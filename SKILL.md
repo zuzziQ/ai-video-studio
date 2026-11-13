@@ -29,6 +29,7 @@ Gồm 3 lớp:
 | Kiểm tra quảng cáo trong QC: chính sách Meta/TikTok theo ngành, claim gate, điểm nguyên bản giữa các phiên bản (`TL.ads`, `scripts/ad_gates.py`, nút "Thiết lập" ở thẻ Kiểm tra chất lượng) | `references/ad-gates.md` |
 | Hồ sơ sản phẩm dùng chung (Product Brain): claim kèm bằng chứng, cụm từ cấm, FAQ; dự án trỏ tới bằng `TL.ads.product` (panel Sản phẩm, `scripts/products.mjs`) | `references/products.md` |
 | Gói Ads Manager Meta/TikTok để tải lên tay: tên file theo mã bản, `ads_mapping.csv` (chữ, CTA, trang đích + UTM), kiểm spec, loại bản bị QC chặn (`scripts/ads_pack.mjs`) | `references/ads-pack.md` |
+| Nhập CSV kết quả Meta/TikTok Ads Manager, lift theo hook/góc/khán giả/kết cấu/bố cục/thời lượng/giọng/nhạc, lô kế tiếp có trọng số + hook mới (`scripts/ads_results.mjs`, `variants.mjs --learn`) | `references/ads-results.md` |
 | Viết thêm tính năng cho Studio: `studio/routes/*.mjs` + `studio/features/*.js` (đối tượng `Studio`) | `references/studio.md` |
 
 ## Chọn gói theo nội dung

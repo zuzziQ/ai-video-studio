@@ -1,0 +1,5 @@
+Ad name,Ad ID,Campaign name,Cost,Impressions,Clicks (destination),CTR (destination),Conversions,Complete payment,Total complete payment value,2-second video views,Video views at 100%
+serum-b5_tiktok_ab12-V04_9x16_20s,1790000000000004,Serum B5,1000000,10000,100,1.00%,1,1,150000,5000,900
+serum-b5_tiktok_ab12-V05_9x16_15s,1790000000000005,Serum B5,1000000,10000,200,2.00%,2,2,400000,6000,1100
+serum-b5_tiktok_ab12-V06_9x16_20s,1790000000000006,Serum B5,1000000,10000,50,0.50%,0,0,0,3000,400
+Total of 3 results,-,-,3000000,30000,350,1.17%,3,3,550000,14000,2400

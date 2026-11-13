@@ -1,0 +1,7 @@
+﻿Reporting starts,Reporting ends,Campaign name,Ad set name,Ad name,Delivery status,Amount spent (VND),Impressions,Link clicks,Results,Result indicator,Purchases,Purchases conversion value,3-second video plays,ThruPlays
+2026-11-01,2026-11-07,Serum B5,Gen Z,serum-b5_meta_ab12-V01_9x16_15s,active,"1,000,000",10000,300,3,actions:offsite_conversion.fb_pixel_purchase,3,"900,000",4000,1500
+2026-11-01,2026-11-07,Serum B5,Mẹ bỉm,serum-b5_meta_ab12-V02_9x16_20s,active,"1,000,000",10000,250,2,actions:offsite_conversion.fb_pixel_purchase,2,"500,000",3500,1200
+2026-11-01,2026-11-07,Serum B5,Gen Z,serum-b5_meta_ab12-V03_9x16_15s,active,"1,000,000",10000,100,1,actions:offsite_conversion.fb_pixel_purchase,1,"200,000",2000,800
+2026-11-01,2026-11-07,Serum B5,Gen Z,"Quảng cáo tay, không có mã",active,"500,000",8000,50,0,,0,0,1000,300
+2026-11-01,2026-11-07,Serum B5,Gen Z,serum-b5_meta_ffff-V09_9x16_15s,active,"100,000",3000,30,0,,0,0,900,200
+2026-11-01,2026-11-07,Serum B5,Gen Z,serum-b5_meta_ab12-V07_9x16_15s,active,"20,000",200,40,0,,0,0,100,50
