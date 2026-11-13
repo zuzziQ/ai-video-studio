@@ -53,6 +53,23 @@ Như mọi `/api/*`: cần token phiên (`X-AVS-Token`, `references/studio.md` m
 | `POST /api/products/save` | `{product}`; không có `id` = tạo mới; claim đã duyệt thiếu bằng chứng, thiếu tên → 400 |
 | `POST /api/products/delete` | `{id}` |
 
+## Kịch bản có claim gate (M22)
+Code: `scripts/script_gate.mjs` (`gatedScript`), `ad_gates.py --script` (`check_script`), nối vào `scripts/topic_video.mjs`. Test: `node --test scripts/tests/script_gate.test.mjs` (LLM giả lập).
+
+```bash
+node scripts/topic_video.mjs "Serum B5 cho da khô mùa đông" --out ~/Desktop/serum --product serum-b5-3f2a [--platforms meta,tiktok]
+node scripts/topic_video.mjs "<chủ đề>" --out <thư mục> --claim-gate      # chưa có hồ sơ: chỉ soát chính sách và cụm từ rủi ro
+```
+
+1. Đọc hồ sơ qua `check_script` (luật trạng thái như trên). Hồ sơ thiếu hoặc id sai: dừng ngay, không gọi LLM.
+2. Prompt viết kịch bản của `topic_video.mjs` + luật: chỉ diễn đạt sát các claim đã duyệt (liệt kê), không nói claim cấm/hết hạn, không dùng cụm từ cấm, không cam kết tuyệt đối / y khoa / trước-sau / "số 1"; FAQ làm tư liệu. Claim chờ duyệt không được đưa vào.
+3. Soát mọi câu của kịch bản: lời mở đầu, lời từng ý, lời kêu gọi, chữ trên màn hình (`screen`, `sub`, `items`), tiêu đề và mô tả đăng. Cùng luật với QC (`text_issues`: chính sách + claim gate, câu được coi là dẫn claim khi khớp ≥ 0,35). Lỗi mức cao (chặn) mới tính là sai; nhắc mức vừa giữ trong `script.json`.
+4. Sai: hỏi lại một lần kèm danh sách lỗi (chỗ nào, mã, câu). LLM trả không phải JSON hợp lệ cũng tính là một lần sai; lỗi đăng nhập, hạn mức, timeout thì báo luôn.
+5. Vẫn sai: **khuôn mẫu**: mỗi ý là nguyên văn một claim đã duyệt (tối đa số ý theo `--dur`), câu mở và kêu gọi trung tính (không nêu lợi ích), tiêu đề là tên sản phẩm. Khuôn mẫu cũng được soát; claim đã duyệt mà tự dính luật chặn (vd "100%") bị bỏ. Không có claim đã duyệt nào: một câu trung tính trỏ tới phần mô tả.
+
+`script.json` có `claim_gate: {mode: "llm"|"template", attempts:[{blocked, issues}], issues, product, approved}`; dòng `RESULT` có `claim_gate`. Timeline mới có `ads: {on: true, product}` nên Kiểm tra chất lượng và cổng chặn xuất soát lại sau khi dựng. `--script` (kịch bản có sẵn) không qua bước sinh lại.
+
 ## Giới hạn
 - Chưa có lịch sử sửa hồ sơ hay người duyệt claim: "đã duyệt" là do người dùng đánh dấu, bằng chứng là chữ tự do.
-- FAQ chưa được cổng quảng cáo dùng; dành cho bước viết kịch bản (`M22`).
+- FAQ chỉ được dùng làm tư liệu trong prompt viết kịch bản, cổng quảng cáo không soát theo FAQ.
+- Claim gate dựa trên độ khớp chữ: câu diễn đạt lại quá xa claim đã duyệt có thể bị nhắc (mức vừa) dù đúng ý.

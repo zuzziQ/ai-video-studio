@@ -329,6 +329,24 @@ class Products(unittest.TestCase):
         self.assertIsNone(r["product"])
         self.assertEqual([(i["kind"], i["severity"]) for i in r["issues"]], [("ad_claim", "med")])
 
+    def test_check_script_uses_product_and_reports_beat_index(self):
+        payload = {"ads": {"on": True, "product": "serum-x"},
+                   "beats": [{"text": "Đầu nhỏ giọt giúp kiểm soát lượng dùng", "type": "hook"}, {"text": "  "},
+                             {"text": "Trị dứt điểm mụn sau một tuần", "type": "body"}]}
+        r = g.check_script(payload)
+        self.assertTrue(r["blocked"])
+        self.assertEqual(r["industry"], "cosmetics")
+        self.assertEqual({i["beat"] for i in r["issues"] if i["severity"] == "high"}, {2})   # chỉ số trong payload
+        self.assertEqual([c["text"] for c in r["approved"]], ["Đầu nhỏ giọt giúp kiểm soát lượng dùng"])
+        self.assertIn("Trị dứt điểm mụn sau một tuần", r["prohibited"])
+        self.assertIn("tên đối thủ", r["blocked_phrases"])
+
+    def test_check_script_missing_product_is_blocked(self):
+        r = g.check_script({"ads": {"product": "khong-co"}, "beats": []})
+        self.assertTrue(r["blocked"])
+        self.assertEqual(r["issues"][0]["code"], "PRODUCT-MISSING")
+        self.assertIsNone(r["issues"][0]["beat"])
+
 
 if __name__ == "__main__":
     unittest.main()
