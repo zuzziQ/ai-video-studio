@@ -1,6 +1,12 @@
 // M50/M51: Chrome GPU flags with SwiftShader fallback, worker plan by physical cores (scripts/render_hw.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// The M50 tests below are about GPU vs SwiftShader only: no chrome-headless-shell from this machine's $AVS_HOME.
+process.env.AVS_CHROME_SHELL = '0';
 
 const load = () => import(`../render_hw.mjs?x=${Math.random()}`); // fresh module: the GPU decision is per process
 
@@ -105,4 +111,130 @@ test('M51: đếm nhân thật từ /proc/cpuinfo (2 socket, SMT)', async () => 
   const text = [0, 1].flatMap(p => [0, 1, 2, 3].flatMap(c => [cpu(p, c), cpu(p, c)])).join('');
   assert.equal(parseCpuinfo(text), 8);
   assert.equal(parseCpuinfo('processor : 0\n'), 0);
+});
+
+test('M57: cờ bỏ vsync mặc định bật cho cả GPU lẫn SwiftShader, AVS_RENDER_NOVSYNC=0 tắt', async () => {
+  const { chromeArgs, novsyncWanted, NOVSYNC_FLAGS } = await load();
+  assert.deepEqual(NOVSYNC_FLAGS, ['--disable-gpu-vsync', '--disable-frame-rate-limit']);
+  for (const mode of ['gpu', 'swiftshader']) {
+    const a = chromeArgs(mode, [], 'win32', {});
+    assert.ok(NOVSYNC_FLAGS.every(f => a.includes(f)), mode);
+    const off = chromeArgs(mode, [], 'win32', { AVS_RENDER_NOVSYNC: '0' });
+    assert.ok(!off.some(f => NOVSYNC_FLAGS.includes(f)), mode);
+  }
+  assert.equal(novsyncWanted({}), true);
+  for (const v of ['0', 'false', 'off', 'No']) assert.equal(novsyncWanted({ AVS_RENDER_NOVSYNC: v }), false, v);
+});
+
+// $AVS_HOME/chrome-headless-shell laid out like @puppeteer/browsers installs it.
+function fakeHome(versions) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-shell-'));
+  const bin = process.platform === 'win32' ? 'chrome-headless-shell.exe' : 'chrome-headless-shell';
+  const exes = versions.map(v => {
+    const d = path.join(home, 'chrome-headless-shell', 'chrome-headless-shell', `win64-${v}`, 'chrome-headless-shell-win64');
+    fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, bin), ''); return path.join(d, bin);
+  });
+  return { home, exes };
+}
+
+test('M57: tìm chrome-headless-shell trong $AVS_HOME (bản mới nhất), AVS_CHROME_SHELL ghi đè hoặc tắt', async () => {
+  const { findHeadlessShell } = await load();
+  const { home, exes } = fakeHome(['156.0.8078.80', '157.0.8103.50', '99.0.1.2']);
+  try {
+    assert.equal(findHeadlessShell({ AVS_HOME: home }), exes[1]);
+    assert.equal(findHeadlessShell({ AVS_HOME: home, AVS_CHROME_SHELL: '0' }), null);
+    assert.equal(findHeadlessShell({ AVS_HOME: home, AVS_CHROME_SHELL: exes[0] }), exes[0]);
+    assert.equal(findHeadlessShell({ AVS_HOME: home, AVS_CHROME_SHELL: path.join(home, 'missing.exe') }), null);
+    assert.equal(findHeadlessShell({ AVS_HOME: path.join(home, 'empty') }), null);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+// Fake puppeteer that tells the shell from Chrome by executablePath; records `<exe>:<mode>:<headless>`.
+function fakeLaunch({ shellFails = false, shellSoftware = false, chromeSoftware = false } = {}) {
+  const launches = [];
+  return {
+    launches,
+    async launch(o) {
+      const gpu = !o.args.includes('--use-angle=swiftshader'), shell = /headless-shell/.test(o.executablePath);
+      launches.push(`${shell ? 'shell' : 'chrome'}:${gpu ? 'gpu' : 'sw'}:${o.headless}`);
+      if (shell && shellFails) throw new Error('spawn UNKNOWN');
+      const soft = !gpu || (shell ? shellSoftware : chromeSoftware);
+      return { async pages() { return [{ evaluate: async () => (soft ? 'SwiftShader' : 'ANGLE (NVIDIA, D3D11)') }]; }, async close() {} };
+    },
+  };
+}
+async function withShell(fn) {
+  const { home, exes } = fakeHome(['157.0.8103.50']);
+  const saved = process.env.AVS_CHROME_SHELL;
+  process.env.AVS_CHROME_SHELL = exes[0]; delete process.env.AVS_RENDER_GPU;
+  try { await fn(exes[0]); } finally { process.env.AVS_CHROME_SHELL = saved; fs.rmSync(home, { recursive: true, force: true }); }
+}
+const CHROME = 'C:/Chrome/chrome.exe';
+
+test('M57: có headless-shell thì worker mở nó (headless: shell), giữ GPU; shell:false bỏ qua', async () => withShell(async exe => {
+  const { launchChrome } = await load();
+  const pp = fakeLaunch();
+  const r = await launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.equal(r.mode, 'gpu'); assert.equal(r.shell, true); assert.equal(r.executablePath, exe);
+  await launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.deepEqual(pp.launches, ['shell:gpu:shell', 'shell:gpu:shell']);
+  const plain = await launchChrome(pp, { quiet: true, executablePath: CHROME, shell: false });
+  assert.equal(plain.shell, false); assert.equal(pp.launches.at(-1), 'chrome:gpu:true');
+}));
+
+test('M57: headless-shell mở lỗi → lùi Chrome cài sẵn, các worker sau không thử lại', async () => withShell(async () => {
+  const { launchChrome } = await load();
+  const pp = fakeLaunch({ shellFails: true });
+  const r = await launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.equal(r.mode, 'gpu'); assert.equal(r.shell, false); assert.equal(r.executablePath, CHROME);
+  await launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.deepEqual(pp.launches, ['shell:gpu:shell', 'chrome:gpu:true', 'chrome:gpu:true']);
+}));
+
+test('M57: headless-shell mở lỗi cả khi SwiftShader → Chrome SwiftShader', async () => withShell(async () => {
+  process.env.AVS_RENDER_GPU = '0';
+  try {
+    const { launchChrome } = await load();
+    const pp = fakeLaunch({ shellFails: true });
+    const r = await launchChrome(pp, { quiet: true, executablePath: CHROME });
+    assert.equal(r.mode, 'swiftshader'); assert.equal(r.shell, false);
+    assert.deepEqual(pp.launches, ['shell:sw:shell', 'chrome:sw:true']);
+  } finally { delete process.env.AVS_RENDER_GPU; }
+}));
+
+test('M57: chỉ Chrome có GPU → Chrome GPU; cả hai phần mềm → SwiftShader trên headless-shell', async () => withShell(async () => {
+  let m = await load(), pp = fakeLaunch({ shellSoftware: true });
+  let r = await m.launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.equal(r.mode, 'gpu'); assert.equal(r.shell, false);
+  await m.launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.deepEqual(pp.launches, ['shell:gpu:shell', 'chrome:gpu:true', 'chrome:gpu:true']);
+  m = await load(); pp = fakeLaunch({ shellSoftware: true, chromeSoftware: true });
+  r = await m.launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.equal(r.mode, 'swiftshader'); assert.equal(r.shell, true);
+  await m.launchChrome(pp, { quiet: true, executablePath: CHROME });
+  assert.deepEqual(pp.launches, ['shell:gpu:shell', 'chrome:gpu:true', 'shell:sw:shell', 'shell:sw:shell']);
+}));
+
+test('M57: không có headless-shell trong $AVS_HOME → Chrome như cũ', async () => {
+  const { home } = fakeHome([]);
+  const saved = { s: process.env.AVS_CHROME_SHELL, h: process.env.AVS_HOME };
+  delete process.env.AVS_CHROME_SHELL; process.env.AVS_HOME = home;
+  try {
+    const { launchChrome } = await load();
+    const pp = fakeLaunch();
+    const r = await launchChrome(pp, { quiet: true, executablePath: CHROME });
+    assert.equal(r.shell, false); assert.deepEqual(pp.launches, ['chrome:gpu:true']);
+  } finally {
+    process.env.AVS_CHROME_SHELL = saved.s;
+    if (saved.h === undefined) delete process.env.AVS_HOME; else process.env.AVS_HOME = saved.h;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('M57: bộ cài chọn bản headless-shell theo Chrome máy này', async () => {
+  const { buildTags } = await import('../install_headless_shell.mjs');
+  assert.deepEqual(buildTags('HeadlessChrome/157.0.8103.51', '157.0.8103.51'), ['157.0.8103', '157', 'stable']);
+  assert.deepEqual(buildTags('HeadlessEdg/157.0.3400.12', '157.0.3400.12'), ['157', 'stable']);
+  assert.deepEqual(buildTags('', ''), ['stable']);
+  assert.deepEqual(buildTags('', '', '156'), ['156']);
 });

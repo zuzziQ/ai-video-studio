@@ -57,7 +57,9 @@
     const ready = new Promise(res => ifr.addEventListener('load', res, { once: true })).then(async () => {
       const w = ifr.contentWindow, d = w.document;
       if (b.layer === 'over') { const st = d.createElement('style'); st.textContent = 'html,body{background:transparent!important}'; d.head.appendChild(st); }
-      await Promise.race([Promise.all([d.fonts?.ready, w.__hf?.buildReady]), new Promise(r => setTimeout(r, 8000))]);
+      // M57: blocks publish buildReady as { [block]: Promise } (fonts, models, textures built async), not as one promise
+      const br = w.__hf?.buildReady, builds = br?.then ? [br] : Object.values(br || {});
+      await Promise.race([Promise.all([d.fonts?.ready, ...builds]), new Promise(r => setTimeout(r, 8000))]);
     });
     f = { host, ifr, ready: Promise.race([ready, new Promise(r => setTimeout(r, 15000))]), used: 0 };
     FR.set(key, f);

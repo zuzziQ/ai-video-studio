@@ -3,7 +3,11 @@
 //        The first launch checks which WebGL renderer it really got; a software renderer (SwiftShader, WARP, llvmpipe)
 //        or a failed launch falls back to SwiftShader for this process. AVS_RENDER_GPU=0 forces SwiftShader.
 //   M51: render workers follow physical cores, not logical threads, and each parallel ffmpeg gets a share of the threads.
-// usage: node scripts/render_hw.mjs   → prints the Chrome mode, WebGL renderer, cores and the default worker plan.
+//   M57: Chrome does not wait for vsync (--disable-gpu-vsync --disable-frame-rate-limit: a capture waited ~2–3 compositor
+//        frames at 60 Hz); AVS_RENDER_NOVSYNC=0 turns that off. chrome-headless-shell is used when found
+//        ($AVS_HOME/chrome-headless-shell, installed by scripts/install_headless_shell.mjs, or AVS_CHROME_SHELL=<exe>;
+//        AVS_CHROME_SHELL=0 never uses it); it falls back to the installed Chrome when it is missing or fails to launch.
+// usage: node scripts/render_hw.mjs   → prints the Chrome mode, WebGL renderer, executable, vsync, cores and worker plan.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,10 +26,37 @@ export function gpuFlags(platform = process.platform) {
   // --enable-unsafe-swiftshader stays so WebGL still exists if Chrome drops to software; the renderer check catches that.
   return [...(platform === 'win32' ? ['--use-angle=d3d11'] : []), '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'];
 }
-export const gpuWanted = (env = process.env) => !/^(0|false|off|no)$/i.test(String(env.AVS_RENDER_GPU ?? '').trim());
+const OFF = /^(0|false|off|no)$/i;
+export const gpuWanted = (env = process.env) => !OFF.test(String(env.AVS_RENDER_GPU ?? '').trim());
+// M57: frames are drawn on demand (renderFrame + captureScreenshot), so pacing them to vsync only adds latency.
+export const NOVSYNC_FLAGS = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
+export const novsyncWanted = (env = process.env) => !OFF.test(String(env.AVS_RENDER_NOVSYNC ?? '').trim());
 export const isSoftwareRenderer = r => !r || /swiftshader|llvmpipe|softpipe|software|basic render|\bwarp\b/i.test(r);
-export const chromeArgs = (mode, extra = [], platform = process.platform) =>
-  [...new Set([...BASE_FLAGS, ...extra, ...(mode === 'gpu' ? gpuFlags(platform) : SWIFTSHADER_FLAGS)])];
+export const chromeArgs = (mode, extra = [], platform = process.platform, env = process.env) =>
+  [...new Set([...BASE_FLAGS, ...(novsyncWanted(env) ? NOVSYNC_FLAGS : []), ...extra, ...(mode === 'gpu' ? gpuFlags(platform) : SWIFTSHADER_FLAGS)])];
+
+// ---------- chrome-headless-shell (M57) ----------
+export const avsHome = (env = process.env) => env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
+export const shellRoot = (env = process.env) => path.join(avsHome(env), 'chrome-headless-shell');
+const SHELL_BIN = process.platform === 'win32' ? 'chrome-headless-shell.exe' : 'chrome-headless-shell';
+const verKey = v => (v.match(/\d+/g) || []).map(Number);
+const byVersionDesc = (a, b) => { const x = verKey(a), y = verKey(b); for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (y[i] || 0) - (x[i] || 0); return 0; };
+// AVS_CHROME_SHELL=<exe> wins, =0 disables; else the newest build in $AVS_HOME/chrome-headless-shell, laid out the way
+// @puppeteer/browsers installs it: chrome-headless-shell/<platform>-<version>/chrome-headless-shell-<platform>/<bin>.
+export function findHeadlessShell(env = process.env) {
+  const pick = String(env.AVS_CHROME_SHELL ?? '').trim();
+  if (OFF.test(pick)) return null;
+  if (pick) return fs.existsSync(pick) ? pick : null;
+  const root = path.join(shellRoot(env), 'chrome-headless-shell');
+  let builds = [];
+  try { builds = fs.readdirSync(root).sort(byVersionDesc); } catch { return null; }
+  for (const b of builds) {
+    let subs = [];
+    try { subs = fs.readdirSync(path.join(root, b)).filter(d => d.startsWith('chrome-headless-shell')); } catch { continue; }
+    for (const d of subs) { const exe = path.join(root, b, d, SHELL_BIN); if (fs.existsSync(exe)) return exe; }
+  }
+  return null;
+}
 
 // WebGL renderer string of a fresh browser ('' = no WebGL), read on its first tab.
 async function webglRenderer(browser) {
@@ -40,27 +71,55 @@ async function webglRenderer(browser) {
   });
 }
 
-// One decision per process, shared by every worker: the first GPU launch that comes back as software settles it.
+// One decision per process, shared by every worker: the first GPU launch that comes back as software settles the mode, and
+// the executable is settled the same way (headless-shell that fails to launch, or only Chrome gets the GPU → Chrome).
 let decided = null;
+let shellState = null; // null = not tried yet, false = not used in this process, string = the shell in use
 export const chromeMode = () => decided;
-// launchChrome(puppeteer, { executablePath, extra: [flags], …puppeteer.launch options }) → { browser, mode, renderer }
-export async function launchChrome(puppeteer, { extra = [], quiet = false, ...opts } = {}) {
+const errLine = e => String(e?.message || e).split('\n')[0];
+// launchChrome(puppeteer, { executablePath, extra: [flags], shell, …puppeteer.launch options })
+//   → { browser, mode, renderer, executablePath, shell }   (shell:false = never try chrome-headless-shell)
+export async function launchChrome(puppeteer, { extra = [], quiet = false, shell = true, ...opts } = {}) {
   const note = m => { if (!quiet) console.error(`[chrome] ${m}`); };
+  const shellExe = shell && shellState !== false ? (shellState || findHeadlessShell()) : null;
+  const chrome = opts.executablePath;
+  const open = (exe, mode) => puppeteer.launch({ headless: true, ...opts, ...(exe === shellExe ? { headless: 'shell' } : {}), executablePath: exe, args: chromeArgs(mode, extra) });
+  const done = (browser, mode, renderer, exe) => {
+    decided = mode;
+    if (shellExe) shellState = exe === shellExe ? shellExe : false; // Chrome won over the shell: do not try it again
+    return { browser, mode, renderer, executablePath: exe, shell: !!shellExe && exe === shellExe };
+  };
+  const exes = [shellExe, chrome].filter((e, i, a) => e && a.indexOf(e) === i);
+  if (!exes.length) exes.push(chrome); // no executable at all: let puppeteer report it
+  let shellBroken = false;
+  const shellFailed = e => { shellBroken = true; note(`chrome-headless-shell không mở được (${errLine(e)}), dùng Chrome`); };
   if ((decided || (gpuWanted() ? 'gpu' : 'swiftshader')) === 'gpu') {
-    let browser = null;
-    try {
-      browser = await puppeteer.launch({ headless: true, ...opts, args: chromeArgs('gpu', extra) });
-      const renderer = await webglRenderer(browser);
-      if (!isSoftwareRenderer(renderer)) { decided = 'gpu'; return { browser, mode: 'gpu', renderer }; }
-      if (decided !== 'swiftshader') note(`GPU không dùng được (${renderer || 'không có WebGL'}), dùng SwiftShader`);
-    } catch (e) {
-      if (decided !== 'swiftshader') note(`mở Chrome với GPU lỗi (${String(e.message || e).split('\n')[0]}), dùng SwiftShader`);
+    let why = '';
+    for (const exe of exes) {
+      let browser = null;
+      try {
+        browser = await open(exe, 'gpu');
+        const renderer = await webglRenderer(browser);
+        if (!isSoftwareRenderer(renderer)) return done(browser, 'gpu', renderer, exe);
+        why = renderer || 'không có WebGL';
+      } catch (e) {
+        why = `mở lỗi: ${errLine(e)}`;
+        if (shellExe && exe === shellExe) shellFailed(e);
+      }
+      await browser?.close().catch(() => {});
     }
-    await browser?.close().catch(() => {});
-    decided = 'swiftshader';
+    if (decided !== 'swiftshader') note(`GPU không dùng được (${why}), dùng SwiftShader`);
   }
-  const browser = await puppeteer.launch({ headless: true, ...opts, args: chromeArgs('swiftshader', extra) });
-  return { browser, mode: 'swiftshader', renderer: 'SwiftShader' };
+  for (const exe of exes) {
+    if (shellBroken && exe === shellExe) continue;
+    try {
+      return done(await open(exe, 'swiftshader'), 'swiftshader', 'SwiftShader', exe);
+    } catch (e) {
+      if (!shellExe || exe !== shellExe || exe === exes[exes.length - 1]) throw e;
+      shellFailed(e);
+    }
+  }
+  throw new Error('không mở được Chrome');
 }
 
 // ---------- cores and workers ----------
@@ -116,8 +175,14 @@ export function renderPlan({ W, H, n, fps, workers = null, fast = false, preset 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { default: puppeteer } = await import('puppeteer-core');
   const { findChrome } = await import('./platform.mjs');
-  const { browser, mode, renderer } = await launchChrome(puppeteer, { executablePath: findChrome() });
+  const { browser, mode, renderer, executablePath, shell } = await launchChrome(puppeteer, { executablePath: findChrome() });
+  const version = await browser.version().catch(() => '');
   await browser.close();
   const p = renderPlan({ W: 1080, H: 1920, n: 900, fps: 30 });
-  console.log(JSON.stringify({ chrome: mode, renderer, gpu_env: process.env.AVS_RENDER_GPU ?? null, physical: physicalCores(), logical: logicalCores(), render_1080p: p }, null, 2));
+  console.log(JSON.stringify({
+    chrome: mode, renderer, executable: shell ? 'chrome-headless-shell' : 'chrome', executable_path: executablePath, version,
+    vsync: novsyncWanted() ? 'off (--disable-gpu-vsync --disable-frame-rate-limit)' : 'on',
+    gpu_env: process.env.AVS_RENDER_GPU ?? null, novsync_env: process.env.AVS_RENDER_NOVSYNC ?? null, shell_env: process.env.AVS_CHROME_SHELL ?? null,
+    physical: physicalCores(), logical: logicalCores(), render_1080p: p,
+  }, null, 2));
 }
