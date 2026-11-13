@@ -1014,8 +1014,8 @@ $('#export').addEventListener('click', () => {
     <div class="acts" style="margin-top:12px"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
     <p class="muted">Âm thanh được trộn lại (giọng + nhạc + SFX, chuẩn −14 LUFS) rồi render từng khung bằng đúng engine của preview.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="xgo"><i class="ti ti-upload"></i> Xuất</button></div>`);
-  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still?t=' + T); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); } else toast('Lỗi: ' + r.error); };
-  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt'); toast('Đã lưu ' + r.out); api('/api/reveal', { path: r.out }); };
+  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); } else toast('Lỗi: ' + r.error); };
+  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', {}); toast('Đã lưu ' + r.out); api('/api/reveal', { path: r.out }); };
   $('#xgo').onclick = async () => {
     if (dirty) await saveNow();
     const from = $('#xfrom').value, to = $('#xto').value;

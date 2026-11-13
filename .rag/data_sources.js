@@ -10,6 +10,7 @@ export const GUARDRAIL_SOURCES = {
   studio: [
     [{ file: "references/studio.md", section: "Plugin (v4)" }],
     [{ file: "references/studio.md", section: "API (cho script)" }],
+    [{ file: "references/studio.md", section: "API (cho script)" }],
   ],
   ads: [
     [{ file: "references/ad-gates.md", section: "Giới hạn" }],

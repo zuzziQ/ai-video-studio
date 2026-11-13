@@ -20,8 +20,11 @@ REC="$(cat "$RES/avs_skill" 2>/dev/null)"
 CANDS=("$HOME/.claude/skills/ai-video-studio" "$REC"); [ -f "$RES/avs_skill_pinned" ] && CANDS=("$REC" "$HOME/.claude/skills/ai-video-studio")
 for c in "${CANDS[@]}"; do [ -n "$c" ] && [ -f "$c/studio/server.mjs" ] && { SKILL="$c"; break; }; done
 
-serving() { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:$PORT/api/features")" = 200 ]; }
-api() { curl -s --max-time 5 "http://127.0.0.1:$PORT$1" "${@:2}"; }
+# Every /api call needs the server's session token; it writes it for this user to $AVS_HOME/studio-<port>.token (mode 600).
+TOKF="${AVS_HOME:-$HOME/.ai-video-studio}/studio-$PORT.token"
+tok() { cat "$TOKF" 2>/dev/null; }
+serving() { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -H "X-AVS-Token: $(tok)" "http://127.0.0.1:$PORT/api/features")" = 200 ]; }
+api() { curl -s --max-time 5 -H "X-AVS-Token: $(tok)" "http://127.0.0.1:$PORT$1" "${@:2}"; }
 browse() { [ -f "$RES/avs_no_browser" ] && { log "(test) bỏ qua mở trình duyệt $URL"; return; }; open "$URL"; }
 remember() { local d; d=$(api /api/app/info | sed -n 's/.*"dir":"\([^"]*\)".*/\1/p'); [ -n "$d" ] && printf '%s' "$d" > "$STATE/last_project"; }
 

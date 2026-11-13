@@ -97,7 +97,7 @@
         <div class="help">Ảnh/clip của bạn (sản phẩm, cửa hàng, văn phòng, hậu trường…) lưu một lần, dùng cho mọi dự án. Gắn thẻ đúng nội dung; b-roll tự động chọn mục có thẻ khớp với câu đang nói.</div>
         <div class="row3"><button data-afu><i class="ti ti-upload"></i> Thêm ảnh/clip</button><button data-aft ${LIB?.length ? '' : 'disabled'} title="Claude xem từng ảnh và viết thẻ"><i class="ti ti-sparkles"></i> Claude gắn thẻ</button><button data-afr title="Tải lại"><i class="ti ti-refresh"></i></button></div>
         <input type="file" id="afup" accept="image/*,video/*" multiple hidden>
-        ${LIB?.length ? `<div class="lib">${LIB.slice(-60).reverse().map(it => `<div class="it" title="${esc(it.tags.join(', '))}"><img src="/api/brolllib/file?f=${encodeURIComponent(it.thumb)}" loading="lazy">${it.kind === 'video' ? '<span class="k">clip</span>' : ''}
+        ${LIB?.length ? `<div class="lib">${LIB.slice(-60).reverse().map(it => `<div class="it" title="${esc(it.tags.join(', '))}"><img src="${avsUrl(`/api/brolllib/file?f=${encodeURIComponent(it.thumb)}`)}" loading="lazy">${it.kind === 'video' ? '<span class="k">clip</span>' : ''}
           <button class="x" data-afx="${esc(it.id)}" title="Xoá khỏi thư viện">✕</button><input data-aftag="${esc(it.id)}" value="${esc(it.tags.join(', '))}" placeholder="thẻ, cách nhau dấu phẩy"></div>`).join('')}</div>` : ''}
       </section>
       <section><div class="sh"><i class="ti ti-volume"></i>Âm thanh<span class="badge">309 SFX · 30 nhạc</span></div>

@@ -11,6 +11,7 @@ import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
+import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
@@ -23,11 +24,9 @@ const VERSION = '4.0';
 const TPL_DIR = path.resolve(opt('--templates', process.env.AVS_TEMPLATES || path.join(SKILL, 'templates')));
 
 let project = null; // { dir, tlFile }
+// Only real projects (a timeline.json), never the config folder with the Telegram / YouTube / Claude tokens (studio/security.mjs).
 function openProject(p) {
-  const abs = path.resolve(p);
-  const tlFile = abs.endsWith('.json') ? abs : path.join(abs, 'timeline.json');
-  if (!fs.existsSync(tlFile)) throw new Error(`không thấy ${tlFile}`);
-  project = { dir: path.dirname(tlFile), tlFile };
+  project = resolveProject(p);
   fs.mkdirSync(path.join(project.dir, '.studio/history'), { recursive: true });
   console.log(`project: ${project.dir}`);
 }
@@ -69,7 +68,7 @@ function under(root, rel) {
   return p === root || p.startsWith(root + path.sep) ? p : null;
 }
 const json = (res, obj, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); };
-const body = req => new Promise((ok, bad) => { let b = ''; req.on('data', c => (b += c)); req.on('end', () => { try { ok(b ? JSON.parse(b) : {}); } catch (e) { bad(new Error('Dữ liệu gửi lên không phải JSON hợp lệ')); } }); });
+const body = req => readJson(req);
 const P = rel => path.resolve(project.dir, rel);
 
 function frameCount(tl) {
@@ -320,6 +319,7 @@ function startJob(kind, fn, payload) {
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => {
   if (job?.state === 'running') killTree(job.proc);
   if (project) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) fs.rmSync(path.join(project.dir, f), { force: true });
+  dropTokenFile();
   setTimeout(() => process.exit(0), 300);
 });
 
@@ -336,14 +336,24 @@ for (const f of fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith
 const FEATURES = () => fs.readdirSync(path.join(HERE, 'features')).filter(f => f.endsWith('.js')).sort();
 
 // ---------- http ----------
+// Session token: new each run, handed to the editor inside the main page (<meta name="avs-token">, read by studio/auth.js) and to
+// local CLI clients through ~/.ai-video-studio/studio-<port>.token (mode 600). Every /api request must carry it.
+const TOKEN = newToken();
+function sendIndex(res) {
+  const html = fs.readFileSync(path.join(HERE, 'index.html'), 'utf8').replace('<meta charset="utf-8">', `<meta charset="utf-8">\n<meta name="avs-token" content="${TOKEN}">`);
+  res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+  res.end(html);
+}
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname;
-  // Local-only API: refuse other websites (CSRF via a simple POST) and DNS-rebinding hosts.
-  const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
-  if (!LOCAL.test(req.headers.host || '') || (req.headers.origin && !LOCAL.test(req.headers.origin.replace(/^https?:\/\//, '')))) return json(res, { error: 'forbidden' }, 403);
+  // Local-only: this origin only (no other website, no other localhost port, no DNS-rebinding host).
+  if (!sameOrigin(req, PORT)) return json(res, { error: 'forbidden' }, 403);
+  if (p.startsWith('/api/') && !tokenOk(req, u, TOKEN)) return json(res, { error: 'Thiếu hoặc sai token phiên — tải lại trang Studio' }, 401);
+  const bs = bodyStatus(req, p);
+  if (bs) { res.setHeader('Connection', 'close'); return json(res, { error: bs === 413 ? 'Dữ liệu gửi lên quá lớn' : 'Cần Content-Length' }, bs); }
   try {
-    if (p === '/' || p === '/index.html') return sendFile(req, res, path.join(HERE, 'index.html'));
+    if (p === '/' || p === '/index.html') return sendIndex(res);
     if (p.startsWith('/studio/')) { const f = under(HERE, p.slice(8)); return f ? sendFile(req, res, f) : json(res, {}, 403); }
     if (p.startsWith('/engine/')) { const f = under(path.join(SKILL, 'engine'), p.slice(8)); return f ? sendFile(req, res, f) : json(res, {}, 403); }
     if (p.startsWith('/assets/')) { const f = under(path.join(SKILL, 'assets'), p.slice(8)); return f ? sendFile(req, res, f) : json(res, {}, 403); }
@@ -376,7 +386,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/project/')) {
       if (!project) return json(res, { error: 'no project' }, 404);
       const f = under(project.dir, p.slice(9));
-      return f ? sendFile(req, res, f) : json(res, {}, 403);
+      return f && fileAllowed(f) ? sendFile(req, res, f) : json(res, {}, 403);
     }
     if (p === '/api/project' && req.method === 'GET') return project ? json(res, readProject()) : json(res, { error: 'Chưa mở dự án' }, 404);
     if (p === '/api/save' && req.method === 'POST') return json(res, save(await body(req)));
@@ -405,19 +415,20 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/media') return json(res, mediaList());
     if (p === '/api/upload' && req.method === 'POST') { await upload(req, u.searchParams.get('name') || 'file.bin'); return json(res, mediaList()); }
-    if (p === '/api/still') return still(+u.searchParams.get('t') || 0).then(out => json(res, { out })).catch(e => json(res, { error: e.message }, 500));
-    if (p === '/api/srt') {
+    // Writing files: POST only (M37).
+    if (p === '/api/still' && req.method === 'POST') { const b = await body(req); return still(+b.t || 0).then(out => json(res, { out })).catch(e => json(res, { error: e.message }, 500)); }
+    if (p === '/api/srt' && req.method === 'POST') {
       const { captions } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
       const out = `out/${path.basename(project.dir)}.srt`; fs.writeFileSync(P(out), srt(captions)); return json(res, { out });
     }
     if (p === '/api/job') return json(res, job ? { ...job, proc: undefined } : null);
     if (p === '/api/job/cancel' && req.method === 'POST') { if (job?.state === 'running') job.cancelled = true; killTree(job?.proc); return json(res, { ok: true }); }
-    if (p === '/api/open' && req.method === 'POST') { const b = await body(req); switchProject(b.path); return json(res, { ok: true }); }
+    if (p === '/api/open' && req.method === 'POST') { const b = await body(req); switchProject(b.path); return json(res, { ok: true }); } // refused → 400/403
     if (p === '/api/reveal' && req.method === 'POST') { const b = await body(req); const f = under(project.dir, b.path || ''); if (f) revealPath(f); return json(res, { ok: !!f }); }
     if (p === '/api/features') return json(res, FEATURES());
     for (const r of ROUTES) if (await r(req, res, p, u)) return;
     json(res, { error: 'not found' }, 404);
-  } catch (e) { console.error(e); json(res, { error: e.message }, 500); }
+  } catch (e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, { error: e.message }, e.status || 500); }
 });
 
 if (args[0] === '--new') {
@@ -434,7 +445,11 @@ server.on('error', e => {
   if (args.includes('--open')) openPath(`http://localhost:${PORT}`);
   setTimeout(() => process.exit(0), 1500);
 });
+let tokFile = null;
+function dropTokenFile() { try { if (tokFile && fs.readFileSync(tokFile, 'utf8') === TOKEN) fs.rmSync(tokFile, { force: true }); } catch {} }
+process.on('exit', dropTokenFile);
 server.listen(PORT, '127.0.0.1', () => {
+  try { tokFile = writeTokenFile(PORT, TOKEN); } catch (e) { console.error('token file', tokenFile(PORT), e.message); }
   const link = `http://localhost:${PORT}`;
   console.log(`AI Video Studio ${VERSION} → ${link}`);
   console.log('Tác giả: Nguyễn Tất Kiểm · Tặng khoá học AI miễn phí: https://nguyentatkiem.com.vn/aiplusntk/');

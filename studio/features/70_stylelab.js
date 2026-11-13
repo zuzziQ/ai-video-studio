@@ -37,7 +37,7 @@
   const st = { tab: 'clone', w: null, an: null, sheet: 0, src: '', job: null, kind: null, result: null, styles: null, check: null, d: { desc: '', orient: 'vertical', industry: '', colors: '', font: '', images: [] }, name: '', model: 'default', timer: null };
   const $b = () => document.getElementById('libbody');
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-  const fileUrl = (w, f) => `/api/stylelab/file?w=${encodeURIComponent(w)}&f=${encodeURIComponent(f)}`;
+  const fileUrl = (w, f) => avsUrl(`/api/stylelab/file?w=${encodeURIComponent(w)}&f=${encodeURIComponent(f)}`);
 
   async function loadStyles() { st.styles = await S.api('/api/stylelab/list').catch(() => []); if (st.visible) render(); }
   async function checkCli() { st.check = await S.api('/api/stylelab/check').catch(e => ({ error: e.message })); if (st.visible) render(); }

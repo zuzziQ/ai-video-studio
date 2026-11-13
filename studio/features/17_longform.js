@@ -77,7 +77,7 @@
       <div class="lf-bulk"><button id="lf-auto" ${S.queue ? '' : 'disabled title="Chưa có tính năng Tự lái (hàng đợi)"'}><i class="ti ti-rocket"></i> Tự lái tất cả</button>
       <button id="lf-exp"><i class="ti ti-upload"></i> Xuất tất cả</button></div>
       ${L.map(it => `<div class="lf-it ${it.mode === 'blurfill' || (it.mode === 'crop' && LS('or') === 'horizontal') ? 'h' : ''}">
-        ${it.thumbUrl ? `<img src="${it.thumbUrl}" alt="">` : '<div class="ph"></div>'}
+        ${it.thumbUrl ? `<img src="${avsUrl(it.thumbUrl)}" alt="">` : '<div class="ph"></div>'}
         <div><div class="tt">${esc(it.title)}</div>${it.hook ? `<div class="hk">“${esc(it.hook)}”</div>` : ''}
         <div class="mt"><span class="sc" title="Điểm Claude chấm">${it.score}</span><span><i class="ti ti-clock"></i> ${mmss(it.t0)}–${mmss(it.t1)}</span><span>${Math.round(it.dur)} s</span>${it.mode === 'reframe' ? '<span title="Video ngang → khung dọc, bám mặt"><i class="ti ti-focus-centered"></i> bám mặt</span>' : ''}</div>
         ${it.reason ? `<div class="rs">${esc(it.reason)}</div>` : ''}
@@ -150,7 +150,7 @@
     location.reload();
   }
   function play(it) {
-    Studio.modal(`<h3><i class="ti ti-player-play"></i> ${esc(it.title || 'Video')}</h3><video src="${it.mp4Url}" controls autoplay style="width:100%;max-height:70vh;border-radius:8px;background:#000"></video>
+    Studio.modal(`<h3><i class="ti ti-player-play"></i> ${esc(it.title || 'Video')}</h3><video src="${avsUrl(it.mp4Url)}" controls autoplay style="width:100%;max-height:70vh;border-radius:8px;background:#000"></video>
       <div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
   }
 
@@ -171,7 +171,7 @@
       <button class="primary lf-go" id="lf-tgo"><i class="ti ti-wand"></i> Tạo video</button>
       <div class="lf-help">Claude viết kịch bản (hook, 3–5 ý, CTA) → giọng đọc → căn thời gian từng chữ → b-roll động + chữ kinetic + nhạc/SFX. Ra một dự án mở được trong Studio để chỉnh tiếp.</div></div>
       ${S.topicOut ? topicResult(S.topicOut) : ''}
-      ${tp.length ? `<div class="lf-card"><h4><i class="ti ti-history"></i> Đã tạo gần đây</h4>${tp.map((r, i) => `<div class="lf-it"><${r.thumbUrl ? `img src="${r.thumbUrl}" alt=""` : 'div class="ph"'}>${r.thumbUrl ? '' : '</div>'}
+      ${tp.length ? `<div class="lf-card"><h4><i class="ti ti-history"></i> Đã tạo gần đây</h4>${tp.map((r, i) => `<div class="lf-it"><${r.thumbUrl ? `img src="${avsUrl(r.thumbUrl)}" alt=""` : 'div class="ph"'}>${r.thumbUrl ? '' : '</div>'}
         <div><div class="tt">${esc(r.name)}</div><div class="mt">${new Date(r.at).toLocaleString('vi-VN')}</div>
         <div class="b"><button data-topen="${i}"><i class="ti ti-edit"></i> Mở</button>${r.mp4Url ? `<button data-tplay="${i}"><i class="ti ti-player-play"></i> Xem</button>` : ''}</div></div></div>`).join('')}</div>` : ''}`;
   }
