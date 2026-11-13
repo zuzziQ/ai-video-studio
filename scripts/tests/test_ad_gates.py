@@ -247,5 +247,88 @@ class Project(unittest.TestCase):
         self.assertEqual(len(g.sibling_dirs(alias, {"_variant": {"base": base}})), 2)
 
 
+def write_product(home, pid, **fields):
+    d = os.path.join(home, "products")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, pid + ".json"), "w", encoding="utf-8") as f:
+        json.dump({"version": 1, "id": pid, "name": "Serum X", **fields}, f, ensure_ascii=False)
+    return d
+
+
+class Products(unittest.TestCase):
+    """Product Brain (M18): `ads.product` trỏ tới $AVS_HOME/products/<id>.json."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = os.path.join(self.tmp.name, "home")
+        old = os.environ.get("AVS_HOME")
+        os.environ["AVS_HOME"] = self.home
+        self.addCleanup(lambda: os.environ.__setitem__("AVS_HOME", old) if old is not None else os.environ.pop("AVS_HOME", None))
+        self.claims = [
+            {"id": "c1", "text": "Đầu nhỏ giọt giúp kiểm soát lượng dùng", "status": "approved", "evidence": "Thử nghiệm nội bộ 2026"},
+            {"id": "c2", "text": "Trị dứt điểm mụn sau một tuần", "status": "prohibited"},
+            {"id": "c3", "text": "Giúp da mịn hơn sau 14 ngày", "status": "approved", "evidence": "Báo cáo lab", "expires": "2020-01-01"},
+            {"id": "c4", "text": "Dưỡng ẩm suốt 24 giờ", "status": "approved"},          # thiếu bằng chứng → coi là pending
+        ]
+        write_product(self.home, "serum-x", industry="cosmetics", claims=self.claims, blocked=["tên đối thủ"])
+
+    def test_bad_ids_never_leave_the_products_folder(self):
+        for bad in ["../config", "..", "a/b", "a\\b", "C:x", "Serum", ".hidden", "a.json", "x" * 65, "", None, 5, "ok\n"]:
+            with self.assertRaises(g.ProductError, msg=repr(bad)):
+                g.product_file(bad)
+        self.assertTrue(g.product_file("serum-x").endswith(os.path.join("products", "serum-x.json")))
+
+    def test_symlink_out_of_products_is_refused(self):
+        outside = os.path.join(self.tmp.name, "secret.json")
+        with open(outside, "w", encoding="utf-8") as f:
+            f.write("{}")
+        try:
+            os.symlink(outside, os.path.join(self.home, "products", "evil.json"))
+        except (OSError, NotImplementedError):
+            self.skipTest("không tạo được symlink trên máy này")
+        with self.assertRaises(g.ProductError):
+            g.load_product("evil")
+
+    def test_claim_status_needs_evidence_and_respects_expiry(self):
+        st = [g.claim_status(c, "2026-11-13") for c in self.claims]
+        self.assertEqual(st, ["approved", "prohibited", "expired", "pending"])
+        self.assertEqual(g.claim_status({"status": "weird"}), "pending")
+
+    def test_resolve_merges_product_with_legacy_claims(self):
+        cfg = {"on": True, "product": "serum-x", "claims": [{"id": "c1", "text": "Chai thuỷ tinh tái chế"}], "blocked": ["TÊN ĐỐI THỦ", "giá rẻ nhất"]}
+        r = g.resolve_ads(cfg, today="2026-11-13")
+        self.assertEqual(r["industry"], "cosmetics")
+        self.assertEqual([c["id"] for c in r["claims"]], ["serum-x:c1", "serum-x:c2", "serum-x:c3", "serum-x:c4", "c1"])
+        self.assertEqual([c["status"] for c in r["claims"]], ["approved", "prohibited", "expired", "pending", "approved"])
+        self.assertEqual(r["blocked"], ["TÊN ĐỐI THỦ", "giá rẻ nhất"])       # trùng không phân biệt hoa/thường
+        self.assertEqual(r["product"], {"id": "serum-x", "name": "Serum X", "claims": 4, "approved": 1})
+        self.assertEqual(r["issues"], [])
+
+    def test_project_with_product_is_checked_against_its_claims(self):
+        lines = ["Trị dứt điểm mụn sau một tuần", "Đầu nhỏ giọt giúp kiểm soát lượng dùng", "Nói về tên đối thủ"]
+        r = g.run(project(self.tmp.name, "p", lines, ads={"on": True, "product": "serum-x"}))
+        self.assertEqual((r["industry"], r["product"]["id"], r["claims"]), ("cosmetics", "serum-x", {"approved": 1, "other": 3}))
+        msgs = [i["msg"] for i in r["issues"] if i["code"] == "BLOCK-01"]
+        self.assertTrue(any("Trùng claim bị cấm" in m for m in msgs))
+        self.assertTrue(any("tên đối thủ" in m for m in msgs))
+        self.assertFalse(any("kiểm soát lượng dùng" in i["msg"] and i["kind"] == "ad_claim" for i in r["issues"]))
+        self.assertTrue(r["blocked"])
+
+    def test_missing_or_bad_product_blocks_with_overridable_claim_issue(self):
+        for pid in ("khong-co", "../x"):
+            r = g.run(project(self.tmp.name, "p" + str(len(pid)), ["Serum dưỡng ẩm"], ads={"on": True, "product": pid}))
+            miss = [i for i in r["issues"] if i["code"] == "PRODUCT-MISSING"]
+            self.assertEqual([(i["kind"], i["severity"]) for i in miss], [("ad_claim", "high")])
+            self.assertTrue(r["blocked"])
+            self.assertIn("error", r["product"])
+
+    def test_legacy_project_without_product_is_unchanged(self):
+        ads = {"on": True, "industry": "general", "claims": [{"text": "Đầu nhỏ giọt giúp kiểm soát lượng dùng"}]}
+        r = g.run(project(self.tmp.name, "p", ["Sản phẩm giúp da mịn hơn"], ads=ads))
+        self.assertIsNone(r["product"])
+        self.assertEqual([(i["kind"], i["severity"]) for i in r["issues"]], [("ad_claim", "med")])
+
+
 if __name__ == "__main__":
     unittest.main()

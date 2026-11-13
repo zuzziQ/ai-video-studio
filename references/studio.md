@@ -97,5 +97,6 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
   - `30_audio`: Âm thanh+.
   - `40_reframe`: Bám mặt, Lồng tiếng.
   - `50–52`: Hàng loạt, Thương hiệu, Đăng.
+  - `53_products`: Sản phẩm (Product Brain, `references/products.md`).
   - `60–62`: Keyframe, Mặt nạ / Tách nền, B-roll AI.
   - `90_app`: mở thư mục, tiến trình.

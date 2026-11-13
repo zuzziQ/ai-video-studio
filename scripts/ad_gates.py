@@ -14,6 +14,7 @@ kiểm duyệt của nền tảng và không bảo đảm quảng cáo được 
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import math
@@ -394,8 +395,90 @@ def sibling_dirs(d: str, tl: dict) -> list[str]:
     return variant_group(d, tl)["dirs"]
 
 
+# ---------------------------------------------------------------- Product Brain (M18, references/products.md)
+# Hồ sơ sản phẩm dùng chung: $AVS_HOME/products/<id>.json, ghi bởi scripts/products.mjs (Studio, route 53_products).
+# Dự án trỏ tới bằng `ads.product`. Id chỉ gồm [a-z0-9_-] nên không thoát được khỏi thư mục products/.
+PRODUCT_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+
+
+class ProductError(ValueError):
+    pass
+
+
+def avs_home() -> str:
+    return os.environ.get("AVS_HOME") or os.path.join(os.path.expanduser("~"), ".ai-video-studio")
+
+
+def products_dir(home: str | None = None) -> str:
+    return os.path.join(home or avs_home(), "products")
+
+
+def product_file(pid, pdir: str | None = None) -> str:
+    """Đường dẫn hồ sơ `pid`; id sai dạng hoặc file (qua symlink) nằm ngoài products/ → ProductError."""
+    pdir = pdir or products_dir()
+    if not isinstance(pid, str) or not PRODUCT_ID.fullmatch(pid):
+        raise ProductError(f"id hồ sơ sản phẩm không hợp lệ: {str(pid)[:80]!r}")
+    f = os.path.join(pdir, pid + ".json")
+    if os.path.exists(f) and not same_dir(os.path.dirname(os.path.realpath(f)), pdir):
+        raise ProductError("hồ sơ sản phẩm trỏ ra ngoài thư mục products/")
+    return f
+
+
+def load_product(pid, pdir: str | None = None) -> dict:
+    f = product_file(pid, pdir)
+    if not os.path.exists(f):
+        raise ProductError(f"không thấy hồ sơ sản phẩm “{pid}” ({f})")
+    p = _read_json(f)
+    if not isinstance(p, dict):
+        raise ProductError(f"hồ sơ sản phẩm “{pid}” hỏng")
+    return p
+
+
+def claim_status(c: dict, today: str | None = None) -> str:
+    """Trạng thái dùng để soát của một claim trong hồ sơ: approved cần bằng chứng và chưa quá `expires`."""
+    st = c.get("status")
+    if st not in ("approved", "pending", "prohibited", "expired"):
+        return "pending"
+    today = today or datetime.date.today().isoformat()
+    if st == "approved":
+        if not str(c.get("evidence") or "").strip():
+            return "pending"
+        exp = str(c.get("expires") or "")
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", exp) and exp < today:
+            return "expired"
+    return st
+
+
+def resolve_ads(cfg: dict, pdir: str | None = None, today: str | None = None) -> dict:
+    """Gộp claim, cụm từ cấm và ngành của hồ sơ sản phẩm (`ads.product`) với phần nhập tay của dự án (dự án cũ).
+
+    Trả {claims, blocked, industry, product, issues}; hồ sơ thiếu hoặc id sai → một vấn đề `PRODUCT-MISSING` mức cao."""
+    claims = [{"id": str(c.get("id") or f"c{i + 1}"), "text": str(c.get("text") or ""), "status": c.get("status") or "approved"}
+              for i, c in enumerate(cfg.get("claims") or []) if isinstance(c, dict) and str(c.get("text") or "").strip()]
+    blocked = [str(b) for b in cfg.get("blocked") or [] if str(b).strip()]
+    industry, info, issues = None, None, []
+    pid = cfg.get("product")
+    if pid:
+        try:
+            p = load_product(pid, pdir)
+        except (ProductError, OSError, ValueError) as e:
+            info = {"id": str(pid)[:80], "error": str(e)}
+            issues.append({"t": 0, "kind": "ad_claim", "severity": "high", "code": "PRODUCT-MISSING", "ref": None,
+                           "msg": f"Không đọc được hồ sơ sản phẩm nên chưa đối chiếu claim: {e}"})
+        else:
+            pc = [{"id": f"{pid}:{c.get('id') or i + 1}", "text": str(c.get("text") or ""), "status": claim_status(c, today)}
+                  for i, c in enumerate(p.get("claims") or []) if isinstance(c, dict) and str(c.get("text") or "").strip()]
+            claims = pc + claims
+            seen = {b.lower() for b in blocked}
+            blocked += [str(b) for b in p.get("blocked") or [] if str(b).strip() and str(b).lower() not in seen]
+            industry = p.get("industry") if p.get("industry") in INDUSTRIES else None
+            info = {"id": pid, "name": str(p.get("name") or pid), "claims": len(pc),
+                    "approved": sum(c["status"] == "approved" for c in pc)}
+    return {"claims": claims, "blocked": blocked, "industry": industry, "product": info, "issues": issues}
+
+
 # ---------------------------------------------------------------- chạy trên một dự án
-_SEV = {"critical": "high", "warning": "med"}
+_SEV ={"critical": "high", "warning": "med"}
 _REMINDER = {"POLICY-PRICE"}   # chỉ nhắc đối chiếu trang đích, không phải dấu hiệu vi phạm
 
 
@@ -463,10 +546,9 @@ def run(d: str, against: list[str] | None = None) -> dict:
     if not cfg.get("on"):
         return {"enabled": False, "issues": []}
     platforms = {p for p in cfg.get("platforms") or [] if p in PLATFORMS} or set(PLATFORMS)
-    claims = [{"id": str(c.get("id") or f"c{i + 1}"), "text": str(c.get("text") or ""), "status": c.get("status") or "approved"}
-              for i, c in enumerate(cfg.get("claims") or []) if isinstance(c, dict) and str(c.get("text") or "").strip()]
+    res = resolve_ads(cfg)
+    claims, blocked = res["claims"], res["blocked"]
     approved = [c for c in claims if c["status"] == "approved"]
-    blocked = [str(b) for b in cfg.get("blocked") or []]
 
     spoken, shown = sentences(caps), screen_texts(tl)
     beats = [{"t": s["t"], "text": s["text"], "type": "hook" if i == 0 else "body", "where": "lời thoại"} for i, s in enumerate(spoken)]
@@ -474,7 +556,7 @@ def run(d: str, against: list[str] | None = None) -> dict:
     for b in beats:   # Studio không có trích dẫn tay: câu được coi là dẫn claim đã duyệt nào khớp nội dung đủ gần
         b["claim_ids"] = [c["id"] for c in approved if similarity(b["text"], c["text"]) >= CITE_WARN]
 
-    industry = cfg.get("industry") if cfg.get("industry") in INDUSTRIES else None
+    industry = cfg.get("industry") if cfg.get("industry") in INDUSTRIES else res["industry"]
     if not industry:
         brand = tl.get("brand") or {}
         industry = detect_industry(" ".join([str(brand.get("name") or ""), str(tl.get("title") or "")] + [b["text"] for b in beats]))
@@ -482,7 +564,7 @@ def run(d: str, against: list[str] | None = None) -> dict:
     def quote(b):
         return f" ({b['where']}: “{b['text'][:70]}{'…' if len(b['text']) > 70 else ''}”)"
 
-    issues = []
+    issues = list(res["issues"])
     for f in check_policy(beats, industry, platforms):
         b = beats[f["beat"]]
         issues.append(_issue("ad_policy", b["t"], {**f, "message": f["message"] + quote(b)}))
@@ -497,7 +579,7 @@ def run(d: str, against: list[str] | None = None) -> dict:
     issues += orig_issues
     issues.sort(key=lambda i: i["t"])
     return {"enabled": True, "industry": industry, "industry_vi": INDUSTRIES[industry], "platforms": sorted(platforms),
-            "claims": {"approved": len(approved), "other": len(claims) - len(approved)},
+            "claims": {"approved": len(approved), "other": len(claims) - len(approved)}, "product": res["product"],
             "blocked": any(i["severity"] == "high" for i in issues), "issues": issues, "originality": orig}
 
 

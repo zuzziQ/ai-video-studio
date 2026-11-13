@@ -177,9 +177,21 @@ test('server: other origins and hosts → 403 even with the token', async () => 
   assert.equal((await call('/api/project', { headers: { Origin: `http://127.0.0.1:${PORT}`, 'Sec-Fetch-Site': 'same-origin' }, host: `127.0.0.1:${PORT}` })).status, 200);
 });
 
+// The 413 is decided from the Content-Length header alone, and the server closes the connection right after answering.
+// Sending the 1.5 MB body as well raced that close (write EPIPE on the Linux runner, CI run 43363531642), so the oversized
+// request declares the length and sends only the head: same server path, no client write to break.
+function headOnlyStatus(p, headers) {
+  return new Promise((ok, bad) => {
+    const s = net.connect(PORT, '127.0.0.1', () => s.write(`POST ${p} HTTP/1.1\r\nHost: 127.0.0.1:${PORT}\r\nX-AVS-Token: ${TOKEN}\r\n`
+      + Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join('') + '\r\n'));
+    let got = '';
+    s.on('data', d => { got += d; const m = /^HTTP\/1\.1 (\d{3})/.exec(got); if (m) { s.destroy(); ok(+m[1]); } });
+    s.on('error', bad);
+    s.setTimeout(5000, () => { s.destroy(); bad(new Error('no response: ' + got)); });
+  });
+}
 test('server: oversized / chunked bodies are refused, GET side effects are gone', async () => {
-  const big = JSON.stringify({ timeline: { pad: 'x'.repeat(1.5 * (1 << 20)) } });
-  assert.equal((await call('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: big })).status, 413);
+  assert.equal(await headOnlyStatus('/api/save', { 'Content-Type': 'application/json', 'Content-Length': String(1.5 * (1 << 20)) }), 413);
   assert.equal((await call('/api/save', { method: 'POST', headers: { 'Transfer-Encoding': 'chunked' }, body: '{}' })).status, 411);
   assert.equal((await call('/api/srt')).status, 404); // GET no longer writes out/<name>.srt
   assert.equal((await call('/api/still?t=1')).status, 404);

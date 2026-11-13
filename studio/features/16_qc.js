@@ -100,21 +100,36 @@
   // ---------- ad gates (references/ad-gates.md): settings live in TL.ads, checked by scripts/ad_gates.py during QC ----------
   const AD_IND = { '': 'Tự nhận diện', general: 'Chung', cosmetics: 'Mỹ phẩm / chăm sóc da', supplements: 'Thực phẩm chức năng', food: 'Thực phẩm & đồ uống', finance: 'Tài chính', health_device: 'Thiết bị sức khoẻ' };
   const AD_PLAT = { meta: 'Facebook / Instagram', tiktok: 'TikTok' };
-  function adsDialog() {
+  async function adsDialog() {
     const a = S.TL.ads || {}, plats = a.platforms?.length ? a.platforms : Object.keys(AD_PLAT), cl = a.claims || [];
+    // Product Brain (M18, studio/features/53_products.js): claim, cụm từ cấm, ngành lấy từ hồ sơ sản phẩm dùng chung
+    const prods = await S.api('/api/products').then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+    const lost = a.product && !prods.some(p => p.id === a.product);
     const lines = st => cl.filter(c => (c.status || 'approved') === st).map(c => c.text).join('\n');
     S.modal(`<h3><i class="ti ti-speakerphone"></i> Kiểm tra quảng cáo</h3>
       <p class="muted">Khi bật, “Kiểm tra chất lượng” soát thêm lời thoại và chữ trên màn hình theo chính sách quảng cáo Meta / TikTok, đối chiếu claim, và chấm điểm nguyên bản so với các phiên bản A/B. Chỉ báo, không tự sửa; không thay kiểm duyệt của nền tảng.</p>
       <label class="qcx" style="margin-top:0"><input type="checkbox" id="adon" ${a.on ? 'checked' : ''}><span><b>Video này dùng để chạy quảng cáo</b></span></label>
-      <div class="ai-row" style="margin-top:10px"><span style="flex:none;width:86px">Ngành</span><select id="adind">${Object.entries(AD_IND).map(([k, v]) => `<option value="${k}" ${(a.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="ai-row" style="margin-top:10px"><span style="flex:none;width:86px">Sản phẩm</span><select id="adprod"><option value="">— nhập claim tay cho dự án này —</option>
+        ${prods.map(p => `<option value="${esc(p.id)}" ${a.product === p.id ? 'selected' : ''}>${esc(p.name)} · ${p.claims?.approved || 0} claim đã duyệt</option>`).join('')}
+        ${lost ? `<option value="${esc(a.product)}" selected>⚠ ${esc(a.product)} (không còn hồ sơ)</option>` : ''}</select></div>
+      <p class="muted" id="adprodhint" style="margin:2px 0 0 94px;font-size:11.5px"></p>
+      <div class="ai-row"><span style="flex:none;width:86px">Ngành</span><select id="adind">${Object.entries(AD_IND).map(([k, v]) => `<option value="${k}" ${(a.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="ai-row"><span style="flex:none;width:86px">Nền tảng</span>${Object.entries(AD_PLAT).map(([k, v]) => `<label style="cursor:pointer;margin-right:12px"><input type="checkbox" data-adp="${k}" ${plats.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
-      <p style="margin:10px 0 4px"><b>Claim đã có bằng chứng</b> <span class="muted">· mỗi dòng một câu; có ít nhất một dòng thì câu nêu lợi ích hay số liệu không khớp sẽ bị nhắc</span></p>
+      <p style="margin:10px 0 4px"><b id="adoklbl">Claim đã có bằng chứng</b> <span class="muted">· mỗi dòng một câu; có ít nhất một dòng thì câu nêu lợi ích hay số liệu không khớp sẽ bị nhắc</span></p>
       <textarea id="adok" rows="4" style="width:100%">${esc(lines('approved'))}</textarea>
       <p style="margin:10px 0 4px"><b>Claim bị cấm</b> <span class="muted">· mỗi dòng một câu; lời thoại gần giống sẽ bị chặn</span></p>
       <textarea id="adno" rows="2" style="width:100%">${esc(lines('prohibited'))}</textarea>
       <p style="margin:10px 0 4px"><b>Cụm từ không được dùng</b> <span class="muted">· mỗi dòng một cụm</span></p>
       <textarea id="adbl" rows="2" style="width:100%">${esc((a.blocked || []).join('\n'))}</textarea>
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="adsave">Lưu</button></div>`);
+    const hint = () => {
+      const id = $('#adprod').value, p = prods.find(x => x.id === id);
+      $('#adprodhint').textContent = p ? `Đối chiếu theo hồ sơ: ${p.claims?.approved || 0} claim đã duyệt, ${(p.claims?.prohibited || 0) + (p.claims?.expired || 0)} cấm / hết hạn, ${p.blocked || 0} cụm từ cấm. Sửa hồ sơ ở panel Sản phẩm; ô dưới chỉ để thêm riêng cho dự án này.`
+        : id ? 'Hồ sơ này không còn: kiểm tra quảng cáo sẽ chặn xuất cho tới khi chọn hồ sơ khác.' : 'Chưa có hồ sơ? Tạo ở panel Sản phẩm (thanh trái) để dùng lại cho nhiều dự án.';
+      $('#adoklbl').textContent = id ? 'Claim thêm riêng dự án này' : 'Claim đã có bằng chứng';
+    };
+    $('#adprod').onchange = () => { const p = prods.find(x => x.id === $('#adprod').value); if (p?.industry && !$('#adind').value) $('#adind').value = p.industry; hint(); };
+    hint();
     $('#adsave').onclick = () => {
       const rows = id => $(id).value.split('\n').map(s => s.trim()).filter(Boolean);
       const old = new Map(cl.map(c => [c.text, c.id])); let n = 0;
@@ -122,7 +137,8 @@
       const platforms = [...document.querySelectorAll('[data-adp]:checked')].map(i => i.dataset.adp);
       S.pushUndo('ads');
       S.TL.ads = { ...a, on: $('#adon').checked, industry: $('#adind').value || undefined, platforms: platforms.length ? platforms : Object.keys(AD_PLAT),
-        claims: [...rows('#adok').map(t => mk(t, 'approved')), ...rows('#adno').map(t => mk(t, 'prohibited'))], blocked: rows('#adbl') };
+        claims: [...rows('#adok').map(t => mk(t, 'approved')), ...rows('#adno').map(t => mk(t, 'prohibited'))], blocked: rows('#adbl'),
+        product: $('#adprod').value || undefined };
       S.changed(); S.closeModal(); rerender();
       S.toast(S.TL.ads.on ? 'Đã bật kiểm tra quảng cáo. Bấm Kiểm tra để soát.' : 'Đã tắt kiểm tra quảng cáo');
     };
@@ -131,7 +147,7 @@
     const a = q.ads; if (!a) return '';
     if (a.error) return `<br><span style="color:var(--warn)">Kiểm tra quảng cáo không chạy được: ${esc(a.error)}</span>`;
     const o = a.originality;
-    return `<br>Quảng cáo (${esc(a.industry_vi || '')} · ${(a.platforms || []).map(p => AD_PLAT[p] || p).join(', ')}): ${a.blocked ? '<b style="color:var(--bad)">có lỗi chặn</b>' : '<b style="color:var(--ok)">không có lỗi chặn</b>'}`
+    return `<br>Quảng cáo (${esc(a.industry_vi || '')} · ${(a.platforms || []).map(p => AD_PLAT[p] || p).join(', ')}${a.product?.name || S.TL.ads?.product ? ` · hồ sơ ${esc(a.product?.name || S.TL.ads.product)}` : ''}): ${a.blocked ? '<b style="color:var(--bad)">có lỗi chặn</b>' : '<b style="color:var(--ok)">không có lỗi chặn</b>'}`
       + (o ? ` · nguyên bản <b style="color:${o.ok ? 'var(--ok)' : o.ab ? 'var(--warn)' : 'var(--bad)'}">${o.score.toFixed(2)}</b> (ngưỡng ${o.min}, so ${o.compared} bản${o.ab ? ', nhóm A/B' : ''})` : ' · chưa có phiên bản khác để chấm nguyên bản')
       + (a.rechecked ? ' · đã soát lại sau khi sửa' : '')
       + (q.override ? `<br><span style="color:var(--warn)">Đã bỏ qua chặn xuất (${esc(new Date(q.override.at).toLocaleString('vi-VN'))}): ${esc(q.override.reason)}</span>` : '');
@@ -178,7 +194,7 @@
       <label class="ai-row" style="cursor:pointer"><input type="checkbox" id="qcclaude" style="flex:none" checked><span>Nhờ Claude xem khung hình <span class="muted">· chậm hơn</span></span></label>
       <div class="acts"><button class="mini" data-qc="run"><i class="ti ti-search"></i> Kiểm tra</button><button class="mini primary" data-qc="fix"><i class="ti ti-wand"></i> Kiểm tra & tự sửa</button>
       ${q ? '<button class="mini" data-qc="show"><i class="ti ti-list-details"></i> Kết quả</button>' : ''}</div>
-      <div class="ai-row" style="margin-top:8px"><span>Kiểm tra quảng cáo: <b>${S.TL.ads?.on ? 'bật' : 'tắt'}</b>${S.TL.ads?.on ? ` <span class="muted">· ${AD_IND[S.TL.ads.industry || '']}</span>` : ''}</span><button class="mini" data-qc="ads" style="margin-left:auto"><i class="ti ti-speakerphone"></i> Thiết lập</button></div></div>
+      <div class="ai-row" style="margin-top:8px"><span>Kiểm tra quảng cáo: <b>${S.TL.ads?.on ? 'bật' : 'tắt'}</b>${S.TL.ads?.on ? ` <span class="muted">· ${AD_IND[S.TL.ads.industry || '']}${S.TL.ads.product ? ` · hồ sơ ${esc(S.TL.ads.product)}` : ''}</span>` : ''}</span><button class="mini" data-qc="ads" style="margin-left:auto"><i class="ti ti-speakerphone"></i> Thiết lập</button></div></div>
       <div class="ai-card" id="vabox"><h4><i class="ti ti-versions"></i> Nhiều phiên bản (A/B)</h4>
       <p>Tạo 3 dự án anh em với hook mở đầu khác nhau (Claude viết) và/hoặc gói style khác nhau, để đăng thử xem bản nào giữ chân người xem tốt hơn.</p>
       <div class="ai-row"><select id="vakind"><option value="hook">Khác hook mở đầu</option><option value="style">Khác gói style</option><option value="both">Khác cả hai</option></select></div>

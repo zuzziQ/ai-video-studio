@@ -21,6 +21,7 @@ Mặc định tắt. Bật trong Studio: panel AI → thẻ **Kiểm tra chất 
 
 - `industry`: `general`, `cosmetics`, `supplements`, `food`, `finance`, `health_device`. Bỏ trống thì đoán từ tên thương hiệu, tiêu đề và lời thoại.
 - `claims[].status`: `approved` (đã có bằng chứng), `prohibited` hoặc `expired` (không được nói).
+- `product`: id hồ sơ sản phẩm dùng chung (`references/products.md`). Có thì claim, cụm từ cấm và ngành lấy từ hồ sơ, gộp với phần nhập tay ở trên; hồ sơ thiếu → `PRODUCT-MISSING` mức cao.
 
 Khi `ads.on`, mỗi lần chạy QC (`node scripts/ai_qc.mjs <dự án>`) gọi thêm `ad_gates.py`. Chạy riêng:
 
