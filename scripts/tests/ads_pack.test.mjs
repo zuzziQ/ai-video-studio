@@ -107,6 +107,7 @@ test('gói Meta + TikTok từ một lô phiên bản', () => {
   assert.deepEqual({ ...man.variants[code(1)], ads: undefined }, { dir: '../serum_v1'.replace('/', path.sep), hook: 'h1', angle: 'demo', audience: 'gen_z', narrative: 'how_to', format: 'split',
     duration: '15', voice: 'voice_minh', music: 'upbeat', hook_text: 'Hook số 1', pack: 'split', ads: undefined });
   assert.ok(!man.variants[code(2)]);
+  assert.equal(man.variants[code(4)].duration, '0');   // 0 = giữ độ dài gốc, vẫn là một giá trị của trục
   const rd = fs.readFileSync(path.join(meta.dir, 'README.txt'), 'utf8');
   assert.match(rd, /không đăng quảng cáo/); assert.match(rd, /BẢN BỊ LOẠI KHỎI GÓI/); assert.match(rd, /Nguyễn Tất Kiểm/);
 });

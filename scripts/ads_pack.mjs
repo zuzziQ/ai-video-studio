@@ -107,7 +107,8 @@ export function factorsOf(tl, v = {}) {
     hook: v.hook_id || tl._variant?.hook_id || v.hook || tl._variant?.hook || '',
     hook_text: v.hook || tl._variant?.hook || '',
     angle: ax.angle || '', audience: ax.audience || '', narrative: ax.narrative || '', format: ax.format || '',
-    duration: ax.duration != null && ax.duration !== '' ? String(ax.duration) : '', pack:   // '0' = giữ độ dài gốc (giá trị trục của ma trận) v.pack || tl.pack || '',
+    duration: ax.duration != null && ax.duration !== '' ? String(ax.duration) : '',   // '0' = giữ độ dài gốc (giá trị trục của ma trận)
+    pack: v.pack || tl.pack || '',
     voice, music: music ? String(music.mood || (music.src || music.file ? path.basename(music.src || music.file) : '')) : '',
   };
 }
