@@ -42,7 +42,7 @@ test('addItem: thiếu đầu vào bị từ chối và queue.json không đổi
 });
 
 // LỖI: scripts/queue.mjs:68 — KINDS là object thường nên `KINDS['constructor']`, `KINDS['toString']` … trả về hàm có sẵn (truthy),
-// nên kind lạ kiểu đó lọt qua kiểm tra. Hậu quả: mục được xếp vào hàng đợi rồi Runner.runItem (scripts/queue.mjs:178) ném TypeError.
+// nên kind lạ kiểu đó lọt qua kiểm tra. Hậu quả: mục được xếp vào hàng đợi rồi Runner.runItem (scripts/queue.mjs:185) ném TypeError.
 test('addItem: tên kind trùng thuộc tính của Object (constructor, toString) cũng bị từ chối', { skip: 'LỖI: scripts/queue.mjs:68 kiểm `KINDS[kind]` bằng truy cập object thường, nhận nhầm Object.prototype' }, () => {
   write([]);
   for (const kind of ['constructor', 'toString', '__proto__']) assert.throws(() => Q.addItem({ kind, input: 'x' }), /Loại việc lạ/, kind);
@@ -127,7 +127,7 @@ test('renderRoots: chỉ lấy đường dẫn tuyệt đối, bỏ trùng và b
   assert.deepEqual(roots, [p, path.join(p, 'out')]);
 });
 
-test('Runner: mục loại lạ đưa vào queue.json bằng tay không làm kẹt hàng đợi', { skip: 'LỖI: scripts/queue.mjs:178 runItem: KINDS[it0.kind] là undefined rồi đọc spec.script ném TypeError trong tick(); mục đó đứng đầu hàng nên các mục sau không bao giờ chạy' }, async () => {
+test('Runner: mục loại lạ đưa vào queue.json bằng tay không làm kẹt hàng đợi', { skip: 'LỖI: scripts/queue.mjs:185 runItem: KINDS[it0.kind] là undefined rồi đọc spec.script ném TypeError trong tick(); mục đó đứng đầu hàng nên các mục sau không bao giờ chạy' }, async () => {
   write([item('bad', 'queued', { kind: 'khong-co' }), item('ok', 'error')]);
   const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
   try {
