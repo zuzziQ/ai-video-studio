@@ -93,7 +93,7 @@ class FetchTest(unittest.TestCase):
 
     def test_wrong_content_is_discarded(self):
         with self.assertRaises(ValueError):
-            m.fetch(self.t, FakeOpener(self.data[:-1] + b"x"))
+            m.fetch(self.t, FakeOpener(self.data[:-1] + bytes([self.data[-1] ^ 1])))  # luôn khác byte cuối
         self.assertEqual([x for x in os.listdir(self.dir) if x.endswith((".mp3", ".part"))], [])
 
     def test_redirect_outside_is_refused(self):
