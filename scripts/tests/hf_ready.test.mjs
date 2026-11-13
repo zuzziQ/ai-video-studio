@@ -19,3 +19,20 @@ test('M57: hf.js chờ từng promise của buildReady dạng object', () => {
   assert.match(src, /Object\.values\(br \|\| \{\}\)/, 'hf.js phải chờ Object.values(buildReady)');
   assert.doesNotMatch(src, /Promise\.all\(\[d\.fonts\?\.ready, w\.__hf\?\.buildReady\]\)/);
 });
+
+// M57: some blocks assign buildReady only inside their module script, after a top-level await (font/model fetch), so the
+// iframe's load event can fire before it exists; hf.js then seeked at once and the block's warm-up draws (other times)
+// landed in the first captured frame (wireframe-portal-title showed its replacement phrase at t=1.6 s).
+test('M57: hf.js chờ khối gán buildReady muộn trong module script', () => {
+  const late = fs.readdirSync(hfDir).filter(b => {
+    const f = path.join(hfDir, b, 'index.html');
+    if (!fs.existsSync(f)) return false;
+    const scripts = [...fs.readFileSync(f, 'utf8').matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+    const sets = scripts.filter(m => /buildReady\[["'][\w-]+["']\]\s*=/.test(m[2]));
+    return sets.length > 0 && sets.every(m => /type=["']module["']/.test(m[1]));
+  });
+  assert.ok(late.includes('wireframe-portal-title'), `khối gán buildReady trong module: ${late.join(', ')}`);
+  const src = fs.readFileSync(path.join(root, 'engine', 'hf.js'), 'utf8');
+  assert.match(src, /s\.text\.includes\('buildReady'\)/, 'hf.js phải nhận ra khối có buildReady qua nội dung script');
+  assert.match(src, /!hasBuild\(w\) && performance\.now\(\) - t0 < 8000/, 'hf.js phải chờ buildReady xuất hiện (trần 8 s) trước khi seek');
+});

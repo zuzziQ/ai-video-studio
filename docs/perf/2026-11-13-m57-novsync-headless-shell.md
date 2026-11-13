@@ -83,6 +83,32 @@ bỏ vsync làm lộ thường hơn. Trong video thật nó chỉ rơi vào **m�
 bắt đầu giữa khối, và `--still`. Đã thử chờ 2 `requestAnimationFrame` rồi seek lại ở lần gắn đầu: khối này phụ thuộc lịch sử seek nên
 khung đầu lại sai ổn định — đã bỏ. Cần sửa riêng (trong khối hoặc cách `hfMount` gắn khối mới), xem mục 5.
 
+**Đã sửa (cùng ngày, PR xếp chồng).** Nguyên nhân: module script của khối có `await` ở cấp cao nhất (tải font Geist) **trước** dòng
+gán `window.__hf.buildReady["wireframe-portal-title"]`, nên sự kiện `load` của iframe có thể bắn khi `buildReady` chưa tồn tại.
+`hfMount` thấy không có gì để chờ, seek ngay (lúc này `__wptRender` chưa có nên không vẽ gì), rồi module chạy tiếp: vẽ `renderScene`
+ở 0,3/0,5/0,7 thời lượng để làm nóng shader (t = 2,4/4,0/5,6 s — câu thay thế đã hiện) cách nhau bằng `setTimeout(0)`, rồi mới vẽ lại
+`tl.time()`. Ảnh chụp rơi vào giữa các lần vẽ làm nóng thì ra câu chữ khác. Seek lại cùng `t` không gọi `onUpdate` của GSAP nên khung
+sai đứng yên (giải thích lần thử "2 rAF rồi seek lại" ở trên). `canopy-part-title` cũng gán `buildReady` sau một `await` cấp cao nhất.
+
+Sửa chung trong `engine/hf.js` (không đụng khối): sau `load`, nếu script của khối có nhắc `buildReady` thì chờ nó xuất hiện (16 ms/lần,
+trần 8 s) rồi mới chờ các promise trong đó như trước. Khối gán `buildReady` sớm trong script thường thoát vòng chờ ngay.
+Test tĩnh: `scripts/tests/hf_ready.test.mjs`.
+
+| Gắn khối rồi chụp ngay (Chrome mới mỗi lượt) | Trước sửa | Sau sửa |
+|---|---|---|
+| t = 1,6 s, đường mặc định (B) | 3/6 + 4/10 sai (`a5f9a60d`, `d095cefa`) | **0/10** sai (`69b6f064` mọi lượt) |
+| t = 1,6 s, đường cũ (A) | 1/10 sai | **0/10** sai |
+| t = 0 / 0,033 / 0,067 s, B (9 lượt) | 2/27 (chung hai đường) | **0/27** khác lượt chụp lại |
+| t = 0 / 0,033 / 0,067 s, A (9 lượt) | | 1/27 khác md5, SSIM 1,000000, lượt thứ ba trùng lượt đầu |
+
+Khung khác md5 còn lại ở đường cũ là nhiễu vsync sẵn có (ở t = 3,2 s đường cũ cũng đổi qua lại `b5b083b9`/`485fb217`, SSIM 1,000000,
+cả trước lẫn sau sửa; đường mặc định không có).
+
+Kiểm lại khung mẫu (cùng `qa.mjs`, 204 khung) sau sửa: B sau sửa ↔ B trước sửa (lượt có khung sai) trùng byte 200/204, khác duy nhất
+`wireframe-portal-title@1,6` (nay là khung đúng `69b6f064`); `canopy-part-title@2,4` (cũng gán `buildReady` muộn) gắn rồi chụp ngay
+6/6 lượt trùng khung chụp lại. A ↔ B sau sửa: gói + `slate` 132/144, khối WebGL 52/60 trùng byte, SSIM nhỏ nhất ≥ 0,99999, không khối
+nào dưới 0,98.
+
 Hai khối lệch của `M50` (`vfx-text-cursor`, `wireframe-portal-title`) là GPU so với SwiftShader, không thuộc phép so này.
 
 ## 4. Hành vi mới
@@ -102,8 +128,8 @@ Hai khối lệch của `M50` (`vfx-text-cursor`, `wireframe-portal-title`) là 
 
 ## 5. Chưa đo / rủi ro còn lại
 
-- `wireframe-portal-title`: khung đầu sau khi gắn khối có thể sai (mục 3), đường mới dính thường hơn đường cũ. Cách lùi tạm khi dùng
-  khối này: `AVS_RENDER_NOVSYNC=0`.
+- `wireframe-portal-title`: khung đầu sau khi gắn khối — đã sửa (mục 3). Phép đo dùng sample trên máy này; khối nào sau này gán
+  `buildReady` muộn mà không nhắc chữ `buildReady` trong script thì vòng chờ không nhận ra.
 
 - macOS/Linux và máy không GPU: chỉ kiểm bằng test giả (`scripts/tests/render_hw.test.mjs`) và `AVS_RENDER_GPU=0` trên máy này.
 - Chrome tự cập nhật thì headless-shell lệch bản đến khi chạy lại lệnh cài (vẫn chạy được; trên máy này cùng bản nên md5 trùng).
