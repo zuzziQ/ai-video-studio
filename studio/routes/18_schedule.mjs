@@ -1,5 +1,5 @@
 // Lịch đăng + Kết nối YouTube (scripts/publish.mjs làm phần việc thật). Lịch dùng chung cho mọi dự án: ~/.ai-video-studio/schedule.json.
-// Có hẹn giờ dự phòng: mỗi 60 s chạy `publish.mjs run-due` (khoá chung publish.lock với hàng đợi Tự lái, nên không bao giờ chạy trùng).
+// Có hẹn giờ dự phòng: mỗi 60 s chạy `publish.mjs run-due` khi lịch có mục đến hạn — M55 (khoá chung publish.lock với hàng đợi Tự lái, nên không bao giờ chạy trùng).
 // Tắt bằng AVS_NO_SCHEDULE_TIMER=1. Spec: references/publish-schedule.md
 // Mọi ghi schedule.json đi qua PUB.addItem/updateItem/removeItem/setSettings/autoSchedule, giữ schedule.json.lock (M40):
 // Studio sửa lịch cùng lúc với run-due (tiến trình con) hay CLI không làm mất thay đổi của nhau.
@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import * as PUB from '../../scripts/publish.mjs';
+import { isDue } from '../../scripts/schedule_due.mjs';
 import { revealPath } from '../../scripts/platform.mjs';
 
 const VID = /\.(mp4|mov|m4v|webm)$/i;
@@ -16,7 +17,8 @@ export default ctx => {
   function runDue(manual) {
     if (RUN.child) return false;
     const s = PUB.loadSchedule();
-    if (!manual && !s.items.some(x => x.state === 'planned' || x.state === 'uploading')) return false;
+    // M55: the timer starts run-due only when an item is actually due (same test as runDue), not for every future item
+    if (!manual && !s.items.some(x => isDue(x, s.settings, PUB.now()))) return false;
     const ch = spawn('node', [CLI, 'run-due', '--json'], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
     RUN.child = ch; RUN.step = 'Đang kiểm tra lịch…'; let out = '', err = '';
     ch.stdout.on('data', d => { out += d; const m = String(d).match(/@@ [\d.]+ (.*)/g); if (m) RUN.step = m.pop().replace(/^@@ [\d.]+ /, ''); });
