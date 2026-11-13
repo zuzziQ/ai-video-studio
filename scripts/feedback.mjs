@@ -10,7 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { AVS_HOME, loadStore, saveStore, getProfile } from './profile.mjs';
-import { loadQueue, addItem } from './queue.mjs';
+import { loadQueue, addItem, isFailed } from './queue.mjs';
 import { loadSchedule } from './publish.mjs';
 import { spawnClaude } from './platform.mjs';
 
@@ -171,7 +171,7 @@ export async function refreshSuggestions({ claude = true, model = 'sonnet' } = {
   const upcoming = (sch.items || []).filter(x => x.state === 'planned' && Date.parse(x.when) > now && Date.parse(x.when) < now + 3 * 864e5).length;
   const ready = q.items.filter(i => i.state === 'done' && (i.outputs || []).some(f => /\.mp4$/i.test(f))).length;
   if (!upcoming && ready) addSuggestion({ key: 'schedule', title: 'Lên lịch đăng cho 3 ngày tới', detail: `Chưa có bài nào được hẹn giờ trong 3 ngày tới, trong khi đã có ${ready} video làm xong.`, action: { type: 'schedule' } });
-  const failed = q.items.filter(i => i.state === 'failed').length;
+  const failed = q.items.filter(isFailed).length;
   if (failed) addSuggestion({ key: 'failed', title: `Chạy lại ${failed} việc bị lỗi trong hàng đợi`, detail: 'Tự lái chạy tiếp từ bước dở, không làm lại từ đầu.', action: { type: 'retry_failed' } });
   for (const p of store.profiles) if (p.fb?.avg && p.fb.avg >= 4.3 && p.fb.n >= 4) addSuggestion({ key: 'clone-' + p.id, title: `Hồ sơ "${p.name}" đang được chấm ${p.fb.avg}★`, detail: 'Nhân bản hồ sơ này cho kênh khác để giữ công thức đang hiệu quả.', action: { type: 'none' } });
   if (claude) {
@@ -208,7 +208,7 @@ export async function actSuggestion(sid, act, { onImprove } = {}) {
     else if (a.type === 'improve') { const r = await (onImprove || improve)(); msg = 'Đã chạy tự cải tiến' + (r?.ai?.summary ? ': ' + r.ai.summary : ''); }
     else if (a.type === 'retry_failed') {
       const { retryItem } = await import('./queue.mjs'); let n = 0;
-      for (const it of loadQueue().items.filter(i => i.state === 'failed')) if (retryItem(it.id)) n++;
+      for (const it of loadQueue().items.filter(isFailed)) if (retryItem(it.id)) n++;
       msg = `Đã cho chạy lại ${n} việc`;
     } else if (a.type === 'schedule') {
       const { autoSchedule } = await import('./publish.mjs');
