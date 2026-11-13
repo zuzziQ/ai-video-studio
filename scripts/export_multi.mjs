@@ -31,6 +31,14 @@ function faceAt(keys, t) {
   const a = keys[i - 1], b = keys[i], k = (t - a.t) / (b.t - a.t || 1);
   return { ox: a.ox + (b.ox - a.ox) * k, oy: a.oy + (b.oy - a.oy) * k };
 }
+// A filter option value inside -filter_complex is parsed twice (ffmpeg-filters "Notes on filtergraph escaping"):
+// first the option level (\ escapes, ' quotes, : separates options), then the graph level ([ ] , ; split filters).
+// Escape \ ' : for the option level, then wrap in '...' for the graph level, so Windows paths like
+// C:\out\.x_1x1.cmd survive both (quoting only the graph level let ffmpeg eat the \ and the drive colon).
+export function ffFilterArg(value) {
+  const opt = String(value).replace(/[\\':]/g, '\\$&');
+  return `'${opt.replace(/'/g, "'\\''")}'`;
+}
 export const NOTES = {
   '16:9>9:16': 'Cắt dọc bám mặt từ bản ngang: chữ/graphic ở hai bên trái-phải bị cắt mất; ảnh phóng ~1,8× nên kém nét hơn bản gốc.',
   '16:9>1:1': 'Cắt vuông bám mặt từ bản ngang: mất phần hai bên trái-phải (graphic, chữ đặt sát mép).',
@@ -78,7 +86,7 @@ export async function deriveAspects(src, aspects, opts = {}) {
       fs.writeFileSync(cmd, lines.join('\n'));
       // 9:16 crop is upscaled so its short side matches the export (1920x1080 -> 1080x1920); 1:1 keeps the crop size
       [ow, oh] = a === '9:16' ? [even(H), even(H * 16 / 9)] : [cw, ch];
-      vf = `[0:v]sendcmd=f='${cmd.replace(/'/g, "'\\''")}',crop=w=${cw}:h=${ch}:x=0:y=0,scale=${ow}:${oh}:flags=lanczos,setsar=1[v]`;
+      vf = `[0:v]sendcmd=f=${ffFilterArg(cmd)},crop=w=${cw}:h=${ch}:x=0:y=0,scale=${ow}:${oh}:flags=lanczos,setsar=1[v]`;
     }
     await run('ffmpeg', ['-v', 'error', '-y', '-i', src, '-filter_complex', vf, '-map', '[v]', '-map', '0:a?', ...venc, '-c:a', 'copy', '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', out], l => {
       const m = /out_time_ms=(\d+)/.exec(l); if (m) prog((n + Math.min(1, +m[1] / 1e6 / dur)) / todo.length);
