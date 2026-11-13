@@ -7,7 +7,9 @@
 //        frames at 60 Hz); AVS_RENDER_NOVSYNC=0 turns that off. chrome-headless-shell is used when found
 //        ($AVS_HOME/chrome-headless-shell, installed by scripts/install_headless_shell.mjs, or AVS_CHROME_SHELL=<exe>;
 //        AVS_CHROME_SHELL=0 never uses it); it falls back to the installed Chrome when it is missing or fails to launch.
-// usage: node scripts/render_hw.mjs   → prints the Chrome mode, WebGL renderer, executable, vsync, cores and worker plan.
+//   M52: H.264 encoder for render.mjs / export_multi.mjs: NVENC / QSV / VideoToolbox after a cached test encode, else
+//        libx264 (pickEncoder). AVS_ENCODER=auto|nvenc|qsv|videotoolbox|x264.
+// usage: node scripts/render_hw.mjs   → prints the Chrome mode, WebGL renderer, executable, vsync, cores, worker plan, encoder.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -171,6 +173,91 @@ export function renderPlan({ W, H, n, fps, workers = null, fast = false, preset 
   };
 }
 
+// ---------- video encoder (M52) ----------
+// Hardware H.264 when this ffmpeg + driver can really open it, else libx264. One short test encode per encoder, cached in
+// $AVS_HOME/encoders.json under a key of the ffmpeg version, OS and GPU driver (a driver or ffmpeg update probes again).
+// AVS_ENCODER=auto (default) | nvenc | qsv | videotoolbox | x264. A forced hardware encoder that fails its probe still falls
+// back to libx264 (with one line on stderr), so a render never dies for want of a GPU encoder.
+export const ENCODERS = { nvenc: 'h264_nvenc', qsv: 'h264_qsv', videotoolbox: 'h264_videotoolbox', x264: 'libx264' };
+const ALIAS = { '': 'auto', auto: 'auto', nvenc: 'nvenc', h264_nvenc: 'nvenc', nvidia: 'nvenc', qsv: 'qsv', h264_qsv: 'qsv', intel: 'qsv',
+  videotoolbox: 'videotoolbox', h264_videotoolbox: 'videotoolbox', vt: 'videotoolbox', x264: 'x264', libx264: 'x264', cpu: 'x264', '0': 'x264', off: 'x264' };
+export function encoderWanted(env = process.env) {
+  const v = String(env.AVS_ENCODER ?? '').trim().toLowerCase();
+  return ALIAS[v] || 'auto';
+}
+// Hardware encoders worth trying on this OS, best first.
+export const hwCandidates = (platform = process.platform) => (platform === 'darwin' ? ['videotoolbox'] : ['nvenc', 'qsv']);
+// Where auto uses the hardware encoder (measured on GTX 1660 Ti, docs/perf/2026-11-13-m52-nvenc.md).
+export const AUTO_USES = new Set(['segment', 'final', 'derive']);
+
+// NVENC quality (cq) per x264 crf: chosen so SSIM vs the x264 file stays ≥ 0.98 at a similar size (report M52, mục 3).
+export const NVENC_CQ_OFFSET = 6;
+// encoderArgs(kind, { preset: x264 preset, crf, threads }) → ffmpeg output args for the video stream.
+export function encoderArgs(kind, { preset = 'medium', crf = 17, threads = 0 } = {}) {
+  switch (kind) {
+    case 'nvenc': return ['-c:v', 'h264_nvenc', '-preset', 'p5', '-tune', 'hq', '-rc', 'vbr', '-cq', String(crf + NVENC_CQ_OFFSET), '-b:v', '0',
+      '-spatial-aq', '1', '-bf', '3', '-profile:v', 'high', '-pix_fmt', 'yuv420p'];
+    // qsv / videotoolbox: not measured on the M52 machine; constant-quality modes roughly matching crf.
+    case 'qsv': return ['-c:v', 'h264_qsv', '-preset', 'medium', '-global_quality', String(crf + 3), '-profile:v', 'high', '-pix_fmt', 'nv12'];
+    case 'videotoolbox': return ['-c:v', 'h264_videotoolbox', '-q:v', String(Math.max(1, Math.min(100, 100 - crf * 2))), '-profile:v', 'high', '-pix_fmt', 'yuv420p'];
+    default: return ['-c:v', 'libx264', '-preset', preset, '-crf', String(crf), '-pix_fmt', 'yuv420p', ...(threads ? ['-threads', String(threads)] : [])];
+  }
+}
+export const encoderLabel = (kind, preset) => (kind === 'x264' ? `x264 ${preset}` : kind);
+
+const firstLine = s => String(s || '').split(/\r?\n/).find(l => l.trim())?.trim() || '';
+// Key for the probe cache: ffmpeg build, OS, and the NVIDIA driver when nvidia-smi exists (QSV/VideoToolbox ride on the OS).
+export function encoderKey({ run = spawnSync, platform = process.platform } = {}) {
+  const ff = firstLine(run('ffmpeg', ['-hide_banner', '-version'], { encoding: 'utf8', timeout: 8000, windowsHide: true })?.stdout);
+  let drv = '';
+  if (platform !== 'darwin') {
+    try { drv = firstLine(run('nvidia-smi', ['--query-gpu=driver_version', '--format=csv,noheader'], { encoding: 'utf8', timeout: 8000, windowsHide: true })?.stdout); } catch { /* no NVIDIA */ }
+  }
+  return `${ff}|${platform}-${os.release()}|nvidia ${drv || '-'}`;
+}
+// One tiny encode with the same args the render uses. → { ok, err }
+export function probeEncoder(kind, { run = spawnSync } = {}) {
+  const r = run('ffmpeg', ['-hide_banner', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=gray:s=320x240:r=30', '-frames:v', '8', ...encoderArgs(kind), '-f', 'null', '-'],
+    { encoding: 'utf8', timeout: 20000, windowsHide: true });
+  const ok = !r?.error && r?.status === 0;
+  return { ok, err: ok ? '' : firstLine(r?.error?.message || r?.stderr) || `ffmpeg exit ${r?.status}` };
+}
+export const encoderCachePath = (env = process.env) => path.join(avsHome(env), 'encoders.json');
+// Probe result for one encoder, from the cache when the key matches (a probe costs ~0.1–0.4 s: a GPU init each time).
+export function encoderUsable(kind, { env = process.env, key = null, run = spawnSync, cachePath = encoderCachePath(env) } = {}) {
+  key ??= encoderKey({ run });
+  let cache = {};
+  try { cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch { /* none yet */ }
+  if (cache.key !== key || typeof cache.results !== 'object' || !cache.results) cache = { key, results: {} };
+  if (!cache.results[kind]) {
+    cache.results[kind] = { ...probeEncoder(kind, { run }), at: new Date().toISOString() };
+    try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify(cache, null, 1)); } catch { /* read-only home: probe again next time */ }
+  }
+  return cache.results[kind];
+}
+
+// pickEncoder({ use: 'segment' | 'final' | 'derive' }) → { kind, why }. Decided once per process and use.
+const picked = new Map();
+export function pickEncoder({ use = 'final', env = process.env, platform = process.platform, run = spawnSync, cachePath, quiet = false } = {}) {
+  const memo = `${use}|${encoderWanted(env)}`, real = run === spawnSync && !cachePath;
+  if (real && picked.has(memo)) return picked.get(memo);
+  const want = encoderWanted(env), note = m => { if (!quiet) console.error(`[encoder] ${m}`); };
+  let res = null;
+  if (want === 'x264') res = { kind: 'x264', why: 'AVS_ENCODER=x264' };
+  else {
+    const tries = want === 'auto' ? (AUTO_USES.has(use) ? hwCandidates(platform) : []) : [want];
+    const key = tries.length ? encoderKey({ run, platform }) : '';
+    for (const kind of tries) {
+      const r = encoderUsable(kind, { env, key, run, cachePath: cachePath || encoderCachePath(env) });
+      if (r.ok) { res = { kind, why: want === 'auto' ? 'auto' : `AVS_ENCODER=${want}` }; break; }
+      if (want !== 'auto') note(`${ENCODERS[kind]} không dùng được (${r.err}), dùng libx264`);
+    }
+    res ||= { kind: 'x264', why: tries.length ? 'không có encoder phần cứng dùng được' : 'auto' };
+  }
+  if (real) picked.set(memo, res);
+  return res;
+}
+
 // ---------- CLI: what would this machine do? ----------
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { default: puppeteer } = await import('puppeteer-core');
@@ -184,5 +271,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     vsync: novsyncWanted() ? 'off (--disable-gpu-vsync --disable-frame-rate-limit)' : 'on',
     gpu_env: process.env.AVS_RENDER_GPU ?? null, novsync_env: process.env.AVS_RENDER_NOVSYNC ?? null, shell_env: process.env.AVS_CHROME_SHELL ?? null,
     physical: physicalCores(), logical: logicalCores(), render_1080p: p,
+    encoder_env: process.env.AVS_ENCODER ?? null, encoder_cache: encoderCachePath(),
+    encoder: Object.fromEntries(['segment', 'final', 'derive'].map(u => [u, pickEncoder({ use: u })])),
   }, null, 2));
 }

@@ -36,3 +36,12 @@ test('M57: hf.js chờ khối gán buildReady muộn trong module script', () =>
   assert.match(src, /s\.text\.includes\('buildReady'\)/, 'hf.js phải nhận ra khối có buildReady qua nội dung script');
   assert.match(src, /!hasBuild\(w\) && performance\.now\(\) - t0 < 8000/, 'hf.js phải chờ buildReady xuất hiện (trần 8 s) trước khi seek');
 });
+
+// M52 (sửa kèm): hf_import.mjs (ảnh xem trước khi nhập khối) chờ buildReady như một promise (`r?.then`) nên bỏ qua dạng
+// { [block]: Promise } và khối gán muộn; nay chờ giống engine/hf.js.
+test('M57: hf_import.mjs chờ buildReady dạng object và gán muộn như hf.js', () => {
+  const src = fs.readFileSync(path.join(root, 'scripts', 'hf_import.mjs'), 'utf8');
+  assert.doesNotMatch(src, /if \(r\?\.then\) await Promise\.race\(\[r,/, 'không còn chỉ chờ buildReady khi nó là promise');
+  assert.match(src, /s\.text\.includes\('buildReady'\)/, 'phải nhận ra khối có buildReady qua nội dung script');
+  assert.match(src, /Object\.values\(br \|\| \{\}\)/, 'phải chờ mọi promise trong buildReady');
+});

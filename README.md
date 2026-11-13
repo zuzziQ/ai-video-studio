@@ -825,6 +825,7 @@ Lúc tạo dự án, chọn độ chính xác cao hơn (model whisper lớn hơn
 
 **Render chậm hoặc máy nóng?**
 Giảm số luồng: `--workers 2`. Mỗi luồng tốn khoảng 300 MB RAM. Render tự dùng GPU khi máy có (`node scripts/render_hw.mjs` cho biết máy đang dùng gì); nếu khung hình bị lỗi hoặc đen trên GPU, đặt `AVS_RENDER_GPU=0` để dựng bằng CPU như cũ.
+Mã hoá video cũng tự dùng encoder phần cứng (NVIDIA NVENC, Intel QSV, Apple VideoToolbox) khi ffmpeg mở được, không thì libx264; `AVS_ENCODER=x264` ép dùng CPU. Với NVIDIA: ffmpeg 9 cần driver **≥ 610**, driver cũ hơn thì NVENC không mở được và render tự dùng libx264 (cập nhật driver rồi chạy lại).
 
 **Muốn dời thư mục dữ liệu?**
 Đặt biến môi trường `AVS_HOME` (mặc định `~/.ai-video-studio`) trước khi chạy `install.sh` / `studio.sh`. `AVS_SKILLS_DIR` (mặc định `~/.claude/skills`) là nơi lưu skill `video-style-*` của style bạn tạo; `AVS_SKILL_DIR` là chỗ `install.sh` gắn skill chính.
