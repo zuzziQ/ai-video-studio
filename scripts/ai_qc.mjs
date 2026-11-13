@@ -14,7 +14,8 @@
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 import { spawn, execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { findChrome, pyBin, spawnClaude } from './platform.mjs';
+import { findChrome, pyBin } from './platform.mjs';
+import { runLLM, parseLooseJSON } from './llm.mjs';
 import { qcHash } from './export_gate.mjs';
 
 export const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,7 +93,7 @@ export async function openEngine(dir, { scale = .75 } = {}) {
   const { default: puppeteer } = await import('puppeteer-core');
   if (!CHROME) throw new Error('Không tìm thấy Google Chrome (cần để render ảnh kiểm tra).');
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
-    args: ['--allow-file-access-from-files', '--disable-web-security', '--force-color-profile=srgb', '--hide-scrollbars', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+    args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
   const page = (await browser.pages())[0] || await browser.newPage();
   const E = { browser, page, dir, scale, failed: [], errors: [], curT: null };
   page.on('requestfailed', r => { const u = r.url(); if (u.startsWith('file:')) E.failed.push({ url: decodeURIComponent(u.replace(/^file:\/\//, '')), t: E.curT }); });
@@ -406,38 +407,15 @@ async function audioPass(tl, dir, qcDir) {
 }
 
 // ---------- Claude review ----------
-export function askClaude(prompt, { model = 'sonnet', cwd, tools = [], timeout = 360000, onTick } = {}) {
-  return new Promise((ok, bad) => {
-    const argv = ['-p', '--output-format', 'json', '--model', model];
-    if (tools.length) argv.push('--allowedTools', tools.join(','));
-    if (cwd) argv.push('--add-dir', cwd);
-    const p = spawnClaude(argv, { stdio: ['pipe', 'pipe', 'pipe'], cwd: cwd || os.tmpdir() });
-    let out = '', err = '', t0 = Date.now();
-    const tick = setInterval(() => { onTick && onTick((Date.now() - t0) / 1000); if (Date.now() - t0 > timeout) { p.kill('SIGTERM'); } }, 1000);
-    p.stdout.on('data', d => (out += d)); p.stderr.on('data', d => (err += d));
-    p.on('error', e => { clearInterval(tick); bad(new Error(e.code === 'ENOENT' ? 'Không tìm thấy lệnh "claude" (Claude Code CLI). Cài Claude Code rồi thử lại, hoặc chạy với --no-claude.' : e.message)); });
-    p.on('close', code => {
-      clearInterval(tick);
-      if (Date.now() - t0 > timeout) return bad(new Error(`Claude trả lời quá ${Math.round(timeout / 1000)} giây — bỏ qua phần nhận xét AI.`));
-      let r = null; try { r = JSON.parse(out); } catch {}
-      const msg = String(r?.result || err || out);
-      if (code !== 0 || r?.is_error) {
-        if (/not logged in|\/login|invalid api key|authenticat|unauthorized|oauth token/i.test(msg)) return bad(new Error('Claude Code chưa đăng nhập. Mở Terminal, chạy "claude" một lần để đăng nhập rồi thử lại.'));
-        if (/credit balance|usage limit|rate limit|quota/i.test(msg)) return bad(new Error('Tài khoản Claude đã hết lượt dùng tạm thời. Đợi một lúc rồi thử lại.'));
-        return bad(new Error(`claude -p lỗi (mã ${code}): ${msg.slice(-300)}`));
-      }
-      ok(String(r ? r.result || '' : out));
-    });
-    p.stdin.end(prompt);
-  });
+// Goes through scripts/llm.mjs (M25). With tools (QC: Read on the stills) it is always Claude; without tools (variants.mjs
+// hook writing) the call is text-only (task 'text'), so it follows the provider chosen in config.json (Claude by default).
+export async function askClaude(prompt, { model = 'sonnet', cwd, tools = [], timeout = 360000, onTick } = {}) {
+  const args = [...(tools.length ? ['--allowedTools', tools.join(',')] : []), ...(cwd ? ['--add-dir', cwd] : [])];
+  const { text } = await runLLM(prompt, { model, args, cwd: cwd || os.tmpdir(), timeout, onTick, task: tools.length ? undefined : 'text',
+    timeoutMsg: `Claude trả lời quá ${Math.round(timeout / 1000)} giây — bỏ qua phần nhận xét AI.` });
+  return text;
 }
-export function parseJson(s) {
-  s = String(s).replace(/^```(?:json)?\s*|```\s*$/gm, '');
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('không có JSON');
-  const body = s.slice(a, b + 1);
-  try { return JSON.parse(body); } catch { return JSON.parse(body.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')); }
-}
+export const parseJson = s => parseLooseJSON(s, { shape: 'object' });
 function pickStills(samples, issues, max = 14) {
   const want = [.5, 1.8, ...issues.map(i => i.t)];
   const pick = new Set();
