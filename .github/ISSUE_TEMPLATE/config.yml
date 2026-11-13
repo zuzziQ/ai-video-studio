@@ -1,0 +1,7 @@
+# Tắt issue trống: mọi issue đi qua một trong các mẫu để có đủ thông tin và nhãn ban đầu (như supabase, kubernetes, vscode).
+blank_issues_enabled: false
+# Câu hỏi và đề xuất tính năng nên ở Discussions, không phải issue. Bỏ comment và sửa URL khi repo bật Discussions:
+# contact_links:
+#   - name: Đề xuất tính năng hoặc hỏi đáp
+#     url: https://github.com/<owner>/<repo>/discussions
+#     about: Thảo luận trước; khi đã rõ việc cần làm thì mở issue "Việc cần làm".

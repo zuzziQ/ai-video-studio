@@ -1,5 +1,9 @@
 # 🎬 AI Video Studio
 
+> **Dựa trên AI Video Studio của Nguyễn Tất Kiểm** — repo gốc: <https://github.com/nguyentatkiem/ai-video-studio> (giấy phép MIT).
+>
+> Bản này giữ nguyên phần mềm gốc và thêm: **cổng quảng cáo trong QC** (kiểm chính sách nền tảng, claim sản phẩm, tính nguyên bản trước khi xuất) và lộ trình gộp dần phần nghiệp vụ quảng cáo của AI Video Factory (sinh nhiều biến thể creative) vào Studio, giữ nguyên engine và editor gốc. Danh sách việc và trạng thái ở [docs/ROADMAP.md](docs/ROADMAP.md); cách kéo bản mới từ repo gốc ở [AGENTS.md](AGENTS.md).
+
 > **Tác giả: Nguyễn Tất Kiểm** · 🎁 **Tặng khoá học AI miễn phí:** <https://nguyentatkiem.com.vn/aiplusntk/>
 >
 > Mã nguồn mở theo giấy phép MIT. Khi sao chép, sửa hoặc phát hành lại (kể cả nhờ AI sửa), **giữ nguyên ghi công tác giả**. Xem [mục 16. Bản quyền và ghi công](#16-bản-quyền-và-ghi-công).

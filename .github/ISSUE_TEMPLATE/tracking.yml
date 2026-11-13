@@ -1,0 +1,32 @@
+name: Issue theo dõi
+description: Một tính năng hoặc một đợt chuyển gồm nhiều PR (kế hoạch, thứ tự, trạng thái)
+title: "feat: "
+labels: ["type/feature", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dùng cho việc cần nhiều PR (theo lớp hoặc theo tranche). Gắn vào **Milestone** của đợt; gắn các issue con làm **Sub-issues** dưới issue này theo đúng thứ tự thực hiện (mỗi issue con mở đầu bằng `Thứ tự: <mã>`). Mỗi PR ghi `Fixes #số-issue-con` hoặc `Refs #số-issue-này`.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Mục tiêu và phạm vi
+      description: Người dùng được gì; cái gì KHÔNG làm trong đợt này.
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Bảng kế hoạch PR và phân làn theo thứ tự
+      description: Ghi thứ tự, issue con, PR, base hiện tại, chủ làn review (Lane) và điều kiện trước khi merge/deploy.
+      placeholder: |
+        | Thứ tự | Issue | PR | Base | Lane / Review | Trước khi merge / deploy |
+        |---|---|---|---|---|---|
+        | 1 | #... | – | main | ... | CI xanh |
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Rủi ro, file đụng độ với PR đang mở và cách quay lại
+      description: Liệt kê các file nóng đụng với PR đang mở khác (schema, lockfile, .env.example...), migration, thứ tự rebase/deploy và cách revert.

@@ -1,0 +1,38 @@
+name: Báo lỗi
+description: Hành vi sai so với mong đợi, tái hiện được
+title: "bug: "
+labels: ["type/bug", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tìm trong issue đang mở trước. Không dán bí mật, token hay dữ liệu thật của khách vào đây.
+  - type: textarea
+    id: what
+    attributes:
+      label: Chuyện gì đang sai
+      description: Một hai câu, kèm thông báo lỗi hoặc ảnh nếu có.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Cách tái hiện
+      description: Các bước từ trạng thái sạch, hoặc câu lệnh, hoặc đoạn mã tối thiểu.
+      placeholder: |
+        1. Vào '...'
+        2. Bấm '...'
+        3. Thấy '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Mong đợi
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Ở đâu và phiên bản nào
+      description: Môi trường (local, staging, prod), commit hoặc phiên bản, trình duyệt nếu là giao diện.

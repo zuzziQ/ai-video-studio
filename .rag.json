@@ -1,0 +1,10 @@
+{
+  "project": "ai-video-studio",
+  "description": "AI Video Studio (bản zuzziQ, dựa trên repo của Nguyễn Tất Kiểm, MIT): editor video chạy trên máy, server Node studio/server.mjs + plugin studio/routes, studio/features; render Chrome headless + ffmpeg; cổng quảng cáo trong QC. code-rag-mcp đọc file này để tìm knowledge pack.",
+  "knowledge": ".rag/index.js",
+  "sync": ".rag/sync.js",
+  "verify_commands": [
+    "node .rag/sync.js --check"
+  ],
+  "anchors": {}
+}

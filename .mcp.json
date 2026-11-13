@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "code-rag-mcp": {
+      "command": "node",
+      "args": [
+        "${CODE_RAG_MCP:-D:/ai/tools/code-rag-mcp}/index.js"
+      ]
+    },
+    "codebase-memory-mcp": {
+      "command": "${CODEBASE_MEMORY_BIN:-codebase-memory-mcp}",
+      "args": []
+    },
+    "dev-memory": {
+      "command": "node",
+      "args": [
+        "${DEVMEM_HOME:-D:/ai/tools/dev-memory}/index.js",
+        "--project",
+        "."
+      ]
+    }
+  }
+}
