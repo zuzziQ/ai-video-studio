@@ -1,12 +1,20 @@
 // Lớp gọi LLM dùng chung (M25): "prompt → chữ" và "prompt → JSON có hàm kiểm và thử lại".
-// Hôm nay chỉ có Claude Code CLI (`claude -p`, qua spawnClaude ở platform.mjs); nhà cung cấp khác thêm ở đây (M26).
+// Nhà cung cấp: Claude Code CLI (`claude -p`, qua spawnClaude ở platform.mjs) và Ollama (M26, máy chủ HTTP trên máy).
+// Việc chỉ có chữ (task 'text': hook, kịch bản, caption, gợi ý b-roll) chạy bằng nhà cung cấp chọn trong
+// ~/.ai-video-studio/config.json; việc cần xem ảnh hay dùng công cụ (không có task 'text', hoặc có --allowedTools) luôn dùng Claude.
 //
 //   runClaude(prompt, opts) → { text, result, code }    một lần gọi CLI, lỗi đã dịch sang câu tiếng Việt dễ hiểu
+//   runOllama(prompt, opts) → { text, result, code }    POST /api/generate (không stream)
+//   runLLM(prompt, opts)    → { text, …, provider }      chọn nhà cung cấp theo opts.task + cấu hình, rồi gọi
 //   askJSON(prompt, opts)   → giá trị JSON đã kiểm        parse lỏng (bỏ ``` , lời dẫn, dấu phẩy thừa, ngoặc kép cong),
 //                                                        validate(value) ném lỗi → hỏi lại tối đa `retries` lần
 //   parseLooseJSON(text, { shape })                      'object' | 'array' | 'any'
 //
 // Prompt luôn đi qua stdin: làm tham số thì vượt giới hạn 32K ký tự dòng lệnh của Windows với video dài bình thường.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnClaude, killTree } from './platform.mjs';
 
 export class LlmError extends Error {
@@ -106,20 +114,141 @@ const defaultHint = msg => `\n\nLần trước bạn trả lời không phải J
  *  retries    extra attempts after a parse/validate failure (default 0). CLI errors (login, timeout…) are not retried.
  *  retryHint  (errMessage, attempt) → text appended to the prompt on a retry
  *  onAttempt  (attempt) before each call;  onRaw (text, attempt) with each raw answer (e.g. to save it for debugging)
- *  run        the provider call (default runClaude) — tests and other providers plug in here
+ *  task       'text' → the provider picked in config.json (Claude or Ollama); otherwise Claude (see runLLM)
+ *  run        the provider call (default runLLM) — tests plug in here
  */
 export async function askJSON(prompt, opts = {}) {
-  const { shape = 'any', validate, retries = 0, retryHint = defaultHint, onAttempt, onRaw, run = runClaude, ...runOpts } = opts;
-  let lastErr;
+  const { shape = 'any', validate, retries = 0, retryHint = defaultHint, onAttempt, onRaw, run = runLLM, ...runOpts } = opts;
+  let lastErr, who = 'Claude';
   for (let attempt = 0; attempt <= retries; attempt++) {
     onAttempt?.(attempt);
     const ask = attempt ? prompt + retryHint(lastErr.message, attempt) : prompt;
-    const { text } = await run(ask, runOpts);
+    const { text, provider } = await run(ask, { ...runOpts, jsonShape: shape });
+    if (provider === 'ollama') who = 'Ollama';
     onRaw?.(text, attempt);
     try {
       const v = parseLooseJSON(text, { shape });
       return validate ? await validate(v) : v;
     } catch (e) { lastErr = e; }
   }
-  throw new LlmError('Claude không trả về JSON hợp lệ: ' + lastErr.message, { kind: 'parse', raw: lastErr.raw || '' });
+  throw new LlmError(who + ' không trả về JSON hợp lệ: ' + lastErr.message, { kind: 'parse', raw: lastErr.raw || '' });
 }
+
+// ---------- cấu hình nhà cung cấp (M26) ----------
+// ~/.ai-video-studio/config.json, khoá "llm" (cùng file với API key ảnh/stock, quyền 600):
+//   { "llm": { "text": "claude" | "ollama", "fallback": "claude" | "",
+//              "ollama": { "url": "http://127.0.0.1:11434", "model": "qwen2.5:7b", "timeout": 600000 } } }
+// Biến môi trường thắng file: AVS_LLM_TEXT, AVS_LLM_FALLBACK, OLLAMA_HOST, AVS_OLLAMA_MODEL.
+export const CONFIG = () => path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
+export const PROVIDERS = ['claude', 'ollama'];
+const DEF_OLLAMA = { url: 'http://127.0.0.1:11434', model: 'qwen2.5:7b', timeout: 600000 };
+const readConfig = () => { try { return JSON.parse(fs.readFileSync(CONFIG(), 'utf8')) || {}; } catch { return {}; } };
+const hostUrl = h => (/^https?:\/\//i.test(h) ? h : 'http://' + h).replace(/\/+$/, '');
+export function llmConfig() {
+  const c = readConfig().llm || {}, o = { ...DEF_OLLAMA, ...(c.ollama || {}) }, env = process.env;
+  const text = String(env.AVS_LLM_TEXT || c.text || 'claude').toLowerCase();
+  const fallback = String(env.AVS_LLM_FALLBACK ?? c.fallback ?? '').toLowerCase();
+  return {
+    text: PROVIDERS.includes(text) ? text : 'claude',
+    fallback: fallback === 'claude' ? 'claude' : '',
+    ollama: { url: hostUrl(env.OLLAMA_HOST || o.url), model: env.AVS_OLLAMA_MODEL || o.model, timeout: +o.timeout || DEF_OLLAMA.timeout },
+  };
+}
+// Merge a patch into config.json's "llm" (other keys untouched; mode 600 like the API keys).
+export function saveLlmConfig(patch = {}) {
+  const f = CONFIG(), cur = readConfig(), llm = { ...(cur.llm || {}) };
+  if (patch.text !== undefined) { if (!PROVIDERS.includes(patch.text)) throw new LlmError('Nhà cung cấp phải là: ' + PROVIDERS.join(', ')); llm.text = patch.text; }
+  if (patch.fallback !== undefined) llm.fallback = patch.fallback === 'claude' ? 'claude' : '';
+  if (patch.ollama) {
+    const o = Object.entries(patch.ollama).filter(([k, v]) => ['url', 'model', 'timeout'].includes(k) && v !== undefined && v !== '');
+    if (o.length) llm.ollama = { ...(llm.ollama || {}), ...Object.fromEntries(o) };
+  }
+  cur.llm = llm;
+  fs.mkdirSync(path.dirname(f), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(f, JSON.stringify(cur, null, 1), { mode: 0o600 }); try { fs.chmodSync(f, 0o600); } catch { /* Windows */ }
+  return llmConfig();
+}
+
+// Which provider runs this call. Vision / tool use (Read on stills…) is Claude-only; so is anything not marked task 'text'.
+export function pickProvider({ task, provider, args = [] } = {}) {
+  if (task !== 'text' || args.includes('--allowedTools')) return 'claude';
+  if (provider) return PROVIDERS.includes(provider) ? provider : 'claude';
+  return llmConfig().text;
+}
+
+const CLAUDE_MODEL = /^(sonnet|opus|haiku|default|claude[\w.-]*)$/i;
+/**
+ * One Ollama call (POST {url}/api/generate, stream:false). opts: model / ollamaModel, url, timeout, timeoutMsg, onTick,
+ * tickMs, onProc, jsonShape ('object' → Ollama's JSON mode). onProc gets a handle with kill(), so a job cancel (killTree)
+ * aborts the request. Claude model names (sonnet, opus, haiku, default) are not Ollama models: the configured one is used.
+ */
+export async function runOllama(prompt, opts = {}) {
+  const cfg = llmConfig().ollama;
+  const url = hostUrl(opts.url || cfg.url), timeout = opts.timeout || cfg.timeout;
+  const model = opts.ollamaModel || (opts.model && !CLAUDE_MODEL.test(opts.model) ? opts.model : cfg.model);
+  const ac = new AbortController(); let why = '';
+  const handle = { pid: undefined, exitCode: null, signalCode: null, kill() { why ||= 'cancel'; handle.signalCode = 'SIGTERM'; ac.abort(); return true; } };
+  opts.onProc?.(handle);
+  const t0 = Date.now(), tick = opts.onTick ? setInterval(() => opts.onTick((Date.now() - t0) / 1000), opts.tickMs || 1000) : null;
+  const tm = timeout > 0 ? setTimeout(() => { why ||= 'timeout'; ac.abort(); }, timeout) : null;
+  const aborted = () => why === 'timeout'
+    ? new LlmError(opts.timeoutMsg || `Ollama quá ${Math.round(timeout / 1000)} giây`, { kind: 'timeout' })
+    : new LlmError('Đã huỷ', { kind: 'cancel' });
+  try {
+    let r, body;
+    try {
+      r = await fetch(url + '/api/generate', { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt, stream: false, ...(opts.jsonShape === 'object' ? { format: 'json' } : {}) }) });
+      body = await r.text();
+    } catch (e) {
+      if (why) throw aborted();
+      throw new LlmError(`Không kết nối được Ollama ở ${url}. Mở Ollama (hoặc chạy "ollama serve") rồi thử lại.`, { kind: 'missing', raw: String(e.cause?.code || e.message) });
+    }
+    let j = null; try { j = JSON.parse(body); } catch { /* not JSON */ }
+    if (!r.ok) {
+      const msg = String(j?.error || body || r.status);
+      if (r.status === 404 || /model .*not found|try pulling/i.test(msg)) throw new LlmError(`Ollama chưa có model "${model}". Chạy: ollama pull ${model}`, { kind: 'model', code: r.status, raw: msg });
+      throw new LlmError(`Ollama lỗi (HTTP ${r.status}): ${msg.slice(0, 300)}`, { kind: 'exit', code: r.status, raw: msg });
+    }
+    if (!j || typeof j.response !== 'string') throw new LlmError('Kết quả Ollama không đọc được', { kind: 'exit', raw: body.slice(0, 300) });
+    return { text: j.response, result: j, code: 0 };
+  } finally { if (tick) clearInterval(tick); if (tm) clearTimeout(tm); handle.exitCode ??= 0; }
+}
+
+// Provider-routed call → { text, result, code, provider }. With llm.fallback = "claude", an unreachable or model-less
+// Ollama falls back to Claude instead of failing the job.
+export async function runLLM(prompt, opts = {}) {
+  const provider = pickProvider(opts);
+  if (provider === 'ollama') {
+    try { return { ...(await runOllama(prompt, opts)), provider }; }
+    catch (e) {
+      if (!(e instanceof LlmError) || !['missing', 'model'].includes(e.kind) || llmConfig().fallback !== 'claude') throw e;
+      return { ...(await runClaude(prompt, opts)), provider: 'claude', fallbackFrom: e.message };
+    }
+  }
+  return { ...(await runClaude(prompt, opts)), provider: 'claude' };
+}
+
+// ---------- CLI: node scripts/llm.mjs status | set text=ollama model=… url=… fallback=claude | try "prompt" ----------
+async function cli(argv) {
+  const [cmd, ...rest] = argv, kv = Object.fromEntries(rest.filter(a => /^\w+=/.test(a)).map(a => [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)]));
+  if (cmd === 'set') {
+    const c = saveLlmConfig({ text: kv.text, fallback: kv.fallback, ollama: { url: kv.url, model: kv.model, timeout: kv.timeout && +kv.timeout } });
+    console.log(JSON.stringify(c, null, 1)); return;
+  }
+  if (cmd === 'status') {
+    const c = llmConfig(); let models = null, err = '';
+    try { const r = await fetch(c.ollama.url + '/api/tags', { signal: AbortSignal.timeout(3000) }); models = ((await r.json()).models || []).map(m => m.name); }
+    catch (e) { err = String(e.cause?.code || e.message); }
+    const has = models ? models.some(m => m === c.ollama.model || m === c.ollama.model + ':latest') : null;
+    console.log(JSON.stringify({ config: CONFIG(), ...c, ollama_reachable: !!models, ollama_models: models, has_model: has, ...(err ? { ollama_error: err } : {}) }, null, 1));
+    return;
+  }
+  if (cmd === 'try') {
+    const prompt = rest.filter(a => !/^\w+=/.test(a)).join(' ') || 'Trả về DUY NHẤT JSON {"ok": true, "loi_chao": "<một câu chào tiếng Việt ngắn>"}';
+    const t0 = Date.now(), r = await askJSON(prompt, { task: 'text', provider: kv.provider, shape: 'object', retries: 1 });
+    console.log(JSON.stringify({ sec: Math.round((Date.now() - t0) / 100) / 10, result: r }, null, 1)); return;
+  }
+  console.log('Dùng: node scripts/llm.mjs status | set text=claude|ollama [model=qwen2.5:7b] [url=http://127.0.0.1:11434] [fallback=claude|none] | try [provider=ollama] "prompt"');
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) cli(process.argv.slice(2)).catch(e => { console.error(e.message); process.exit(1); });
