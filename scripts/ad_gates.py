@@ -1,6 +1,7 @@
 """Cổng quảng cáo cho một dự án Studio: chính sách Meta/TikTok, claim gate, điểm nguyên bản.
 
 usage: python ad_gates.py <thư mục dự án> [--against <dự án khác> ...]
+       python ad_gates.py --script <kịch bản.json | ->      (claim gate cho kịch bản chưa dựng, xem check_script)
 In một JSON ra stdout: {enabled, industry, platforms, blocked, issues:[{t, kind, severity, code, msg, ref}], originality}.
 Được `scripts/ai_qc.mjs` gọi khi timeline có `ads.on`. Spec: references/ad-gates.md.
 
@@ -540,6 +541,56 @@ def originality_check(d: str, tl: dict, against: list[str], minimum: float) -> t
     return orig, issues
 
 
+def text_issues(beats: list[dict], claims: list[dict], blocked: list[str], industry: str, platforms: set[str]) -> list[dict]:
+    """Chính sách + claim gate trên các câu (`beats`: {t, text, type, where}); dùng cho dự án (run) và kịch bản (check_script)."""
+    approved = [c for c in claims if c["status"] == "approved"]
+    for b in beats:   # không có trích dẫn tay: câu được coi là dẫn claim đã duyệt nào khớp nội dung đủ gần
+        b["claim_ids"] = [c["id"] for c in approved if similarity(b["text"], c["text"]) >= CITE_WARN]
+
+    def quote(b):
+        return f" ({b['where']}: “{b['text'][:70]}{'…' if len(b['text']) > 70 else ''}”)"
+
+    issues = []
+    for f in check_policy(beats, industry, platforms):
+        b = beats[f["beat"]]
+        issues.append({**_issue("ad_policy", b["t"], {**f, "message": f["message"] + quote(b)}), "beat": f["beat"]})
+    for f in check_script_claims(beats, claims, blocked):
+        if f["code"] == "WARN-CLAIM" and not approved:
+            continue   # chưa khai claim nào thì không đòi dẫn chứng cho từng câu
+        b = beats[f["beat"]]
+        issues.append({**_issue("ad_claim", b["t"], {**f, "message": f["message"] + quote(b)}), "beat": f["beat"]})
+    return issues
+
+
+def check_script(payload: dict) -> dict:
+    """Claim gate cho kịch bản chưa dựng (M22, scripts/script_gate.mjs).
+
+    payload: {beats: [{text, type: hook|body|cta|screen, where?}], ads: {product?, claims?, blocked?, industry?, platforms?},
+              title?}. Trả {blocked, industry, product, approved:[{id, text}], prohibited:[text], blocked_phrases, issues}:
+    `issues[].beat` là chỉ số câu trong `beats`; `approved` để bên gọi đưa vào prompt hoặc ghép khuôn mẫu."""
+    cfg = payload.get("ads") if isinstance(payload.get("ads"), dict) else {}
+    platforms = {p for p in cfg.get("platforms") or [] if p in PLATFORMS} or set(PLATFORMS)
+    res = resolve_ads(cfg)
+    claims, blocked = res["claims"], res["blocked"]
+    beats = []
+    for i, b in enumerate(payload.get("beats") or []):
+        if isinstance(b, dict) and str(b.get("text") or "").strip():
+            typ = b.get("type") if b.get("type") in ("hook", "body", "cta", "screen") else "body"
+            beats.append({"t": i, "text": str(b["text"]), "type": typ, "where": str(b.get("where") or "kịch bản")})
+    industry = cfg.get("industry") if cfg.get("industry") in INDUSTRIES else res["industry"]
+    if not industry:
+        industry = detect_industry(" ".join([str(payload.get("title") or "")] + [b["text"] for b in beats]))
+    issues = [{**i, "beat": None} for i in res["issues"]] + text_issues(beats, claims, blocked, industry, platforms)
+    for i in issues:
+        if i.get("beat") is not None:
+            i["beat"] = beats[i["beat"]]["t"]   # chỉ số trong payload (câu rỗng đã bị bỏ)
+    return {"blocked": any(i["severity"] == "high" for i in issues), "industry": industry, "platforms": sorted(platforms),
+            "product": res["product"],
+            "approved": [{"id": c["id"], "text": c["text"]} for c in claims if c["status"] == "approved"],
+            "prohibited": [c["text"] for c in claims if c["status"] in ("prohibited", "expired")],
+            "blocked_phrases": blocked, "issues": issues}
+
+
 def run(d: str, against: list[str] | None = None) -> dict:
     tl, caps = load_project(d)
     cfg = tl.get("ads") if isinstance(tl.get("ads"), dict) else {}
@@ -553,26 +604,13 @@ def run(d: str, against: list[str] | None = None) -> dict:
     spoken, shown = sentences(caps), screen_texts(tl)
     beats = [{"t": s["t"], "text": s["text"], "type": "hook" if i == 0 else "body", "where": "lời thoại"} for i, s in enumerate(spoken)]
     beats += [{"t": s["t"], "text": s["text"], "type": "screen", "where": "chữ trên màn hình"} for s in shown]
-    for b in beats:   # Studio không có trích dẫn tay: câu được coi là dẫn claim đã duyệt nào khớp nội dung đủ gần
-        b["claim_ids"] = [c["id"] for c in approved if similarity(b["text"], c["text"]) >= CITE_WARN]
 
     industry = cfg.get("industry") if cfg.get("industry") in INDUSTRIES else res["industry"]
     if not industry:
         brand = tl.get("brand") or {}
         industry = detect_industry(" ".join([str(brand.get("name") or ""), str(tl.get("title") or "")] + [b["text"] for b in beats]))
 
-    def quote(b):
-        return f" ({b['where']}: “{b['text'][:70]}{'…' if len(b['text']) > 70 else ''}”)"
-
-    issues = list(res["issues"])
-    for f in check_policy(beats, industry, platforms):
-        b = beats[f["beat"]]
-        issues.append(_issue("ad_policy", b["t"], {**f, "message": f["message"] + quote(b)}))
-    for f in check_script_claims(beats, claims, blocked):
-        if f["code"] == "WARN-CLAIM" and not approved:
-            continue   # chưa khai claim nào thì không đòi dẫn chứng cho từng câu
-        b = beats[f["beat"]]
-        issues.append(_issue("ad_claim", b["t"], {**f, "message": f["message"] + quote(b)}))
+    issues = list(res["issues"]) + [{k: v for k, v in i.items() if k != "beat"} for i in text_issues(beats, claims, blocked, industry, platforms)]
 
     minimum = float(cfg.get("originality_min") or ORIGINALITY_MIN)
     orig, orig_issues = originality_check(d, tl, against or [], minimum)
@@ -587,6 +625,20 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__, file=sys.stderr)
         return 2
+    if argv[0] == "--script":   # kịch bản JSON từ file hoặc stdin ("-") → kết quả check_script
+        sys.stdout.reconfigure(encoding="utf-8")
+        try:
+            if len(argv) > 1 and argv[1] != "-":
+                payload = _read_json(argv[1])
+            else:
+                payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("cần một object JSON")
+        except (OSError, ValueError) as e:
+            print(f"LỖI: không đọc được kịch bản: {e}", file=sys.stderr)
+            return 1
+        json.dump(check_script(payload), sys.stdout, ensure_ascii=False)
+        return 0
     d, against = argv[0], []
     if "--against" in argv:
         against = argv[argv.index("--against") + 1:]

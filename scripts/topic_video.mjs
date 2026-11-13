@@ -2,17 +2,22 @@
 // usage: node scripts/topic_video.mjs "<chủ đề>" --out <dir> [--dur 45] [--voice Linh|edge:vi-VN-HoaiMyNeural] [--rate 190]
 //        [--orient vertical|horizontal] [--pack kinetic] [--images <dir | a.jpg,b.jpg>] [--stock] [--handle @kenh]
 //        [--claude-model sonnet] [--model large-v3-turbo] [--export] [--quality 1080]
+//        [--product <id hồ sơ sản phẩm>] [--claim-gate] [--platforms meta,tiktok]
 // 1. Claude writes a Vietnamese short-video script (hook, 3–5 beats, CTA) with on-screen text + visual intent per beat (JSON).
 // 2. TTS per line (macOS `say -v Linh` offline; edge-tts if installed and asked for), real durations measured, lines joined
 //    into work/voice.wav; word timings by re-transcribing the TTS audio with transcribe.py and aligning to the script words.
 // 3. Main track = graphics: procedural b-roll presets (assets/broll/catalog.json) + kinetic text scenes, optional user images /
 //    stock photos (broll_fetch.py) as stills on TL.clips; a still background clip carries the voice. Music + SFX: auto_sfx.py.
+// Claim gate (M22, scripts/script_gate.mjs): with --product (or --claim-gate) the script is checked sentence by sentence
+// against the product profile's approved claims + ad policy (ad_gates.py), rewritten once with the violations listed, and
+// replaced by a template built only from approved claims if it still fails; the timeline gets ads.on/ads.product.
 // Output: one project folder (opens in Studio) + script.json; --export renders out/<name>.mp4. Progress: "@@ <0..1> <step>".
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { callClaude, parseJson } from './ai_edit.mjs';
+import { gatedScript } from './script_gate.mjs';
 import { sh, say, probe, fold, slug, exportProject, PY, SKILL } from './highlights.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -181,8 +186,16 @@ async function main() {
 
   // 1. script
   let sc = null;
+  const product = opt('--product', ''), gateOn = !!product || args.includes('--claim-gate');
+  const ads = gateOn ? { on: true, ...(product ? { product } : {}), ...(opt('--platforms') ? { platforms: opt('--platforms').split(',').map(x => x.trim()).filter(Boolean) } : {}) } : null;
+  let claimGate = null;
   if (args.includes('--script') && fs.existsSync(opt('--script'))) sc = JSON.parse(fs.readFileSync(opt('--script'), 'utf8'));
-  else {
+  else if (gateOn) {
+    const nBeats = dur <= 30 ? 3 : dur <= 60 ? 4 : 5;
+    const r = await gatedScript({ prompt: scriptPrompt(topic, dur, nBeats), topic, ads, nBeats, model: opt('--claude-model', 'sonnet'), onStep: m => say(.05, m) });
+    sc = r.script; claimGate = r.gate;
+    say(.2, claimGate.mode === 'llm' ? `Kịch bản qua claim gate (lần ${claimGate.attempts.length})` : 'Dùng khuôn mẫu ghép claim đã duyệt');
+  } else {
     const prompt = scriptPrompt(topic, dur, dur <= 30 ? 3 : dur <= 60 ? 4 : 5);
     let last;
     for (let a = 0; a < 2 && !sc; a++) {
@@ -195,6 +208,7 @@ async function main() {
     if (!sc) throw new Error('Claude không trả về kịch bản hợp lệ: ' + last);
   }
   sc.topic = topic;
+  if (claimGate) sc.claim_gate = claimGate;
   fs.writeFileSync(path.join(out, 'script.json'), JSON.stringify(sc, null, 1));
   const lines = [{ kind: 'hook', ...sc.hook }, ...sc.beats.slice(0, 6).map((b, i) => ({ kind: 'beat', i, ...b })), { kind: 'cta', ...(sc.cta || { say: 'Theo dõi để xem thêm nhé!', screen: 'FOLLOW NGAY' }) }]
     .filter(l => String(l.say || '').trim());
@@ -294,6 +308,7 @@ async function main() {
     clips, face: vert ? { x: 360, y: 520 } : { x: 640, y: 300 }, title: sc.title || topic,
     caption_style: 'kinetic', captions: 'work/captions.json', scenes, fx,
     audio: { mix: 'work/mix.wav', music: [{ t0: 0, t1: total, mood: MOODS.includes(sc.mood) ? sc.mood : 'tech', gain: -22 }], sfx: [], duck: { on: true, amount_db: -10, attack: 60, release: 400, hold: 250 } },
+    ...(ads ? { ads } : {}),
     _topic: { topic, voice, rate: rateUsed, lines: lines.map(L => ({ kind: L.kind, say: L.say, s: L.s, e: L.e, screen: L.screen, visual: L.visual })), title: sc.title, caption: sc.caption, hashtags: sc.hashtags, aligned: heard.length },
   };
   const tlFile = path.join(out, 'timeline.json');
@@ -315,6 +330,6 @@ async function main() {
   let mp4 = null;
   if (args.includes('--export')) mp4 = await exportProject(out, { quality: opt('--quality', '1080'), onProgress: (k, s) => say(.66 + .33 * k, `Xuất video (${s}) ${Math.round(k * 100)}%`) });
   say(1, 'Xong');
-  console.log('RESULT ' + JSON.stringify({ dir: out, outputs: [out, ...(mp4 ? [mp4] : [])], title: sc.title, duration: total, lines: lines.length, scenes: scenes.length, words: matched, heard: heard.length, mp4 }));
+  console.log('RESULT ' + JSON.stringify({ dir: out, outputs: [out, ...(mp4 ? [mp4] : [])], title: sc.title, duration: total, lines: lines.length, scenes: scenes.length, words: matched, heard: heard.length, mp4, ...(claimGate ? { claim_gate: claimGate.mode } : {}) }));
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.resolve(process.argv[1]))).href) main().catch(e => { console.error('LỖI: ' + e.message); process.exit(1); });
