@@ -62,7 +62,7 @@
   let VOICES = {}, ST = null;
   const state = () => {
     const TL = Studio.TL;
-    ST = ST || { lang: TL.sub2?.lang || (TL.lang === 'en' ? 'vi' : 'en'), tts: TL.audio?.dub?.engine || 'say', voice: TL.audio?.dub?.voice || '' };
+    ST = ST || { lang: TL.sub2?.lang || (TL.lang === 'en' ? 'vi' : 'en'), tts: TL.audio?.dub?.engine || Studio.ttsDefault || 'say', voice: TL.audio?.dub?.voice || '' };
     return ST;
   };
   async function loadVoices(lang) {
@@ -75,7 +75,7 @@
     if (!V) loadVoices(s.lang);
     const src = TL.lang || 'vi', nTr = CAP.filter(c => c.tr).length, dub = A.dub, trk = (A.tracks || []).find(t => t.id === 'dub');
     const vg = Math.round((A.voice_gain ?? 1) * 100);
-    const voices = s.tts === 'edge' ? (V?.edge ? [[V.edge, V.edge + ' (online)']] : []) : (V?.say || []).map(v => [v, v]);
+    const voices = s.tts === 'edge' ? (V?.edge ? [[V.edge, V.edge + ' (online)']] : []) : s.tts === 'vieneu' ? [['', 'Giọng đã chọn (Mô hình & giọng)'], ...(V?.vieneu || []).map(v => [v, v])] : (V?.say || []).map(v => [v, v]);
     $('#libbody').innerHTML = `<div id="dubp">${CAP.length ? '' : Studio.ctaTranscribe('Dịch và lồng tiếng')}
       ${sect('Ngôn ngữ', `<div class="row"><div><span class="lbl">Gốc</span><select data-db="src">${opt(LANGS, src)}</select></div>
         <div><span class="lbl">Dịch sang</span><select data-db="lang">${opt(LANGS.filter(l => l[0] !== src), s.lang)}</select></div></div>
@@ -85,14 +85,14 @@
         <div class="slrow"><span>Cỡ chữ</span><input type="range" data-db="size" min="16" max="44" step="1" value="${S2.size || (Studio.DH > Studio.DW ? 27 : 25)}"><b>${S2.size || 'tự'}</b></div>
         <div class="acts"><button data-dba="translate" class="${nTr ? '' : 'primary'}"><i class="ti ti-language"></i> ${nTr ? 'Dịch lại' : 'Dịch phụ đề'}</button></div>
         <div class="help">${nTr ? `${nTr}/${CAP.length} đoạn đã có bản dịch — sửa trực tiếp ở danh sách dưới.` : 'Chưa có bản dịch.'} Dòng dịch tự đặt ngay dưới phụ đề (hoặc trên nếu sát đáy), theo mọi kiểu phụ đề.</div>`, 'ti-badge-cc')}
-      ${sect('Lồng tiếng', `<div class="row"><div><span class="lbl">Giọng đọc</span><select data-db="tts">${opt([['say', 'macOS (offline)'], ['edge', 'Microsoft Edge (cần mạng)']], s.tts)}</select></div>
+      ${sect('Lồng tiếng', `<div class="row"><div><span class="lbl">Giọng đọc</span><select data-db="tts">${opt([['say', 'macOS (offline)'], ['edge', 'Microsoft Edge (cần mạng)'], ['vieneu', 'VieNeu trên máy (tiếng Việt)']], s.tts)}</select></div>
         <div><span class="lbl">Giọng</span><select data-db="voice">${voices.length ? opt(voices, s.voice || voices[0][0]) : '<option value="">(không có giọng)</option>'}</select></div></div>
         <div class="slrow"><span>Giọng gốc</span><input type="range" data-db="vg" min="0" max="100" step="5" value="${vg}"><b>${vg}%</b></div>
         <div class="acts"><button data-dba="dub" class="primary"><i class="ti ti-microphone-2"></i> Tạo lồng tiếng</button></div>
         ${dub ? `<div class="dubfile"><i class="ti ti-wave-sine"></i> ${esc(dub.file)} · ${esc(dub.voice || '')}${trk ? `<label class="check"><input type="checkbox" data-db="dubon" ${trk.mute ? '' : 'checked'}> Dùng khi xuất</label>` : ''}</div>
           <audio controls preload="none" src="/project/${esc(dub.file)}?${Studio.META?.saved || ''}"></audio>` : ''}
         <div class="help">Mỗi câu đọc riêng, nhanh lên tối đa 1,35× để khớp chỗ trống; câu quá dài sẽ lấn sang câu sau (có báo). Giọng lồng tiếng là một track âm thanh;
-        giọng gốc giảm theo thanh trên khi <b>xuất</b> (preview vẫn phát giọng gốc — nghe thử bản lồng tiếng ở đây). ${s.tts === 'say' ? 'Thêm giọng macOS: Cài đặt › Trợ năng › Nội dung được đọc.' : 'edge-tts gửi câu chữ lên dịch vụ đọc của Microsoft.'}</div>`, 'ti-microphone-2')}
+        giọng gốc giảm theo thanh trên khi <b>xuất</b> (preview vẫn phát giọng gốc — nghe thử bản lồng tiếng ở đây). ${s.tts === 'say' ? 'Thêm giọng macOS: Cài đặt › Trợ năng › Nội dung được đọc.' : s.tts === 'vieneu' ? 'VieNeu chỉ đọc tiếng Việt; máy chủ không chạy hoặc dịch sang tiếng khác thì lùi về edge-tts (có báo).' : 'edge-tts gửi câu chữ lên dịch vụ đọc của Microsoft.'}</div>`, 'ti-microphone-2')}
       ${nTr ? sect('Bản dịch', `<div class="trlist">${CAP.map((c, i) => c.hidden ? '' : `<div><small>${esc(c.words.map(w => w.w).join(' '))}</small><input data-tri="${i}" value="${esc(c.tr || '')}"></div>`).join('')}</div>`, 'ti-list') : ''}
     </div>`;
   }

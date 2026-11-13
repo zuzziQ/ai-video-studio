@@ -44,10 +44,14 @@ như script, rồi `python3 scripts/tts.py vieneu-config --python <venv>/bin/pyt
 `$AVS_HOME/config.json` (cùng file với khoá `llm` và API key, quyền 600), khoá `tts`:
 
 ```json
-{ "tts": { "vieneu": { "url": "http://127.0.0.1:8771", "python": "C:\\…\\vieneu\\venv\\Scripts\\python.exe", "voice": "Trúc Ly" } } }
+{ "tts": { "vieneu": { "url": "http://127.0.0.1:8771", "python": "C:\\…\\vieneu\\venv\\Scripts\\python.exe", "voice": "Trúc Ly" },
+           "default_engine": "vieneu" } }
 ```
 
-`python scripts/tts.py vieneu-config --url … --python … --voice …` gộp vào khoá này, khoá khác giữ nguyên.
+`python scripts/tts.py vieneu-config [--url …] [--python …] [--voice …] [--default-engine vieneu|edge|say]` gộp vào khoá này,
+khoá khác giữ nguyên (không truyền `--url` thì giữ địa chỉ đang lưu). Phía Node đọc/ghi cùng định dạng qua `scripts/tts_config.mjs`.
+`default_engine` là giọng của job không ghi engine riêng: `batch.mjs` (dòng không có `tts_engine`), `dub.py` (không có `--tts`),
+`topic_video.mjs` (không có `--voice`). Chưa đặt thì như cũ: `say` trên macOS, edge-tts ở nơi khác.
 Biến môi trường `AVS_VIENEU_URL` thắng `url`. Chỉ nhận `http://127.0.0.1|localhost|[::1]:<cổng>`.
 
 ### Khi không dùng được
@@ -67,14 +71,30 @@ Biến môi trường `AVS_VIENEU_URL` thắng `url`. Chỉ nhận `http://127.0
 ```bash
 python scripts/dub.py timeline.json --lang vi --tts vieneu [--voice "Trúc Ly"]
 node scripts/batch.mjs <template> sheet.csv out/ --voice tts --tts vieneu [--tts-voice "Hải Đăng"]
+node scripts/topic_video.mjs "<chủ đề>" --out <thư mục> --voice vieneu[:"Hải Đăng"]
 ```
+
+`topic_video.mjs --voice vieneu[:<tên>]`: kiểm máy chủ một lần trước khi đọc (không tên = giọng trong cấu hình, rồi giọng mặc định
+của máy chủ); mỗi câu đọc qua `scripts/tts.py say --engine vieneu`. Máy chủ không chạy → in cảnh báo (kèm lệnh bật) rồi đọc bằng
+edge-tts như `dub.py`/`batch.mjs`; tên giọng lạ → dừng, in danh sách giọng; máy chủ tắt giữa chừng → dừng (không trộn hai giọng).
+Bản đọc VieNeu không tăng tốc khi dài hơn `--dur` (chỉ `say` có `-r`).
+
+### Trong Studio
+
+Nút **Mô hình & giọng** trên thanh trên (`studio/features/28_engines.js`, API `studio/routes/28_engines.mjs`), thẻ **Giọng VieNeu**:
+trạng thái máy chủ (chạy/không, nút **Bật máy chủ** = `tts.py vieneu-start`), chọn 1 trong 10 giọng có sẵn, **nghe thử** một câu ngắn
+(≤ 200 ký tự, đọc thật qua `tts.py say`, trả `audio/wav`, file tạm xoá ngay), đặt **giọng mặc định** cho Hàng loạt, Lồng tiếng và
+Video từ chủ đề, sửa địa chỉ máy chủ (chỉ loopback). Panel **Lồng tiếng** có thêm lựa chọn "VieNeu trên máy"; panel **Video dài**
+(chủ đề → video) có giọng "VieNeu". Không có nhái giọng (`C04`).
 
 `batch.mjs`: giọng của dòng là `tts_voice` trong `job.json`; tên giọng edge (đuôi `Neural`) chỉ dùng cho edge-tts.
 
 ## Test
 
-`python -m unittest scripts.tests.test_tts scripts.tests.test_vieneu_server` và `node --test scripts/tests/tts_batch.test.mjs`:
-máy chủ VieNeu giả trên 127.0.0.1, edge-tts giả (`scripts/tests/fixtures/fake_edge_tts`), không cần mạng hay gói `vieneu`.
+`python -m unittest scripts.tests.test_tts scripts.tests.test_vieneu_server` và
+`node --test scripts/tests/tts_batch.test.mjs scripts/tests/engines_route.test.mjs`: máy chủ VieNeu giả trên 127.0.0.1, edge-tts giả
+(`scripts/tests/fixtures/fake_edge_tts`), không cần mạng hay gói `vieneu`. `engines_route.test.mjs` kiểm route Studio: GET không lộ
+khoá/token/đường dẫn python, POST từ chối URL không phải loopback, giữ khoá khác của `config.json`, giọng phải có sẵn, `pickVoice`
+của `topic_video.mjs`.
 
-Còn lại (M27): chọn VieNeu trong giao diện Studio (panel lồng tiếng `studio/features/40_reframe.js`, batch);
-nối vào `topic_video.mjs` sau khi M22 merge.
+Còn lại (M27): nhái giọng chờ `C04`.

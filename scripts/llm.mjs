@@ -144,6 +144,15 @@ export const PROVIDERS = ['claude', 'ollama'];
 const DEF_OLLAMA = { url: 'http://127.0.0.1:11434', model: 'qwen2.5:7b', timeout: 600000 };
 const readConfig = () => { try { return JSON.parse(fs.readFileSync(CONFIG(), 'utf8')) || {}; } catch { return {}; } };
 const hostUrl = h => (/^https?:\/\//i.test(h) ? h : 'http://' + h).replace(/\/+$/, '');
+// Máy chủ chạy trên máy (Ollama, VieNeu): chỉ nhận http://127.0.0.1|localhost|[::1][:cổng], không user/pass, không đường dẫn.
+// Trả origin đã chuẩn hoá; sai thì ném LlmError (kind 'url'). Dùng cho mọi URL người dùng nhập (CLI set, Studio).
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
+export function loopbackUrl(raw) {
+  let u = null; try { u = new URL(hostUrl(String(raw || '').trim())); } catch { /* not a URL */ }
+  if (!u || u.protocol !== 'http:' || !LOOPBACK.has(u.hostname.toLowerCase()) || u.username || u.password || (u.pathname && u.pathname !== '/') || u.search || u.hash)
+    throw new LlmError(`Địa chỉ phải là máy này: http://127.0.0.1:<cổng> (nhận: ${String(raw || '').slice(0, 80)})`, { kind: 'url' });
+  return u.origin;
+}
 export function llmConfig() {
   const c = readConfig().llm || {}, o = { ...DEF_OLLAMA, ...(c.ollama || {}) }, env = process.env;
   const text = String(env.AVS_LLM_TEXT || c.text || 'claude').toLowerCase();
@@ -161,6 +170,7 @@ export function saveLlmConfig(patch = {}) {
   if (patch.fallback !== undefined) llm.fallback = patch.fallback === 'claude' ? 'claude' : '';
   if (patch.ollama) {
     const o = Object.entries(patch.ollama).filter(([k, v]) => ['url', 'model', 'timeout'].includes(k) && v !== undefined && v !== '');
+    for (const kv of o) if (kv[0] === 'url') kv[1] = loopbackUrl(kv[1]);
     if (o.length) llm.ollama = { ...(llm.ollama || {}), ...Object.fromEntries(o) };
   }
   cur.llm = llm;

@@ -1,11 +1,12 @@
 // Chủ đề → video (không cần quay). Spec: references/longform-topic.md
-// usage: node scripts/topic_video.mjs "<chủ đề>" --out <dir> [--dur 45] [--voice Linh|edge:vi-VN-HoaiMyNeural] [--rate 190]
+// usage: node scripts/topic_video.mjs "<chủ đề>" --out <dir> [--dur 45] [--voice Linh|edge:vi-VN-HoaiMyNeural|vieneu[:<tên giọng>]] [--rate 190]
 //        [--orient vertical|horizontal] [--pack kinetic] [--images <dir | a.jpg,b.jpg>] [--stock] [--handle @kenh]
 //        [--claude-model sonnet] [--model large-v3-turbo] [--export] [--quality 1080]
 //        [--product <id hồ sơ sản phẩm>] [--claim-gate] [--platforms meta,tiktok]
 // 1. Claude writes a Vietnamese short-video script (hook, 3–5 beats, CTA) with on-screen text + visual intent per beat (JSON).
 // 2. TTS per line (macOS `say -v Linh` offline; edge-tts if installed and asked for), real durations measured, lines joined
-//    into work/voice.wav; word timings by re-transcribing the TTS audio with transcribe.py and aligning to the script words.
+//    into work/voice.wav; vieneu[:tên] = VieNeu local voices via scripts/tts.py (server on 127.0.0.1; not running → says so and
+//    falls back to edge-tts like dub.py/batch.mjs); no --voice = the Studio default (config.json tts.default_engine); word timings by re-transcribing the TTS audio with transcribe.py and aligning to the script words.
 // 3. Main track = graphics: procedural b-roll presets (assets/broll/catalog.json) + kinetic text scenes, optional user images /
 //    stock photos (broll_fetch.py) as stills on TL.clips; a still background clip carries the voice. Music + SFX: auto_sfx.py.
 // Claim gate (M22, scripts/script_gate.mjs): with --product (or --claim-gate) the script is checked sentence by sentence
@@ -19,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { callClaude, parseJson } from './ai_edit.mjs';
 import { gatedScript } from './script_gate.mjs';
 import { sh, say, probe, fold, slug, exportProject, PY, SKILL } from './highlights.mjs';
+import { defaultEngine, ttsConfig, vieneuHealth } from './tts_config.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const S = f => path.join(HERE, f);
@@ -53,10 +55,30 @@ Chỉ trả về DUY NHẤT JSON (không markdown):
 
 // ---------- TTS ----------
 function hasEdge() { try { execFileSync(process.platform === 'win32' ? 'where' : '/bin/sh', process.platform === 'win32' ? ['edge-tts'] : ['-lc', 'command -v edge-tts'], { stdio: 'pipe' }); return 'edge-tts'; } catch {} const b = path.join(path.dirname(PY), process.platform === 'win32' ? 'edge-tts.exe' : 'edge-tts'); return fs.existsSync(b) ? b : null; }
+const EDGE_VI = 'edge:vi-VN-HoaiMyNeural';
+// --voice vieneu[:tên] → 'vieneu:<tên>' when the VieNeu server answers, else a clear message + edge-tts (same rule as tts.py resolve).
+export async function pickVoice(voice, { health = vieneuHealth, warn = m => console.error('⚠ ' + m) } = {}) {
+  if (!/^vieneu(:|$)/.test(voice)) return voice;
+  const conf = ttsConfig().vieneu, h = await health(conf.url);
+  if (!h?.ready) {
+    warn(`Máy chủ giọng VieNeu không chạy ở ${conf.url}. Bật: python scripts/tts.py vieneu-start (hoặc Studio › Mô hình & giọng). Lùi về edge-tts (cần Internet).`);
+    return EDGE_VI;
+  }
+  const names = (h.voices || []).map(v => v?.name).filter(Boolean), want = voice.slice(7).trim() || conf.voice || h.default || names[0];
+  if (!want || (names.length && !names.includes(want))) throw new Error(`VieNeu không có giọng "${want || ''}". Giọng có sẵn: ${names.join(', ')}`);
+  return 'vieneu:' + want;
+}
 async function tts(text, voice, rate, outWav) {
   const tmp = outWav.replace(/\.wav$/, '.src');
-  if (process.platform !== 'darwin' && !voice.startsWith('edge:')) voice = 'edge:vi-VN-HoaiMyNeural'; // `say` voices exist only on macOS
-  if (voice.startsWith('edge:')) {
+  if (process.platform !== 'darwin' && !/^(edge|vieneu):/.test(voice)) voice = EDGE_VI; // `say` voices exist only on macOS
+  if (voice.startsWith('vieneu:')) { // one call of scripts/tts.py per line (pickVoice already checked the server)
+    let res = null;
+    await sh(PY, ['-I', '-X', 'utf8', S('tts.py'), 'say', '--engine', 'vieneu', '--voice', voice.slice(7), '--lang', 'vi', '--out', tmp + '.wav', '--', text],
+      { onLine: l => { if (l.startsWith('TTS ')) res = JSON.parse(l.slice(4)); } });
+    if (!res?.file || !fs.existsSync(res.file)) throw new Error('tts.py không trả file giọng đọc');
+    if (res.engine !== 'vieneu') throw new Error('Máy chủ VieNeu ngừng giữa chừng (câu này đã đọc bằng ' + res.engine + '). Bật lại máy chủ rồi chạy lại.');
+    fs.renameSync(res.file, tmp);
+  } else if (voice.startsWith('edge:')) {
     const exe = hasEdge(); if (!exe) throw new Error('chưa cài edge-tts (pip install edge-tts) — dùng --voice Linh để đọc offline');
     await sh(exe, ['--voice', voice.slice(5), '--text', text, '--write-media', tmp + '.mp3']); fs.renameSync(tmp + '.mp3', tmp);
   } else {
@@ -171,7 +193,9 @@ async function main() {
   const topic = args[0] && !args[0].startsWith('--') ? args[0].trim() : '';
   if (!topic) throw new Error('cách dùng: node scripts/topic_video.mjs "<chủ đề>" --out <thư mục> [--dur 45] [--voice Linh] [--orient vertical]');
   const dur = Math.max(15, Math.min(120, +opt('--dur', 45))), vert = opt('--orient', 'vertical') !== 'horizontal';
-  let voice = opt('--voice', 'Linh'); const rate = +opt('--rate', 190), pack = opt('--pack', 'kinetic');
+  const def = defaultEngine();
+  let voice = opt('--voice', def === 'vieneu' ? 'vieneu' : def === 'edge' ? EDGE_VI : 'Linh'); const rate = +opt('--rate', 190), pack = opt('--pack', 'kinetic');
+  voice = await pickVoice(voice);
   if (voice.startsWith('edge:') && !hasEdge()) { console.error('chưa cài edge-tts → dùng giọng Linh (offline)'); voice = 'Linh'; }
   // --out is the project folder; when it is an existing folder holding something else (e.g. a queue's shared "topics" folder),
   // the project goes into <out>/<slug of the topic>[-n] instead of overwriting it.
@@ -228,7 +252,7 @@ async function main() {
   };
   let rateUsed = rate, end = await speak(rate, 0);
   // too long for --dur (the script ran over its word budget): read faster once (say only, ≤ 240 wpm)
-  if (!voice.startsWith('edge:') && end > dur * 1.1) {
+  if (!/^(edge|vieneu):/.test(voice) && end > dur * 1.1) {
     const speech = lines.reduce((a, L) => a + L.d, 0), room = Math.max(5, dur - (end - speech));
     rateUsed = Math.min(240, Math.round(rate * speech / room));
     if (rateUsed > rate + 5) end = await speak(rateUsed, 1);

@@ -3,11 +3,12 @@
   python tts.py status                                   trạng thái các giọng (JSON)
   python tts.py say "Xin chào" --engine vieneu|edge|say [--voice TÊN] [--lang vi] --out file
                                                          đọc một câu; in "TTS {json}" (file thật, engine thật đã dùng)
-  python tts.py vieneu-config --url http://127.0.0.1:8771 [--python <venv python>] [--voice TÊN]
+  python tts.py vieneu-config [--url http://127.0.0.1:8771] [--python <venv python>] [--voice TÊN] [--default-engine vieneu|edge|say]
   python tts.py vieneu-start [--wait 60]                 bật máy chủ giọng VieNeu (chạy nền, chỉ nghe 127.0.0.1)
 
 VieNeu chạy ở một máy chủ riêng (scripts/vieneu_server.py, trong môi trường Python riêng do install_vieneu.ps1 tạo),
-cấu hình ở $AVS_HOME/config.json khoá "tts": {"vieneu": {"url", "python", "voice"}}. Chỉ nhận địa chỉ 127.0.0.1/localhost.
+cấu hình ở $AVS_HOME/config.json khoá "tts": {"vieneu": {"url", "python", "voice"}, "default_engine"}. default_engine là giọng
+mặc định của job batch/dub khi job không ghi engine (Studio đặt ở hộp "Mô hình & giọng"). Chỉ nhận địa chỉ 127.0.0.1/localhost.
 Không có máy chủ (hoặc ngôn ngữ không phải tiếng Việt) thì báo rõ ra stderr và lùi về edge-tts. Chỉ giọng có sẵn:
 nhái giọng không bật (C04). Chỉ dùng thư viện chuẩn (dub.py/batch.mjs gọi bằng python -I).
 """
@@ -53,6 +54,37 @@ def vieneu_conf():
     return c
 
 
+ENGINES = ("say", "edge", "vieneu")
+
+
+def default_engine():
+    """Giọng mặc định cho job không ghi engine (khoá tts.default_engine); None khi chưa đặt."""
+    e = (read_config().get("tts") or {}).get("default_engine")
+    return e if e in ENGINES else None
+
+
+def write_default_engine(engine):
+    if engine not in ENGINES:
+        raise ValueError(f"Giọng mặc định phải là: {', '.join(ENGINES)}")
+    f = config_path()
+    cur = read_config()
+    cur["tts"] = {**(cur.get("tts") or {}), "default_engine": engine}
+    _write_config(f, cur)
+    return engine
+
+
+def _write_config(f, cur):
+    os.makedirs(os.path.dirname(f), exist_ok=True)
+    tmp = f + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as h:
+        json.dump(cur, h, ensure_ascii=False, indent=1)
+    os.replace(tmp, f)
+    try:
+        os.chmod(f, 0o600)
+    except OSError:
+        pass
+
+
 def check_loopback(url):
     u = urllib.parse.urlparse(url)
     if u.scheme != "http" or (u.hostname or "") not in LOOPBACK:
@@ -67,15 +99,7 @@ def write_vieneu_conf(patch):
     tts = dict(cur.get("tts") or {})
     tts["vieneu"] = {**(tts.get("vieneu") or {}), **{k: v for k, v in patch.items() if v is not None}}
     cur["tts"] = tts
-    os.makedirs(os.path.dirname(f), exist_ok=True)
-    tmp = f + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as h:
-        json.dump(cur, h, ensure_ascii=False, indent=1)
-    os.replace(tmp, f)
-    try:
-        os.chmod(f, 0o600)
-    except OSError:
-        pass
+    _write_config(f, cur)
     return tts["vieneu"]
 
 
@@ -217,6 +241,7 @@ def status():
         "vieneu": {"url": conf["url"], "installed": bool(conf.get("python") and os.path.exists(conf["python"])),
                    "running": bool(h and h.get("ready")), "voices": voice_names(h), "default": conf.get("voice") or (h or {}).get("default"),
                    "clone": False},
+        "default_engine": default_engine(),
     }
 
 
@@ -233,9 +258,10 @@ def main(argv=None):
     s.add_argument("--out", required=True, help="file ra; đuôi theo engine thật (.wav/.mp3/.aiff)")
     s.add_argument("--python", help="Python có edge_tts (mặc định: Python đang chạy)")
     c = sub.add_parser("vieneu-config")
-    c.add_argument("--url", default=DEFAULT_URL)
+    c.add_argument("--url", help="mặc định: giữ địa chỉ đang lưu (lần đầu " + DEFAULT_URL + ")")
     c.add_argument("--python")
     c.add_argument("--voice")
+    c.add_argument("--default-engine", choices=ENGINES, help="giọng mặc định của job batch/dub")
     st = sub.add_parser("vieneu-start")
     st.add_argument("--wait", type=float, default=60)
     a = ap.parse_args(argv)
@@ -247,9 +273,13 @@ def main(argv=None):
         print("TTS " + json.dumps({"file": f, "engine": choice["engine"], "voice": choice.get("voice"),
                                    "fallback": choice.get("fallback")}, ensure_ascii=False), flush=True)
     elif a.cmd == "vieneu-config":
-        check_loopback(a.url.rstrip("/"))
-        v = write_vieneu_conf({"url": a.url.rstrip("/"), "python": a.python, "voice": a.voice})
-        print("Đã ghi tts.vieneu: " + json.dumps({k: v.get(k) for k in ("url", "voice")}, ensure_ascii=False))
+        url = (a.url or vieneu_conf()["url"]).rstrip("/")
+        check_loopback(url)
+        v = write_vieneu_conf({"url": url, "python": a.python, "voice": a.voice})
+        if a.default_engine:
+            write_default_engine(a.default_engine)
+        print("Đã ghi tts.vieneu: " + json.dumps({k: v.get(k) for k in ("url", "voice")}, ensure_ascii=False)
+              + (f", default_engine={a.default_engine}" if a.default_engine else ""))
     elif a.cmd == "vieneu-start":
         return vieneu_start(a.wait)
     return 0

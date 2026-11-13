@@ -77,6 +77,9 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `POST /api/templates/save` | `{tpl, t}` → `templates/user/<id>.json` + ảnh bìa `templates/previews/<id>.jpg` |
 | `GET /templates/…` | file tĩnh của thư mục mẫu (preview mp4/jpg) |
 | `GET /studio/thumbs/…` | ảnh thu nhỏ hiệu ứng + `index.json` |
+| `GET /api/engines`, `GET /api/engines/status` | cấu hình LLM + giọng (chỉ khoá `llm`/`tts`, không khoá bí mật), trạng thái Ollama/VieNeu |
+| `POST /api/engines/llm`, `POST /api/engines/llm/try` | `{text, fallback, url, model}` (url chỉ loopback) · thử một câu JSON |
+| `POST /api/engines/voice`, `…/voice/start`, `…/voice/preview` | `{url, voice, default_engine}` · bật máy chủ VieNeu · `{voice, text}` → `audio/wav` |
 
 Server chỉ nghe ở `127.0.0.1` và chỉ phục vụ file trong `studio/`, `engine/`, `assets/`, thư mục mẫu và thư mục dự án. Thư mục mẫu mặc định là `<skill>/templates`, đổi bằng `--templates <dir>` hoặc biến `AVS_TEMPLATES`.
 
@@ -94,6 +97,7 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
 - Tính năng có sẵn:
   - `18_schedule`: Lịch đăng + Kết nối YouTube (`references/publish-schedule.md`).
   - `20_ai`: AI dựng giúp, Cắt lỗi nói, Lời thoại.
+  - `28_engines`: nút **Mô hình & giọng**: nhà cung cấp LLM cho việc chỉ có chữ (Claude/Ollama, `references/llm.md`) và giọng VieNeu (`references/voice.md`).
   - `30_audio`: Âm thanh+.
   - `40_reframe`: Bám mặt, Lồng tiếng.
   - `50–52`: Hàng loạt, Thương hiệu, Đăng.

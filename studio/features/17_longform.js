@@ -164,7 +164,8 @@
         <div><label class="lf-lbl">Khung</label><select id="lf-tor"><option value="vertical">Dọc 9:16</option><option value="horizontal" ${LS('tor') === 'horizontal' ? 'selected' : ''}>Ngang 16:9</option></select></div>
         <div class="full"><label class="lf-lbl">Giọng đọc</label><select id="lf-voice"><option value="Linh">Linh — macOS, offline</option>
           <option value="edge:vi-VN-HoaiMyNeural" ${LS('voice') === 'edge:vi-VN-HoaiMyNeural' ? 'selected' : ''}>Hoài My — edge-tts (cần Internet, cài edge-tts)</option>
-          <option value="edge:vi-VN-NamMinhNeural" ${LS('voice') === 'edge:vi-VN-NamMinhNeural' ? 'selected' : ''}>Nam Minh — edge-tts (cần Internet, cài edge-tts)</option></select></div>
+          <option value="edge:vi-VN-NamMinhNeural" ${LS('voice') === 'edge:vi-VN-NamMinhNeural' ? 'selected' : ''}>Nam Minh — edge-tts (cần Internet, cài edge-tts)</option>
+          <option value="vieneu" ${LS('voice') === 'vieneu' ? 'selected' : ''}>VieNeu — trên máy (giọng chọn ở Mô hình & giọng)</option></select></div>
         <div class="full"><label class="lf-lbl">Tên kênh trên nút Follow (tuỳ chọn)</label><input id="lf-handle" placeholder="@kenh.cua.ban" value="${esc(LS('handle') || '')}"></div>
       </div>
       <label class="ap-tog" style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:8px"><input type="checkbox" id="lf-texp" style="width:auto" ${LS('texp') === '0' ? '' : 'checked'}> Xuất MP4 luôn</label>
