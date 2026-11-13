@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { AVS_HOME, loadStore, saveStore, getProfile } from './profile.mjs';
 import { loadQueue, addItem, isFailed } from './queue.mjs';
 import { loadSchedule } from './publish.mjs';
-import { spawnClaude } from './platform.mjs';
+import { askJSON } from './llm.mjs';
 
 const FB = path.join(AVS_HOME, 'feedback.jsonl'), SUG = path.join(AVS_HOME, 'suggestions.json'), LOG = path.join(AVS_HOME, 'improve_log.json');
 const rd = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
@@ -75,19 +75,9 @@ export function deriveFeedbackRules(entries) {
   return r;
 }
 
+// Prompt → JSON object (also used by telegram.mjs). Stops the CLI after `timeout` ms.
 export function askClaudeJSON(prompt, { model = 'sonnet', timeout = 240000 } = {}) {
-  return new Promise((ok, bad) => {
-    const p = spawnClaude(['-p', '--output-format', 'json', '--model', model], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let out = '', err = ''; const k = setTimeout(() => p.kill('SIGTERM'), timeout);
-    p.stdout.on('data', d => (out += d)); p.stderr.on('data', d => (err += d));
-    p.on('error', e => { clearTimeout(k); bad(new Error(e.code === 'ENOENT' ? 'Chưa cài Claude Code CLI' : e.message)); });
-    p.on('close', c => {
-      clearTimeout(k);
-      try { const r = JSON.parse(out); if (r.is_error) throw new Error(r.result); const s = String(r.result || ''), a = s.indexOf('{'), b = s.lastIndexOf('}'); ok(JSON.parse(s.slice(a, b + 1))); }
-      catch (e) { bad(new Error(c ? (err || out).slice(-300) : 'AI không trả về JSON: ' + e.message)); }
-    });
-    p.stdin.end(prompt);
-  });
+  return askJSON(prompt, { model, timeout, shape: 'object' });
 }
 
 const qcIssues = dirs => {

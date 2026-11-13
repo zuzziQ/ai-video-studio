@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { spawnClaude } from './platform.mjs';
+import { askJSON } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
@@ -167,22 +167,9 @@ Chọn tối đa ${n} câu đáng chèn b-roll nhất (minh hoạ ý chính, s�
 Thêm "why" (≤ 12 từ tiếng Việt). Trả về DUY NHẤT một mảng JSON, không giải thích: [{"i":0,"kind":"preset","id":"...","text":"...","why":"..."},{"i":3,"kind":"stock","query":"...","why":"..."}]
 
 ${JSON.stringify(cands)}`;
-  const r = await new Promise((ok, bad) => {
-    // Prompt on stdin: as an argument it passes Windows' 32K command-line limit for normal-length videos.
-    const p = spawnClaude(['-p', '--output-format', 'json', '--model', model], { stdio: ['pipe', 'pipe', 'pipe'] });
-    p.stdin.on('error', () => {}); p.stdin.end(prompt);
-    let o = '', e = ''; p.stdout.on('data', d => (o += d)); p.stderr.on('data', d => (e += d));
-    p.on('error', () => bad(new Error('Không tìm thấy Claude Code CLI (lệnh "claude"). Cài Claude Code rồi đăng nhập để dùng gợi ý AI.')));
-    p.on('close', code => {
-      let res = e || o, isErr = !!code; try { const j = JSON.parse(o); if (j.result) res = String(j.result); isErr ||= !!j.is_error; } catch {}
-      if (!isErr) return ok(o);
-      bad(new Error(/not logged in|\/login|authenticat|unauthorized|api key/i.test(res) ? 'Claude Code chưa đăng nhập. Mở Terminal, chạy lệnh "claude" một lần để đăng nhập rồi thử lại.' : `claude -p lỗi (mã ${code}): ${res.slice(-300)}`));
-    });
-  });
-  let txt = r; try { txt = JSON.parse(r).result ?? r; } catch {}
-  const m = String(txt).match(/\[[\s\S]*\]/); if (!m) throw new Error('Claude không trả về JSON hợp lệ');
+  const picks = await askJSON(prompt, { model, shape: 'array' });
   const byI = Object.fromEntries(sents.map(s => [s.i, s]));
-  return JSON.parse(m[0]).filter(x => byI[x.i] && (x.kind === 'stock' ? x.query : ids.has(x.id)))
+  return picks.filter(x => x && byI[x.i] && (x.kind === 'stock' ? x.query : ids.has(x.id)))
     .map(x => ({ ...byI[x.i], ...x, text: byI[x.i].text, ...(x.kind === 'preset' ? { label: String(x.text || '').slice(0, 24), preset: cat.find(e => e.id === x.id) } : {}) }));
 }
 

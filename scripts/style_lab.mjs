@@ -15,7 +15,8 @@
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { findChrome, pyBin, claudeBin, spawnClaude } from './platform.mjs';
+import { findChrome, pyBin, claudeBin } from './platform.mjs';
+import { runClaude } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -57,42 +58,22 @@ const SAMPLE_CAPS = (() => {
 
 // ---------- Claude CLI ----------
 export { claudeBin };
-const LOGIN = /not logged in|please run \/login|invalid api key|authentication|unauthorized|oauth token|credit balance/i;
 // stream-json so we can show live activity (which image Claude opens, thinking, how much it has written) and keep the
 // image reads (`Read` tool) on record: res.reads lists the files Claude actually opened.
-function callClaude(prompt, { cwd, model, resume, onTick, timeout = 20 * 60e3 }) {
-  return new Promise((ok, bad) => {
-    const a = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--allowedTools', 'Read'];
-    if (model && model !== 'default') a.push('--model', model);
-    if (resume) a.push('--resume', resume);
-    const p = child = spawnClaude(a, { cwd, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env } });
-    let buf = '', err = '', r = null, chars = 0, act = 'đang đọc yêu cầu', usedModel = '', timedOut = false; const reads = [], t0 = Date.now();
-    const tick = setInterval(() => onTick?.((Date.now() - t0) / 1000, act), 1000);
-    const kill = setTimeout(() => { timedOut = true; p.kill('SIGTERM'); }, timeout);
-    const ev = e => {
-      if (e.type === 'system' && e.subtype === 'init') usedModel = e.model || '';
-      else if (e.type === 'system' && e.subtype === 'thinking_tokens') act = 'đang suy nghĩ';
-      else if (e.type === 'stream_event' && e.event?.delta?.text) { chars += e.event.delta.text.length; act = `đang viết (${Math.round(chars / 100) / 10}k ký tự)`; }
-      else if (e.type === 'assistant') for (const c of e.message?.content || []) if (c.type === 'tool_use') { const f = path.basename(String(c.input?.file_path || '')); reads.push(f); act = `đang xem ${f}`; }
-      if (e.type === 'result') r = e;
-    };
-    p.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); try { ev(JSON.parse(l)); } catch {} } });
-    p.stderr.on('data', d => (err += d));
-    const done = () => { clearInterval(tick); clearTimeout(kill); child = null; };
-    p.on('error', e => { done(); bad(new Error(e.code === 'ENOENT' ? 'Không tìm thấy lệnh "claude" (Claude Code CLI). Cài Claude Code (https://claude.com/claude-code) rồi chạy "claude" một lần để đăng nhập.' : e.message)); });
-    p.on('close', code => {
-      done();
-      try { if (!r && buf.trim()) ev(JSON.parse(buf)); } catch {}
-      const msg = String(r?.result || err || '').slice(-400);
-      if (timedOut) return bad(new Error(`Claude chạy quá ${Math.round(timeout / 60e3)} phút nên đã dừng. Thử lại với model Sonnet (nhanh hơn).`));
-      if (code !== 0 || !r || r.is_error) {
-        if (LOGIN.test(msg)) return bad(new Error('Claude Code CLI chưa đăng nhập. Mở Terminal, chạy "claude" và đăng nhập (/login), rồi thử lại.'));
-        return bad(new Error(`claude -p lỗi (mã ${code}): ${msg || 'không có kết quả'}`));
-      }
-      ok({ text: String(r.result || ''), session: r.session_id, turns: r.num_turns, cost: r.total_cost_usd, model: usedModel, reads, sec: Math.round((Date.now() - t0) / 1000) });
-    });
-    p.stdin.end(prompt);
-  });
+async function callClaude(prompt, { cwd, model, resume, onTick, timeout = 20 * 60e3 }) {
+  let chars = 0, act = 'đang đọc yêu cầu', usedModel = ''; const reads = [], t0 = Date.now();
+  const ev = e => {
+    if (e.type === 'system' && e.subtype === 'init') usedModel = e.model || '';
+    else if (e.type === 'system' && e.subtype === 'thinking_tokens') act = 'đang suy nghĩ';
+    else if (e.type === 'stream_event' && e.event?.delta?.text) { chars += e.event.delta.text.length; act = `đang viết (${Math.round(chars / 100) / 10}k ký tự)`; }
+    else if (e.type === 'assistant') for (const c of e.message?.content || []) if (c.type === 'tool_use') { const f = path.basename(String(c.input?.file_path || '')); reads.push(f); act = `đang xem ${f}`; }
+  };
+  try {
+    const { text, result: r } = await runClaude(prompt, { model, cwd, env: { ...process.env }, stream: true, onEvent: ev, args: ['--allowedTools', 'Read', ...(resume ? ['--resume', resume] : [])],
+      timeout, timeoutMsg: `Claude chạy quá ${Math.round(timeout / 60e3)} phút nên đã dừng. Thử lại với model Sonnet (nhanh hơn).`,
+      onTick: s => onTick?.(s, act), onProc: p => { child = p; } });
+    return { text, session: r.session_id, turns: r.num_turns, cost: r.total_cost_usd, model: usedModel, reads, sec: Math.round((Date.now() - t0) / 1000) };
+  } finally { child = null; }
 }
 function sections(txt) {
   const out = {}; const re = /^=====\s*([A-Z_]+)\s*=====\s*$/gm; let m, last = null, idx = 0;
