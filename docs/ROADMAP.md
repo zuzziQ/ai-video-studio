@@ -77,7 +77,7 @@ Mã đã xong trên máy, chờ `S01` để thành PR.
 
 ### **`S05`** Đợt 4: xuất gói quảng cáo và học từ kết quả
 
-- [ ] **`M30`** (`area/export`): gói Ads Manager: preset Meta và TikTok, tên file theo quy ước, `ads_mapping.csv` (ad_name, primary_text, headline, CTA, landing_url + UTM theo mã bản), kiểm spec (thời lượng, tỷ lệ, dung lượng), `README.txt`. Bản có `ads.blocked` bị loại khỏi gói. Tải lên thủ công, không tự đăng.
+- [x] **`M30`** (`area/export`): gói Ads Manager: preset Meta và TikTok, tên file theo quy ước, `ads_mapping.csv` (ad_name, primary_text, headline, CTA, landing_url + UTM theo mã bản), kiểm spec (thời lượng, tỷ lệ, dung lượng), `README.txt`. Bản có `ads.blocked` bị loại khỏi gói. Tải lên thủ công, không tự đăng. Xong 2026-11-13: `scripts/ads_pack.mjs` (mã bản `<lô>-V<i>` trong `ad_name` và `utm_content`, chữ lấy từ `publish/publish.json`, khổ phụ của `export_multi`, `manifest.json` mã bản → trục cho `M31`), tài liệu `references/ads-pack.md`, test `scripts/tests/ads_pack.test.mjs`. Chưa có giao diện Studio.
 - [ ] **`M31`** (`area/export`): nhập CSV kết quả quảng cáo, tính lift theo hook, góc, khán giả, kết cấu, bố cục, thời lượng, giọng, nhạc (n ≥ 2). Tách phép tính khỏi SQLite của `scale.py`.
 - [ ] **`M32`** (`area/ads`): lô kế tiếp có trọng số: yếu tố thắng được ưu tiên trong ma trận, kèm tỷ lệ hook mới. Nối với vòng phản hồi sẵn có của Studio (`scripts/feedback.mjs`).
 
