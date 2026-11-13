@@ -13,6 +13,7 @@ import { readGate, gateText } from './export_gate.mjs';
 import { SKILL, PY, loadProject, saveProject, designOf, isBase, openEngine, engineInit, engineShot, askClaude, parseJson } from './ai_qc.mjs';
 import { loadLib, saveLib, libPath, libKey, projectContext, pickHook, markUsed, generateHooks } from './hooks_lib.mjs';
 import { AUDIENCES, ANGLES as M_ANGLES, NARRATIVES, FORMATS, sourceStats, checkSourceGate, matrixBrief, planMatrix, estimate, estimateText } from './variant_matrix.mjs';
+import { nextBatchPlan, freshSlot } from './ads_results.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -208,10 +209,15 @@ export async function makeMatrix(src, o = {}) {
   const stats = sourceStats(dir, base.tl), gate = checkSourceGate(stats, target, { allowLowSource: !!o.allowLowSource });
   const brief = matrixBrief(base.tl, { audiences: o.audiences, angles: o.angles, narratives: o.narratives, durations: o.durations, formats: o.formats, seed: o.seed });
   const ctx = projectContext(dir), lib = loadLib(libPath(ctx.key), libKey(ctx.key));
-  const plan = planMatrix(brief, stats, { duration: base.tl.duration, ads: !!base.tl.ads?.on, claims: ctx.claims }, target);
+  // M32: lô kế tiếp có trọng số theo kết quả quảng cáo đã nhập (ads_results.json): yếu tố thắng nặng điểm hơn, hook thắng
+  // được ưu tiên, ~explore × target bản dùng hook mới sinh.
+  const learnO = o.learn || brief.learn, nb = learnO ? nextBatchPlan(dir, { target, ...learnO }) : null;
+  if (nb) console.log(nb.has_data ? `Học từ kết quả (${nb.kpi}): trọng số ${JSON.stringify(nb.weights)} · hook thắng ${nb.preferred_hooks.length} · ${nb.fresh_slots} bản hook mới` : `Học từ kết quả: ${nb.learn.note}`);
+  const plan = planMatrix(brief, stats, { duration: base.tl.duration, ads: !!base.tl.ads?.on, claims: ctx.claims }, target, nb?.has_data ? { weights: nb.weights } : {});
   const est = estimate({ dir, tl: base.tl, target, plan, stats, gate, lib, export: !!o.export });
   console.log(estimateText(est));
-  const summary = { theoretical: plan.theoretical, feasible: plan.feasible_count, rejected: plan.rejected_reasons, angles: plan.angle_distribution, quota: plan.quota, brief };
+  const summary = { theoretical: plan.theoretical, feasible: plan.feasible_count, rejected: plan.rejected_reasons, angles: plan.angle_distribution, quota: plan.quota, brief,
+    ...(nb ? { learn: { kpi: nb.kpi, has_data: nb.has_data, weights: nb.weights, preferred_hooks: nb.preferred_hooks, explore: nb.explore, fresh_slots: nb.fresh_slots, new_hooks: nb.new_hooks, angle_quota: plan.angle_quota } } : {}) };
   if (o.estimateOnly) { console.log('RESULT ' + JSON.stringify({ estimate: est, plan: summary })); return { estimate: est, plan: summary, variants: [] }; }
   if (gate.blocked) throw new Error(`Cổng đa dạng nguồn: ${gate.warnings[0].message}. ${gate.warnings[0].hint} Vẫn muốn chạy: thêm --allow-low-source.`);
   if (!plan.chosen.length) throw new Error(`Không có tổ hợp khả thi (${Object.entries(plan.rejected_reasons).map(([k, v]) => `${k} ${v}`).join(', ')}).`);
@@ -222,10 +228,18 @@ export async function makeMatrix(src, o = {}) {
   try {
     const want = [...new Set(chosen.map(c => FORMATS[c.format]?.pack).filter(Boolean))], packMap = {};
     if (want.length) { await engineInit(E, base.tl, base.caps); for (const r of await recipes(E, base.tl, base.caps, want.length, want)) packMap[r.id] = r; }
+    let freshIds = [];
+    if (nb?.new_hooks) {
+      say(.05, `Sinh ${nb.new_hooks} hook mới cho phần khám phá`);
+      const g = await generateHooks(lib, ctx, { n: nb.new_hooks, useLlm: !o.noClaude, model: o.model, seed: brief.seed });
+      if (g.llm_error) console.error(`[variants] LLM: ${g.llm_error} — dùng hook mẫu`);
+      freshIds = g.hooks.map(x => x.id);
+    }
     for (let i = 0; i < chosen.length; i++) {
       const c = chosen[i];
       say(.06 + i / chosen.length * (o.export ? .5 : .9), `Tạo bản ${i + 1}/${chosen.length}: ${M_ANGLES[c.angle]?.label || c.angle}`);
-      let h = pickHook(lib, { angle: c.angle, seed: brief.seed + i });
+      const fresh = !!nb && freshSlot(i, nb.explore), preferred = fresh ? freshIds : nb?.preferred_hooks;
+      let h = pickHook(lib, { angle: c.angle, seed: brief.seed + i, preferred });
       if (!h) {
         const g = await generateHooks(lib, ctx, { n: Math.max(3, Math.ceil((chosen.length - i) / 5)), angle: c.angle, useLlm: !o.noClaude, model: o.model, seed: brief.seed + i });
         if (g.llm_error) console.error(`[variants] LLM: ${g.llm_error} — dùng hook mẫu`);
@@ -244,6 +258,7 @@ export async function makeMatrix(src, o = {}) {
       if (c.duration && !trimTo(tl, caps, c.duration)) notes.push(`video đã ≤ ${c.duration}s, giữ nguyên độ dài`);
       v.desc = [`Kết cấu ${NARRATIVES[c.narrative] || c.narrative}`, `bố cục ${FORMATS[c.format]?.label || c.format}`, c.duration ? `${c.duration}s` : 'giữ độ dài', ...notes].join(' · ');
       if (c.quota_overflow) v.quota_overflow = true;
+      if (nb) v.learn_hook = freshIds.includes(h.id) ? 'new' : nb.preferred_hooks.includes(h.id) ? 'winner' : 'library';
       tl._variant = { base: dir, i: i + 1, kind: 'matrix', hook: h.text, hook_id: h.id, pack: v.pack, axes, created: new Date().toISOString() };
       saveProject(P, tl, caps);
       await engineInit(E, tl, caps);
@@ -263,6 +278,8 @@ export async function makeMatrix(src, o = {}) {
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', size: `${DW}x${DH}`, hook_library: lib.file,
     axes: ['audience', 'angle', 'narrative', 'duration', 'format'], plan: summary, source_gate: { ok: gate.ok, need: gate.need, have: gate.have, warnings: gate.warnings },
     estimate: est, variants: out };
+  if (nb) res.learn = { kpi: nb.kpi, has_data: nb.has_data, weights: nb.weights, preferred_hooks: nb.preferred_hooks, explore: nb.explore,
+    new_hooks: out.filter(v => v.learn_hook === 'new').length, winner_hooks: out.filter(v => v.learn_hook === 'winner').length, source: 'ads_results.json' };
   fs.writeFileSync(path.join(dir, 'variants.json'), JSON.stringify(res, null, 1));
   return res;
 }
@@ -336,12 +353,13 @@ export async function makeVariants(src, o = {}) {
 
 async function main() {
   const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-  const VAL = ['--n', '--kind', '--model', '--quality', '--audiences', '--angles', '--narratives', '--durations', '--formats', '--seed'];
+  const VAL = ['--n', '--kind', '--model', '--quality', '--audiences', '--angles', '--narratives', '--durations', '--formats', '--seed', '--kpi', '--explore'];
   const src = args.find((a, i) => !a.startsWith('--') && !(i > 0 && VAL.includes(args[i - 1])));
-  if (!src) { console.error('usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both|matrix] [--export] [--quality 720|1080] [--no-claude]\n  matrix: [--audiences a,b] [--angles x,y] [--narratives …] [--durations 0,15,30] [--formats full,split] [--seed 42] [--allow-low-source] [--estimate]'); process.exit(2); }
+  if (!src) { console.error('usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both|matrix] [--export] [--quality 720|1080] [--no-claude]\n  matrix: [--audiences a,b] [--angles x,y] [--narratives …] [--durations 0,15,30] [--formats full,split] [--seed 42] [--allow-low-source] [--estimate] [--learn [--kpi auto|ctr|cpa|roas…] [--explore 0.2]]'); process.exit(2); }
   const r = await makeVariants(src, { n: +opt('--n', 3), kind: opt('--kind', 'hook'), export: args.includes('--export'), quality: opt('--quality', '720'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude'),
     audiences: opt('--audiences'), angles: opt('--angles'), narratives: opt('--narratives'), durations: opt('--durations'), formats: opt('--formats'), seed: opt('--seed') != null ? +opt('--seed') : undefined,
-    allowLowSource: args.includes('--allow-low-source'), estimateOnly: args.includes('--estimate') });
+    allowLowSource: args.includes('--allow-low-source'), estimateOnly: args.includes('--estimate'),
+    learn: args.includes('--learn') ? { kpi: opt('--kpi', 'auto'), explore: opt('--explore') != null ? +opt('--explore') : 0.2 } : undefined });
   for (const v of r.variants) console.log(`${path.basename(v.dir)}: ${v.name} · hook “${v.hook}” · ${v.pack}${v.axes ? ` · ${v.desc}` : ''}${v.teaser ? ` · teaser ${v.teaser.dur}s` : ''}${v.video ? ` → ${v.video}` : ''}`);
   if (r.base) console.log(`variants: ${path.join(r.base, 'variants.json')}`);
   say(1, 'Xong');

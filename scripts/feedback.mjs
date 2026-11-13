@@ -99,7 +99,7 @@ export function cleanPatch(patch = {}) {
 }
 const sanitizeAction = a => {
   if (a?.type === 'profile') { const patch = cleanPatch(a.patch); return Object.keys(patch).length ? { ...a, patch } : { type: 'none' }; }
-  return ['topic', 'improve', 'schedule', 'retry_failed'].includes(a?.type) ? a : { type: 'none' };
+  return ['topic', 'improve', 'schedule', 'retry_failed', 'next_batch'].includes(a?.type) ? a : { type: 'none' };
 };
 
 export async function improve({ claude = true, apply = false, model = 'sonnet', log = () => {} } = {}) {
@@ -195,7 +195,12 @@ export async function actSuggestion(sid, act, { onImprove } = {}) {
       if (!Object.keys(patch).length) throw new Error('Đề xuất không có thay đổi hợp lệ');
       Object.assign(p, patch); saveStore(store); msg = `Đã cập nhật hồ sơ "${p.name}"`;
     } else if (a.type === 'topic') { const it = addItem({ kind: 'topic', input: a.topic, source: 'suggest' }); msg = `Đã xếp hàng video chủ đề (#${it.id})`; }
-    else if (a.type === 'improve') { const r = await (onImprove || improve)(); msg = 'Đã chạy tự cải tiến' + (r?.ai?.summary ? ': ' + r.ai.summary : ''); }
+    else if (a.type === 'next_batch') {   // M32: lô kế tiếp có trọng số từ kết quả quảng cáo (scripts/ads_results.mjs)
+      if (!a.project || !fs.existsSync(path.join(a.project, 'timeline.json'))) throw new Error('Không thấy dự án gốc của lô');
+      const kpi = /^(auto|ctr|hook_rate|completion|cvr|cpa|roas)$/.test(a.kpi || '') ? a.kpi : 'auto', explore = Math.max(0, Math.min(1, Number.isFinite(+a.explore) ? +a.explore : 0.2));
+      const it = addItem({ kind: 'variants', input: a.project, opts: { n: Math.max(1, Math.min(1000, Math.round(+a.n || 10))), kind: 'matrix', args: ['--learn', '--kpi', kpi, '--explore', String(explore)] }, source: 'suggest' });
+      msg = `Đã xếp hàng lô kế tiếp có trọng số (#${it.id})`;
+    } else if (a.type === 'improve') { const r = await (onImprove || improve)(); msg = 'Đã chạy tự cải tiến' + (r?.ai?.summary ? ': ' + r.ai.summary : ''); }
     else if (a.type === 'retry_failed') {
       const { retryItem } = await import('./queue.mjs'); let n = 0;
       for (const it of loadQueue().items.filter(isFailed)) if (retryItem(it.id)) n++;

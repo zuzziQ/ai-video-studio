@@ -90,6 +90,8 @@ export function matrixBrief(tl, o = {}) {
     formats: pick(m.formats, Object.keys(FORMATS), ['full']),
     quota_ratio: Number.isFinite(+m.quota_ratio) && +m.quota_ratio > 0 ? +m.quota_ratio : 0.25,
     seed: Number.isFinite(+m.seed) ? +m.seed : 42,
+    // M32: học từ kết quả quảng cáo (scripts/ads_results.mjs). true hoặc { kpi, explore, platform }; bỏ trống/false = không học.
+    learn: m.learn ? { kpi: m.learn.kpi || 'auto', explore: Number.isFinite(+m.learn.explore) ? Math.max(0, Math.min(1, +m.learn.explore)) : 0.2, platform: m.learn.platform || undefined } : null,
   };
 }
 function rng(seed) { let s = (seed >>> 0) || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
@@ -107,6 +109,8 @@ export function planMatrix(brief, stats, ctx, target, o = {}) {
     for (const duration of brief.durations) for (const format of brief.formats) combos.push({ audience, angle, narrative, duration, format });
   shuffle(combos, seed);
   const quota = Math.max(1, Math.ceil(target * brief.quota_ratio)), perAngle = {}, rejected = {}, proposals = [];
+  // M32: có trọng số thì quota của từng góc nhân theo trọng số góc đó (góc thắng được nhiều suất hơn, góc thua ít hơn).
+  const qOf = a => (Number.isFinite(weights?.angle?.[a]) ? Math.max(1, Math.ceil(quota * weights.angle[a])) : quota);
   for (const c of combos) {
     const info = ANGLES[c.angle] || { needs: [] }, missing = info.needs.filter(t => !stats.tags[t]);
     let reason = null;
@@ -116,7 +120,7 @@ export function planMatrix(brief, stats, ctx, target, o = {}) {
     else if (c.duration && c.duration > (ctx.duration || 0) + 0.5) reason = `TOO_LONG: video gốc chỉ dài ${r1(ctx.duration || 0)}s`;
     if (reason) { const k = reason.split(':')[0]; rejected[k] = (rejected[k] || 0) + 1; proposals.push({ ...c, feasible: false, reason, score: 0 }); continue; }
     const coverage = info.needs.length ? Math.min(1, info.needs.reduce((s, t) => s + (stats.tags[t] || 0), 0) / (2 * info.needs.length)) : 1;
-    const novelty = 1 - (perAngle[c.angle] || 0) / quota;
+    const novelty = Math.max(0, 1 - (perAngle[c.angle] || 0) / qOf(c.angle));
     let score = Math.round(1000 * (0.45 * coverage + 0.35 * novelty + 0.2 * Math.min(1, (ctx.ads ? approved.length : 3) / 3))) / 10;
     if (weights) {
       const ws = Object.entries({ ...c, duration: String(c.duration) }).map(([d, v]) => weights[d]?.[v]).filter(w => Number.isFinite(w));
@@ -134,7 +138,7 @@ export function planMatrix(brief, stats, ctx, target, o = {}) {
   const chosen = [], used = {}, left = [...feasible];
   while (chosen.length < target && left.length) {
     let bi = -1;
-    for (let i = 0; i < left.length; i++) if ((used[left[i].angle] || 0) < quota && (bi < 0 || adj(left[i]) > adj(left[bi]))) bi = i;
+    for (let i = 0; i < left.length; i++) if ((used[left[i].angle] || 0) < qOf(left[i].angle) && (bi < 0 || adj(left[i]) > adj(left[bi]))) bi = i;
     if (bi < 0) break;
     const [p] = left.splice(bi, 1); chosen.push(p); used[p.angle] = (used[p.angle] || 0) + 1; take(p);
   }
@@ -144,7 +148,8 @@ export function planMatrix(brief, stats, ctx, target, o = {}) {
   }
   const angle_distribution = {}; for (const p of chosen) angle_distribution[p.angle] = (angle_distribution[p.angle] || 0) + 1;
   return { theoretical: combos.length, feasible_count: feasible.length, rejected_count: combos.length - feasible.length,
-    rejected_reasons: rejected, chosen, proposals, angle_distribution, quota };
+    rejected_reasons: rejected, chosen, proposals, angle_distribution, quota,
+    ...(weights?.angle ? { angle_quota: Object.fromEntries(brief.angles.map(a => [a, qOf(a)])) } : {}) };
 }
 
 // ---------- ước tính (scale.estimate_plan) ----------
