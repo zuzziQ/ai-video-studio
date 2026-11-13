@@ -27,7 +27,9 @@ Theo thứ tự, hook bị bỏ ở luật đầu tiên không qua:
 1. **Độ dài** 3–16 từ, không có link, `@`, `#`.
 2. **Cổng chính sách + claim**: `scripts/ad_gates.py` chạy qua CLI trên một dự án tạm, mỗi hook là một scene chữ.
    Có lỗi mức cao (`ad_policy`, `ad_claim`) là bỏ. Claim, cụm từ cấm, ngành và nền tảng lấy từ `timeline.ads` và hồ sơ
-   Product Brain (`~/.ai-video-studio/products/<mã>.json`, nếu có).
+   Product Brain (`~/.ai-video-studio/products/<mã>.json`, M18). Có hồ sơ thì dự án tạm trỏ `ads.product` tới hồ sơ để
+   `ad_gates.py` tự áp luật của hồ sơ (claim thiếu bằng chứng = chờ duyệt, quá `expires` = hết hạn, cụm từ cấm, hồ sơ
+   không có = `PRODUCT-MISSING`); prompt LLM cũng chỉ đưa claim đủ bằng chứng và còn hạn.
 3. **Khác mọi hook đã có**: cosine trên unigram + bigram (cùng công thức `ad_gates.similarity`) với mọi hook trong kho và
    mọi hook vừa nhận trong cùng lô phải < 0,5.
 

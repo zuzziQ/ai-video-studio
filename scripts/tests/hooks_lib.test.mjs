@@ -50,6 +50,25 @@ test('gateHooks chạy ad_gates.py thật: chặn cụm từ rủi ro và cụm 
   assert.equal(v[2].ok, false); assert.match(v[2].reasons.join(' '), /giá rẻ nhất/);
 });
 
+test('Product Brain (M18): ngữ cảnh theo luật hồ sơ, cổng để ad_gates.py tự đọc hồ sơ', async () => {
+  fs.mkdirSync(path.join(HOME, 'products'), { recursive: true });
+  fs.writeFileSync(path.join(HOME, 'products', 'serum-b5.json'), JSON.stringify({ version: 1, id: 'serum-b5', name: 'Serum B5', industry: 'cosmetics',
+    claims: [{ id: 'c1', text: 'Đầu nhỏ giọt giúp kiểm soát lượng dùng', status: 'approved', evidence: 'Thử nội bộ' },
+      { id: 'c2', text: 'Cấp ẩm suốt 24 giờ', status: 'approved', evidence: '' },
+      { id: 'c3', text: 'Mềm da sau 3 ngày', status: 'approved', evidence: 'x', expires: '2020-01-01' }],
+    blocked: ['hãng đối thủ'], faq: [{ q: 'Dùng mấy lần?', a: '2' }] }));
+  const proj = fs.mkdtempSync(path.join(HOME, 'pb-'));
+  fs.writeFileSync(path.join(proj, 'timeline.json'), JSON.stringify({ ads: { on: true, product: 'serum-b5', blocked: ['giá sốc'] }, scenes: [] }));
+  const ctx = H.projectContext(proj);
+  assert.equal(ctx.name, 'Serum B5'); assert.equal(ctx.product, 'serum-b5');
+  assert.deepEqual(ctx.claims.map(c => c.status), ['approved', 'pending', 'expired']);
+  assert.deepEqual(ctx.blocked, ['hãng đối thủ', 'giá sốc']);
+  const v = await H.gateHooks(['Serum B5 tốt hơn hãng đối thủ nhiều lắm', 'Serum B5 đang có giá sốc cuối tuần', 'Bạn dùng Serum B5 lúc nào trong ngày?'], ctx, { py: PY });
+  assert.deepEqual(v.map(x => x.ok), [false, false, true], JSON.stringify(v));   // cụm từ cấm của hồ sơ (đọc bởi ad_gates.py) và của dự án
+  const miss = await H.gateHooks(['Bạn dùng Serum B5 lúc nào trong ngày?'], { product: 'khong-co' }, { py: PY });
+  assert.equal(miss[0].ok, false); assert.match(miss[0].reasons.join(' '), /PRODUCT-MISSING/);
+});
+
 test('generateHooks: LLM (giả) → lọc → vào kho; LLM lỗi thì dùng mẫu', async () => {
   const lib = H.loadLib(path.join(HOME, 'x.json'));
   const ctx = { name: 'Serum X', claims: [], blocked: [] };
