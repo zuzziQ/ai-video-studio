@@ -21,7 +21,7 @@ export const isDue = (it, set, T) => isPreRemindDue(it, set, T) || isYoutubeDue(
 
 const nowMs = () => (process.env.AVS_NOW ? Date.parse(process.env.AVS_NOW) : Date.now());
 // true khi run-due có việc. Không có schedule.json → false. Đọc không được (file bận trên Windows) hoặc không phải JSON →
-// true: để run-due tự xử lý như trước (nó giữ file hỏng thành schedule.json.bad-*), không bao giờ bỏ sót một lượt đăng.
+// true: sinh run-due như trước khi có M55 (với file hỏng thì mỗi 60 s, cho tới khi lịch được ghi lại), không bỏ sót lượt đăng.
 export function scheduleHasDue({ home = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), now = nowMs() } = {}) {
   let s;
   try { s = JSON.parse(fs.readFileSync(path.join(home, 'schedule.json'), 'utf8')); }

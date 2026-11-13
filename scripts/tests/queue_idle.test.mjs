@@ -132,8 +132,12 @@ test('scheduleHasDue: ba loại mục đến hạn của runDue, và lịch hỏ
   assert.equal(has([{ platform: 'youtube', state: 'planned', when: at(200) }]), false);
   assert.equal(has([{ platform: 'tiktok', state: 'planned', when: at(30) }], { remindMin: 45 }), true);
   assert.equal(has([{ platform: 'youtube', state: 'planned', when: at(10), retryAfter: at(-1) }]), true); // hết giờ chờ thử lại
+  assert.equal(has([{ platform: 'youtube', state: 'uploading', when: at(30) }]), true); // tải lên bị kẹt: run-due làm tiếp
   fs.writeFileSync(SCHED, '{hỏng');
   assert.equal(D.scheduleHasDue({ home: HOME, now: T }), true);
+  // đọc lỗi không phải ENOENT (trên Windows là EPERM/EBUSY khi file đang bị thay; ở đây EISDIR) → vẫn cho chạy run-due
+  fs.rmSync(SCHED, { force: true }); fs.mkdirSync(SCHED);
+  try { assert.equal(D.scheduleHasDue({ home: HOME, now: T }), true); } finally { fs.rmSync(SCHED, { recursive: true, force: true }); }
 });
 
 test('scheduleHasDue dùng cùng mặc định với publish.mjs', () => {
