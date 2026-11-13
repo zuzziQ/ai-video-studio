@@ -330,3 +330,14 @@ test('M40: autoSchedule giữ khoá suốt lượt (gọi lồng addItem không 
   assert.equal(readSched().length, 1);
   assert.ok(fs.readdirSync(HOME).some(f => f.startsWith('schedule.json.bad-')), 'bản hỏng được giữ thành schedule.json.bad-*');
 });
+
+test('M40: đọc schedule.json lỗi (không phải "chưa có file") thì không ghi đè thành lịch trống', () => {
+  reset();
+  const v = mkVideo('doc-loi.mp4', 500).file;
+  fs.mkdirSync(SCHED); // đọc được báo lỗi EISDIR, giống một lần đọc thất bại kéo dài
+  try {
+    assert.throws(() => P.addItem({ file: v, platform: 'zalo', when: '2026-11-06 19:30' }));
+    assert.ok(fs.statSync(SCHED).isDirectory(), 'không bị thay bằng lịch trống');
+    assert.ok(!fs.existsSync(SCHED + '.lock'), 'khoá được nhả khi lỗi');
+  } finally { fs.rmSync(SCHED, { recursive: true, force: true }); }
+});

@@ -45,10 +45,12 @@ const progress = (f, s) => console.log(`@@ ${Math.max(0, Math.min(1, f)).toFixed
 function writePrivate(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
-  fs.writeFileSync(tmp, typeof data === 'string' ? data : JSON.stringify(data, null, 1), { mode: 0o600 });
-  fs.chmodSync(tmp, 0o600);
-  // Windows: renaming over a file another process is reading fails for a moment (EPERM/EBUSY) → retry (file_lock.mjs)
-  try { retryBusy(() => fs.renameSync(tmp, file)); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  try {
+    fs.writeFileSync(tmp, typeof data === 'string' ? data : JSON.stringify(data, null, 1), { mode: 0o600 });
+    fs.chmodSync(tmp, 0o600);
+    // Windows: renaming over a file another process is reading fails for a moment (EPERM/EBUSY) → retry (file_lock.mjs)
+    retryBusy(() => fs.renameSync(tmp, file));
+  } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 }
 const readJSON = (file, d) => { try { return JSON.parse(retryBusy(() => fs.readFileSync(file, 'utf8'), 10)); } catch { return d; } };
 
