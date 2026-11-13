@@ -5,11 +5,16 @@ Output: [{"w": "Video", "s": 0.00, "e": 0.32}, ...]  (flat list of words, second
 """
 import argparse
 import json
+import os
 import subprocess
+import sys
 import wave
 
 import numpy as np
 from faster_whisper import WhisperModel
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
+from whisper_device import describe, load_model  # GPU NVIDIA khi chạy được, không thì CPU (M53)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("src")
@@ -32,12 +37,13 @@ w = wave.open(wav)
 audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
 
 try:
-    model = WhisperModel(a.model, device="cpu", compute_type="int8")
+    model, dev = load_model(WhisperModel, a.model)
 except Exception as e:  # first run offline / download failed: a worse transcript beats no transcript
     if a.model == "small":
         raise
     print(f"model {a.model} không tải được ({e.__class__.__name__}: {e}) — dùng tạm model small", flush=True)
-    model = WhisperModel("small", device="cpu", compute_type="int8")
+    model, dev = load_model(WhisperModel, "small")
+print(f"whisper: {describe(dev)}", flush=True)
 segs, _ = model.transcribe(audio, language=None if a.lang == "auto" else a.lang, word_timestamps=True, vad_filter=False)
 words = []
 for s in segs:

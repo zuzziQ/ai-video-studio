@@ -1,7 +1,8 @@
 ﻿# AI Video Studio — cài đặt trên Windows 10/11 (bản tương đương install.sh).
-#   Bấm đúp install.cmd, hoặc:  powershell -ExecutionPolicy Bypass -File install.ps1 [-NoSkill] [-NoShortcut] [-Yes]
+#   Bấm đúp install.cmd, hoặc:  powershell -ExecutionPolicy Bypass -File install.ps1 [-NoSkill] [-NoShortcut] [-Yes] [-NoCuda]
 #   -Yes: tự cài công cụ còn thiếu bằng winget, không hỏi lại.
-param([switch]$NoSkill, [switch]$NoShortcut, [switch]$Yes)
+#   -NoCuda: có GPU NVIDIA cũng không cài CUDA runtime cho whisper (whisper chạy CPU).
+param([switch]$NoSkill, [switch]$NoShortcut, [switch]$Yes, [switch]$NoCuda)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $REPO = $PSScriptRoot
@@ -61,6 +62,12 @@ $VPY = Join-Path $S '.venv\Scripts\python.exe'
 if (-not (Test-Path $VPY)) { & $PY[0] $PY[1..9] -m venv (Join-Path $S '.venv'); if ($LASTEXITCODE) { Die 'Không tạo được Python venv' } }
 & $VPY -m pip install -q --upgrade pip
 & $VPY -m pip install -q faster-whisper numpy scipy pillow 'rembg[cpu]'; if ($LASTEXITCODE) { Die 'Cài thư viện Python lỗi (xem dòng báo lỗi ở trên)' }
+# Whisper trên GPU (M53): có GPU NVIDIA thì cài cuBLAS của CUDA 12 qua pip (ctranslate2 bản Windows đã kèm cuDNN).
+# Lỗi không chặn cài đặt: whisper tự lùi về CPU.
+if (-not $NoCuda -and (Has 'nvidia-smi')) {
+  Say 'Có GPU NVIDIA → cài cuBLAS cho whisper chạy GPU (~0,9 GB; bỏ qua bằng -NoCuda)'
+  & $VPY -m pip install -q nvidia-cublas-cu12; if ($LASTEXITCODE) { Say 'Không cài được cuBLAS: whisper sẽ chạy CPU' }
+}
 & $VPY -m pip install -q edge-tts; if ($LASTEXITCODE) { Say 'Bỏ qua edge-tts (giọng đọc online, không bắt buộc)' }
 Push-Location $S; npm install --silent; $npm = $LASTEXITCODE; Pop-Location
 if ($npm) { Die 'npm install lỗi' }
