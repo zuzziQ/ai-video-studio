@@ -72,21 +72,26 @@ function readForWrite() {
 
 // ---------- lock for queue.json writes (M24) ----------
 // Exclusive create of <file>.lock holding {pid, host, t}. A holder keeps it only while it reads, edits and renames the
-// JSON (milliseconds), so a lock whose pid is gone, or older than staleMs, is left over from a crash and is removed.
-export function withFileLock(lockFile, fn, { timeoutMs = 15000, staleMs = 10000 } = {}) {
+// JSON (milliseconds; at worst the busy-file retries, ~10 s), so a lock whose pid is gone, or older than staleMs, is left
+// over from a crash and is removed. Each lock carries a random token: a holder only deletes its own lock, and a stale lock
+// is only deleted if it still holds the same content that was judged stale (two waiters cannot delete each other's new lock
+// unless they interleave within microseconds).
+const lockText = f => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
+export function withFileLock(lockFile, fn, { timeoutMs = 15000, staleMs = 30000 } = {}) {
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
   const t0 = Date.now();
   for (let k = 0; ; k++) {
     let fd = null;
     try { fd = fs.openSync(lockFile, 'wx'); } catch (e) { if (e.code !== 'EEXIST' && !BUSY.has(e.code)) throw e; }
     if (fd !== null) {
-      try { fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: os.hostname(), t: Date.now() })); } finally { fs.closeSync(fd); }
-      try { return fn(); } finally { try { retryBusy(() => fs.rmSync(lockFile, { force: true })); } catch {} }
+      const mine = JSON.stringify({ pid: process.pid, host: os.hostname(), t: Date.now(), tok: crypto.randomBytes(6).toString('hex') });
+      try { fs.writeSync(fd, mine); } finally { fs.closeSync(fd); }
+      try { return fn(); } finally { try { if (lockText(lockFile) === mine) retryBusy(() => fs.rmSync(lockFile, { force: true })); } catch {} }
     }
-    let info = null, age = 0;
-    try { age = Date.now() - fs.statSync(lockFile).mtimeMs; info = JSON.parse(fs.readFileSync(lockFile, 'utf8')); } catch {}
+    let info = null, age = 0, raw = null;
+    try { age = Date.now() - fs.statSync(lockFile).mtimeMs; raw = lockText(lockFile); info = JSON.parse(raw); } catch {}
     const dead = info?.pid && info.host === os.hostname() && info.pid !== process.pid && !alive(info.pid);
-    if (dead || age > staleMs) { try { fs.rmSync(lockFile, { force: true }); } catch {} continue; }
+    if (dead || age > staleMs) { try { if (lockText(lockFile) === raw) fs.rmSync(lockFile, { force: true }); } catch {} continue; }
     if (Date.now() - t0 > timeoutMs) throw new Error(`queue.json đang bị khoá quá ${Math.round(timeoutMs / 1000)} s (${lockFile})`);
     sleepSync(Math.min(50, 2 + k * 2) + Math.random() * 5);
   }
@@ -127,7 +132,8 @@ export const isGateStop = errLine => /CHẶN XUẤT/.test(errLine || '');
 export function removeItem(id) { return mutate(q => { const it = q.items.find(x => x.id === id); if (!it || it.state === 'running') return false; q.items = q.items.filter(x => x.id !== id); return true; }); }
 export function moveItem(id, d) { return mutate(q => { const i = q.items.findIndex(x => x.id === id), j = i + d; if (i < 0 || j < 0 || j >= q.items.length) return false; [q.items[i], q.items[j]] = [q.items[j], q.items[i]]; return true; }); }
 // Whole batch (items sharing `batch`; no batch = the whole queue): pause = waiting items become 'paused' (the runner only
-// takes 'queued'; a running item finishes), resume = back to 'queued' in the same order, cancel = waiting/paused items
+// takes 'queued'; a running item finishes, and if it has to go back to the queue — retry after an error, runner stopped —
+// it goes to 'paused', flag pauseAfter), resume = back to 'queued' in the same order, cancel = waiting/paused items
 // become 'cancelled' and a running one gets the cancel flag. Returns how many items changed.
 export function batchControl(action, batch) {
   if (!['pause', 'resume', 'cancel'].includes(action)) throw new Error(`Lệnh lô lạ: ${action}`);
@@ -136,12 +142,23 @@ export function batchControl(action, batch) {
     for (const it of q.items) {
       if (batch && it.batch !== batch) continue;
       if (action === 'pause' && it.state === 'queued') { Object.assign(it, { state: 'paused', step: 'Tạm dừng' }); n++; }
+      else if (action === 'pause' && it.state === 'running' && !it.pauseAfter) { it.pauseAfter = true; n++; }
+      else if (action === 'resume' && it.pauseAfter) { delete it.pauseAfter; if (it.state === 'paused') Object.assign(it, { state: 'queued', step: 'Đang chờ' }); n++; }
       else if (action === 'resume' && it.state === 'paused') { Object.assign(it, { state: 'queued', step: 'Đang chờ' }); n++; }
       else if (action === 'cancel' && (it.state === 'queued' || it.state === 'paused')) { Object.assign(it, { state: 'cancelled', step: 'Đã huỷ (cả lô)', finished: now }); n++; }
       else if (action === 'cancel' && it.state === 'running' && !it.cancel) { it.cancel = true; n++; }
     }
     return n;
   });
+}
+// A running item that must go back to the queue (retry, runner stopped or dead): honour a cancel or batch pause that
+// arrived meanwhile instead of silently queueing it again.
+export function requeue(it, step) {
+  const now = new Date().toISOString();
+  if (it.cancel) Object.assign(it, { state: 'cancelled', step: 'Đã huỷ', finished: now, runner: null });
+  else if (it.pauseAfter) Object.assign(it, { state: 'paused', step: 'Tạm dừng', runner: null });
+  else Object.assign(it, { state: 'queued', step, runner: null });
+  return it;
 }
 export function clearDone() { return mutate(q => { const n = q.items.length; q.items = q.items.filter(x => !['done', 'cancelled'].includes(x.state)); return n - q.items.length; }); }
 
@@ -207,8 +224,12 @@ export class Runner {
   stop({ requeue = true } = {}) {
     clearInterval(this.timer); this.timer = null;
     if (this.child) killTree(this.child, { group: true }); // Windows: taskkill /t — process.kill(-pid) does nothing there
-    if (this.item && requeue) mutate(q => { const it = q.items.find(x => x.id === this.item.id); if (it && it.state === 'running') Object.assign(it, { state: 'queued', step: 'Bị dừng — sẽ chạy tiếp', runner: null }); });
+    if (this.item && requeue) this.safe(() => mutate(q => { const it = q.items.find(x => x.id === this.item.id); if (it && it.state === 'running') requeue(it, 'Bị dừng — sẽ chạy tiếp'); }), 'dừng');
     unlock();
+  }
+  // queue.json writes from event callbacks (child output, child exit, signals): a lock timeout or a file that stays busy
+  // must not throw out of the callback — in the Studio server or the Telegram bot that would kill the whole process.
+  safe(fn, what) { try { return fn(); } catch (e) { this.log(`queue: không ghi được queue.json (${what}): ${e.message}`); return undefined; }
   }
   async tick() {
     if (this.busy) return; this.busy = true;
@@ -216,7 +237,7 @@ export class Runner {
       this.active = tryLock(this.role);
       if (!this.active) return;
       // items left "running" by a runner that died → back to the queue (autopilot resumes where it stopped)
-      mutate(q => { for (const it of q.items) if (it.state === 'running' && it.runner !== process.pid && !alive(it.runner)) Object.assign(it, { state: 'queued', step: 'Chạy tiếp sau khi bị dừng', runner: null }); });
+      mutate(q => { for (const it of q.items) if (it.state === 'running' && it.runner !== process.pid && !alive(it.runner)) requeue(it, 'Chạy tiếp sau khi bị dừng'); });
       const st = loadSettings();
       if (this.daemon && st.watch.on) this.scan(st);
       if (this.child) {
@@ -238,19 +259,24 @@ export class Runner {
   }
   runItem(it0) {
     const upd = patch => mutate(q => { const it = q.items.find(x => x.id === it0.id); if (it) Object.assign(it, patch); return it; });
+    const updSafe = (patch, what) => this.safe(() => upd(patch), what);
     // a kind written into queue.json by hand or by another build: fail this item, the ones behind it still run
     if (!isKind(it0.kind)) { upd({ state: FAILED, error: `Loại việc lạ: ${it0.kind}`, step: 'Lỗi', finished: new Date().toISOString() }); return; }
     const spec = KINDS[it0.kind], script = path.join(SKILL, 'scripts', spec.script);
     if (!fs.existsSync(script)) { upd({ state: FAILED, error: `Tính năng “${spec.name}” chưa được cài (thiếu scripts/${spec.script})`, step: 'Lỗi', finished: new Date().toISOString() }); return; }
     const attempt = (it0.attempt || 0) + 1;
-    this.item = upd({ state: 'running', started: new Date().toISOString(), progress: 0, step: attempt > 1 ? 'Thử lại lần 2' : 'Bắt đầu', runner: process.pid, attempt, error: null, cancel: false });
+    // claim under the lock, only if still waiting: a pause / cancel / remove since loadQueue() wins
+    const claimed = mutate(q => { const it = q.items.find(x => x.id === it0.id); if (!it || it.state !== 'queued') return null;
+      return Object.assign(it, { state: 'running', started: new Date().toISOString(), progress: 0, step: attempt > 1 ? 'Thử lại lần 2' : 'Bắt đầu', runner: process.pid, attempt, error: null, cancel: false }); });
+    if (!claimed) return;
+    this.item = claimed;
     this.cancelled = false;
     const argv = argsFor(it0), startedMs = Date.now();
     this.log(`queue: chạy ${it0.kind} ${it0.input} (lần ${attempt})`);
     const p = spawn('node', [script, ...argv], { cwd: SKILL, detached: true, env: process.env });
     this.child = p;
     let log = '', last = 0, pending = {}, result = null;
-    const flush = (force) => { if (force || Date.now() - last > 1000) { last = Date.now(); upd({ ...pending, log: log.slice(-1500) }); pending = {}; } };
+    const flush = (force) => { if (force || Date.now() - last > 1000) { last = Date.now(); updSafe({ ...pending, log: log.slice(-1500) }, 'tiến độ'); pending = {}; } };
     const onLine = l => {
       const m = /^@@ ([\d.]+) (.*)$/.exec(l);
       if (m) { pending.progress = Math.min(.999, +m[1]); pending.step = m[2]; }
@@ -265,13 +291,25 @@ export class Runner {
       this.child = null; this.item = null; this.idleSince = Date.now();
       if (code !== 0) { const cur = loadQueue().items.find(x => x.id === it0.id); sweepRenderTmp(renderRoots(cur || it0), startedMs); }
       const errLine = (log.match(/^LỖI: .*$/gm) || []).pop()?.slice(5) || log.trim().split('\n').slice(-2).join(' | ').slice(-300);
-      const outputs = result?.outputs || (it0.opts?.out ? [it0.opts.out] : []);
-      if (code === 0) { upd({ state: 'done', progress: 1, step: 'Xong', finished: new Date().toISOString(), outputs, result, log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} xong`, it0.title); }
-      else if (this.cancelled) upd({ state: 'cancelled', step: 'Đã huỷ', finished: new Date().toISOString(), log: log.slice(-1500) });
-      else if (isGateStop(errLine)) { upd({ state: FAILED, blocked: true, step: 'Dừng ở bước QC: chặn xuất', error: errLine, finished: new Date().toISOString(), log: log.slice(-1500) }); notify(`${spec.name} dừng ở bước QC`, `${it0.title}: ${errLine}`); }
-      else if (attempt < 2 && !/chưa được cài|Chỉ nhận tệp|Không thấy /.test(errLine)) upd({ state: 'queued', step: `Lỗi, sẽ thử lại: ${errLine}`.slice(0, 300), error: errLine, log: log.slice(-1500) });
-      else { upd({ state: FAILED, step: 'Lỗi', error: errLine, finished: new Date().toISOString(), log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} lỗi`, `${it0.title}: ${errLine}`); }
-      this.log(`queue: ${it0.kind} ${it0.input} → ${code === 0 ? 'xong' : this.cancelled ? 'huỷ' : 'lỗi ' + errLine}`);
+      const outputs = result?.outputs || (it0.opts?.out ? [it0.opts.out] : []), now = new Date().toISOString();
+      // final state decided under the lock from the freshest item: a cancel flag set after the last tick still counts
+      const finish = () => mutate(q => {
+        const it = q.items.find(x => x.id === it0.id); if (!it) return null;
+        const tail = { log: log.slice(-1500) };
+        if (code === 0) Object.assign(it, { state: 'done', progress: 1, step: 'Xong', finished: now, outputs, result, ...tail });
+        else if (this.cancelled || it.cancel) Object.assign(it, { state: 'cancelled', step: 'Đã huỷ', finished: now, ...tail });
+        else if (isGateStop(errLine)) Object.assign(it, { state: FAILED, blocked: true, step: 'Dừng ở bước QC: chặn xuất', error: errLine, finished: now, ...tail });
+        else if (attempt < 2 && !/chưa được cài|Chỉ nhận tệp|Không thấy /.test(errLine)) Object.assign(requeue(it, `Lỗi, sẽ thử lại: ${errLine}`.slice(0, 300)), { error: errLine, ...tail });
+        else Object.assign(it, { state: FAILED, step: 'Lỗi', error: errLine, finished: now, ...tail });
+        return it.state;
+      });
+      // queue.json still locked or busy: try again a few times rather than leaving the item "running"
+      const settle = (k = 0) => { let st; try { st = finish(); } catch (e) { if (k < 5) { setTimeout(() => settle(k + 1), 3000); return; } this.log(`queue: không ghi được kết quả ${it0.id}: ${e.message}`); return; }
+        if (st === 'done' && it0.kind !== 'autopilot') notify(`${spec.name} xong`, it0.title);
+        else if (st === FAILED && isGateStop(errLine)) notify(`${spec.name} dừng ở bước QC`, `${it0.title}: ${errLine}`);
+        else if (st === FAILED && it0.kind !== 'autopilot') notify(`${spec.name} lỗi`, `${it0.title}: ${errLine}`);
+        this.log(`queue: ${it0.kind} ${it0.input} → ${st === 'done' ? 'xong' : st === 'cancelled' ? 'huỷ' : st === 'paused' ? 'tạm dừng' : 'lỗi ' + errLine}`); };
+      settle();
     });
   }
   // Watch folders: a video whose size+mtime stayed the same for 5 s is moved to "Đã xử lý" and queued for Tự lái.
@@ -293,7 +331,9 @@ export class Runner {
           for (let k = 2; fs.existsSync(dst); k++) dst = path.join(f.processed, `${path.basename(name, path.extname(name))} (${k})${path.extname(name)}`);
           fs.renameSync(abs, dst);
           const base = path.basename(dst, path.extname(dst));
-          const it = addItem({ kind: 'autopilot', input: dst, opts: { profile: f.profile || st.profile || undefined, out: path.join(f.done, base) }, source: 'watch' });
+          let it;
+          try { it = addItem({ kind: 'autopilot', input: dst, opts: { profile: f.profile || st.profile || undefined, out: path.join(f.done, base) }, source: 'watch' }); }
+          catch (e) { try { fs.renameSync(dst, abs); } catch {} throw e; } // not queued: put the video back so the next scan retries it
           this.log(`watch: ${name} → hàng đợi (${it.id})`);
         }
       } catch (e) { this.watchErr = `${f.in}: ${e.message}`; }

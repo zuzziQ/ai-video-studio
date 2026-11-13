@@ -208,13 +208,15 @@ test('lô: addItem ghi nhãn lô; tạm dừng chỉ đụng việc đang chờ 
   const a = Q.addItem({ kind: 'topic', input: 'l1', batch: 'L' }), b = Q.addItem({ kind: 'topic', input: 'l2', batch: 'L' });
   assert.equal(Q.loadQueue().items.find(x => x.id === a.id).batch, 'L');
   const q0 = Q.loadQueue(); q0.items.find(x => x.id === a.id).state = 'running'; fs.writeFileSync(QFILE, JSON.stringify(q0));
-  assert.equal(Q.batchControl('pause', 'L'), 1);
-  const st = id => Q.loadQueue().items.find(x => x.id === id).state;
-  assert.equal(st(a.id), 'running'); // việc đang chạy làm nốt
+  assert.equal(Q.batchControl('pause', 'L'), 2);
+  const get = id => Q.loadQueue().items.find(x => x.id === id), st = id => get(id).state;
+  assert.equal(st(a.id), 'running'); // việc đang chạy làm nốt…
+  assert.equal(get(a.id).pauseAfter, true); // …nhưng nếu phải về hàng đợi thì về "tạm dừng"
   assert.equal(st(b.id), 'paused');
   assert.equal(st('o1'), 'queued'); // ngoài lô: không đổi
-  assert.equal(Q.batchControl('resume', 'L'), 1);
+  assert.equal(Q.batchControl('resume', 'L'), 2);
   assert.equal(st(b.id), 'queued');
+  assert.equal(get(a.id).pauseAfter, undefined);
 });
 
 test('lô: huỷ cả lô — chờ/tạm dừng thành đã huỷ, đang chạy được đặt cờ huỷ; không ghi lô = cả hàng đợi', () => {
@@ -227,7 +229,7 @@ test('lô: huỷ cả lô — chờ/tạm dừng thành đã huỷ, đang chạy
   assert.equal(by.p3.cancel, true);
   assert.equal(by.p4.state, 'done');
   assert.equal(by.p5.state, 'queued');
-  assert.equal(Q.batchControl('pause'), 1);
+  assert.equal(Q.batchControl('pause'), 2); // p5 chờ → tạm dừng, p3 đang chạy → pauseAfter
   assert.equal(Q.loadQueue().items.find(x => x.id === 'p5').state, 'paused');
   assert.throws(() => Q.batchControl('xoa-het'), /Lệnh lô lạ/);
 });
@@ -239,4 +241,45 @@ test('Runner: việc tạm dừng không được chạy; việc chờ phía sau
   const by = Object.fromEntries(Q.loadQueue().items.map(x => [x.id, x]));
   assert.equal(by.s1.state, 'paused');
   assert.equal(by.s2.state, Q.FAILED); // runner chọn s2 (loại lạ → lỗi), bỏ qua s1
+});
+
+test('requeue: việc phải về hàng đợi tôn trọng cờ huỷ và lô đang tạm dừng', () => {
+  assert.equal(Q.requeue({ state: 'running', cancel: true }, 'x').state, 'cancelled');
+  assert.equal(Q.requeue({ state: 'running', pauseAfter: true }, 'x').state, 'paused');
+  const it = Q.requeue({ state: 'running', runner: 123 }, 'Chạy tiếp');
+  assert.equal(it.state, 'queued');
+  assert.equal(it.step, 'Chạy tiếp');
+  assert.equal(it.runner, null);
+});
+
+test('Runner: runner chết giữa chừng — việc của lô đã tạm dừng về "tạm dừng", việc đã bấm huỷ thành đã huỷ', async () => {
+  const dead = 2 ** 22 + 4321;
+  write([item('z1', 'running', { runner: dead, pauseAfter: true }), item('z2', 'running', { runner: dead, cancel: true }), item('z3', 'running', { runner: dead })]);
+  const q = Q.loadQueue(); for (const it of q.items) it.kind = 'khong-co'; fs.writeFileSync(QFILE, JSON.stringify(q)); // z3 về hàng đợi rồi lỗi ngay, không chạy script thật
+  const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
+  try { await r.tick(); } finally { r.stop({ requeue: false }); }
+  const by = Object.fromEntries(Q.loadQueue().items.map(x => [x.id, x]));
+  assert.equal(by.z1.state, 'paused');
+  assert.equal(by.z2.state, 'cancelled');
+  assert.equal(by.z3.state, Q.FAILED);
+});
+
+test('Runner.runItem: việc đã bị tạm dừng / xoá sau khi runner đọc hàng đợi thì không được chạy', () => {
+  const stale = item('y1', 'queued', { kind: 'topic' });
+  write([{ ...stale, state: 'paused' }]);
+  const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
+  r.runItem(stale);
+  assert.equal(r.child, null);
+  assert.equal(Q.loadQueue().items[0].state, 'paused');
+  write([]);
+  r.runItem(stale);
+  assert.equal(r.child, null);
+  assert.deepEqual(ids(), []);
+});
+
+test('khoá: người giữ chỉ xoá khoá của chính mình', () => {
+  const lock = path.join(HOME, 'own.lock');
+  Q.withFileLock(lock, () => { fs.writeFileSync(lock, JSON.stringify({ pid: 1, host: 'khac', t: Date.now(), tok: 'cua-nguoi-khac' })); });
+  assert.ok(fs.existsSync(lock), 'khoá của người khác (đã thay chỗ) không bị xoá');
+  fs.rmSync(lock);
 });

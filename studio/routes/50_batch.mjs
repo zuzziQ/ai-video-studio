@@ -40,7 +40,8 @@ export default ctx => {
   const settle = (dir, how) => {
     const st = status(dir); if (!st?.rows) return st;
     for (const r of st.rows) {
-      if (r.state === 'running') Object.assign(r, how === 'pause' ? { state: 'pending', step: 'chờ (tạm dừng)', progress: 0 } : { state: 'cancelled', step: 'đã dừng' });
+      // pause: the row that had just started was "running" (Windows, taskkill /f) or "cancelled" by batch.mjs's SIGTERM handler
+      if (r.state === 'running' || (how === 'pause' && r.state === 'cancelled')) Object.assign(r, how === 'pause' ? { state: 'pending', step: 'chờ (tạm dừng)', progress: 0 } : { state: 'cancelled', step: 'đã dừng' });
       if (how === 'cancel' && (r.state === 'pending' || r.state === 'cancelled')) Object.assign(r, { state: 'cancelled', step: 'đã huỷ' });
     }
     if (how === 'cancel') st.cancelled = new Date().toISOString(); else delete st.cancelled;
@@ -120,7 +121,7 @@ export default ctx => {
             if (CTRL.pause && !CTRL.pause.hit && row && +row !== CTRL.pause.row) { CTRL.pause.hit = true; killTree(ctx.job.proc); }
           } catch {}
         }).then(() => null, e => e);
-        if (CTRL.cancel || CTRL.pause?.hit) {
+        if ((CTRL.cancel && err) || CTRL.pause?.hit) { // cancel that came after the batch had finished: nothing to cancel
           const st = settle(dir, CTRL.cancel ? 'cancel' : 'pause'), done = st ? st.rows.filter(r => r.state === 'done').length : 0;
           throw new Error(CTRL.cancel ? `Đã huỷ lô — giữ ${done}/${st?.total || 0} video đã xong` : `Đã tạm dừng (${done}/${st?.total || 0} xong) — bấm “Chạy tiếp” để làm nốt`);
         }
