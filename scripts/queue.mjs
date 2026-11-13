@@ -19,6 +19,8 @@ import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { notify } from './notify.mjs';
 import { killTree } from './platform.mjs';
+import { retryBusy, withFileLock } from './file_lock.mjs';
+export { withFileLock };
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const AVS_HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -29,11 +31,7 @@ export const DEFAULT_FOLDER = { in: path.join(MOVIES, 'Thả video vào đây'),
 const LA_LABEL = 'com.aivideostudio.watch';
 const LA_DIR = process.env.AVS_LA_DIR || path.join(os.homedir(), 'Library/LaunchAgents');
 
-// Windows: renaming over a file another process has open for reading fails for a moment (EPERM/EACCES/EBUSY), and so does
-// opening a file that is being replaced. Those errors are retried instead of being read as "no file".
-const BUSY = new Set(['EPERM', 'EACCES', 'EBUSY']);
-const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-function retryBusy(fn, tries = 40) { for (let k = 0; ; k++) { try { return fn(); } catch (e) { if (!BUSY.has(e.code) || k >= tries) throw e; sleepSync(10 + k * 5); } } }
+// BUSY / retryBusy (Windows busy-file retries) and withFileLock live in file_lock.mjs, shared with publish.mjs (M40).
 const rd = (f, d) => { try { return JSON.parse(retryBusy(() => fs.readFileSync(f, 'utf8'), 10)); } catch { return d; } };
 function wr(f, o) { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`; fs.writeFileSync(t, JSON.stringify(o, null, 1)); try { retryBusy(() => fs.renameSync(t, f)); } catch (e) { fs.rmSync(t, { force: true }); throw e; } }
 const slug = s => String(s || 'x').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'x';
@@ -70,32 +68,7 @@ function readForWrite() {
   }
 }
 
-// ---------- lock for queue.json writes (M24) ----------
-// Exclusive create of <file>.lock holding {pid, host, t}. A holder keeps it only while it reads, edits and renames the
-// JSON (milliseconds; at worst the busy-file retries, ~10 s), so a lock whose pid is gone, or older than staleMs, is left
-// over from a crash and is removed. Each lock carries a random token: a holder only deletes its own lock, and a stale lock
-// is only deleted if it still holds the same content that was judged stale (two waiters cannot delete each other's new lock
-// unless they interleave within microseconds).
-const lockText = f => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
-export function withFileLock(lockFile, fn, { timeoutMs = 15000, staleMs = 30000 } = {}) {
-  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
-  const t0 = Date.now();
-  for (let k = 0; ; k++) {
-    let fd = null;
-    try { fd = fs.openSync(lockFile, 'wx'); } catch (e) { if (e.code !== 'EEXIST' && !BUSY.has(e.code)) throw e; }
-    if (fd !== null) {
-      const mine = JSON.stringify({ pid: process.pid, host: os.hostname(), t: Date.now(), tok: crypto.randomBytes(6).toString('hex') });
-      try { fs.writeSync(fd, mine); } finally { fs.closeSync(fd); }
-      try { return fn(); } finally { try { if (lockText(lockFile) === mine) retryBusy(() => fs.rmSync(lockFile, { force: true })); } catch {} }
-    }
-    let info = null, age = 0, raw = null;
-    try { age = Date.now() - fs.statSync(lockFile).mtimeMs; raw = lockText(lockFile); info = JSON.parse(raw); } catch {}
-    const dead = info?.pid && info.host === os.hostname() && info.pid !== process.pid && !alive(info.pid);
-    if (dead || age > staleMs) { try { if (lockText(lockFile) === raw) fs.rmSync(lockFile, { force: true }); } catch {} continue; }
-    if (Date.now() - t0 > timeoutMs) throw new Error(`queue.json đang bị khoá quá ${Math.round(timeoutMs / 1000)} s (${lockFile})`);
-    sleepSync(Math.min(50, 2 + k * 2) + Math.random() * 5);
-  }
-}
+// ---------- lock for queue.json writes (M24): withFileLock() in file_lock.mjs ----------
 // read-modify-write with the freshest file, under the lock (Studio, the runner, the Telegram bot and the CLI all write it)
 export function mutate(fn) { return withFileLock(QLOCK, () => { const q = readForWrite(); const r = fn(q); wr(QFILE, q); return r; }); }
 export const KINDS = {

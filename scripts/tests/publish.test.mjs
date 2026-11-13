@@ -10,6 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-publish-m39-'));
 process.env.AVS_HOME = HOME;
@@ -254,4 +256,77 @@ test('PKCE khớp ví dụ trong RFC 7636; URL xin quyền có code_challenge S2
   assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
   assert.equal(u.searchParams.get('access_type'), 'offline');
   assert.ok(u.searchParams.get('scope').includes('youtube.upload'));
+});
+
+// ---------- M40: khoá schedule.json giữa các tiến trình ----------
+// Mỗi tiến trình con nạp publish.mjs với cùng AVS_HOME, chờ đến cùng một mốc giờ rồi mới ghi, để các lần ghi chồng lên nhau.
+const PUB_URL = pathToFileURL(path.resolve(import.meta.dirname, '../publish.mjs')).href;
+function child(body, { startAt, env = {} }) {
+  const src = `const P = await import(${JSON.stringify(PUB_URL)}); while (Date.now() < ${startAt}) {}\n${body}`;
+  return new Promise((ok, fail) => {
+    const ch = spawn(process.execPath, ['--input-type=module', '-e', src], { env: { ...process.env, AVS_HOME: HOME, AVS_DRY_OPEN: '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '', err = '';
+    ch.stdout.on('data', d => (out += d)); ch.stderr.on('data', d => (err += d));
+    ch.on('close', code => (code === 0 ? ok(out) : fail(new Error(`tiến trình con thoát ${code}: ${err.slice(-500)}`))));
+  });
+}
+
+test('M40: hai tiến trình cùng thêm rồi sửa lịch một lúc không mất mục nào', async () => {
+  reset();
+  const { file } = mkVideo('song-song.mp4', 500);
+  const N = 25, startAt = Date.now() + 1500;
+  const body = tag => `
+    const ids = [];
+    for (let i = 0; i < ${N}; i++) ids.push(P.addItem({ file: ${JSON.stringify(file)}, platform: 'tiktok', when: '2026-12-01 19:30', title: '${tag}-' + i }).id);
+    for (const id of ids) P.updateItem(id, { caption: 'sửa bởi ${tag}' });`;
+  await Promise.all([child(body('A'), { startAt }), child(body('B'), { startAt })]);
+  const items = readSched();
+  assert.equal(items.length, 2 * N, 'đủ mục của cả hai tiến trình');
+  for (const tag of ['A', 'B']) {
+    const mine = items.filter(x => x.title.startsWith(tag + '-'));
+    assert.equal(mine.length, N);
+    assert.ok(mine.every(x => x.caption === 'sửa bởi ' + tag), `mọi mục của ${tag} giữ bản sửa`);
+  }
+  assert.ok(!fs.existsSync(SCHED + '.lock'), 'khoá được nhả');
+  assert.deepEqual(fs.readdirSync(HOME).filter(f => f.endsWith('.tmp')), [], 'không còn file tạm');
+});
+
+test('M40: run-due chạy song song với Studio sửa lịch: cả cờ nhắc lẫn bản sửa đều còn', async () => {
+  reset();
+  const { file } = mkVideo('nhac.mp4', 500);
+  const N = 25, ids = [];
+  for (let i = 0; i < N; i++) ids.push(P.addItem({ file, platform: 'tiktok', when: '2026-11-05 18:35', title: 'NHAC-' + i }).id); // 5 phút sau T_VN
+  const startAt = Date.now() + 1500;
+  const studio = `
+    const ids = ${JSON.stringify(ids)};
+    for (const id of ids) P.updateItem(id, { caption: 'sửa từ Studio' });
+    for (let i = 0; i < 15; i++) P.addItem({ file: ${JSON.stringify(file)}, platform: 'youtube', when: '2026-12-02 11:30', title: 'MOI-' + i });
+    P.setSettings({ slots: '11:30,19:30,21:00' });`;
+  const [due] = await Promise.all([
+    child(`console.log(JSON.stringify(await P.runDue({ log: () => {} })));`, { startAt, env: { AVS_NOW: T_VN } }),
+    child(studio, { startAt }),
+  ]);
+  const r = JSON.parse(due.trim().split('\n').pop());
+  assert.equal(r.preReminded.length, N, 'run-due nhắc trước đủ mục');
+  const items = readSched();
+  assert.equal(items.length, N + 15, 'mục Studio thêm trong lúc run-due chạy vẫn còn');
+  for (const id of ids) {
+    const x = items.find(y => y.id === id);
+    assert.equal(x.preReminded, true, 'cờ nhắc của run-due còn');
+    assert.equal(x.caption, 'sửa từ Studio', 'bản sửa của Studio còn');
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(SCHED, 'utf8')).settings.slots, ['11:30', '19:30', '21:00']);
+});
+
+test('M40: autoSchedule giữ khoá suốt lượt (gọi lồng addItem không tự chờ chính mình); schedule.json hỏng được giữ lại', () => {
+  reset();
+  setNow('2026-11-05T01:00:00Z');
+  const v = mkVideo('auto.mp4', 500).file;
+  const t0 = Date.now();
+  assert.equal(P.autoSchedule([{ file: v }], ['youtube', 'tiktok']).length, 2);
+  assert.ok(Date.now() - t0 < 5000, 'không kẹt chờ khoá của chính mình');
+  fs.writeFileSync(SCHED, '{ hỏng');
+  P.addItem({ file: v, platform: 'zalo', when: '2026-11-06 19:30' });
+  assert.equal(readSched().length, 1);
+  assert.ok(fs.readdirSync(HOME).some(f => f.startsWith('schedule.json.bad-')), 'bản hỏng được giữ thành schedule.json.bad-*');
 });
