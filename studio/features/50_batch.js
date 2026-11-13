@@ -2,7 +2,9 @@
 (() => {
   const { $, esc } = Studio;
   const S = { source: 'file:bds-can-ho.template.json', sheet: null, targets: [], mapping: {}, voice: 'auto', quality: '1080', dur: '', rows: '', brand: '', prevRow: 0, prevT: 2.5,
-    img: null, busy: false, run: null, status: null, sources: null, brands: [], history: [], showText: false };
+    img: null, busy: false, run: null, status: null, sources: null, brands: [], history: [], showText: false, page: null /* null = follow the running row */ };
+  const stUrl = () => `/api/batch/status?dir=${encodeURIComponent(S.run)}&page=${S.page == null ? 'auto' : S.page}`;
+  const refreshStatus = async () => { if (S.run) { S.status = await Studio.api(stUrl()); rerender(); } };
   const css = document.createElement('style');
   css.textContent = `
   .bt-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
@@ -27,6 +29,10 @@
   .bt-ok { color: var(--ok); } .bt-bad { color: var(--bad); } .bt-run { color: var(--acc); }
   .bt-drop { border: 1px dashed var(--line3); border-radius: 8px; padding: 10px; text-align: center; color: var(--tx3); cursor: pointer; font-size: 11.5px; }
   .bt-drop:hover { border-color: var(--acc); color: var(--tx); }
+  .bt-sum { font-size: 11px; color: var(--tx3); margin: -2px 0 6px; }
+  .bt-pg { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 11px; color: var(--tx3); flex-wrap: wrap; }
+  .bt-pg span { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bt-pg button.icon { width: 26px; height: 26px; padding: 0; justify-content: center; flex: none; }
   .bt-file { display: flex; align-items: center; gap: 6px; font-size: 11.5px; margin-top: 6px; } .bt-file b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`;
   document.head.appendChild(css);
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'batch';
@@ -70,13 +76,20 @@
     if (!resume && !S.sheet) return Studio.toast('Chọn bảng tính trước');
     const r = await Studio.api('/api/batch/start', resume ? { resume } : jobBody());
     if (r.error) return Studio.toast(r.error);
-    S.run = r.dir; S.status = null; poll(); rerender();
+    S.run = r.dir; S.status = null; S.page = null; poll(); rerender();
+  }
+  async function control(what) {
+    if (what === 'cancel' && !confirm('Huỷ cả lô? Dòng đang làm dừng ngay; video đã xong được giữ lại. Vẫn bấm “Chạy tiếp” được nếu đổi ý.')) return;
+    const r = await Studio.api('/api/batch/' + what, { dir: S.run });
+    if (r.error) return Studio.toast(r.error);
+    Studio.toast(what === 'pause' ? (r.after ? `Sẽ dừng khi xong dòng ${r.after}` : 'Đang dừng…') : 'Đã huỷ lô');
+    refreshStatus();
   }
   let timer = null;
   function poll() {
     clearInterval(timer);
     timer = setInterval(async () => {
-      const [st, job] = await Promise.all([Studio.api('/api/batch/status?dir=' + encodeURIComponent(S.run)), Studio.api('/api/job')]);
+      const [st, job] = await Promise.all([Studio.api(stUrl()), Studio.api('/api/job')]);
       S.status = st; S.job = job;
       if (!job || job.kind !== 'batch' || job.state !== 'running') { clearInterval(timer); timer = null; S.history = await Studio.api('/api/batch/list').catch(() => S.history); }
       rerender();
@@ -96,6 +109,13 @@
     const T = S.targets, by = k => T.filter(t => t.kind === k);
     const nMap = Object.values(S.mapping).filter(Boolean).length;
     const st = S.status, running = S.job?.kind === 'batch' && S.job.state === 'running';
+    // large batches: the server sends one page of rows (page null = the page holding the running row) plus counts for all rows
+    const C = st ? st.counts || st.rows.reduce((c, r) => (c[r.state] = (c[r.state] || 0) + 1, c), {}) : {};
+    if (st && st.count == null) Object.assign(st, { count: st.rows.length, pages: 1, page: 0, size: st.rows.length });
+    const pager = st && st.pages > 1 ? `<div class="bt-pg"><button class="icon" data-bpg="prev" title="Trang trước" ${st.page <= 0 ? 'disabled' : ''}><i class="ti ti-chevron-left"></i></button>
+      <span>Trang ${st.page + 1}/${st.pages} · dòng ${st.page * st.size + 1}–${Math.min(st.count, (st.page + 1) * st.size)}</span>
+      <button class="icon" data-bpg="next" title="Trang sau" ${st.page >= st.pages - 1 ? 'disabled' : ''}><i class="ti ti-chevron-right"></i></button>
+      ${S.page != null ? `<button class="icon" data-bpg="follow" title="Về trang có dòng đang làm"><i class="ti ti-focus-2"></i></button>` : ''}</div>` : '';
     $('#libbody').innerHTML = `
     <div class="help" style="margin-top:4px">Một mẫu + một bảng tính → mỗi dòng một video riêng (thư mục dự án + MP4). Chạy lần lượt, dừng được, chạy tiếp được.</div>
     <div class="bt-card"><h4><span class="n">1</span>Nguồn</h4>
@@ -129,17 +149,21 @@
         <div style="display:flex;align-items:flex-end"><button id="bt-prev" style="width:100%;justify-content:center" ${S.busy || !S.sheet ? 'disabled' : ''}>${S.busy === 'preview' ? '<i class="ti ti-loader-2 spin"></i> Đang dựng…' : `<i class="ti ti-eye"></i> Xem dòng ${S.prevRow + 1}`}</button></div></div>
       ${S.img ? `<div class="bt-prev"><img src="${esc(S.img)}"><div class="help" style="margin:0">Ảnh tĩnh dòng ${S.prevRow + 1} tại ${S.prevT}s${S.prevDur ? ` · video dài ${S.prevDur}s` : ''}.<br>Chưa có tiếng trong ảnh xem trước.</div></div>` : ''}
       <div class="acts"><button class="primary" id="bt-go" ${!S.sheet || running ? 'disabled' : ''}><i class="ti ti-player-play"></i> Bắt đầu ${S.sheet ? `(${S.rows || S.sheet.rows.length + ' video'})` : ''}</button>
-        ${running ? '<button class="danger" id="bt-stop"><i class="ti ti-player-stop"></i> Dừng</button>' : ''}</div></div>
-    ${st ? `<div class="bt-card"><h4><i class="ti ti-list-check"></i>${esc(st.name)} <span class="muted" style="font-weight:500;margin-left:auto">${st.rows.filter(r => r.state === 'done').length}/${st.total}</span></h4>
-      ${running ? `<div class="help" style="margin:0 0 4px">${esc(S.job.step || '')}</div>` : ''}
+        ${running && !st ? '<button class="danger" id="bt-stop"><i class="ti ti-player-stop"></i> Dừng</button>' : ''}</div></div>
+    ${st ? `<div class="bt-card"><h4><i class="ti ti-list-check"></i>${esc(st.name)} <span class="muted" style="font-weight:500;margin-left:auto">${C.done || 0}/${st.total}</span></h4>
+      <div class="bt-sum">${[['done', 'xong', 'bt-ok'], ['running', 'đang làm', 'bt-run'], ['pending', 'chờ', ''], ['error', 'lỗi', 'bt-bad'], ['cancelled', st.cancelled ? 'đã huỷ' : 'đã dừng', '']].filter(([k]) => C[k]).map(([k, l, c]) => `<span class="${c}">${C[k]} ${l}</span>`).join(' · ')}${st.cancelled ? ' · <b>lô đã huỷ</b>' : ''}</div>
+      ${running ? `<div class="help" style="margin:0 0 4px">${esc(st.pausing ? 'Sẽ tạm dừng khi xong dòng đang làm…' : S.job.step || '')}</div>
+        <div class="acts" style="padding-top:0"><button id="bt-pause" ${st.pausing ? 'disabled' : ''}><i class="ti ti-player-pause"></i> ${st.pausing ? 'Đang chờ dòng này xong…' : 'Tạm dừng'}</button><button class="danger" id="bt-cancel"><i class="ti ti-x"></i> Huỷ lô</button></div>` : ''}
+      ${pager}
       ${st.rows.map(r => `<div class="bt-row"><i class="ti ${r.state === 'done' ? 'ti-circle-check bt-ok' : r.state === 'error' ? 'ti-alert-triangle bt-bad' : r.state === 'running' ? 'ti-loader-2 spin bt-run' : r.state === 'cancelled' ? 'ti-player-pause muted' : 'ti-clock muted'}"></i>
         <div style="min-width:0"><span class="nm">${r.i + 1}. ${esc(r.title || r.name || 'Dòng ' + (r.i + 1))}</span>
-          <span class="st ${r.state === 'error' ? 'err' : ''}" title="${esc(r.error || r.step || '')}">${esc(r.error || (r.state === 'pending' ? 'chờ' : r.state === 'cancelled' ? 'đã dừng — bấm Chạy tiếp' : r.step || r.state))}</span>
+          <span class="st ${r.state === 'error' ? 'err' : ''}" title="${esc(r.error || r.step || '')}">${esc(r.error || (r.state === 'pending' ? 'chờ' : r.state === 'cancelled' ? (st.cancelled ? 'đã huỷ' : 'đã dừng — bấm Chạy tiếp') : r.step || r.state))}</span>
           ${r.state === 'running' ? `<div class="bt-pbar"><i style="width:${Math.round((r.progress || 0) * 100)}%"></i></div>` : ''}</div>
         <div class="b">${r.url ? `<button class="icon" title="Mở video" data-bopen="${esc(r.url)}"><i class="ti ti-player-play"></i></button><button class="icon" title="Hiện trong Finder" data-breveal="${esc(r.rout)}"><i class="ti ti-folder"></i></button>` : ''}
           ${r.rdir ? `<button class="icon" title="Mở dự án này trong Studio" data-bproj="${esc(r.rdir)}"><i class="ti ti-edit"></i></button>` : ''}</div></div>`).join('')}
-      ${!running && st.rows.some(r => r.state !== 'done') ? `<div class="acts"><button id="bt-resume"><i class="ti ti-player-track-next"></i> Chạy tiếp các dòng chưa xong</button></div>` : ''}</div>` : ''}
-    ${S.history.length ? `<div class="sect"><i class="ti ti-history"></i> Lần chạy trước</div>${S.history.slice(0, 6).map(h => `<div class="bt-row" style="grid-template-columns:minmax(0,1fr) auto"><div style="min-width:0"><span class="nm">${esc(h.name)}</span><span class="st">${h.done}/${h.total} video</span></div>
+      ${pager}
+      ${!running && (C.done || 0) < st.count ? `<div class="acts"><button id="bt-resume"><i class="ti ti-player-track-next"></i> Chạy tiếp ${st.count - (C.done || 0)} dòng chưa xong</button>${st.cancelled ? '' : '<button class="danger" id="bt-cancel"><i class="ti ti-x"></i> Huỷ lô</button>'}</div>` : ''}</div>` : ''}
+    ${S.history.length ? `<div class="sect"><i class="ti ti-history"></i> Lần chạy trước</div>${S.history.slice(0, 6).map(h => `<div class="bt-row" style="grid-template-columns:minmax(0,1fr) auto"><div style="min-width:0"><span class="nm">${esc(h.name)}</span><span class="st">${h.done}/${h.total} video${h.cancelled ? ' · đã huỷ' : ''}</span></div>
       <div class="b"><button class="icon" title="Xem" data-bhist="${esc(h.dir)}"><i class="ti ti-list"></i></button><button class="icon" title="Hiện trong Finder" data-breveal="${esc(h.dir)}"><i class="ti ti-folder"></i></button></div></div>`).join('')}` : ''}`;
     bind();
   }
@@ -164,13 +188,20 @@
     $('#bt-go').onclick = () => start();
     if ($('#bt-stop')) $('#bt-stop').onclick = () => Studio.api('/api/job/cancel', {}).then(() => Studio.toast('Đang dừng… (dòng đang làm sẽ làm lại khi chạy tiếp)'));
     if ($('#bt-resume')) $('#bt-resume').onclick = () => start(S.run);
+    if ($('#bt-pause')) $('#bt-pause').onclick = () => control('pause');
+    if ($('#bt-cancel')) $('#bt-cancel').onclick = () => control('cancel');
+    B.querySelectorAll('[data-bpg]').forEach(b => (b.onclick = () => {
+      const st = S.status, cur = st?.page ?? 0;
+      S.page = b.dataset.bpg === 'follow' ? null : Math.max(0, Math.min((st?.pages || 1) - 1, cur + (b.dataset.bpg === 'next' ? 1 : -1)));
+      refreshStatus();
+    }));
     B.querySelectorAll('[data-bopen]').forEach(b => (b.onclick = () => window.open(b.dataset.bopen)));
     B.querySelectorAll('[data-breveal]').forEach(b => (b.onclick = () => Studio.api('/api/reveal', { path: b.dataset.breveal })));
     B.querySelectorAll('[data-bproj]').forEach(b => (b.onclick = async () => {
       if (!confirm('Mở dự án của dòng này trong Studio? (lưu dự án hiện tại trước)')) return;
       await Studio.saveNow(); const r = await Studio.api('/api/open', { path: Studio.META.dir + '/' + b.dataset.bproj }); if (r.ok) location.reload(); else Studio.toast(r.error || 'Lỗi');
     }));
-    B.querySelectorAll('[data-bhist]').forEach(b => (b.onclick = async () => { S.run = b.dataset.bhist; S.status = await Studio.api('/api/batch/status?dir=' + encodeURIComponent(S.run)); S.job = await Studio.api('/api/job'); if (S.job?.kind === 'batch' && S.job.state === 'running') poll(); render(); }));
+    B.querySelectorAll('[data-bhist]').forEach(b => (b.onclick = async () => { S.run = b.dataset.bhist; S.page = null; S.status = await Studio.api(stUrl()); S.job = await Studio.api('/api/job'); if (S.job?.kind === 'batch' && S.job.state === 'running') poll(); render(); }));
   }
   Studio.addPanel('batch', 'ti-stack-2', 'Hàng loạt', () => { render(); if (!S.sources) init(); });
   Studio.onReady(async () => {

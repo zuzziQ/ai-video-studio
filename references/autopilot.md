@@ -51,7 +51,8 @@ Studio: tạo / sửa / nhân bản / xoá / đặt mặc định trong thẻ **
 - Điều đã học hiện trong thẻ hồ sơ (câu tiếng Việt), được ghi vào `autopilot.json`/`summary.json` (`learnedApplied`) mỗi lần chạy; **Quên điều đã học** (cục tẩy) xoá `learned`. Tắt hẳn: `learn: false`.
 
 ## 3. Hàng đợi nền (`queue.json`)
-Mục: `{id, kind, input, opts, source, state: queued|running|done|error|cancelled, progress, step, created, started, finished, outputs[], error, attempt, project}`.
+Mục: `{id, kind, input, opts, source, state: queued|paused|running|done|error|cancelled, progress, step, created, started, finished, outputs[], error, attempt, project, batch?}`.
+Mọi lần đọc–sửa–ghi `queue.json` (Studio, runner, bot Telegram, CLI) đi qua `mutate()` và giữ khoá `queue.json.lock` (tạo độc quyền, vài ms; khoá của tiến trình đã chết hoặc cũ hơn 10 s bị gỡ). `queue.json` hỏng được giữ lại thành `queue.json.bad-<thời điểm>` trước khi ghi mới. Kind lạ (kể cả `constructor`, `toString`) bị từ chối khi thêm; mục kind lạ sửa tay vào file thì báo lỗi, không làm kẹt hàng đợi.
 
 | kind | lệnh |
 |---|---|
@@ -65,7 +66,8 @@ Mục: `{id, kind, input, opts, source, state: queued|running|done|error|cancell
 - **Một runner duy nhất** giữ `queue.lock` (pid): lane trong máy chủ Studio (không dùng ô tác vụ chính — Xuất/AI vẫn chạy song song), `node scripts/queue.mjs run [--daemon]`, hoặc LaunchAgent. Tiến trình khác đứng chờ và tự nhận lại khi runner kia tắt. Chỉ chạy **1 mục nặng** một lúc.
 - Lỗi → tự thử lại 1 lần (autopilot chạy tiếp từ bước dừng). Huỷ (đang chạy: giết cả nhóm tiến trình), Thử lại, Lên/Xuống, Xoá, Mở dự án trong Studio, Hiện trong Finder. Mục `running` của runner đã chết → tự về `queued`.
 - Mỗi 60 s runner gọi `node scripts/publish.mjs run-due` nếu file tồn tại (lịch đăng A4).
-- CLI: `node scripts/queue.mjs add autopilot ~/clip.mov [--profile id] [--out dir] | list | cancel|retry|remove|up|down <id> | clear-done | run [--daemon]`.
+- Cả lô (mục có cùng `batch`; không ghi lô = cả hàng đợi): `batchControl('pause'|'resume'|'cancel', lô)` — tạm dừng đổi mục chờ thành `paused` (runner chỉ lấy `queued`, mục đang chạy làm nốt), tiếp tục trả về `queued` giữ thứ tự, huỷ đổi mục chờ/tạm dừng thành `cancelled` và đặt cờ huỷ cho mục đang chạy.
+- CLI: `node scripts/queue.mjs add autopilot ~/clip.mov [--profile id] [--out dir] [--batch lô] | list | cancel|retry|remove|up|down <id> | clear-done | pause|resume|cancel-all [lô] | run [--daemon]`.
 
 ## 4. Thư mục tự động
 Mặc định (tắt sẵn): `~/Movies/AI Video Studio/Thả video vào đây` → kết quả `…/Đã xong/<tên>/`, bản gốc chuyển sang `…/Đã xử lý/`. Thêm nhiều thư mục, mỗi thư mục một hồ sơ. Nhận `.mov .mp4 .m4v .mkv`; bỏ qua file ẩn, `.download/.crdownload/.part` (AirDrop/trình duyệt đang tải); file phải giữ nguyên dung lượng + giờ sửa **5 giây** mới được nhận.

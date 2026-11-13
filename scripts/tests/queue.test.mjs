@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-queue-m39-'));
 process.env.AVS_HOME = HOME;
@@ -41,9 +43,8 @@ test('addItem: thiếu đầu vào bị từ chối và queue.json không đổi
   assert.equal(fs.readFileSync(QFILE, 'utf8'), before);
 });
 
-// LỖI: scripts/queue.mjs:68 — KINDS là object thường nên `KINDS['constructor']`, `KINDS['toString']` … trả về hàm có sẵn (truthy),
-// nên kind lạ kiểu đó lọt qua kiểm tra. Hậu quả: mục được xếp vào hàng đợi rồi Runner.runItem (scripts/queue.mjs:185) ném TypeError.
-test('addItem: tên kind trùng thuộc tính của Object (constructor, toString) cũng bị từ chối', { skip: 'LỖI: scripts/queue.mjs:68 kiểm `KINDS[kind]` bằng truy cập object thường, nhận nhầm Object.prototype' }, () => {
+// Trước M24: KINDS là object thường nên `KINDS['constructor']`, `KINDS['toString']` … trả về hàm có sẵn và kind lạ lọt qua.
+test('addItem: tên kind trùng thuộc tính của Object (constructor, toString) cũng bị từ chối', () => {
   write([]);
   for (const kind of ['constructor', 'toString', '__proto__']) assert.throws(() => Q.addItem({ kind, input: 'x' }), /Loại việc lạ/, kind);
   assert.deepEqual(ids(), []);
@@ -127,7 +128,8 @@ test('renderRoots: chỉ lấy đường dẫn tuyệt đối, bỏ trùng và b
   assert.deepEqual(roots, [p, path.join(p, 'out')]);
 });
 
-test('Runner: mục loại lạ đưa vào queue.json bằng tay không làm kẹt hàng đợi', { skip: 'LỖI: scripts/queue.mjs:185 runItem: KINDS[it0.kind] là undefined rồi đọc spec.script ném TypeError trong tick(); mục đó đứng đầu hàng nên các mục sau không bao giờ chạy' }, async () => {
+// Trước M24: runItem đọc KINDS[kind].script khi kind lạ → TypeError trong tick(); mục đứng đầu hàng nên các mục sau không chạy.
+test('Runner: mục loại lạ đưa vào queue.json bằng tay không làm kẹt hàng đợi', async () => {
   write([item('bad', 'queued', { kind: 'khong-co' }), item('ok', 'error')]);
   const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
   try {
@@ -136,4 +138,148 @@ test('Runner: mục loại lạ đưa vào queue.json bằng tay không làm k�
     r.stop({ requeue: false });
   }
   assert.equal(Q.loadQueue().items.find(x => x.id === 'bad').state, Q.FAILED);
+});
+
+// ---------- M24: khoá ghi queue.json giữa các tiến trình ----------
+const QUEUE_URL = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'queue.mjs')).href;
+// Mỗi tiến trình con chờ tới cùng một mốc giờ rồi thêm N việc liên tiếp: không khoá thì đọc–sửa–ghi chồng nhau và mất việc.
+const writer = (n, at, tag) => new Promise((ok, bad) => {
+  const code = `const Q = await import(${JSON.stringify(QUEUE_URL)}); while (Date.now() < ${at}) {} for (let i = 0; i < ${n}; i++) Q.addItem({ kind: 'topic', input: '${tag}-' + i, source: 'test' });`;
+  const p = spawn(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, AVS_HOME: HOME }, stdio: ['ignore', 'ignore', 'pipe'] });
+  let err = ''; p.stderr.on('data', d => (err += d));
+  p.on('close', c => (c === 0 ? ok() : bad(new Error(`tiến trình ${tag} lỗi ${c}: ${err}`))));
+});
+
+test('khoá: ba tiến trình cùng thêm việc một lúc không làm mất việc nào', async () => {
+  write([]);
+  const N = 40, at = Date.now() + 1500;
+  await Promise.all(['a', 'b', 'c'].map(t => writer(N, at, t)));
+  const items = Q.loadQueue().items;
+  assert.equal(items.length, 3 * N);
+  for (const t of ['a', 'b', 'c']) assert.equal(items.filter(x => x.input.startsWith(t + '-')).length, N, t);
+  assert.ok(!fs.existsSync(QFILE + '.lock'), 'khoá được nhả sau khi ghi');
+  assert.deepEqual(fs.readdirSync(HOME).filter(f => f.endsWith('.tmp')), [], 'không còn file tạm');
+});
+
+test('khoá: khoá bỏ lại bởi tiến trình đã chết (pid không còn) được gỡ, không treo', () => {
+  write([]);
+  fs.writeFileSync(QFILE + '.lock', JSON.stringify({ pid: 2 ** 22 + 12345, host: os.hostname(), t: Date.now() }));
+  const t0 = Date.now();
+  Q.addItem({ kind: 'topic', input: 'sau khoá chết' });
+  assert.ok(Date.now() - t0 < 3000);
+  assert.equal(Q.loadQueue().items.length, 1);
+  assert.ok(!fs.existsSync(QFILE + '.lock'));
+});
+
+test('khoá: khoá cũ quá hạn (file rỗng, mtime cũ) được gỡ', () => {
+  write([]);
+  fs.writeFileSync(QFILE + '.lock', '');
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(QFILE + '.lock', old, old);
+  Q.addItem({ kind: 'topic', input: 'sau khoá cũ' });
+  assert.equal(Q.loadQueue().items.length, 1);
+});
+
+test('khoá: còn người giữ (khoá mới, máy khác) thì chờ rồi báo lỗi khi quá hạn, không chạy phần ghi', () => {
+  const lock = path.join(HOME, 'other.lock');
+  fs.writeFileSync(lock, JSON.stringify({ pid: 1, host: 'may-khac', t: Date.now() }));
+  let ran = false;
+  assert.throws(() => Q.withFileLock(lock, () => { ran = true; }, { timeoutMs: 300 }), /bị khoá/);
+  assert.equal(ran, false);
+  fs.rmSync(lock);
+  assert.equal(Q.withFileLock(lock, () => 42), 42);
+  assert.ok(!fs.existsSync(lock));
+  assert.throws(() => Q.withFileLock(lock, () => { throw new Error('hỏng giữa chừng'); }), /hỏng giữa chừng/);
+  assert.ok(!fs.existsSync(lock), 'lỗi trong phần ghi vẫn nhả khoá');
+});
+
+test('queue.json hỏng: lần ghi sau giữ bản hỏng thành queue.json.bad-*', () => {
+  for (const f of fs.readdirSync(HOME).filter(f => f.startsWith('queue.json.bad-'))) fs.rmSync(path.join(HOME, f));
+  fs.writeFileSync(QFILE, '{ hỏng');
+  Q.addItem({ kind: 'topic', input: 'x' });
+  const bad = fs.readdirSync(HOME).filter(f => f.startsWith('queue.json.bad-'));
+  assert.equal(bad.length, 1);
+  assert.equal(fs.readFileSync(path.join(HOME, bad[0]), 'utf8'), '{ hỏng');
+});
+
+// ---------- M24: điều khiển cả lô ----------
+test('lô: addItem ghi nhãn lô; tạm dừng chỉ đụng việc đang chờ của lô đó; tiếp tục trả về hàng chờ', () => {
+  write([item('o1', 'queued')]);
+  const a = Q.addItem({ kind: 'topic', input: 'l1', batch: 'L' }), b = Q.addItem({ kind: 'topic', input: 'l2', batch: 'L' });
+  assert.equal(Q.loadQueue().items.find(x => x.id === a.id).batch, 'L');
+  const q0 = Q.loadQueue(); q0.items.find(x => x.id === a.id).state = 'running'; fs.writeFileSync(QFILE, JSON.stringify(q0));
+  assert.equal(Q.batchControl('pause', 'L'), 2);
+  const get = id => Q.loadQueue().items.find(x => x.id === id), st = id => get(id).state;
+  assert.equal(st(a.id), 'running'); // việc đang chạy làm nốt…
+  assert.equal(get(a.id).pauseAfter, true); // …nhưng nếu phải về hàng đợi thì về "tạm dừng"
+  assert.equal(st(b.id), 'paused');
+  assert.equal(st('o1'), 'queued'); // ngoài lô: không đổi
+  assert.equal(Q.batchControl('resume', 'L'), 2);
+  assert.equal(st(b.id), 'queued');
+  assert.equal(get(a.id).pauseAfter, undefined);
+});
+
+test('lô: huỷ cả lô — chờ/tạm dừng thành đã huỷ, đang chạy được đặt cờ huỷ; không ghi lô = cả hàng đợi', () => {
+  write([item('p1', 'queued', { batch: 'X' }), item('p2', 'paused', { batch: 'X' }), item('p3', 'running', { batch: 'X' }), item('p4', 'done', { batch: 'X' }), item('p5', 'queued')]);
+  assert.equal(Q.batchControl('cancel', 'X'), 3);
+  const by = Object.fromEntries(Q.loadQueue().items.map(x => [x.id, x]));
+  assert.equal(by.p1.state, 'cancelled');
+  assert.equal(by.p2.state, 'cancelled');
+  assert.equal(by.p3.state, 'running');
+  assert.equal(by.p3.cancel, true);
+  assert.equal(by.p4.state, 'done');
+  assert.equal(by.p5.state, 'queued');
+  assert.equal(Q.batchControl('pause'), 2); // p5 chờ → tạm dừng, p3 đang chạy → pauseAfter
+  assert.equal(Q.loadQueue().items.find(x => x.id === 'p5').state, 'paused');
+  assert.throws(() => Q.batchControl('xoa-het'), /Lệnh lô lạ/);
+});
+
+test('Runner: việc tạm dừng không được chạy; việc chờ phía sau vẫn được chọn', async () => {
+  write([item('s1', 'paused'), item('s2', 'queued', { kind: 'khong-co' })]);
+  const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
+  try { await r.tick(); } finally { r.stop({ requeue: false }); }
+  const by = Object.fromEntries(Q.loadQueue().items.map(x => [x.id, x]));
+  assert.equal(by.s1.state, 'paused');
+  assert.equal(by.s2.state, Q.FAILED); // runner chọn s2 (loại lạ → lỗi), bỏ qua s1
+});
+
+test('requeue: việc phải về hàng đợi tôn trọng cờ huỷ và lô đang tạm dừng', () => {
+  assert.equal(Q.requeue({ state: 'running', cancel: true }, 'x').state, 'cancelled');
+  assert.equal(Q.requeue({ state: 'running', pauseAfter: true }, 'x').state, 'paused');
+  const it = Q.requeue({ state: 'running', runner: 123 }, 'Chạy tiếp');
+  assert.equal(it.state, 'queued');
+  assert.equal(it.step, 'Chạy tiếp');
+  assert.equal(it.runner, null);
+});
+
+test('Runner: runner chết giữa chừng — việc của lô đã tạm dừng về "tạm dừng", việc đã bấm huỷ thành đã huỷ', async () => {
+  const dead = 2 ** 22 + 4321;
+  write([item('z1', 'running', { runner: dead, pauseAfter: true }), item('z2', 'running', { runner: dead, cancel: true }), item('z3', 'running', { runner: dead })]);
+  const q = Q.loadQueue(); for (const it of q.items) it.kind = 'khong-co'; fs.writeFileSync(QFILE, JSON.stringify(q)); // z3 về hàng đợi rồi lỗi ngay, không chạy script thật
+  const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
+  try { await r.tick(); } finally { r.stop({ requeue: false }); }
+  const by = Object.fromEntries(Q.loadQueue().items.map(x => [x.id, x]));
+  assert.equal(by.z1.state, 'paused');
+  assert.equal(by.z2.state, 'cancelled');
+  assert.equal(by.z3.state, Q.FAILED);
+});
+
+test('Runner.runItem: việc đã bị tạm dừng / xoá sau khi runner đọc hàng đợi thì không được chạy', () => {
+  const stale = item('y1', 'queued', { kind: 'topic' });
+  write([{ ...stale, state: 'paused' }]);
+  const r = new Q.Runner({ role: 'test', daemon: false, log: () => {} });
+  r.runItem(stale);
+  assert.equal(r.child, null);
+  assert.equal(Q.loadQueue().items[0].state, 'paused');
+  write([]);
+  r.runItem(stale);
+  assert.equal(r.child, null);
+  assert.deepEqual(ids(), []);
+});
+
+test('khoá: người giữ chỉ xoá khoá của chính mình', () => {
+  const lock = path.join(HOME, 'own.lock');
+  Q.withFileLock(lock, () => { fs.writeFileSync(lock, JSON.stringify({ pid: 1, host: 'khac', t: Date.now(), tok: 'cua-nguoi-khac' })); });
+  assert.ok(fs.existsSync(lock), 'khoá của người khác (đã thay chỗ) không bị xoá');
+  fs.rmSync(lock);
 });
