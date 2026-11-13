@@ -11,10 +11,11 @@
 //   3. --fix: backup → deterministic fixes + validated Claude patches (changed items get _qc:true) → re-check → before/after stills.
 // Writes <project>/.studio/qc.json {score, before, after, issues:[{t, kind, severity, msg, fixed}], …} and .studio/qc/sheet.jpg.
 // Progress: "@@ <0..1> <step>" on stdout. Errors: Vietnamese on stderr, exit ≠ 0.
-import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import crypto from 'node:crypto';
+import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 import { spawn, execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin, spawnClaude } from './platform.mjs';
+import { qcHash } from './export_gate.mjs';
 
 export const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PY = pyBin(SKILL);
@@ -45,6 +46,21 @@ export function adsPass(dir) {
     if (e) return ok({ enabled: false, issues: [], error: String(err || e.message).trim().slice(0, 300) });
     try { ok(JSON.parse(out)); } catch { ok({ enabled: false, issues: [], error: 'ad_gates.py trả kết quả không đọc được' }); }
   }));
+}
+
+// Ad issues of the first pass vs a re-run on the fixed project: an old issue with no counterpart (same kind + code, ±1.5 s)
+// is marked fixed; a counterpart updates its message; re-run issues left over are added as new. Returns the added ones.
+export const adIssue = (i, D) => ({ t: r2(clamp(+i.t || 0, 0, D || 0)), kind: i.kind, severity: i.severity, target: null, msg: i.msg, code: i.code, note: i.ref || undefined, src: 'auto' });
+export function recheckAds(det, ads2, D) {
+  const fresh = (ads2.issues || []).map(i => adIssue(i, D)), used = new Set();
+  for (const i of det.filter(x => String(x.kind).startsWith('ad_') && !x.new)) {
+    const k = fresh.findIndex((r, j) => !used.has(j) && r.kind === i.kind && r.code === i.code && Math.abs(r.t - i.t) < 1.5);
+    if (k < 0) { i.fixed = true; i.note = 'soát lại sau khi sửa: không còn'; continue; }
+    used.add(k); Object.assign(i, { msg: fresh[k].msg, severity: fresh[k].severity, fixed: false });
+  }
+  const added = fresh.filter((r, j) => !used.has(j)).map(r => ({ ...r, new: true }));
+  det.push(...added);
+  return added;
 }
 
 // ---------- project ----------
@@ -708,7 +724,7 @@ export async function runQC(src, o = {}) {
   let { tl, caps } = proj;
   const qcDir = path.join(dir, '.studio/qc'), stillDir = path.join(qcDir, 'stills');
   fs.rmSync(stillDir, { recursive: true, force: true }); fs.mkdirSync(stillDir, { recursive: true });
-  const hash = crypto.createHash('sha1').update(JSON.stringify({ s: tl.scenes, c: caps, a: tl.audio, cs: tl.caption_style })).digest('hex').slice(0, 16);
+  const hash = qcHash(tl, caps);
   say(.02, 'Kiểm tra timeline (chồng lớp, khoảng trống, phụ đề, file thiếu)');
   const stat = staticIssues(tl, caps, dir);
   say(.06, 'Render ảnh kiểm tra bằng engine (1 Chrome)');
@@ -722,7 +738,7 @@ export async function runQC(src, o = {}) {
     if (!o.noAudio) { say(.4, 'Trộn thử âm thanh, đo LUFS / nhạc át giọng'); try { audio = await audioPass(tl, dir, qcDir); } catch (e) { console.error('[qc] audio:', e.message.slice(0, 300)); } }
     let ads = { enabled: false, issues: [] };
     if (proj.tl.ads?.on) { say(.43, 'Soát chính sách quảng cáo, claim, độ nguyên bản'); ads = await adsPass(dir); if (ads.error) console.error('[qc] ads: ' + ads.error); }
-    const adIssues = (ads.issues || []).map(i => ({ t: r2(clamp(+i.t || 0, 0, tl.duration || 0)), kind: i.kind, severity: i.severity, target: null, msg: i.msg, code: i.code, note: i.ref || undefined }));
+    const adIssues = (ads.issues || []).map(i => adIssue(i, tl.duration));
     let det = [...stat, ...dom, ...audio.issues, ...adIssues].map(i => ({ ...i, src: 'auto' }));
     det.sort((a, b) => a.t - b.t);
     // Claude review
@@ -754,7 +770,7 @@ export async function runQC(src, o = {}) {
     const cIssues = (claude.issues || []).map(i => ({ ...i }));
     const before = [...det, ...cIssues];
     const scoreBefore = score(before);
-    let after = null, compare = [], backup = null, applied = [];
+    let after = null, compare = [], backup = null, applied = [], hashNow = hash;
     if (o.fix) {
       say(.78, 'Sao lưu rồi tự sửa');
       fs.mkdirSync(qcDir, { recursive: true });
@@ -795,7 +811,6 @@ export async function runQC(src, o = {}) {
       for (const i of det) if (!i.fixed && PLACE.has(i.kind) && !recheck.some(r => same(r, i)) && touched.has(i.target)) i.fixed = true; // solved by a Claude patch
       for (const i of superseded) if (det.some(d => d.target === i.fix.target && d.fixed)) { i.fixed = true; i.note = 'dời bằng bộ xếp chỗ tự động (tránh mặt, phụ đề, logo)'; }
       const remaining = recheck.filter(r => !det.some(i => same(r, i))).map(r => ({ ...r, new: true }));
-      after = score([...det.filter(i => !i.fixed), ...remaining, ...cIssues.filter(i => !i.fixed)]);
       det.push(...remaining.filter(r => r.kind !== 'text_unsafe'));
       // before/after stills for every fixed item
       const near = (S, t) => S.reduce((a, b) => (Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a), S[0]);
@@ -804,6 +819,16 @@ export async function runQC(src, o = {}) {
       compare = pairs.slice(0, 10).map(p => ({ t: p.t, kind: p.kind, before: path.relative(dir, p.b), after: path.relative(dir, p.a) }));
       if (pairs.length) await sheet(pairs.slice(0, 8).flatMap(p => [p.b, p.a]), path.join(qcDir, 'compare.jpg'), isVert(tl));
       saveProject(proj, tl, caps);
+      // ad gates read the saved project: soát lại để vấn đề đã hết (Claude sửa chữ, đổi hook…) được đánh dấu đã sửa
+      let adNew = [];
+      if (ads.enabled) {
+        say(.93, 'Soát lại chính sách quảng cáo sau khi sửa');
+        const ads2 = await adsPass(dir);
+        if (ads2.error) console.error('[qc] ads (soát lại): ' + ads2.error);
+        else { adNew = recheckAds(det, ads2, tl.duration); ads = { ...ads2, rechecked: true }; }
+      }
+      after = score([...det.filter(i => !i.fixed && !i.new), ...remaining, ...adNew, ...cIssues.filter(i => !i.fixed)]);
+      hashNow = qcHash(tl, caps);
     }
     say(.95, 'Ghép ảnh tổng quan');
     const aStills = fs.readdirSync(stillDir).filter(f => f.startsWith('a_')).sort().map(f => path.join(stillDir, f));
@@ -811,11 +836,11 @@ export async function runQC(src, o = {}) {
     const issues = [...det, ...cIssues].sort((a, b) => a.t - b.t).map(i => ({ t: i.t, kind: i.kind, kind_vi: KIND_VI[i.kind] || i.kind, severity: i.severity, msg: i.msg, fixed: !!i.fixed,
       src: i.src, code: i.code || undefined, target: i.target || undefined, fix: i.fix || undefined, note: i.note || undefined, new: i.new || undefined }));
     result = {
-      version: 1, project: dir, created: new Date().toISOString(), hash, fix: !!o.fix,
+      version: 1, project: dir, created: new Date().toISOString(), hash, hash_now: hashNow, fix: !!o.fix,
       score: after ?? scoreBefore, before: scoreBefore, after,
       counts: { total: issues.length, fixed: issues.filter(i => i.fixed).length, high: issues.filter(i => i.severity === 'high' && !i.fixed).length },
       claude: { used: !!claude.used, model: claude.model, scores: claude.scores, summary: claude.summary, error: claude.error },
-      ads: ads.enabled || ads.error ? { enabled: !!ads.enabled, industry: ads.industry, industry_vi: ads.industry_vi, platforms: ads.platforms, claims: ads.claims, blocked: !!ads.blocked, originality: ads.originality || null, error: ads.error } : undefined,
+      ads: ads.enabled || ads.error ? { enabled: !!ads.enabled, industry: ads.industry, industry_vi: ads.industry_vi, platforms: ads.platforms, claims: ads.claims, blocked: !!ads.blocked, originality: ads.originality || null, rechecked: ads.rechecked || undefined, error: ads.error } : undefined,
       audio: audio.stats, issues, applied, backup: backup ? path.relative(dir, backup) : undefined,
       sheet: fs.existsSync(path.join(qcDir, 'sheet.jpg')) ? '.studio/qc/sheet.jpg' : undefined,
       compare_sheet: o.fix && fs.existsSync(path.join(qcDir, 'compare.jpg')) ? '.studio/qc/compare.jpg' : undefined, compare,

@@ -132,7 +132,9 @@
     if (a.error) return `<br><span style="color:var(--warn)">Kiểm tra quảng cáo không chạy được: ${esc(a.error)}</span>`;
     const o = a.originality;
     return `<br>Quảng cáo (${esc(a.industry_vi || '')} · ${(a.platforms || []).map(p => AD_PLAT[p] || p).join(', ')}): ${a.blocked ? '<b style="color:var(--bad)">có lỗi chặn</b>' : '<b style="color:var(--ok)">không có lỗi chặn</b>'}`
-      + (o ? ` · nguyên bản <b style="color:${o.ok ? 'var(--ok)' : 'var(--bad)'}">${o.score.toFixed(2)}</b> (ngưỡng ${o.min}, so ${o.compared} bản)` : ' · chưa có phiên bản khác để chấm nguyên bản');
+      + (o ? ` · nguyên bản <b style="color:${o.ok ? 'var(--ok)' : o.ab ? 'var(--warn)' : 'var(--bad)'}">${o.score.toFixed(2)}</b> (ngưỡng ${o.min}, so ${o.compared} bản${o.ab ? ', nhóm A/B' : ''})` : ' · chưa có phiên bản khác để chấm nguyên bản')
+      + (a.rechecked ? ' · đã soát lại sau khi sửa' : '')
+      + (q.override ? `<br><span style="color:var(--warn)">Đã bỏ qua chặn xuất (${esc(new Date(q.override.at).toLocaleString('vi-VN'))}): ${esc(q.override.reason)}</span>` : '');
   }
 
   // ---------- variants ----------
@@ -222,8 +224,51 @@
       $('#qcdetail').onclick = e => { e.preventDefault(); showResult(); };
     }
   }).observe($('#modalbox'), { childList: true, subtree: false });
+  // ---------- export gate (M15, scripts/export_gate.mjs): QC still has high ad issues → ask, default = stop ----------
+  let passGate = false;
+  const KCODE = { ad_policy: 'Chính sách', ad_claim: 'Claim', ad_originality: 'Nguyên bản' };
+  async function checkGate() {
+    if (dirty()) await S.saveNow();
+    const g = await S.api('/api/qc/gate').catch(() => null);
+    if (!g?.blocked) { passGate = true; return $('#xgo')?.click(); }
+    showGate(g);
+  }
+  function showGate(g) {
+    const box = $('#modalbox'); if (!box || box.querySelector('#qcgate')) return;
+    // hide the export form (kept, with its handlers) while the gate is open; #modal .actions sets display, so not [hidden]
+    const form = [...box.children].map(el => [el, el.style.display]); form.forEach(([el]) => (el.style.display = 'none'));
+    const wasQc = passQc; passQc = false; saved = null; // "Dừng" must not leave the QC-then-export pass armed
+    box.insertAdjacentHTML('beforeend', `<div id="qcgate">
+      <h3><i class="ti ti-shield-x" style="color:var(--bad)"></i> Chưa xuất: còn ${g.issues.length} lỗi quảng cáo mức cao</h3>
+      <p class="muted" style="margin:0 0 6px">Lần kiểm tra chất lượng gần nhất${g.checked ? ` (${new Date(g.checked).toLocaleString('vi-VN')})` : ''} còn các lỗi sau. Mặc định là dừng để sửa.</p>
+      ${g.stale ? '<div class="help" style="color:var(--warn)">Timeline đã đổi sau lần kiểm tra đó. Nếu đã sửa, bấm “Kiểm tra lại”.</div>' : ''}
+      <div class="qc-list">${g.issues.map(i => `<div class="qc-it" data-qct="${i.t}"><span class="tm">${S.fmt(i.t).replace(/^0:/, '')}</span><span class="sv high"></span>
+        <span class="bd"><span class="src">${esc(KCODE[i.kind] || i.kind)}</span>${esc(i.msg)}</span></div>`).join('')}</div>
+      ${g.hard ? `<div class="help" style="color:var(--bad)"><b>Có lỗi chính sách quảng cáo mức cao: không bỏ qua được.</b> Sửa lời thoại hoặc chữ trên màn hình rồi kiểm tra lại.</div>`
+        : `<label class="lbl" for="qcgwhy">Vẫn xuất? Ghi lý do (lưu vào .studio/qc.json và .studio/qc_overrides.log)</label>
+           <textarea id="qcgwhy" rows="2" style="width:100%" placeholder="Ví dụ: claim đã có giấy chứng nhận số …, khách hàng đã duyệt"></textarea>`}
+      <div class="actions"><button id="qcgqc"><i class="ti ti-refresh"></i> Kiểm tra lại</button>
+        ${g.hard ? '' : '<button id="qcggo" disabled><i class="ti ti-upload"></i> Vẫn xuất</button>'}
+        <button class="primary" id="qcgstop"><i class="ti ti-player-stop"></i> Dừng</button></div></div>`);
+    const gate = $('#qcgate'), stop = $('#qcgstop'), why = $('#qcgwhy'), go = $('#qcggo');
+    stop.focus();
+    stop.onclick = () => S.closeModal();
+    gate.querySelector('.qc-list').addEventListener('click', e => { const it = e.target.closest('[data-qct]'); if (it) { S.setTime(+it.dataset.qct); S.closeModal(); } });
+    $('#qcgqc').onclick = () => runQc({ fix: false, claude: false });
+    if (why) why.oninput = () => (go.disabled = why.value.trim().length < 10);
+    if (go) go.onclick = async () => {
+      const r = await S.api('/api/qc/override', { reason: why.value });
+      if (r.error) return S.toast(r.error);
+      S.toast('Đã ghi lý do bỏ qua chặn xuất');
+      gate.remove(); form.forEach(([el, d]) => (el.style.display = d));
+      passQc = wasQc; passGate = true; $('#xgo')?.click();
+    };
+  }
   document.addEventListener('click', e => {
     if (!e.target.closest?.('#xgo')) return;
+    // the gate is checked on the export about to run: after the QC pass when "AI kiểm tra & sửa" is ticked, else now
+    if (passGate) passGate = false;
+    else if (passQc || !$('#qcx')?.checked) { e.preventDefault(); e.stopImmediatePropagation(); checkGate(); return; }
     if (passQc) { passQc = false; saved = null; return; } // second pass: let studio.js export
     if (!$('#qcx')?.checked) return;
     e.preventDefault(); e.stopImmediatePropagation();

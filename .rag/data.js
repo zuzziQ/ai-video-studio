@@ -76,7 +76,8 @@ export const DOMAINS = {
     keywords: ["ads", "ad_gates", "qc", "policy", "claim", "originality", "meta", "tiktok", "industry", "blocked"],
     summary: "scripts/ad_gates.py soát lời thoại và chữ theo luật chính sách Meta/TikTok theo ngành, claim đã duyệt/cấm và điểm nguyên bản; scripts/ai_qc.mjs gọi nó khi timeline.ads.on và ghi vào .studio/qc.json.",
     guardrails: [
-      "Cổng chỉ dò ngôn ngữ rủi ro, không tự sửa, không thay kiểm duyệt của nền tảng; kết quả sau --fix vẫn là của lần soát trước.",
+      "Cổng chỉ dò ngôn ngữ rủi ro, không tự sửa, không thay kiểm duyệt của nền tảng; với --fix một vấn đề chỉ hết khi lần soát lại trên bản đã lưu không còn thấy.",
+      "Chặn xuất (scripts/export_gate.mjs): lỗi ad_policy mức cao không bỏ qua được; lỗi claim/nguyên bản bỏ qua phải ghi lý do (qc.json override + .studio/qc_overrides.log). Phiên bản A/B khai trong variants.json chỉ là INFO-AB mức thấp.",
     ],
     leaf_chunks: [
       {

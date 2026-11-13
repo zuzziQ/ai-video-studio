@@ -5,7 +5,7 @@
 // folders and calls `node scripts/publish.mjs run-due` every 60 s when that script exists.
 // usage:
 //   node scripts/queue.mjs add <kind> <input> [--profile id] [--out dir] [--opts '{"n":6}']   kinds: autopilot|highlights|topic|variants|publish
-//   node scripts/queue.mjs list | cancel <id> | retry <id> | remove <id> | up <id> | down <id> | clear-done
+//   node scripts/queue.mjs list | cancel <id> | retry <id> [--qc-override "<lý do>"] | remove <id> | up <id> | down <id> | clear-done
 //   node scripts/queue.mjs run [--daemon]        (run until the queue is empty; --daemon: keep running + watch folders)
 //   node scripts/queue.mjs agent install|uninstall|status      (LaunchAgent com.aivideostudio.watch)
 import fs from 'node:fs';
@@ -78,14 +78,21 @@ export function cancelItem(id) {
     else if (it.state === 'running') it.cancel = true;
     return true; });
 }
-export function retryItem(id) { return mutate(q => { const it = q.items.find(x => x.id === id); if (!it || it.state === 'running') return false; Object.assign(it, { state: 'queued', step: 'Đang chờ (thử lại)', error: null, attempt: 0, progress: 0, cancel: false, finished: null }); return true; }); }
+// qcOverride: retry an autopilot job stopped by the QC export gate, recording this reason (only for non-policy issues).
+export function retryItem(id, { qcOverride } = {}) {
+  return mutate(q => { const it = q.items.find(x => x.id === id); if (!it || it.state === 'running') return false;
+    if (qcOverride) it.opts = { ...(it.opts || {}), qc_override: String(qcOverride) };
+    Object.assign(it, { state: 'queued', step: 'Đang chờ (thử lại)', error: null, blocked: undefined, attempt: 0, progress: 0, cancel: false, finished: null }); return true; });
+}
+// The autopilot stopped at its QC step because QC blocks export (scripts/export_gate.mjs): no automatic retry.
+export const isGateStop = errLine => /CHẶN XUẤT/.test(errLine || '');
 export function removeItem(id) { return mutate(q => { const it = q.items.find(x => x.id === id); if (!it || it.state === 'running') return false; q.items = q.items.filter(x => x.id !== id); return true; }); }
 export function moveItem(id, d) { return mutate(q => { const i = q.items.findIndex(x => x.id === id), j = i + d; if (i < 0 || j < 0 || j >= q.items.length) return false; [q.items[i], q.items[j]] = [q.items[j], q.items[i]]; return true; }); }
 export function clearDone() { return mutate(q => { const n = q.items.length; q.items = q.items.filter(x => !['done', 'cancelled'].includes(x.state)); return n - q.items.length; }); }
 
 function argsFor(it) {
   const o = it.opts || {}, k = it.kind, A = [];
-  if (k === 'autopilot') { A.push(it.input); if (o.profile) A.push('--profile', o.profile); if (o.out) A.push('--out', o.out); if (o.project) A.push('--project', o.project); }
+  if (k === 'autopilot') { A.push(it.input); if (o.profile) A.push('--profile', o.profile); if (o.out) A.push('--out', o.out); if (o.project) A.push('--project', o.project); if (o.qc_override) A.push('--qc-override', String(o.qc_override)); }
   else if (k === 'highlights') { A.push(it.input, '--out', o.out || path.join(AVS_HOME, 'autopilot/highlights', `${slug(path.basename(it.input, path.extname(it.input)))}-${it.id}`)); for (const f of ['n', 'min', 'max', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
   else if (k === 'topic') { A.push(it.input, '--out', o.out || path.join(AVS_HOME, 'autopilot/topics', it.id)); /* fresh folder per item: topic_video nests into an existing one */ for (const f of ['dur', 'voice', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
   else if (k === 'variants') { A.push(it.input, '--n', String(o.n || 3)); if (o.kind) A.push('--kind', o.kind); }
@@ -204,6 +211,7 @@ export class Runner {
       const outputs = result?.outputs || (it0.opts?.out ? [it0.opts.out] : []);
       if (code === 0) { upd({ state: 'done', progress: 1, step: 'Xong', finished: new Date().toISOString(), outputs, result, log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} xong`, it0.title); }
       else if (this.cancelled) upd({ state: 'cancelled', step: 'Đã huỷ', finished: new Date().toISOString(), log: log.slice(-1500) });
+      else if (isGateStop(errLine)) { upd({ state: FAILED, blocked: true, step: 'Dừng ở bước QC: chặn xuất', error: errLine, finished: new Date().toISOString(), log: log.slice(-1500) }); notify(`${spec.name} dừng ở bước QC`, `${it0.title}: ${errLine}`); }
       else if (attempt < 2 && !/chưa được cài|Chỉ nhận tệp|Không thấy /.test(errLine)) upd({ state: 'queued', step: `Lỗi, sẽ thử lại: ${errLine}`.slice(0, 300), error: errLine, log: log.slice(-1500) });
       else { upd({ state: FAILED, step: 'Lỗi', error: errLine, finished: new Date().toISOString(), log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} lỗi`, `${it0.title}: ${errLine}`); }
       this.log(`queue: ${it0.kind} ${it0.input} → ${code === 0 ? 'xong' : this.cancelled ? 'huỷ' : 'lỗi ' + errLine}`);
@@ -305,7 +313,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
       console.log(fmt(addItem({ kind: a, input, opts, source: 'cli' })));
     } else if (cmd === 'list') { const q = loadQueue(); if (!q.items.length) console.log('(hàng đợi trống)'); q.items.forEach(it => console.log(fmt(it))); const l = readLock(); console.log(l && alive(l.pid) ? `runner: pid ${l.pid} (${l.role})` : 'runner: không chạy'); }
     else if (cmd === 'cancel') console.log(cancelItem(a) ? 'ok' : 'không thấy');
-    else if (cmd === 'retry') console.log(retryItem(a) ? 'ok' : 'không thể');
+    else if (cmd === 'retry') console.log(retryItem(a, { qcOverride: opt('--qc-override') }) ? 'ok' : 'không thể');
     else if (cmd === 'remove') console.log(removeItem(a) ? 'ok' : 'không thể');
     else if (cmd === 'up' || cmd === 'down') console.log(moveItem(a, cmd === 'up' ? -1 : 1) ? 'ok' : 'không thể');
     else if (cmd === 'clear-done') console.log(clearDone());

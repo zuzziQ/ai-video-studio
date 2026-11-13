@@ -5,6 +5,7 @@
 // Writes <project>/variants.json {base, kind, variants:[{dir, name, hook, pack, desc, still, video}]}. Progress: "@@ <0..1> <step>".
 import fs from 'node:fs'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { readGate, gateText } from './export_gate.mjs';
 import { SKILL, PY, loadProject, saveProject, designOf, isBase, openEngine, engineInit, engineShot, askClaude, parseJson } from './ai_qc.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
@@ -214,14 +215,16 @@ export async function makeVariants(src, o = {}) {
     }
     await engineInit(E, base.tl, base.caps); await engineShot(E, 1.2, path.join(dir, '.studio/hook.jpg'), false);
   } finally { await E.browser.close().catch(() => {}); }
-  // 4. optional export of every variant
-  if (o.export) for (let i = 0; i < out.length; i++) {
+  // 4. optional export of every variant (not while the base project's QC blocks export: the variants share its words)
+  const gate = o.export ? readGate(dir) : null;
+  if (gate?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(gate)})`);
+  if (o.export && !gate?.blocked) for (let i = 0; i < out.length; i++) {
     say(.58 + i / out.length * .4, `Xuất phiên bản ${i + 1}/${out.length}`);
     out[i].video = await exportProject(out[i].dir, o.quality || '720', k => say(.58 + (i + k) / out.length * .4, `Xuất phiên bản ${i + 1}/${out.length} · ${Math.round(k * 100)}%`));
   }
   const baseVid = fs.existsSync(path.join(dir, 'out')) ? fs.readdirSync(path.join(dir, 'out')).filter(f => f.endsWith('.mp4')).map(f => `out/${f}`).sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs)[0] : null;
   const res = { base: dir, created: new Date().toISOString(), kind, kind_vi: { hook: 'khác hook mở đầu', style: 'khác gói style', both: 'khác hook + gói style' }[kind], n: out.length,
-    base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', base_video: baseVid || undefined, size: `${DW}x${DH}`, variants: out };
+    ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', base_video: baseVid || undefined, size: `${DW}x${DH}`, variants: out };
   fs.writeFileSync(path.join(dir, 'variants.json'), JSON.stringify(res, null, 1));
   return res;
 }

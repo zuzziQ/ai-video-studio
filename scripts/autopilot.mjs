@@ -1,10 +1,13 @@
 // Tự lái (autopilot): one raw video → finished videos + cover + publish texts, following a channel profile (references/autopilot.md).
 // usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
+//        [--qc-override "<lý do>"]   (QC chặn xuất vì lỗi claim / nguyên bản: ghi lý do rồi xuất tiếp; lỗi chính sách thì không)
 //        node scripts/autopilot.mjs --steps            (list step ids)
 // Chain (each optional step can be turned off in the profile; a failing optional step logs a warning and the chain goes on):
 //   new → brand → clean → fillers → ai → broll → sfx → qc → export → publish → cover → deliver
 // Resumable: state in <project>/.studio/autopilot.json; re-running continues after the last finished step. Steps that rewrite
 // timeline.json keep a backup (.studio/autopilot/pre_<step>.json) that is restored if that step was interrupted.
+// QC gate (scripts/export_gate.mjs): ad issues of high severity left after QC stop the chain at the qc step (step 'error' + blocked:true, run state 'blocked',
+// line "LỖI: … CHẶN XUẤT …", exit 1); re-running repeats QC.
 // Output: progress "@@ <0..1> <text>", "PROJECT <dir>" once, and finally "RESULT {json}"; <project>/out/summary.json.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,6 +20,7 @@ import { rippleCut } from './ripple.mjs';
 import { AVS_HOME, getProfile, effectiveProfile } from './profile.mjs';
 import { notify } from './notify.mjs';
 import { findChrome } from './platform.mjs';
+import { readGate, recordOverride, gateText } from './export_gate.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const S = f => path.join(SKILL, 'scripts', f);
@@ -163,7 +167,7 @@ async function exportProject(dir, { quality = '1080', aspects = [] }, say) {
 }
 
 // ---------- main ----------
-export async function autopilot(input, { profile: profId, out: outDir, project: projArg, restart, from } = {}) {
+export async function autopilot(input, { profile: profId, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
   const t00 = Date.now();
   const abs = path.resolve(input.replace(/^~(?=\/)/, os.homedir()));
   if (!fs.existsSync(abs)) throw new Error(`Không thấy ${abs}`);
@@ -308,9 +312,19 @@ export async function autopilot(input, { profile: profId, out: outDir, project: 
       await run('node', [S('ai_qc.mjs'), dir, '--fix'], l => { const m = /^@@ ([\d.]+) (.*)$/.exec(l); if (m) sayS(+m[1], m[2]); });
       const q = rd(P('.studio/qc.json'));
       res.qc = q ? { score: q.score, issues: (q.issues || []).length, fixed: (q.issues || []).filter(i => i.fixed).length } : null;
-      return q ? `điểm ${q.score} · ${res.qc.issues} lỗi, đã sửa ${res.qc.fixed}` : 'xong';
+      const msg = q ? `điểm ${q.score} · ${res.qc.issues} lỗi, đã sửa ${res.qc.fixed}` : 'xong';
+      const g = readGate(dir);
+      if (g.blocked) {
+        if (qcOverride && g.overridable) { try { recordOverride(dir, qcOverride, { by: 'autopilot' }); } catch (err) { err.gate = g; throw err; } res.qc.override = qcOverride; return `${msg} · bỏ qua chặn xuất, lý do: ${qcOverride}`; }
+        const e = new Error(`CHẶN XUẤT — ${gateText(g)}.${g.overridable ? ' Sửa trong Studio rồi chạy lại, hoặc chạy lại với --qc-override "<lý do>".' : ' Sửa lời thoại hoặc chữ trong Studio rồi chạy lại.'}`);
+        e.gate = g; throw e;
+      }
+      return msg;
     },
     async export() {
+      // QC turned off or crashed: an earlier QC result that still blocks export stops here too
+      const g = readGate(dir);
+      if (g.blocked) { const e = new Error(`CHẶN XUẤT — ${gateText(g)} (theo lần QC trước).`); e.gate = g; throw e; }
       // what the autopilot delivered — "Học từ chỉnh sửa" compares the user's later saves against this
       fs.copyFileSync(P('timeline.json'), P('.studio/autopilot_result.json'));
       const outs = await exportProject(dir, { quality: prof.quality || '1080', aspects: prof.aspects || [] }, sayS);
@@ -385,9 +399,9 @@ export async function autopilot(input, { profile: profId, out: outDir, project: 
       console.log(`✓ ${label} (${sec}s)${st.steps[id].msg ? ' — ' + st.steps[id].msg : ''}`);
     } catch (e) {
       const sec = +((Date.now() - t0) / 1000).toFixed(2);
-      if (required) {
-        st.steps[id] = { state: 'error', msg: e.message, sec }; st.state = 'error'; st.error = `${label}: ${e.message}`; save();
-        await notify('Tự lái lỗi', `${path.basename(st.input)} — ${label}: ${e.message}`);
+      if (required || e.gate) {
+        st.steps[id] = { state: 'error', msg: e.message, sec, ...(e.gate ? { blocked: true } : {}) }; st.state = e.gate ? 'blocked' : 'error'; st.error = `${label}: ${e.message}`; save();
+        await notify(e.gate ? 'Tự lái dừng ở bước QC' : 'Tự lái lỗi', `${path.basename(st.input)} — ${label}: ${e.message}`);
         throw new Error(`${label}: ${e.message}`);
       }
       st.steps[id] = { state: 'warn', msg: e.message, sec };
@@ -411,8 +425,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { try { CUR?.kill('SIGTERM'); } catch {} process.exit(130); });
   if (args.includes('--steps')) { for (const [id, l, , r] of STEPS) console.log(`${id.padEnd(8)} ${l}${r ? ' (bắt buộc)' : ''}`); process.exit(0); }
   const input = args.find((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && !['--restart'].includes(args[i - 1])));
-  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]'); process.exit(2); }
-  autopilot(input, { profile: opt('--profile'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from') })
+  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
+  autopilot(input, { profile: opt('--profile'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
     .then(() => process.exit(0))
     .catch(e => { console.error('LỖI: ' + e.message); process.exit(1); });
 }

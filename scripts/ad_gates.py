@@ -324,6 +324,15 @@ def _file_id(d: str, rel) -> str | None:
         return rel
 
 
+HOOK_WINDOW = 3.0   # giây đầu: chữ trên màn hình bắt đầu trong khoảng này là hook người xem thấy
+
+
+def hook_text(tl: dict, sents: list[dict]) -> str:
+    """Hook người xem thấy: chữ trên màn hình bắt đầu trong 3 giây đầu; không có thì câu nói đầu tiên."""
+    shown = [s["text"] for s in screen_texts(tl) if s["t"] < HOOK_WINDOW]
+    return " ".join(shown) if shown else (sents[0]["text"] if sents else "")
+
+
 def features(d: str) -> dict:
     """Đặc trưng một dự án để so độ giống: lời thoại, hook, chuỗi cảnh, gói style, kiểu phụ đề, giọng, nhạc."""
     tl, caps = load_project(d)
@@ -340,16 +349,29 @@ def features(d: str) -> dict:
         scenes.append(f"{s.get('type')}:{key}")
     audio = tl.get("audio") or {}
     music = [(m.get("src") or m.get("file") or m.get("mood") or m.get("name")) for m in audio.get("music") or [] if isinstance(m, dict)]
-    return {"id": os.path.abspath(d), "text": " ".join(x["text"] for x in sents), "hook": sents[0]["text"] if sents else "",
+    return {"id": os.path.abspath(d), "text": " ".join(x["text"] for x in sents), "hook": hook_text(tl, sents),
             "scenes": scenes, "format": tl.get("pack") or "", "font": tl.get("caption_style") or "",
             "voice": {"voice": _file_id(d, audio.get("voice")), "provider": None,
                       "rate": [c.get("speed", 1) for c in tl.get("clips") or []]},
             "music": music}
 
 
-def sibling_dirs(d: str, tl: dict) -> list[str]:
-    """Các phiên bản cùng gốc (variants.json của dự án, hoặc của dự án gốc khi đang mở một phiên bản)."""
-    d = os.path.abspath(d)
+def same_dir(a: str, b: str) -> bool:
+    """Cùng một thư mục, kể cả khi hai đường dẫn viết khác nhau (tên ngắn 8.3 trên Windows, symlink, hoa/thường)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+AB_KINDS = {"hook", "style", "both"}   # các kiểu "Tạo phiên bản" của scripts/variants.mjs
+
+
+def variant_group(d: str, tl: dict) -> dict:
+    """Nhóm phiên bản cùng gốc (variants.json của dự án, hoặc của dự án gốc khi đang mở một phiên bản).
+
+    `ab` = nhóm được khai là A/B có chủ đích: `ab_test: true`, hoặc file do variants.mjs viết (có `kind` hợp lệ)
+    mà không ghi `ab_test: false`."""
     cands = [os.path.join(d, "variants.json")]
     base = (tl.get("_variant") or {}).get("base")
     if base:
@@ -361,8 +383,15 @@ def sibling_dirs(d: str, tl: dict) -> list[str]:
             except (OSError, ValueError):
                 continue
             dirs = [v.get("base")] + [x.get("dir") for x in v.get("variants") or [] if isinstance(x, dict)]
-            return [os.path.abspath(x) for x in dirs if x and os.path.abspath(x) != d and os.path.exists(os.path.join(x, "timeline.json"))]
-    return []
+            dirs = [os.path.abspath(x) for x in dirs if x and os.path.exists(os.path.join(x, "timeline.json"))]
+            ab = v.get("ab_test") is True or (v.get("ab_test") is not False and v.get("kind") in AB_KINDS)
+            return {"dirs": [x for x in dirs if not same_dir(x, d)], "ab": ab, "kind": v.get("kind")}
+    return {"dirs": [], "ab": False, "kind": None}
+
+
+def sibling_dirs(d: str, tl: dict) -> list[str]:
+    """Các phiên bản cùng gốc, trừ chính dự án `d`."""
+    return variant_group(d, tl)["dirs"]
 
 
 # ---------------------------------------------------------------- chạy trên một dự án
@@ -373,6 +402,59 @@ _REMINDER = {"POLICY-PRICE"}   # chỉ nhắc đối chiếu trang đích, khôn
 def _issue(kind: str, t: float, flag: dict) -> dict:
     sev = "low" if flag["code"] in _REMINDER else _SEV.get(flag["severity"], "med")
     return {"t": t, "kind": kind, "severity": sev, "code": flag["code"], "msg": flag["message"], "ref": flag.get("ref")}
+
+
+AB_SAME = 0.9   # hook và hình đều giống ≥ 90% thì không còn là hai phương án A/B
+
+
+def _feats(dirs: list[str]) -> list[dict]:
+    out = []
+    for o in dirs:
+        try:
+            out.append(features(o))
+        except (OSError, ValueError):
+            pass
+    return out
+
+
+def originality_check(d: str, tl: dict, against: list[str], minimum: float) -> tuple[dict | None, list[dict]]:
+    """Chấm nguyên bản riêng cho bản ngoài (`--against`) và cho nhóm phiên bản cùng gốc.
+
+    Trong nhóm được khai là A/B (variants.json của "Tạo phiên bản"), các bản chủ ý chung lời thoại và hình: điểm thấp
+    chỉ là nhắc mức thấp, không chặn, miễn là hook hoặc hình thật sự khác (< AB_SAME). Bản ngoài nhóm vẫn chặn mức cao."""
+    group = variant_group(d, tl)
+    ext = [o for o in against if not same_dir(o, d)]
+    grp = [x for x in group["dirs"] if not any(same_dir(x, e) for e in ext)]
+    me = features(d)
+    ext_f, grp_f = _feats(ext), _feats(grp)
+    o_ext = originality(me, ext_f, minimum) if ext_f else None
+    o_grp = originality(me, grp_f, minimum) if grp_f else None
+    if o_grp:
+        o_grp["ab"] = group["ab"]
+    issues = []
+
+    def why(o):
+        p = o["parts"]
+        return (f"Điểm nguyên bản {o['score']:.2f} dưới ngưỡng {minimum:.2f}: quá giống {os.path.basename(str(o['nearest']))} "
+                f"(chữ {p['text']:.0%}, hook {p['hook']:.0%}, hình {p['visual']:.0%}, tiếng {p['audio']:.0%})")
+
+    if o_ext and not o_ext["ok"]:
+        issues.append({"t": 0, "kind": "ad_originality", "severity": "high", "code": "BLOCK-04", "ref": None, "msg": why(o_ext)})
+    if o_grp and not o_grp["ok"]:
+        p = o_grp["parts"]
+        if group["ab"] and min(p["hook"], p["visual"]) < AB_SAME:
+            issues.append({"t": 0, "kind": "ad_originality", "severity": "low", "code": "INFO-AB", "ref": None,
+                           "msg": why(o_grp) + ". Đây là phiên bản A/B có chủ đích (variants.json) nên không chặn; "
+                                  "chạy chung một nhóm quảng cáo để so, đừng đăng như nhiều quảng cáo khác nhau"})
+        else:
+            extra = ". Cùng nhóm A/B nhưng hook và hình gần như giống hệt: chưa phải hai phương án" if group["ab"] else ""
+            issues.append({"t": 0, "kind": "ad_originality", "severity": "high", "code": "BLOCK-04", "ref": None,
+                           "msg": why(o_grp) + extra})
+    cands = [o for o in (o_ext, o_grp) if o]
+    orig = min(cands, key=lambda o: o["score"]) if cands else None
+    if orig:
+        orig = {**orig, "compared": len(ext_f) + len(grp_f)}
+    return orig, issues
 
 
 def run(d: str, against: list[str] | None = None) -> dict:
@@ -411,18 +493,8 @@ def run(d: str, against: list[str] | None = None) -> dict:
         issues.append(_issue("ad_claim", b["t"], {**f, "message": f["message"] + quote(b)}))
 
     minimum = float(cfg.get("originality_min") or ORIGINALITY_MIN)
-    others = []
-    for o in (against or []) + sibling_dirs(d, tl):
-        try:
-            others.append(features(o))
-        except (OSError, ValueError):
-            pass
-    orig = originality(features(d), others, minimum) if others else None
-    if orig and not orig["ok"]:
-        p = orig["parts"]
-        issues.append({"t": 0, "kind": "ad_originality", "severity": "high", "code": "BLOCK-04", "ref": None,
-                       "msg": f"Điểm nguyên bản {orig['score']:.2f} dưới ngưỡng {minimum:.2f}: quá giống {os.path.basename(str(orig['nearest']))} "
-                              f"(chữ {p['text']:.0%}, hook {p['hook']:.0%}, hình {p['visual']:.0%}, tiếng {p['audio']:.0%})"})
+    orig, orig_issues = originality_check(d, tl, against or [], minimum)
+    issues += orig_issues
     issues.sort(key=lambda i: i["t"])
     return {"enabled": True, "industry": industry, "industry_vi": INDUSTRIES[industry], "platforms": sorted(platforms),
             "claims": {"approved": len(approved), "other": len(claims) - len(approved)},
