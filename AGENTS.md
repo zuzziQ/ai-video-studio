@@ -59,7 +59,7 @@ Bản này là repo riêng tư dựa trên repo gốc ở trên, nằm trong hub
 
 - Repo riêng tư trên tài khoản `zuzziQ`; đo phút: `python3 D:/ai/scripts/actions-usage.py .`
 - Workflow `CI` (`.github/workflows/ci.yml`) theo `D:/ai/templates/ci-gate.workflow.yml`: chạy khi PR, chạy tay và lịch tuần; không chạy sau mỗi push vào `main`. Chạy tay: `gh workflow run CI --ref main`.
-- Một job duy nhất `gate` (W1): nhãn PR, dòng Roadmap, `.rag/sync.js --check`, `node --check` cho mọi `scripts/**/*.mjs` và `studio/**/*.js|mjs`, `python -m unittest discover -s scripts/tests`. Không cài dependency, không render. Check bắt buộc: `gate`.
+- Một job duy nhất `gate` (W1): nhãn PR, dòng Roadmap, `.rag/sync.js --check`, `node --check` cho mọi `scripts/**/*.mjs` và `studio/**/*.js|mjs`, `python -m unittest discover -s scripts/tests`, `node --test scripts/tests/*.test.mjs`. Không cài dependency, không render. Check bắt buộc: `gate`.
 - Sửa workflow xong chạy `python3 D:/ai/scripts/ci-audit.py .`
 
 ## Issue, PR và nhiều worktree (xem `D:/ai/docs/ISSUE-PR-STANDARD.md`)

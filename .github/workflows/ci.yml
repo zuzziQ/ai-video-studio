@@ -69,3 +69,9 @@ jobs:
       - name: Test Python (scripts/tests)
         if: always()
         run: python3 -m unittest discover -s scripts/tests
+
+      # node:test của scripts/tests (hàng đợi, server Studio, đăng bài, gói style…): chỉ thư viện chuẩn Node, máy chủ giả cục bộ,
+      # không gọi mạng ngoài, không Chrome/ffmpeg. Glob do bash mở (Node 22+ không nhận thư mục làm đối số --test).
+      - name: Test Node (scripts/tests/*.test.mjs)
+        if: always()
+        run: node --test scripts/tests/*.test.mjs

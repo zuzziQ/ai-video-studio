@@ -12,6 +12,13 @@
       "when": ["scripts/**/*.py"],
       "timeout": 120,
       "fix": "python -m unittest discover -s scripts/tests -v"
+    },
+    {
+      "id": "nodetest",
+      "cmd": ["node", "--test", "scripts/tests/queue.test.mjs", "scripts/tests/queue_telegram.test.mjs", "scripts/tests/server_paths.test.mjs", "scripts/tests/studio_security.test.mjs", "scripts/tests/publish.test.mjs"],
+      "when": ["scripts/**/*.mjs", "studio/**"],
+      "timeout": 180,
+      "fix": "node --test scripts/tests/*.test.mjs"
     }
   ]
 }
