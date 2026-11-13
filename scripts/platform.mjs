@@ -65,10 +65,19 @@ export function execClaude(args, opts = {}, cb) { const [exe, pre] = claudeCmd()
 
 // Stop a child and everything it started. On Windows kill() is a hard TerminateProcess that skips the child's own cleanup
 // (render.mjs closing its Chromes/ffmpeg), so the whole tree goes through taskkill instead.
-export function killTree(p) {
-  if (!p || p.exitCode != null) return;
-  if (IS_WIN && p.pid) { try { execFile('taskkill', ['/pid', String(p.pid), '/t', '/f'], () => {}); return; } catch { /* fall through */ } }
+// `group: true` (POSIX): the child was spawned `detached`, so it leads its own process group — signal the whole group.
+// Resolves once taskkill has returned (Windows) or the signal was sent.
+export function killTree(p, { group = false } = {}) {
+  if (!p || p.exitCode != null || p.signalCode != null) return Promise.resolve();
+  if (IS_WIN && p.pid) {
+    return new Promise(ok => {
+      try { execFile('taskkill', ['/pid', String(p.pid), '/t', '/f'], { windowsHide: true }, () => ok()); }
+      catch { try { p.kill('SIGTERM'); } catch { /* already gone */ } ok(); }
+    });
+  }
+  if (group && p.pid) { try { process.kill(-p.pid, 'SIGTERM'); return Promise.resolve(); } catch { /* no group → plain kill */ } }
   try { p.kill('SIGTERM'); } catch { /* already gone */ }
+  return Promise.resolve();
 }
 const bg = (cmd, args) => { try { const p = spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true }); p.on('error', () => {}); p.unref(); } catch { /* no opener */ } };
 // Open a file, folder or URL with the system's default app.

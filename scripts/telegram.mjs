@@ -5,20 +5,21 @@
 //   • nhắn tự do → agent (Claude CLI) hiểu ý và chạy đúng việc
 //   • chấm ★ + bấm thẻ góp ý + gõ góp ý → feedback.mjs → tự cải tiến hồ sơ kênh; mỗi sáng gửi đề xuất kèm nút Áp dụng.
 // Config ~/.ai-video-studio/telegram.json (mode 600): {token, on, allowed:[{id,name}], pair, profile, digest:"08:00", autoImprove}
+//   roots: ["D:/Videos", …] = extra folders whose videos the bot may queue by path (besides the watch folders + its inbox).
 //   node scripts/telegram.mjs token <BOT_TOKEN>   · pair (in mã ghép nối) · run (chạy bot + hàng đợi) · status
 // Inside the Studio server the bot runs in-process (studio/routes/46_agent.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { AVS_HOME, loadQueue, addItem, retryItem, Runner, KINDS } from './queue.mjs';
+import { AVS_HOME, loadQueue, addItem, retryItem, Runner, KINDS, FAILED, isFailed, loadSettings } from './queue.mjs';
 import { loadStore } from './profile.mjs';
 import { TAGS, addFeedback, patchFeedback, improve, refreshSuggestions, loadSuggestions, actSuggestion, askClaudeJSON, listFeedback } from './feedback.mjs';
 
 const CFG = path.join(AVS_HOME, 'telegram.json'), INBOX = path.join(AVS_HOME, 'telegram', 'inbox');
 const API = process.env.AVS_TG_API || 'https://api.telegram.org'; // override = local fake server in tests
 const VIDEO = /\.(mp4|mov|m4v|mkv|webm)$/i, MAX_DL = 20 * 1024 * 1024, MAX_UP = 49 * 1024 * 1024;
-export const DEFAULTS = { token: '', on: false, allowed: [], pair: null, profile: '', digest: '08:00', autoImprove: true, offset: 0, notified: [], fbmap: {}, pending: {}, lastDigest: '', lastImproveN: 0 };
+export const DEFAULTS = { token: '', on: false, allowed: [], pair: null, pairTries: 0, pairLock: null, roots: [], profile: '', digest: '08:00', autoImprove: true, offset: 0, notified: [], fbmap: {}, pending: {}, lastDigest: '', lastImproveN: 0 };
 export function loadCfg() { try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(CFG, 'utf8')) }; } catch { return { ...DEFAULTS }; } }
 export function saveCfg(patch) {
   const c = { ...loadCfg(), ...patch };
@@ -26,13 +27,50 @@ export function saveCfg(patch) {
   fs.writeFileSync(CFG, JSON.stringify(c, null, 1), { mode: 0o600 }); try { fs.chmodSync(CFG, 0o600); } catch { /* windows */ }
   return c;
 }
-export const publicCfg = c => ({ on: c.on, hasToken: !!c.token, allowed: c.allowed, pair: c.pair && Date.parse(c.pair.exp) > Date.now() ? c.pair : null, profile: c.profile, digest: c.digest, autoImprove: c.autoImprove });
-export function newPairCode() { const pair = { code: String(crypto.randomInt(100000, 999999)), exp: new Date(Date.now() + 15 * 60e3).toISOString() }; saveCfg({ pair }); return pair; }
+const nowMs = () => (process.env.AVS_NOW ? Date.parse(process.env.AVS_NOW) : Date.now()); // AVS_NOW = fake clock in tests
+export const publicCfg = c => ({ on: c.on, hasToken: !!c.token, allowed: c.allowed, pair: c.pair && Date.parse(c.pair.exp) > nowMs() ? c.pair : null, profile: c.profile, digest: c.digest, autoImprove: c.autoImprove });
+// A new code (owner action in Studio / CLI) also lifts a lockout.
+export function newPairCode() { const pair = { code: String(crypto.randomInt(100000, 999999)), exp: new Date(nowMs() + 15 * 60e3).toISOString() }; saveCfg({ pair, pairTries: 0, pairLock: null }); return pair; }
+
+// Pairing: a 6-digit code would fall to guessing, so after PAIR_MAX_TRIES wrong codes the code is burnt and every attempt is
+// refused for PAIR_LOCK_MS (until the owner makes a new code). → 'ok' | 'wrong' | 'locked' | 'none' (no live code).
+export const PAIR_MAX_TRIES = 5, PAIR_LOCK_MS = 15 * 60e3;
+export function checkPairCode(code) {
+  const c = loadCfg(), t = nowMs();
+  if (c.pairLock && Date.parse(c.pairLock) > t) return 'locked';
+  if (!c.pair || !(Date.parse(c.pair.exp) > t)) return 'none';
+  const a = Buffer.from(String(code)), b = Buffer.from(String(c.pair.code));
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) return 'ok';
+  const tries = (c.pairTries || 0) + 1;
+  if (tries >= PAIR_MAX_TRIES) { saveCfg({ pair: null, pairTries: 0, pairLock: new Date(t + PAIR_LOCK_MS).toISOString() }); return 'locked'; }
+  saveCfg({ pairTries: tries });
+  return 'wrong';
+}
+
+// Video paths named in a chat (the agent reads them out of free text) are only accepted inside folders the owner declared:
+// the watch folders (in / done / processed), the bot's inbox and telegram.json `roots`. Symlinks and `..` are resolved first.
+export function allowedRoots(c = loadCfg()) {
+  const st = loadSettings();
+  return [INBOX, ...st.watch.folders.flatMap(f => [f.in, f.done, f.processed]), ...(Array.isArray(c.roots) ? c.roots : [])].filter(r => typeof r === 'string' && r);
+}
+export function safeVideoPath(p, roots = allowedRoots()) {
+  const f = String(p || '').trim().replace(/^["']|["']$/g, '');
+  if (!f || !path.isAbsolute(f)) return null;
+  let real; try { real = fs.realpathSync(f); if (!fs.statSync(real).isFile()) return null; } catch { return null; }
+  if (!VIDEO.test(real)) return null;
+  const norm = s => (process.platform === 'win32' ? s.toLowerCase() : s);
+  for (const r of roots) {
+    let rr; try { rr = fs.realpathSync(r); } catch { continue; }
+    const rel = path.relative(norm(rr), norm(real));
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return real;
+  }
+  return null;
+}
 
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const vn = n => new Date(n).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
 const rdj = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
-const STATE_VI = { queued: 'đang chờ', running: 'đang chạy', done: 'xong', failed: 'lỗi', cancelled: 'đã huỷ' };
+const STATE_VI = { queued: 'đang chờ', running: 'đang chạy', done: 'xong', [FAILED]: 'lỗi', failed: 'lỗi', cancelled: 'đã huỷ' };
 const HELP = `<b>AI Video Studio · Agent</b>
 🎬 Gửi một video (≤ 20 MB) → tự dựng xong gửi lại
 💡 /chude &lt;chủ đề&gt; → làm video không cần quay
@@ -103,11 +141,14 @@ export class TelegramBot {
   async onMessage(m) {
     const chat = m.chat, text = (m.text || m.caption || '').trim();
     if (!this.allowed(chat)) {
-      const c = this.cfg, code = (text.match(/\d{6}/) || [])[0];
-      if (code && c.pair && code === c.pair.code && Date.parse(c.pair.exp) > Date.now()) {
-        saveCfg({ allowed: [...c.allowed, { id: chat.id, name: chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || String(chat.id) }], pair: null });
+      const code = (text.match(/\d{6}/) || [])[0], r = code ? checkPairCode(code) : 'none';
+      if (r === 'ok') {
+        const c = this.cfg;
+        saveCfg({ allowed: [...c.allowed, { id: chat.id, name: chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || String(chat.id) }], pair: null, pairTries: 0 });
         return this.send(chat.id, `✅ Đã ghép nối với AI Video Studio.\n\n${HELP}`);
       }
+      if (r === 'locked') return this.send(chat.id, '🔒 Nhập sai mã quá nhiều lần nên ghép nối đang bị khoá. Chủ máy mở Studio → <b>Agent</b> → <b>Lấy mã ghép nối</b> để tạo mã mới.');
+      if (r === 'wrong') return this.send(chat.id, `❌ Mã không đúng. Còn ${PAIR_MAX_TRIES - (this.cfg.pairTries || 0)} lần thử trước khi bị khoá.`);
       return this.send(chat.id, '🔒 Bot riêng của AI Video Studio. Mở Studio → <b>Agent</b> → <b>Lấy mã ghép nối</b>, rồi gửi <code>/start 123456</code> vào đây.');
     }
     const vid = m.video || m.video_note || (m.document && (/^video\//.test(m.document.mime_type || '') || VIDEO.test(m.document.file_name || '')) ? m.document : null);
@@ -133,7 +174,7 @@ export class TelegramBot {
   }
 
   async onVideo(chat, v, caption) {
-    if (v.file_size && v.file_size > MAX_DL) return this.send(chat.id, `📦 Video ${(v.file_size / 1048576).toFixed(0)} MB vượt giới hạn 20 MB của bot Telegram.\nCách khác: chép video vào thư mục tự động trên máy, hoặc nhắn đường dẫn file trên máy (ví dụ <code>/Users/ban/Movies/clip.mov</code>).`);
+    if (v.file_size && v.file_size > MAX_DL) return this.send(chat.id, `📦 Video ${(v.file_size / 1048576).toFixed(0)} MB vượt giới hạn 20 MB của bot Telegram.\nCách khác: chép video vào thư mục tự động trên máy rồi nhắn đường dẫn file (chỉ nhận file trong thư mục tự động hoặc thư mục đã khai trong cài đặt bot).`);
     await this.api('sendChatAction', { chat_id: chat.id, action: 'upload_video' }).catch(() => {});
     const f = await this.api('getFile', { file_id: v.file_id });
     const r = await fetch(`${API}/file/bot${this.cfg.token}/${f.file_path}`);
@@ -152,7 +193,7 @@ export class TelegramBot {
   statusText() {
     const items = loadQueue().items.slice(-8).reverse();
     if (!items.length) return 'Hàng đợi trống. Gửi video hoặc /chude để bắt đầu.';
-    return '<b>Hàng đợi</b>\n' + items.map(i => `${i.state === 'done' ? '✅' : i.state === 'failed' ? '⚠️' : i.state === 'running' ? '⏳' : '🕒'} ${esc(KINDS[i.kind]?.name || i.kind)} · ${esc(i.title)} — ${STATE_VI[i.state] || i.state}${i.state === 'running' ? ` ${Math.round((i.progress || 0) * 100)}% ${esc(i.step || '')}` : ''}`).join('\n');
+    return '<b>Hàng đợi</b>\n' + items.map(i => `${i.state === 'done' ? '✅' : isFailed(i) ? '⚠️' : i.state === 'running' ? '⏳' : '🕒'} ${esc(KINDS[i.kind]?.name || i.kind)} · ${esc(i.title)} — ${STATE_VI[i.state] || i.state}${i.state === 'running' ? ` ${Math.round((i.progress || 0) * 100)}% ${esc(i.step || '')}` : ''}`).join('\n');
   }
 
   // ---------- results → chat ----------
@@ -160,10 +201,12 @@ export class TelegramBot {
     const c = this.cfg, done = new Set(c.notified);
     for (const it of loadQueue().items) {
       const chat = it.opts?.telegram?.chat;
-      if (!chat || done.has(it.id) || !['done', 'failed'].includes(it.state) || this.busy.has(it.id)) continue;
+      // key = id@finished, so a job that failed, was retried and then finished is reported again (plain ids: older builds)
+      const key = `${it.id}@${it.finished || ''}`;
+      if (!chat || done.has(it.id) || done.has(key) || !(it.state === 'done' || isFailed(it)) || this.busy.has(it.id)) continue;
       this.busy.add(it.id);
       try {
-        if (it.state === 'failed') {
+        if (isFailed(it)) {
           await this.send(chat, `⚠️ Việc #${it.id} (${esc(it.title)}) bị lỗi: ${esc(String(it.error || it.step || '').slice(0, 300))}`, { reply_markup: { inline_keyboard: [[{ text: '🔁 Chạy lại', callback_data: `q:${it.id}:retry` }]] } });
         } else {
           const vids = (it.outputs || []).filter(f => VIDEO.test(f) && fs.existsSync(f)), proj = it.project || it.result?.project;
@@ -175,7 +218,7 @@ export class TelegramBot {
           else await this.send(chat, head + (v ? `\n📁 ${esc(v)} (lớn hơn 50 MB nên không gửi qua Telegram được)` : ''));
           await this.send(chat, 'Video này thế nào? Chấm để Tự lái học gu của bạn:', { reply_markup: { inline_keyboard: [[1, 2, 3, 4, 5].map(n => ({ text: `${n}⭐`, callback_data: `r:${it.id}:${n}` }))] } });
         }
-        saveCfg({ notified: [...this.cfg.notified, it.id].slice(-300) });
+        saveCfg({ notified: [...this.cfg.notified, key].slice(-300) });
       } catch (e) { this.log('gửi kết quả lỗi:', e.message); }
       finally { this.busy.delete(it.id); }
     }
@@ -238,7 +281,7 @@ export class TelegramBot {
     await refreshSuggestions({ claude: true }).catch(() => {});
     const q = loadQueue().items.filter(i => Date.now() - Date.parse(i.finished || i.created) < 864e5);
     for (const a of c.allowed) {
-      await this.send(a.id, `☀️ <b>Bản tin sáng</b> — 24 giờ qua: ${q.filter(i => i.state === 'done').length} video xong, ${q.filter(i => i.state === 'failed').length} lỗi.`);
+      await this.send(a.id, `☀️ <b>Bản tin sáng</b> — 24 giờ qua: ${q.filter(i => i.state === 'done').length} video xong, ${q.filter(isFailed).length} lỗi.`);
       await this.sendSuggestions(a.id, false);
     }
   }
@@ -266,8 +309,8 @@ Chỉ trả JSON: {"reply":"…","action":{"type":"…", …}}`;
     const a = r.action || {};
     if (a.type === 'topic' && a.topic) return this.queueTopic(chat, a.topic);
     if (a.type === 'video_path' && a.path) {
-      const f = String(a.path).replace(/^["']|["']$/g, '');
-      if (!fs.existsSync(f) || !VIDEO.test(f)) return this.send(chat.id, `Không thấy file video: <code>${esc(f)}</code>`);
+      const f = safeVideoPath(a.path);
+      if (!f) return this.send(chat.id, `Không nhận file <code>${esc(String(a.path).slice(0, 300))}</code>: chỉ dựng video có sẵn nằm trong thư mục tự động hoặc thư mục đã khai trong cài đặt bot.`);
       const it = addItem({ kind: 'autopilot', input: f, opts: { ...(this.cfg.profile ? { profile: this.cfg.profile } : {}), telegram: { chat: chat.id } }, source: 'telegram' });
       return this.send(chat.id, `🎬 Đang dựng ${esc(path.basename(f))} (#${it.id}).`);
     }

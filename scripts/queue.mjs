@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { notify } from './notify.mjs';
+import { killTree } from './platform.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const AVS_HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -44,7 +45,16 @@ export function saveSettings(patch) {
 }
 
 // ---------- queue store ----------
-export function loadQueue() { const q = rd(QFILE, null); return q && Array.isArray(q.items) ? q : { version: 1, items: [] }; }
+// A job that gave up is in state FAILED ('error'). Builds before M34 had readers that looked for 'failed', and a queue.json
+// edited by hand or by an old build may still say 'failed': loadQueue() maps it to FAILED so every reader sees one name.
+export const FAILED = 'error';
+export const isFailed = it => it?.state === FAILED || it?.state === 'failed';
+export function loadQueue() {
+  const q = rd(QFILE, null);
+  if (!q || !Array.isArray(q.items)) return { version: 1, items: [] };
+  for (const it of q.items) if (it && it.state === 'failed') it.state = FAILED;
+  return q;
+}
 // read-modify-write with the freshest file (the UI process and the runner process both write it)
 export function mutate(fn) { const q = loadQueue(); const r = fn(q); wr(QFILE, q); return r; }
 export const KINDS = {
@@ -84,6 +94,32 @@ function argsFor(it) {
   return A;
 }
 
+// ---------- leftovers of a killed render ----------
+// render.mjs splits work into <out dir>/.render_XXXX/ and removes it itself — unless it is killed (cancel: taskkill /f on
+// Windows skips its cleanup) or crashes. After a job ends badly, remove the .render_* folders it left in its own output
+// folders. Only folders created since the job started are touched, so a render running elsewhere (Studio export) is safe.
+export function renderRoots(it) {
+  const o = it?.opts || {}, roots = [it?.project, it?.result?.project, o.out, ...(it?.outputs || []).map(f => path.dirname(f))];
+  return [...new Set(roots.filter(r => typeof r === 'string' && r && path.isAbsolute(r)).map(r => path.resolve(r)))];
+}
+export function sweepRenderTmp(roots, sinceMs = 0, depth = 2) {
+  const gone = [];
+  const walk = (dir, d) => {
+    let ents; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      if (!e.isDirectory()) continue;
+      const abs = path.join(dir, e.name);
+      if (e.name.startsWith('.render_')) {
+        let st; try { st = fs.statSync(abs); } catch { continue; }
+        if (Math.max(st.birthtimeMs || 0, st.ctimeMs || 0) + 2000 < sinceMs) continue;
+        try { fs.rmSync(abs, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); gone.push(abs); } catch { /* still locked: next sweep */ }
+      } else if (d > 0 && e.name !== 'node_modules' && !e.name.startsWith('.git')) walk(abs, d - 1);
+    }
+  };
+  for (const r of roots) walk(r, depth);
+  return gone;
+}
+
 // ---------- lock ----------
 function readLock() { return rd(LOCK, null); }
 function tryLock(role) {
@@ -108,7 +144,7 @@ export class Runner {
   start() { if (!this.timer) { this.timer = setInterval(() => this.tick().catch(e => this.log('queue:', e.message)), 2000); this.tick().catch(() => {}); } return this; }
   stop({ requeue = true } = {}) {
     clearInterval(this.timer); this.timer = null;
-    if (this.child) { try { process.kill(-this.child.pid, 'SIGTERM'); } catch {} }
+    if (this.child) killTree(this.child, { group: true }); // Windows: taskkill /t — process.kill(-pid) does nothing there
     if (this.item && requeue) mutate(q => { const it = q.items.find(x => x.id === this.item.id); if (it && it.state === 'running') Object.assign(it, { state: 'queued', step: 'Bị dừng — sẽ chạy tiếp', runner: null }); });
     unlock();
   }
@@ -123,7 +159,7 @@ export class Runner {
       if (this.daemon && st.watch.on) this.scan(st);
       if (this.child) {
         const it = loadQueue().items.find(x => x.id === this.item.id);
-        if (it?.cancel) { this.cancelled = true; try { process.kill(-this.child.pid, 'SIGTERM'); } catch {} }
+        if (it?.cancel && !this.cancelled) { this.cancelled = true; killTree(this.child, { group: true }); }
       } else {
         const next = loadQueue().items.find(x => x.state === 'queued');
         if (next) this.runItem(next); else if (!this.daemon && Date.now() - this.idleSince > 1500) { this.stop(); this.onIdle?.(); }
@@ -141,11 +177,11 @@ export class Runner {
   runItem(it0) {
     const spec = KINDS[it0.kind], script = path.join(SKILL, 'scripts', spec.script);
     const upd = patch => mutate(q => { const it = q.items.find(x => x.id === it0.id); if (it) Object.assign(it, patch); return it; });
-    if (!fs.existsSync(script)) { upd({ state: 'error', error: `Tính năng “${spec.name}” chưa được cài (thiếu scripts/${spec.script})`, step: 'Lỗi', finished: new Date().toISOString() }); return; }
+    if (!fs.existsSync(script)) { upd({ state: FAILED, error: `Tính năng “${spec.name}” chưa được cài (thiếu scripts/${spec.script})`, step: 'Lỗi', finished: new Date().toISOString() }); return; }
     const attempt = (it0.attempt || 0) + 1;
     this.item = upd({ state: 'running', started: new Date().toISOString(), progress: 0, step: attempt > 1 ? 'Thử lại lần 2' : 'Bắt đầu', runner: process.pid, attempt, error: null, cancel: false });
     this.cancelled = false;
-    const argv = argsFor(it0);
+    const argv = argsFor(it0), startedMs = Date.now();
     this.log(`queue: chạy ${it0.kind} ${it0.input} (lần ${attempt})`);
     const p = spawn('node', [script, ...argv], { cwd: SKILL, detached: true, env: process.env });
     this.child = p;
@@ -163,12 +199,13 @@ export class Runner {
     p.on('error', e => feed('LỖI: ' + e.message));
     p.on('close', code => {
       this.child = null; this.item = null; this.idleSince = Date.now();
+      if (code !== 0) { const cur = loadQueue().items.find(x => x.id === it0.id); sweepRenderTmp(renderRoots(cur || it0), startedMs); }
       const errLine = (log.match(/^LỖI: .*$/gm) || []).pop()?.slice(5) || log.trim().split('\n').slice(-2).join(' | ').slice(-300);
       const outputs = result?.outputs || (it0.opts?.out ? [it0.opts.out] : []);
       if (code === 0) { upd({ state: 'done', progress: 1, step: 'Xong', finished: new Date().toISOString(), outputs, result, log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} xong`, it0.title); }
       else if (this.cancelled) upd({ state: 'cancelled', step: 'Đã huỷ', finished: new Date().toISOString(), log: log.slice(-1500) });
       else if (attempt < 2 && !/chưa được cài|Chỉ nhận tệp|Không thấy /.test(errLine)) upd({ state: 'queued', step: `Lỗi, sẽ thử lại: ${errLine}`.slice(0, 300), error: errLine, log: log.slice(-1500) });
-      else { upd({ state: 'error', step: 'Lỗi', error: errLine, finished: new Date().toISOString(), log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} lỗi`, `${it0.title}: ${errLine}`); }
+      else { upd({ state: FAILED, step: 'Lỗi', error: errLine, finished: new Date().toISOString(), log: log.slice(-1500) }); if (it0.kind !== 'autopilot') notify(`${spec.name} lỗi`, `${it0.title}: ${errLine}`); }
       this.log(`queue: ${it0.kind} ${it0.input} → ${code === 0 ? 'xong' : this.cancelled ? 'huỷ' : 'lỗi ' + errLine}`);
     });
   }
@@ -259,7 +296,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
   const args = process.argv.slice(2);
   const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
   const [cmd, a, b] = args;
-  const fmt = it => `${it.id}  ${it.state.padEnd(9)} ${it.kind.padEnd(10)} ${Math.round((it.progress || 0) * 100).toString().padStart(3)}%  ${it.title}  ${it.state === 'error' ? '— ' + it.error : it.step || ''}`;
+  const fmt = it => `${it.id}  ${it.state.padEnd(9)} ${it.kind.padEnd(10)} ${Math.round((it.progress || 0) * 100).toString().padStart(3)}%  ${it.title}  ${isFailed(it) ? '— ' + it.error : it.step || ''}`;
   try {
     if (cmd === 'add') {
       const opts = { ...(opt('--opts') ? JSON.parse(opt('--opts')) : {}) };
