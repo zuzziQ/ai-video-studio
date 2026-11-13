@@ -204,16 +204,30 @@ export const postText = it => [it.platform === 'youtube' || it.platform === 'fac
 
 // ---------- lock (shared with A1's queue runner) ----------
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// The holder creates the lock ('wx') and only then writes {pid, started}: a lock that is empty or not valid JSON yet and
+// younger than this is still being written, so it counts as held and is never deleted (M41).
+export const LOCK_WRITING_MS = 10e3;
+const lockState = f => { try { const mtime = fs.statSync(f).mtimeMs; return { mtime, raw: fs.readFileSync(f, 'utf8') }; } catch (e) { return e.code === 'ENOENT' ? null : { busy: true }; } };
 export function acquireLock() {
   const f = F('publish.lock'); fs.mkdirSync(HOME(), { recursive: true });
   for (let k = 0; k < 2; k++) {
     try { const fd = fs.openSync(f, 'wx', 0o600); fs.writeSync(fd, JSON.stringify({ pid: process.pid, started: new Date().toISOString(), by: 'publish.mjs run-due' })); fs.closeSync(fd); return 'own'; }
     catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      const l = readJSON(f, {}), age = Date.now() - (Date.parse(l.started) || fs.statSync(f).mtimeMs);
-      if (l.pid === process.ppid) return 'parent'; // the A1 runner holds it and spawned us
-      if (l.pid && alive(l.pid) && age < 6 * 3600e3) return null;
-      fs.rmSync(f, { force: true }); // stale (dead pid / > 6 h)
+      const st = lockState(f);
+      if (!st) continue;            // released in between → try to take it again
+      if (st.busy) return null;     // cannot read it right now (Windows busy file) → treat as held, try next run
+      let l = null; try { l = JSON.parse(st.raw); } catch {}
+      if (!l || typeof l !== 'object' || !l.pid) {
+        if (Math.abs(Date.now() - st.mtime) < LOCK_WRITING_MS) return null; // being written by its holder
+      } else {
+        if (l.pid === process.ppid) return 'parent'; // the A1 runner holds it and spawned us
+        const age = Date.now() - (Date.parse(l.started) || st.mtime);
+        if (alive(l.pid) && age < 6 * 3600e3) return null;
+      }
+      // stale (dead pid / > 6 h / empty for too long): delete only if it is still the same file we judged
+      const now2 = lockState(f);
+      if (now2 && !now2.busy && now2.raw === st.raw && now2.mtime === st.mtime) fs.rmSync(f, { force: true });
     }
   }
   return null;

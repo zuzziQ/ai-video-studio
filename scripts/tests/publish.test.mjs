@@ -150,6 +150,25 @@ test('khoá run-due: đang có tiến trình sống giữ khoá thì lượt nà
   assert.ok(!fs.existsSync(lock), 'khoá sau khi chạy xong được nhả');
 });
 
+test('khoá run-due (M41): khoá rỗng vừa tạo là đang được ghi nên bỏ qua và giữ nguyên; khoá rỗng đã cũ bị dọn', async () => {
+  reset();
+  const lock = path.join(HOME, 'publish.lock');
+  fs.writeFileSync(lock, ''); // tiến trình khác vừa openSync('wx') nhưng chưa kịp ghi {pid, started}
+  const skipped = await P.runDue({ log: () => {} });
+  assert.equal(skipped.skipped, 'locked');
+  assert.ok(fs.existsSync(lock), 'không xoá khoá đang được ghi');
+  assert.equal(fs.readFileSync(lock, 'utf8'), '', 'khoá đang được ghi giữ nguyên nội dung');
+  fs.writeFileSync(lock, '{"pi'); // ghi dở, chưa phải JSON
+  assert.equal((await P.runDue({ log: () => {} })).skipped, 'locked');
+  assert.ok(fs.existsSync(lock));
+  fs.writeFileSync(lock, '');
+  const old = new Date(Date.now() - P.LOCK_WRITING_MS - 60e3);
+  fs.utimesSync(lock, old, old); // rỗng quá lâu: tiến trình giữ khoá đã chết trước khi ghi
+  const ran = await P.runDue({ log: () => {} });
+  assert.equal(ran.skipped, undefined);
+  assert.ok(!fs.existsSync(lock), 'khoá rỗng cũ được dọn, lượt chạy xong nhả khoá của mình');
+});
+
 test('run-due: nhắc trước 10 phút đúng một lần, không nhắc lặp; ghi publish_last_run.json', async () => {
   reset();
   const { file } = mkVideo('tt.mp4', 500);
