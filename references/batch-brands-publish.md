@@ -13,7 +13,9 @@ Ba tính năng cho người làm nhiều video giống nhau (BĐS, bán hàng, k
 ## 1. Làm hàng loạt
 
 Một **nguồn** × một **bảng tính** → mỗi dòng một thư mục dự án (mở lại sửa được trong Studio) + một MP4. Chạy lần lượt từng dòng
-(một tác vụ nền, như Xuất), có tiến độ từng dòng, **Dừng** được, **Chạy tiếp** bỏ qua dòng đã xong.
+(một tác vụ nền, như Xuất), có tiến độ từng dòng, **Chạy tiếp** bỏ qua dòng đã xong. Điều khiển cả lô (M24): **Tạm dừng** = làm nốt
+dòng đang làm rồi dừng (các dòng sau về "chờ"), **Huỷ lô** = dừng ngay, mọi dòng chưa xong thành "đã huỷ" (`status.cancelled`;
+video đã xong giữ nguyên, vẫn Chạy tiếp được). Panel hiện 50 dòng một trang, tự theo trang có dòng đang làm.
 
 **Nguồn**
 - *Template* (`templates/*.json`, `templates/user/*.json`) hoặc *Mẫu hàng loạt* (`examples/batch/*.template.json`). Áp bằng đúng
@@ -67,7 +69,8 @@ Không có `--map` thì tự ghép theo tên cột. Mã thoát 2 nếu có dòng
 
 **API**: `GET /api/batch/sources`, `POST /api/batch/targets {source, columns}`, `POST /api/batch/sheet?name=` (body = file),
 `GET /api/batch/example`, `POST /api/batch/preview {…job, row, t}`, `POST /api/batch/start {…job | resume:dir}`,
-`GET /api/batch/status?dir=`, `GET /api/batch/list`. Dừng: `POST /api/job/cancel`.
+`GET /api/batch/status?dir=[&page=N|auto&size=50]` (có `page` thì chỉ trả một trang dòng + `counts`, `count`, `pages`, `pausing`),
+`GET /api/batch/list`, `POST /api/batch/pause {dir}`, `POST /api/batch/cancel {dir}`. Dừng ngay: `POST /api/job/cancel`.
 
 **Ví dụ BĐS**: `examples/batch/bds-can-ho-vi-du.csv` (5 căn hộ, mọi tên/giá/SĐT đều ghi "(ví dụ)" hoặc `0900 000 00x`) +
 `examples/batch/bds-can-ho.template.json` (gói `realestate`, 12 s, toàn bộ chữ là `{{cột}}`, 4 ảnh `anh_1…anh_4`, lời đọc cột `script`).
