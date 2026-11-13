@@ -1,17 +1,20 @@
 // Render timeline.json through engine/index.html with headless Chrome, pipe JPEG frames into ffmpeg.
 // usage: node render.mjs <timeline.json> <out.mp4> [--from 0] [--to 10] [--still 12.5 still.jpg] [--audio mix.wav]
-//                        [--workers N] [--fast]
+//                        [--workers N] [--fast] [--preset P]
 // --workers N: N Chrome pages render contiguous chunks in parallel into temp segments, joined losslessly
-//              (concat -c copy), audio muxed once at the end. Default min(6, cores-2). --workers 1 = serial.
-// --fast:      ffmpeg -preset veryfast (bigger file, quicker encode).
+//              (concat -c copy), audio muxed once at the end. Default min(4, physical cores-2), 3 above 1080p
+//              (render_hw.mjs renderPlan). --workers 1 = serial.
+// --fast:      ffmpeg -preset veryfast for a serial render too (parallel segments already use veryfast).
+// --preset P:  x264 preset for every encode (e.g. medium to get the old parallel output back).
+// Chrome draws with the GPU when there is one (render_hw.mjs launchChrome); AVS_RENDER_GPU=0 forces SwiftShader.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './platform.mjs';
 import { interceptCdn } from './net_cache.mjs';
+import { launchChrome, renderPlan, BACKGROUND_FLAGS } from './render_hw.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -23,20 +26,18 @@ tl.base = pathToFileURL(tlDir).href + '/';
 if (typeof tl.captions === 'string') tl.captions = JSON.parse(fs.readFileSync(path.resolve(tlDir, tl.captions), 'utf8'));
 const W = tl.width || 1280, H = tl.height || 720, fps = tl.fps || 30;
 if (tl.aroll && !tl.aroll.count) tl.aroll.count = fs.readdirSync(path.resolve(tlDir, path.dirname(tl.aroll.frames))).filter(f => f.endsWith('.jpg')).length;
-const PRESET = args.includes('--fast') ? 'veryfast' : 'medium';
 
 const CHROME = findChrome();
 
-const launchArgs = ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars',
-  '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
-  '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']; // WebGL for 3D HyperFrames blocks
 const browsers = [];
+let chrome = '';
 const engineUrl = pathToFileURL(path.join(here, '..', 'engine', 'index.html')).href;
 // JPEG frame size from the SOF0/SOF2 marker (sanity check: a background tab can capture a wrong-sized surface).
 const jpegSize = b => { for (let i = 2; i < b.length - 9;) { if (b[i] !== 0xff) return null; const m = b[i + 1]; if (m === 0xc0 || m === 0xc2) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)]; i += 2 + b.readUInt16BE(i + 2); } return null; };
 // One Chrome per worker, using its initial (foreground) tab: parallel tabs in one browser capture wrong-sized surfaces.
 async function openPage() {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: launchArgs });
+  const { browser, mode } = await launchChrome(puppeteer, { executablePath: CHROME, extra: BACKGROUND_FLAGS });
+  chrome = mode;
   browsers.push(browser);
   const page = (await browser.pages())[0] || await browser.newPage();
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
@@ -76,9 +77,8 @@ const n = Math.round((t1 - t0) * fps);
 // Audio: --audio, else tl.audio.mix, else the default mix_audio.py output (work/mix.wav) when it exists.
 const defMix = path.resolve(tlDir, tl.audio?.mix || 'work/mix.wav');
 const audio = opt('--audio', tl.audio && fs.existsSync(defMix) ? defMix : null);
-// Default min(6, cores-2), max 3 above 1080p (each worker is a whole Chrome); never less than ~1 s of frames per worker.
-const workers = Math.max(1, Math.min(+opt('--workers', Math.min(W * H > 2.5e6 ? 3 : 6, os.cpus().length - 2)) || 1, Math.ceil(n / fps)));
-const venc = ['-c:v', 'libx264', '-preset', PRESET, '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps)];
+const { workers, threads, preset } = renderPlan({ W, H, n, fps, workers: opt('--workers'), fast: args.includes('--fast'), preset: opt('--preset') });
+const venc = ['-c:v', 'libx264', '-preset', preset, '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), ...(threads ? ['-threads', String(threads)] : [])];
 
 const started = Date.now();
 let done = 0, lastShown = -1;
@@ -135,4 +135,4 @@ if (workers === 1) {
 }
 process.stdout.write(`\r${t1.toFixed(1)}s / ${t1}s  (${((Date.now() - started) / 1000).toFixed(0)}s elapsed)`);
 // Explicit exit: a leftover puppeteer handle can otherwise keep node alive ~20 s after the file is written.
-process.stdout.write(`\ndone -> ${outPath}  (${n} frames, ${workers} worker${workers > 1 ? 's' : ''}, ${(n / process.uptime()).toFixed(1)} fps, ${process.uptime().toFixed(1)}s)\n`, () => process.exit(0));
+process.stdout.write(`\ndone -> ${outPath}  (${n} frames, ${workers} worker${workers > 1 ? 's' : ''}, ${chrome}, ${preset}, ${(n / process.uptime()).toFixed(1)} fps, ${process.uptime().toFixed(1)}s)\n`, () => process.exit(0));

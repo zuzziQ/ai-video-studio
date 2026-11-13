@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findChrome } from './platform.mjs';
+import { launchChrome } from './render_hw.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(here, '..');
@@ -28,7 +29,7 @@ const [W, H] = land ? [1280, 720] : [720, 1280];
 Object.assign(tl, { width: W, height: H, scenes: [], caption_style: 'none', fx: [] });
 
 const CHROME = findChrome();
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const { browser } = await launchChrome(puppeteer, { executablePath: CHROME });
 const page = await browser.newPage();
 await page.setViewport({ width: W, height: H, deviceScaleFactor: land ? 320 / 1280 : 180 / 720 });
 const errs = [];

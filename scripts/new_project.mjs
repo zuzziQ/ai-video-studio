@@ -51,6 +51,7 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
   onStep('Nhận dạng giọng nói (whisper)', .05);
   await run(PY, ['-I', '-X', 'utf8', S('transcribe.py'), src, path.join(d, 'work/words_raw.json'), '--model', model, ...(lang && lang !== 'vi' ? ['--lang', lang] : [])]);
   onStep('Cắt khoảng lặng', .45);
+  fs.rmSync(path.join(d, 'work/aroll.mp4'), { force: true }); // M54: không ghi đè tại chỗ (có thể là liên kết cứng của bản anh em)
   await run(PY, ['-I', '-X', 'utf8', S('cut.py'), src, path.join(d, 'work/words_raw.json'), path.join(d, 'work')]);
   onStep(`Trích khung hình ${orient === 'horizontal' ? '16:9' : '9:16'}`, .6);
   const [FW, FH] = orient === 'horizontal' ? [1280, 720] : [720, 1280];

@@ -3,18 +3,28 @@
 ## 1. Render nhanh (`scripts/render.mjs`)
 
 ```bash
-node scripts/render.mjs timeline.json out.mp4 [--from 0] [--to 10] [--audio mix.wav] [--workers N] [--fast]
+node scripts/render.mjs timeline.json out.mp4 [--from 0] [--to 10] [--audio mix.wav] [--workers N] [--fast] [--preset P]
+node scripts/render_hw.mjs    # máy này sẽ render ra sao: GPU hay SwiftShader, số nhân, số worker mặc định
 node scripts/render.mjs timeline.json x --still 12.5 still.jpg
 ```
 
 - `--workers N`: N Chrome headless (mỗi worker một Chrome riêng) render các đoạn liền nhau → mỗi đoạn một file mp4 tạm
   (`<thư mục out>/.render_xxx/`), nối **không nén lại** (`ffmpeg concat -c copy`), âm thanh ghép một lần ở cuối.
-  Mặc định `min(6, số nhân CPU − 2)`; tự giảm để mỗi worker có ≥ 1 giây. `--workers 1` = chạy tuần tự như cũ.
+  Mặc định `min(4, số nhân thật − 2)` (nhân thật, không phải luồng logic; trên 1080p tối đa 3); tự giảm để mỗi worker có ≥ 1 giây.
+  `--workers 1` = chạy tuần tự như cũ. Mỗi ffmpeg đoạn bị giới hạn `-threads` = số luồng logic ÷ số worker (`M51`).
+- GPU (`M50`): Chrome dựng hình bằng GPU khi có (Windows: `--use-angle=d3d11`). Chrome đầu tiên tự đọc renderer WebGL; nếu là
+  phần mềm (SwiftShader, Microsoft Basic Render Driver, llvmpipe) hoặc mở lỗi thì cả lượt lùi về SwiftShader như cũ.
+  `AVS_RENDER_GPU=0` ép SwiftShader. Cờ Chrome của `render.mjs`, `thumbs.mjs`, `batch.mjs`, `build_templates.mjs`, `fx_audit.mjs`,
+  `hf_import.mjs` nằm chung ở `scripts/render_hw.mjs`.
 - Chụp khung bằng CDP `Page.captureScreenshot` (jpeg, `optimizeForSpeed`, `captureBeyondViewport:false`); nếu khung chụp
   sai kích thước thì tự quay về `page.screenshot`.
-- `--fast`: x264 `-preset veryfast` (mặc định `medium`, CRF 17 giữ nguyên) — file to hơn một chút, nhanh hơn ~10–15%.
-- Dòng tiến độ giữ dạng `X.Xs / Ys` (studio đọc để vẽ thanh tiến độ); cuối cùng in `done -> out.mp4 (n frames, N workers, fps)`.
+- Preset x264 (CRF 17 giữ nguyên): các đoạn song song mặc định `veryfast` (SSIM 0,994 so với `medium`, CPU mã hoá ÷2,4); render
+  một worker (gồm `--still`) giữ `medium`. Bản ghép cuối là `concat -c copy`, không nén lại. `--fast` = `veryfast` cả khi một worker;
+  `--preset medium` lấy lại hành vi cũ cho mọi đoạn.
+- Dòng tiến độ giữ dạng `X.Xs / Ys` (studio đọc để vẽ thanh tiến độ); cuối cùng in `done -> out.mp4 (n frames, N workers, gpu|swiftshader, preset, fps)`.
 - Huỷ (SIGTERM từ nút Huỷ của studio) sẽ tắt mọi Chrome/ffmpeg con và xoá file tạm.
+
+Số đo trên Windows 6 nhân + GTX 1660 Ti trước/sau `M50`/`M51`: `docs/perf/2026-11-13-m50-m51-gpu-workers.md`.
 
 **Đo trên dự án demo 1080×1920, 30 fps (máy 15 nhân, đang có tải khác):**
 
