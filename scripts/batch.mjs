@@ -244,7 +244,8 @@ async function browser() {
   if (BROWSER) return BROWSER;
   const { default: puppeteer } = await import('puppeteer-core');
   const CHROME = findChrome();
-  BROWSER = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const { launchChrome } = await import('./render_hw.mjs');
+  BROWSER = (await launchChrome(puppeteer, { executablePath: CHROME })).browser;
   return BROWSER;
 }
 // applyTemplate runs inside the engine page (same function Studio uses).

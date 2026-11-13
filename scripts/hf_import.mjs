@@ -10,6 +10,7 @@ import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findChrome } from './platform.mjs';
 import { localize } from './hf_localize.mjs';
+import { launchChrome, BACKGROUND_FLAGS } from './render_hw.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(here, '..');
@@ -35,8 +36,7 @@ var v=vars(),r=document.querySelector('[data-composition-id]')||document.documen
 })();</script>`;
 
 const CHROME = findChrome();
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, protocolTimeout: 60000,
-  args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const { browser } = await launchChrome(puppeteer, { executablePath: CHROME, protocolTimeout: 60000, extra: BACKGROUND_FLAGS });
 
 function copyDir(a, b) {
   fs.mkdirSync(b, { recursive: true });
