@@ -9,7 +9,7 @@ import net from 'node:net';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { forbiddenDir, resolveProject, tokenOk, sameOrigin, bodyStatus, readJson, tokenFile } from '../../studio/security.mjs';
+import { forbiddenDir, resolveProject, fileAllowed, tokenOk, sameOrigin, bodyStatus, readJson, tokenFile } from '../../studio/security.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-sec-'));
@@ -83,6 +83,23 @@ test('bodyStatus: JSON vs upload limits, chunked refused', () => {
   assert.equal(s('/api/upload', { 'content-length': '900' }), 0);
   assert.equal(s('/api/autopilot/upload', { 'content-length': '1001' }), 413);
   assert.equal(s('/api/save', { 'transfer-encoding': 'chunked' }), 411);
+  assert.equal(s('/api/batch/sheet', { 'content-length': '101' }), 413); // buffered in memory → JSON cap
+});
+
+test('resolveProject: UNC paths refused on Windows', { skip: process.platform !== 'win32' }, () => {
+  assert.throws(() => resolveProject('\\\\localhost\\c$\\Users', HOME), e => e.status === 403);
+  assert.throws(() => resolveProject('//localhost/c$/Users', HOME), e => e.status === 403);
+});
+
+test('symlinks into the config folder are refused (project folder, timeline, /project/ file)', () => {
+  const link = (target, at, type) => { try { fs.symlinkSync(target, at, type); return true; } catch { return false; } };
+  const p = mk('linkproj', { 'timeline.json': TL });
+  if (link(HOME, path.join(p, 'cfg'), 'junction')) assert.equal(fileAllowed(path.join(p, 'cfg', 'telegram.json'), HOME), false);
+  assert.equal(fileAllowed(path.join(p, 'timeline.json'), HOME), true);
+  const q = mk('linkproj2');
+  if (link(path.join(HOME, 'timeline.json'), path.join(q, 'timeline.json'), 'file')) assert.throws(() => resolveProject(q, HOME), e => e.status === 403);
+  const r = path.join(TMP, 'linkhome');
+  if (link(HOME, r, 'junction')) assert.throws(() => resolveProject(r, HOME), e => e.status === 403);
 });
 
 test('readJson: caps the bytes it buffers', async () => {

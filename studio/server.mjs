@@ -11,7 +11,7 @@ import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
-import { resolveProject, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson } from './security.mjs';
+import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
@@ -386,7 +386,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/project/')) {
       if (!project) return json(res, { error: 'no project' }, 404);
       const f = under(project.dir, p.slice(9));
-      return f ? sendFile(req, res, f) : json(res, {}, 403);
+      return f && fileAllowed(f) ? sendFile(req, res, f) : json(res, {}, 403);
     }
     if (p === '/api/project' && req.method === 'GET') return project ? json(res, readProject()) : json(res, { error: 'Chưa mở dự án' }, 404);
     if (p === '/api/save' && req.method === 'POST') return json(res, save(await body(req)));

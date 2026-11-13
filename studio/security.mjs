@@ -26,7 +26,7 @@ export function forbiddenDir(dir, home = AVS_HOME()) {
   }
   // other dot-folders directly in the user's home (~/.ssh, ~/.claude, ~/.config, …) hold credentials too
   const u = real(os.homedir());
-  if (inside(d, u) && d !== u) {
+  if (inside(d, u) && key(d) !== key(u)) {
     const top = path.relative(u, d).split(path.sep)[0];
     if (top.startsWith('.') && !inside(d, h)) return 'thư mục ẩn trong thư mục người dùng';
   }
@@ -37,12 +37,15 @@ export function forbiddenDir(dir, home = AVS_HOME()) {
 export function resolveProject(p, home = AVS_HOME()) {
   const fail = (msg, status = 400) => Object.assign(new Error(msg), { status });
   if (typeof p !== 'string' || !p.trim()) throw fail('Thiếu đường dẫn dự án');
+  // UNC paths (\\localhost\c$\…) are not resolved to drive letters by realpath, so the folder checks could not see through them.
+  if (process.platform === 'win32' && /^[\\/]{2}/.test(p.trim())) throw fail('Không mở dự án qua đường dẫn mạng (UNC)', 403);
   const abs = path.resolve(p.trim());
   const isFile = /\.json$/i.test(abs);
   const tlFile = isFile ? abs : path.join(abs, 'timeline.json');
   if (!fs.existsSync(tlFile) || !fs.statSync(tlFile).isFile()) throw fail(`không thấy ${tlFile}`);
   const dir = path.dirname(tlFile);
-  const why = forbiddenDir(dir, home);
+  // the timeline itself may be a symlink into the config folder
+  const why = forbiddenDir(dir, home) || forbiddenDir(path.dirname(real(tlFile)), home);
   if (why) throw fail(`Không mở được ${dir}: ${why}`, 403);
   if (isFile && path.basename(tlFile).toLowerCase() !== 'timeline.json') {
     // another file name is fine only when it really is a timeline (not config.json & co.)
@@ -51,6 +54,9 @@ export function resolveProject(p, home = AVS_HOME()) {
   }
   return { dir, tlFile };
 }
+
+// /project/<file>: a symlink inside the project must not lead into the config folder.
+export const fileAllowed = (f, home = AVS_HOME()) => forbiddenDir(path.dirname(real(f)), home) === null;
 
 // ---------- session token ----------
 export const newToken = () => crypto.randomBytes(24).toString('base64url');
@@ -93,8 +99,8 @@ export const limits = () => ({
   json: (+process.env.AVS_MAX_JSON_MB || 32) * MB, // timelines with long captions stay far below
   upload: (+process.env.AVS_MAX_UPLOAD_MB || 20 * 1024) * MB, // raw 4K phone footage
 });
-// Routes that stream the raw request body to disk.
-export const UPLOAD_ROUTES = /^\/api\/(upload|pick\/upload|autopilot\/upload|longform\/upload|stylelab\/upload|brolllib\/upload|brands\/logo|batch\/sheet)$/;
+// Routes that stream the raw request body to disk. Routes that buffer it in memory (/api/batch/sheet) keep the JSON cap.
+export const UPLOAD_ROUTES = /^\/api\/(upload|pick\/upload|autopilot\/upload|longform\/upload|stylelab\/upload|brolllib\/upload|brands\/logo)$/;
 // 0 when the body may be read, else the HTTP status to answer. Node's parser stops a body at its Content-Length, so the
 // declared length is the real ceiling; bodies without one (chunked) are refused.
 export function bodyStatus(req, p, lim = limits()) {
