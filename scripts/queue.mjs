@@ -2,7 +2,7 @@
 // Store: ~/.ai-video-studio/queue.json (AVS_HOME overrides); settings: ~/.ai-video-studio/autopilot.json; lock: queue.lock.
 // One runner at a time (Studio server lane, `queue.mjs run`, or the LaunchAgent) holds queue.lock; the others stay passive and
 // take over when the holder exits. The runner executes at most ONE item at a time, retries a failed item once, scans the watch
-// folders and calls `node scripts/publish.mjs run-due` every 60 s when that script exists.
+// folders and, every 60 s, calls `node scripts/publish.mjs run-due` when schedule.json has something due (M55).
 // usage:
 //   node scripts/queue.mjs add <kind> <input> [--profile id] [--out dir] [--batch lô] [--opts '{"n":6}']   kinds: autopilot|highlights|topic|variants|publish
 //   node scripts/queue.mjs list | cancel <id> | retry <id> [--qc-override "<lý do>"] | remove <id> | up <id> | down <id> | clear-done
@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { notify } from './notify.mjs';
 import { killTree } from './platform.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
+import { scheduleHasDue } from './schedule_due.mjs';
 export { withFileLock };
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -185,8 +186,10 @@ function unlock() { const l = readLock(); if (l?.pid === process.pid) fs.rmSync(
 
 // ---------- runner ----------
 export class Runner {
-  constructor({ role = 'cli', daemon = true, log = (...a) => console.log(...a) } = {}) {
-    Object.assign(this, { role, daemon, log, child: null, item: null, active: false, timer: null, seen: new Map(), lastDue: 0, due: null, watchErr: null, idleSince: Date.now() });
+  // execDue(args, done): starts `node <args>` for run-due (tests replace it to count spawns without running publish.mjs)
+  constructor({ role = 'cli', daemon = true, log = (...a) => console.log(...a), execDue } = {}) {
+    Object.assign(this, { role, daemon, log, child: null, item: null, active: false, timer: null, seen: new Map(), lastDue: 0, due: null, dueRunning: false, watchErr: null, idleSince: Date.now(),
+      execDue: execDue || ((args, done) => execFile('node', args, { timeout: 50 * 60000, cwd: SKILL }, done)) });
   }
   status() {
     const l = readLock();
@@ -209,8 +212,11 @@ export class Runner {
     try {
       this.active = tryLock(this.role);
       if (!this.active) return;
-      // items left "running" by a runner that died → back to the queue (autopilot resumes where it stopped)
-      mutate(q => { for (const it of q.items) if (it.state === 'running' && it.runner !== process.pid && !alive(it.runner)) requeue(it, 'Chạy tiếp sau khi bị dừng'); });
+      // items left "running" by a runner that died → back to the queue (autopilot resumes where it stopped).
+      // M55: look first without the lock; lock and rewrite queue.json only when there is such an item (mutate re-checks under
+      // the lock). An idle runner no longer rewrites queue.json every 2 s.
+      const orphan = it => it.state === 'running' && it.runner !== process.pid && !alive(it.runner);
+      if (loadQueue().items.some(orphan)) mutate(q => { for (const it of q.items) if (orphan(it)) requeue(it, 'Chạy tiếp sau khi bị dừng'); });
       const st = loadSettings();
       if (this.daemon && st.watch.on) this.scan(st);
       if (this.child) {
@@ -226,9 +232,16 @@ export class Runner {
   runDue() {
     const f = path.join(SKILL, 'scripts/publish.mjs');
     if (!fs.existsSync(f)) { this.due = { at: new Date().toISOString(), skipped: 'chưa có scripts/publish.mjs' }; return; }
-    execFile('node', [f, 'run-due'], { timeout: 50 * 60000, cwd: SKILL }, (e, out, err) => {
+    // M55: a cheap read of schedule.json decides; no process is started when nothing is due, nor while our previous run-due
+    // is still going (it holds publish.lock, so a second one would only skip). publish.mjs keeps its own locks (M40, M41).
+    if (this.dueRunning) return;
+    if (!scheduleHasDue()) { this.due = { at: new Date().toISOString(), ok: true, msg: 'không có mục đến hạn' }; return; }
+    this.dueRunning = true;
+    const done = (e, out, err) => {
+      this.dueRunning = false;
       this.due = { at: new Date().toISOString(), ok: !e, msg: String(e ? (err || e.message) : out).trim().split('\n').pop()?.slice(0, 200) || '' };
-    });
+    };
+    try { this.execDue([f, 'run-due'], done); } catch (e) { done(e, '', ''); }
   }
   runItem(it0) {
     const upd = patch => mutate(q => { const it = q.items.find(x => x.id === it0.id); if (it) Object.assign(it, patch); return it; });

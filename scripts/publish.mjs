@@ -26,6 +26,7 @@ import { spawn, execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { openPath, revealPath, notifyDesktop, copyText } from './platform.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
+import { isPreRemindDue, isYoutubeDue, isPostDue } from './schedule_due.mjs';
 
 export const HOME = () => process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
 const F = name => path.join(HOME(), name);
@@ -242,13 +243,13 @@ export async function runDue({ log = console.log } = {}) {
   try {
     const s = loadSchedule(), set = s.settings, at = it => new Date(it.when).getTime();
     // 1) nhắc trước 10 phút (không phải YouTube)
-    for (const it of s.items.filter(x => x.state === 'planned' && x.platform !== 'youtube' && !x.preReminded && at(x) > T && at(x) - set.remindMin * 60e3 <= T)) {
+    for (const it of s.items.filter(x => isPreRemindDue(x, set, T))) {
       notify('AI Video Studio · sắp đăng', `${Math.round((at(it) - T) / 60e3)} phút nữa: đăng “${(it.title || path.basename(it.file)).slice(0, 60)}” lên ${PLATFORMS[it.platform].name}`);
       mutate(s2 => { const x = s2.items.find(y => y.id === it.id); if (x) x.preReminded = true; });
       res.preReminded.push(it.id);
     }
     // 2) YouTube: tải lên trước giờ đăng (ytLeadMin), YouTube tự công khai đúng giờ (status.publishAt)
-    const yts = s.items.filter(x => x.platform === 'youtube' && (x.state === 'planned' || x.state === 'uploading') && at(x) - set.ytLeadMin * 60e3 <= T && !(Date.parse(x.retryAfter) > T)).sort((a, b) => at(a) - at(b));
+    const yts = s.items.filter(x => isYoutubeDue(x, set, T)).sort((a, b) => at(a) - at(b));
     for (const it of yts) {
       if (!ytConnected()) { await remind(it, T, 'Chưa kết nối YouTube nên chuyển sang nhắc đăng tay'); res.reminded.push(it.id); continue; }
       const patch = o => mutate(s2 => { const x = s2.items.find(y => y.id === it.id); if (x) Object.assign(x, o, { updated: now().toISOString() }); });
@@ -270,7 +271,7 @@ export async function runDue({ log = console.log } = {}) {
       }
     }
     // 3) nền tảng khác: đến giờ → thông báo + mở trang đăng + hiện file + chép caption (mỗi lượt 1 mục để clipboard không bị đè)
-    const due = loadSchedule().items.filter(x => x.state === 'planned' && x.platform !== 'youtube' && at(x) <= T).sort((a, b) => at(a) - at(b));
+    const due = loadSchedule().items.filter(x => isPostDue(x, set, T)).sort((a, b) => at(a) - at(b));
     if (due.length) { await remind(due[0], T, null, due.length - 1); res.reminded.push(due[0].id); res.pending = due.length - 1; }
   } finally { releaseLock(lock); }
   writePrivate(F('publish_last_run.json'), res);
