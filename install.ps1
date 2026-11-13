@@ -71,6 +71,10 @@ if (-not $NoCuda -and (Has 'nvidia-smi')) {
 & $VPY -m pip install -q edge-tts; if ($LASTEXITCODE) { Say 'Bỏ qua edge-tts (giọng đọc online, không bắt buộc)' }
 Push-Location $S; npm install --silent; $npm = $LASTEXITCODE; Pop-Location
 if ($npm) { Die 'npm install lỗi' }
+# chrome-headless-shell cho worker render (M57, tuỳ chọn): tải lỗi thì vẫn render bằng Chrome đã cài
+Say 'Tải chrome-headless-shell (render nhanh hơn, không bắt buộc)'
+try { $env:AVS_HOME = $HOME_DIR; node (Join-Path $S 'install_headless_shell.mjs'); $hs = $LASTEXITCODE } catch { $hs = 1 }
+if ($hs) { Say 'Không tải được chrome-headless-shell (bỏ qua, render bằng Chrome đã cài)' }
 $A = Join-Path $REPO 'assets'
 if (-not (Test-Path "$A\sfx\catalog.json")) { & $VPY (Join-Path $S 'gen_sfx.py') "$A\sfx" --ext flac }
 if (-not (Test-Path "$A\music\catalog.json")) { & $VPY (Join-Path $S 'gen_music.py') "$A\music" }

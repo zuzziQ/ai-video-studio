@@ -4,7 +4,8 @@
 
 ```bash
 node scripts/render.mjs timeline.json out.mp4 [--from 0] [--to 10] [--audio mix.wav] [--workers N] [--fast] [--preset P]
-node scripts/render_hw.mjs    # máy này sẽ render ra sao: GPU hay SwiftShader, số nhân, số worker mặc định
+node scripts/render_hw.mjs    # máy này sẽ render ra sao: GPU hay SwiftShader, Chrome hay headless-shell, vsync, số nhân, số worker
+node scripts/install_headless_shell.mjs   # tải chrome-headless-shell khớp Chrome máy này vào $AVS_HOME (tuỳ chọn, M57)
 node scripts/render.mjs timeline.json x --still 12.5 still.jpg
 ```
 
@@ -16,6 +17,12 @@ node scripts/render.mjs timeline.json x --still 12.5 still.jpg
   phần mềm (SwiftShader, Microsoft Basic Render Driver, llvmpipe) hoặc mở lỗi thì cả lượt lùi về SwiftShader như cũ.
   `AVS_RENDER_GPU=0` ép SwiftShader. Cờ Chrome của `render.mjs`, `thumbs.mjs`, `batch.mjs`, `build_templates.mjs`, `fx_audit.mjs`,
   `hf_import.mjs` nằm chung ở `scripts/render_hw.mjs`.
+- Không chờ vsync (`M57`): mọi Chrome mở qua `launchChrome` thêm `--disable-gpu-vsync --disable-frame-rate-limit` (mỗi lần chụp
+  không còn chờ 2–3 khung compositor 60 Hz). `AVS_RENDER_NOVSYNC=0` tắt hai cờ này.
+- `chrome-headless-shell` (`M57`): khi có trong `$AVS_HOME/chrome-headless-shell` (bộ cài tải bằng
+  `node scripts/install_headless_shell.mjs`, đúng bản Chrome máy đang có; không bắt buộc) thì worker dùng nó thay Chrome đầy đủ.
+  `AVS_CHROME_SHELL=<đường dẫn exe>` chỉ định bản khác, `AVS_CHROME_SHELL=0` không dùng. Mở lỗi, hoặc chỉ Chrome đầy đủ mới có GPU,
+  thì cả lượt lùi về Chrome cài sẵn. Chrome tự cập nhật thì chạy lại lệnh cài để headless-shell theo kịp.
 - Chụp khung bằng CDP `Page.captureScreenshot` (jpeg, `optimizeForSpeed`, `captureBeyondViewport:false`); nếu khung chụp
   sai kích thước thì tự quay về `page.screenshot`.
 - Preset x264 (CRF 17 giữ nguyên): các đoạn song song mặc định `veryfast` (SSIM 0,994 so với `medium`, CPU mã hoá ÷2,4); render
@@ -24,7 +31,8 @@ node scripts/render.mjs timeline.json x --still 12.5 still.jpg
 - Dòng tiến độ giữ dạng `X.Xs / Ys` (studio đọc để vẽ thanh tiến độ); cuối cùng in `done -> out.mp4 (n frames, N workers, gpu|swiftshader, preset, fps)`.
 - Huỷ (SIGTERM từ nút Huỷ của studio) sẽ tắt mọi Chrome/ffmpeg con và xoá file tạm.
 
-Số đo trên Windows 6 nhân + GTX 1660 Ti trước/sau `M50`/`M51`: `docs/perf/2026-11-13-m50-m51-gpu-workers.md`.
+Số đo trên Windows 6 nhân + GTX 1660 Ti trước/sau `M50`/`M51`: `docs/perf/2026-11-13-m50-m51-gpu-workers.md`; `M57`:
+`docs/perf/2026-11-13-m57-novsync-headless-shell.md`.
 
 **Đo trên dự án demo 1080×1920, 30 fps (máy 15 nhân, đang có tải khác):**
 

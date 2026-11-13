@@ -30,6 +30,9 @@ command -v claude >/dev/null && say "Có Claude Code CLI → bật được AI d
 # 2. Thư viện Python + puppeteer
 say "Cài thư viện (Python venv + puppeteer-core) — lần đầu mất vài phút"
 bash "$REPO/scripts/setup.sh"
+# chrome-headless-shell cho worker render (M57, tuỳ chọn): tải lỗi thì vẫn render bằng Chrome đã cài
+say "Tải chrome-headless-shell (render nhanh hơn, không bắt buộc)"
+AVS_HOME="$HOME_DIR" node "$REPO/scripts/install_headless_shell.mjs" || say "Không tải được chrome-headless-shell (bỏ qua, render bằng Chrome đã cài)"
 
 # 3. Gắn thành skill của Claude Code (symlink để git pull là cập nhật)
 if [ "$LINK" = 1 ] && [ "$REPO" != "$SKILL_DIR" ]; then
