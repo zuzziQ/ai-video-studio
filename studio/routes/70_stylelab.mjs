@@ -8,7 +8,10 @@
 //   POST /api/stylelab/generate {w?, mode:'clone'|'describe', desc, orient, industry, colors, font, images[], name, model} → job → { ok, w }
 //   GET  /api/stylelab/result?w=                 → result.json (also written when it failed)
 //   GET  /api/stylelab/list · POST /api/stylelab/delete {id}
+//   GET  /api/stylelab/packs                     → [{ id, file, name, origin: 'repo'|'stylelab'|'other', trusted }] (M38, engine/packs/user)
+//   POST /api/stylelab/trust {id}                → người dùng tin gói 'other' này (nhớ theo sha256 nội dung)
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 export default ctx => {
@@ -26,8 +29,66 @@ export default ctx => {
       if (m) { ctx.job.progress = +m[1]; ctx.job.step = m[2]; } else if (/^LỖI: /.test(l)) ctx.job.error = l.slice(5);
     }).catch(e => { throw new Error(ctx.job.error || e.message); });
   });
+  // M38: user packs are plain JS that runs unsandboxed in the Studio preview (with the session token) and in every render.
+  // Trusted without asking: a pack that ships with the repo (git: tracked and unmodified; fail-closed when git can't say),
+  // or one Style Lab made on this machine (a local work folder's result.json names it; its hash is pinned the first time it
+  // is seen, so a later edit warns again). Anything else (copied in, restored from another machine's store, edited) needs
+  // the user's explicit OK, remembered per content hash in ~/.ai-video-studio/packs-trust.json. engine/packs/user/_all.js
+  // (what the engine actually loads) must equal the rebuild from the single packs (scripts/style_lab.mjs rebuildAll) or be
+  // the repo's unmodified copy; otherwise it is listed too.
+  const UPACK = path.join(ctx.SKILL, 'engine/packs/user'), REL = 'engine/packs/user/';
+  const TRUST = path.join(HOME, 'packs-trust.json');
+  const readTrust = () => { try { return JSON.parse(fs.readFileSync(TRUST, 'utf8')) || {}; } catch { return {}; } };
+  const writeTrust = t => { fs.mkdirSync(HOME, { recursive: true }); fs.writeFileSync(TRUST, JSON.stringify(t, null, 1)); };
+  const norm = s => s.replace(/\r\n/g, '\n');
+  const sha = f => crypto.createHash('sha256').update(norm(fs.readFileSync(f, 'utf8'))).digest('hex');
+  const git = argv => new Promise(ok => execFile('git', ['-C', ctx.SKILL, ...argv], { timeout: 10000, windowsHide: true, maxBuffer: 4e6 },
+    (e, out) => ok(e ? null : String(out).split('\0').filter(Boolean))));
+  // repo-clean files under engine/packs/user (paths relative to SKILL, NUL-separated: no quoting of non-ASCII names)
+  async function repoClean() {
+    const [tracked, changed] = await Promise.all([git(['ls-files', '-z', '--', REL]), git(['diff', '--name-only', '-z', '--relative', 'HEAD', '--', REL])]);
+    if (!tracked || !changed) return new Set();
+    const ch = new Set(changed);
+    return new Set(tracked.filter(f => !ch.has(f)));
+  }
+  // pack ids named by result.json of Style Lab runs on this machine
+  function madeHere() {
+    const ids = new Set();
+    try { for (const w of fs.readdirSync(ROOT)) { try { const r = JSON.parse(fs.readFileSync(path.join(ROOT, w, 'result.json'), 'utf8')); if (r?.ok && r.id) ids.add(String(r.id)); } catch { /* not a finished run */ } } } catch { /* no stylelab yet */ }
+    return ids;
+  }
+  const packFiles = () => fs.readdirSync(UPACK).filter(f => f.endsWith('.js') && f !== '_all.js').sort();
+  const rebuilt = files => `// Gói style của người dùng (Style Lab, scripts/style_lab.mjs) — file tự sinh, đừng sửa tay: sửa engine/packs/user/<id>.js rồi chạy "node scripts/style_lab.mjs sync".\n`
+    + files.map(f => `// ---- ${f} ----\ntry {\n${fs.readFileSync(path.join(UPACK, f), 'utf8')}\n} catch (e) { console.error('user pack ${f}', e); }\n`).join('\n');
+  async function packs() {
+    if (!fs.existsSync(UPACK)) return [];
+    const [clean, here, trust] = [await repoClean(), madeHere(), readTrust()];
+    let pinned = false;
+    const files = packFiles();
+    const list = files.map(f => {
+      const id = f.slice(0, -3), h = sha(path.join(UPACK, f));
+      let tpl = null; try { tpl = JSON.parse(fs.readFileSync(path.join(ctx.SKILL, 'templates/user', id + '.json'), 'utf8')); } catch { /* none */ }
+      const origin = clean.has(REL + f) ? 'repo' : here.has(id) ? 'stylelab' : 'other';
+      if (origin === 'stylelab' && !trust[id]) { trust[id] = h; pinned = true; }
+      return { id, file: REL + f, name: tpl?.name || id, origin, trusted: origin === 'repo' || trust[id] === h };
+    });
+    if (pinned) writeTrust(trust);
+    const all = path.join(UPACK, '_all.js');
+    if (fs.existsSync(all) && !clean.has(REL + '_all.js') && norm(fs.readFileSync(all, 'utf8')) !== norm(rebuilt(files))) {
+      list.push({ id: '_all', file: REL + '_all.js', name: '_all.js (tệp gộp mà engine nạp, khác với các gói lẻ)', origin: 'other', trusted: trust._all === sha(all) });
+    }
+    return list;
+  }
   return async (req, res, p, u) => {
     if (!p.startsWith('/api/stylelab/')) return false;
+    if (p === '/api/stylelab/packs') return ctx.json(res, await packs()), true;
+    if (p === '/api/stylelab/trust' && req.method === 'POST') {
+      const b = await ctx.body(req), id = String(b.id || '');
+      // only names that exist in engine/packs/user (no path parts can get through)
+      if (!fs.existsSync(UPACK) || !(id === '_all' || packFiles().includes(id + '.js'))) return ctx.json(res, { error: 'Không có gói ' + id }, 400), true;
+      const t = readTrust(); t[id] = sha(path.join(UPACK, id + '.js')); writeTrust(t);
+      return ctx.json(res, { ok: true }), true;
+    }
     const q = k => u.searchParams.get(k);
     if (p === '/api/stylelab/check') {
       const { execClaude } = await import('../../scripts/platform.mjs');

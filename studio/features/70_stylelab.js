@@ -28,6 +28,7 @@
   .sl-mine img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; background: #000; flex: none; }
   .sl-mine .tx { flex: 1; min-width: 0; } .sl-mine .tx b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sl-mine .tx small { color: var(--tx3); font-size: 10.5px; } .sl-mine button.icon { width: 26px; height: 26px; flex: none; }
+  .sl-warn { border-color: var(--bad); } .sl-warn h4 { color: var(--bad); } .sl-warn p { font-size: 11.5px; }
   .sl-imgs { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; } .sl-imgs img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; }`;
   document.head.appendChild(css);
 
@@ -40,6 +41,23 @@
   const fileUrl = (w, f) => avsUrl(`/api/stylelab/file?w=${encodeURIComponent(w)}&f=${encodeURIComponent(f)}`);
 
   async function loadStyles() { st.styles = await S.api('/api/stylelab/list').catch(() => []); if (st.visible) render(); }
+  // M38: user packs run as plain JS (Studio preview + every render). Warn about packs that neither ship with the repo nor were
+  // made by Style Lab on this machine, until the user says they trust them (or deletes them).
+  async function loadPacks() { st.packs = await S.api('/api/stylelab/packs').catch(() => []); if (st.visible) render(); return st.packs; }
+  const foreign = () => (st.packs || []).filter(x => !x.trusted);
+  const warnCard = () => !foreign().length ? '' : `<div class="sl-card sl-warn"><h4><i class="ti ti-alert-triangle"></i> Gói style không rõ nguồn (${foreign().length})</h4>
+      <p>Các gói dưới đây không đi kèm bản cài và không do Style Lab trên máy này tạo (chép từ nơi khác, khôi phục từ máy khác hoặc đã bị sửa).
+      Mã JS của gói chạy với toàn quyền trong Studio (gọi được API của Studio) và khi xuất video. Chỉ giữ gói bạn tin nguồn.</p>
+      ${foreign().map(x => `<div class="sl-mine"><div class="tx"><b>${S.esc(x.name)}</b><small>${S.esc(x.file)}</small></div>
+        <button data-trust="${S.esc(x.id)}" title="Tôi tin nguồn gói này">Tin gói này</button>
+        ${/^u_[a-z0-9_]+$/.test(x.id) ? `<button class="icon" data-del="${S.esc(x.id)}" title="Xoá gói"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('')}</div>`;
+  async function trustPack(id) {
+    const x = (st.packs || []).find(p => p.id === id);
+    if (!confirm(`Tin gói “${x?.name || id}” (${x?.file || id})? Mã của gói sẽ chạy trong Studio và khi xuất video mà không cảnh báo nữa (đến khi nội dung gói đổi).`)) return;
+    const r = await S.api('/api/stylelab/trust', { id });
+    if (!r.ok) return S.toast('Lỗi: ' + (r.error || ''));
+    await loadPacks(); render();
+  }
   async function checkCli() { st.check = await S.api('/api/stylelab/check').catch(e => ({ error: e.message })); if (st.visible) render(); }
 
   function render() {
@@ -48,8 +66,10 @@
     st.visible = true;
     if (!st.styles) loadStyles();
     if (!st.check) checkCli();
+    if (!st.packs) loadPacks();
     const running = st.job && st.job.state === 'running';
     b.innerHTML = `<div class="seg" id="sltab">${[['clone', 'ti-movie', 'Clone từ video'], ['describe', 'ti-writing', 'Từ mô tả']].map(([k, i, l]) => `<button data-t="${k}" class="${st.tab === k ? 'on' : ''}"><i class="ti ${i}"></i> ${l}</button>`).join('')}</div>
+      ${warnCard()}
       ${st.check?.error ? `<div class="sl-card"><p class="sl-err"><i class="ti ti-alert-triangle"></i> ${S.esc(st.check.error)}</p></div>` : ''}
       ${running || (st.job && st.job.state === 'error' && !st.result) ? progCard() : ''}
       ${!running && st.result ? resultCard(st.result) : ''}
@@ -127,6 +147,7 @@
       if ((x = e.target.closest('[data-apply]'))) return applyStyle(x.dataset.apply);
       if ((x = e.target.closest('[data-lib]'))) return openLib(x.dataset.lib);
       if ((x = e.target.closest('[data-del]'))) return delStyle(x.dataset.del);
+      if ((x = e.target.closest('[data-trust]'))) return trustPack(x.dataset.trust);
       if ((x = e.target.closest('[data-sh]'))) { st.sheet = +x.dataset.sh; return render(); }
       if ((x = e.target.closest('[data-rmimg]'))) { save(); st.d.images.splice(+x.dataset.rmimg, 1); return render(); }
       if (e.target.matches('.sl-sheet, .sl-thumbs img')) return S.modal(`<img src="${e.target.src}" style="max-width:100%;max-height:80vh;display:block;margin:auto"><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
@@ -219,11 +240,12 @@
     if (!r.ok) return S.toast('Lỗi: ' + (r.error || ''));
     const w = S.win; if (w?.PACKS) for (let i = w.PACKS.length - 1; i >= 0; i--) if (w.PACKS[i].id === id) w.PACKS.splice(i, 1);
     if (st.result?.id === id) st.result = null;
-    refreshTemplates(); st.styles = null; S.toast('Đã xoá style ' + id); render();
+    refreshTemplates(); st.styles = null; st.packs = null; S.toast('Đã xoá style ' + id); render();
   }
 
   S.addPanel('stylelab', 'ti-dna', 'Tạo style', render);
   // other panels re-render #libbody; stop live updates when they do
   document.addEventListener('click', e => { if (e.target.closest('#rail [data-p]') && !e.target.closest('[data-p="stylelab"]')) st.visible = false; }, true);
+  S.onReady(() => loadPacks().then(l => { const n = l.filter(x => !x.trusted).length; if (n) S.toast(`Cảnh báo: ${n} gói style không rõ nguồn chạy trong Studio — xem panel “Tạo style”.`); }));
   S.onReady(() => { fetch('/api/job').then(r => r.json()).then(j => { if (j?.kind === 'stylelab' && j.state === 'running') { st.w = j.w; st.kind = /describe/.test(j.w || '') ? 'describe' : /analyze|^\d+_clone/.test(j.w || '') && j.progress < .3 ? 'analyze' : 'clone'; watch(async jj => { st.result = await S.api('/api/stylelab/result?w=' + encodeURIComponent(st.w)); if (st.result.none) { st.result = null; st.an = await S.api('/api/stylelab/analysis?w=' + encodeURIComponent(st.w)); if (st.an.error) st.an = null; } render(); }); } }).catch(() => {}); });
 })();
