@@ -15,10 +15,10 @@
     "hash": "82ce9e3c4332"
   },
   "chunk:studio/studio-plugin": {
-    "hash": "6b6f3865fc39"
+    "hash": "41f5bd1d7b25"
   },
   "guardrail:studio#0/0": {
-    "hash": "6b6f3865fc39"
+    "hash": "41f5bd1d7b25"
   },
   "guardrail:studio#1/0": {
     "hash": "1a3962ed5851"
@@ -27,7 +27,7 @@
     "hash": "1a3962ed5851"
   },
   "chunk:ads/ads-config": {
-    "hash": "686c15e95ce6"
+    "hash": "ccc8ec722b23"
   },
   "guardrail:ads#0/0": {
     "hash": "f79352fa79f0"

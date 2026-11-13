@@ -59,7 +59,7 @@ Mã đã xong trên máy, chờ `S01` để thành PR.
 
 ### **`S03`** Đợt 2: Product Brain, thư viện hook, ma trận biến thể
 
-- [ ] **`M18`** (`area/ads`): Product Brain: hồ sơ sản phẩm dùng chung nhiều dự án tại `~/.ai-video-studio/products/<id>.json` (tên, ngành, claim kèm bằng chứng và trạng thái, cụm từ cấm, FAQ). Route và panel mới; `timeline.ads.product` trỏ tới hồ sơ thay cho việc nhập claim từng dự án.
+- [x] **`M18`** (`area/ads`): Product Brain: hồ sơ sản phẩm dùng chung nhiều dự án tại `~/.ai-video-studio/products/<id>.json` (tên, ngành, claim kèm bằng chứng và trạng thái, cụm từ cấm, FAQ). Route và panel mới; `timeline.ads.product` trỏ tới hồ sơ thay cho việc nhập claim từng dự án.
 - [x] **`M19`** (`area/ads`): thư viện hook: sinh hook bằng LLM hoặc mẫu, hook mới phải khác mọi hook đã có (cosine < 0,5) và qua cổng chính sách + claim; mỗi hook dùng tối đa 5 bản. Chuyển phần thuần của `scale.py` (dòng 127–196). Xong 2026-11-13: `scripts/hooks_lib.mjs` (kho JSON `~/.ai-video-studio/hooks/<khoá>.json`, lệnh `gen|add|list|pick`, cổng gọi `ad_gates.py` qua CLI trên dự án tạm), tài liệu `references/hook-library.md`, test `scripts/tests/hooks_lib.test.mjs`. Nối vào ma trận biến thể ở `M21`.
 - [ ] **`M20`** (`area/ads`): cổng đa dạng nguồn: > 20 bản cần ≥ 3 video nguồn và 12 cảnh; > 100 cần ≥ 5 và 25; > 300 cần ≥ 8 và 40. Thiếu thì báo cần thêm nguồn, có lối bỏ qua kèm cảnh báo.
 - [ ] **`M21`** (`area/ads`): ma trận biến thể: mở rộng `scripts/variants.mjs` từ "đổi hook hoặc gói" thành tổ hợp khán giả × góc × kết cấu × bố cục × thời lượng, dựa trên `creative.plan_matrix`. Mỗi bản là một dự án anh em; `variants.json` ghi thêm trục của từng bản.
