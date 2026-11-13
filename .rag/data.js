@@ -45,6 +45,7 @@ export const DOMAINS = {
     guardrails: [
       "Tính năng mới = một studio/routes/NN_x.mjs + một studio/features/NN_x.js theo hợp đồng ctx/Studio; không thêm framework hay cơ sở dữ liệu.",
       "Server chỉ nghe 127.0.0.1 và chỉ phục vụ file trong studio/, engine/, assets/, thư mục mẫu và thư mục dự án.",
+      "Mọi /api/* cần token phiên (header X-AVS-Token, GET nhận ?avs_token=; editor gọi qua fetch đã vá trong studio/auth.js, URL media dùng avsUrl()); không bao giờ mở $AVS_HOME (~/.ai-video-studio) làm dự án; GET không được ghi file. Kiểm ở studio/security.mjs.",
     ],
     leaf_chunks: [
       {
@@ -52,16 +53,16 @@ export const DOMAINS = {
         layer: "domain",
         title: "Bảng API của Studio cho script",
         file_path: "references/studio.md",
-        lines: "57-78",
-        keywords: ["api", "save", "export", "open", "job", "templates", "upload"],
-        content: "Các đường dẫn /api/* (project, save, export, new, job, open, media, still, srt, templates) và phạm vi file server phục vụ.",
+        lines: "57-80",
+        keywords: ["api", "save", "export", "open", "job", "templates", "upload", "token", "origin", "avs_token"],
+        content: "Token phiên, kiểm origin, giới hạn body (413/411), các đường dẫn /api/* (project, save, export, new, job, open có chặn thư mục cấu hình, media, still/srt POST, templates) và phạm vi file server phục vụ.",
       },
       {
         id: "studio-plugin",
         layer: "domain",
         title: "Hợp đồng plugin: route và feature",
         file_path: "references/studio.md",
-        lines: "88-99",
+        lines: "90-101",
         keywords: ["route", "feature", "ctx", "startJob", "addPanel", "addTopButton", "pollJob"],
         content: "Chữ ký route (ctx => (req,res,p,u) => bool), các hàm của ctx và đối tượng Studio, danh sách tính năng có sẵn theo số thứ tự.",
       },
