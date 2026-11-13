@@ -25,6 +25,7 @@ import crypto from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { openPath, revealPath, notifyDesktop, copyText } from './platform.mjs';
+import { retryBusy, withFileLock } from './file_lock.mjs';
 
 export const HOME = () => process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
 const F = name => path.join(HOME(), name);
@@ -43,11 +44,15 @@ export const now = () => (process.env.AVS_NOW ? new Date(process.env.AVS_NOW) : 
 const progress = (f, s) => console.log(`@@ ${Math.max(0, Math.min(1, f)).toFixed(3)} ${s}`);
 function writePrivate(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, typeof data === 'string' ? data : JSON.stringify(data, null, 1), { mode: 0o600 });
-  fs.chmodSync(tmp, 0o600); fs.renameSync(tmp, file);
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(tmp, typeof data === 'string' ? data : JSON.stringify(data, null, 1), { mode: 0o600 });
+    fs.chmodSync(tmp, 0o600);
+    // Windows: renaming over a file another process is reading fails for a moment (EPERM/EBUSY) → retry (file_lock.mjs)
+    retryBusy(() => fs.renameSync(tmp, file));
+  } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 }
-const readJSON = (file, d) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return d; } };
+const readJSON = (file, d) => { try { return JSON.parse(retryBusy(() => fs.readFileSync(file, 'utf8'), 10)); } catch { return d; } };
 
 // ---------- time (hiển thị theo giờ Việt Nam, lưu ISO UTC) ----------
 export function parseWhen(s) {
@@ -66,13 +71,26 @@ const vnDate = d => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(ne
 const pacificDay = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date(d)); // quota reset 0h Pacific
 
 // ---------- schedule store ----------
-export function loadSchedule() {
-  const s = readJSON(F('schedule.json'), null) || {};
-  return { version: 1, settings: { ...DEFAULT_SETTINGS, ...(s.settings || {}) }, items: Array.isArray(s.items) ? s.items : [] };
+const normSchedule = s => { s = s || {}; return { version: 1, settings: { ...DEFAULT_SETTINGS, ...(s.settings || {}) }, items: Array.isArray(s.items) ? s.items : [] }; };
+export function loadSchedule() { return normSchedule(readJSON(F('schedule.json'), null)); }
+// schedule.json is written by several processes (Studio, run-due spawned by Studio or by the queue runner, the CLI):
+// every write holds schedule.json.lock (withFileLock, same mechanism as queue.json — M40). Re-entrant inside one process,
+// so autoSchedule() can hold it across its addItem() calls. fn must be synchronous.
+let lockDepth = 0;
+export function withScheduleLock(fn) {
+  if (lockDepth) return fn();
+  return withFileLock(F('schedule.json.lock'), () => { lockDepth++; try { return fn(); } finally { lockDepth--; } });
 }
-export function saveSchedule(s) { writePrivate(F('schedule.json'), { version: 1, settings: s.settings, items: s.items }); return s; }
-// read-modify-write in one go so a long upload never overwrites edits made meanwhile in the UI
-export function mutate(fn) { const s = loadSchedule(); const r = fn(s); saveSchedule(s); return r; }
+// Before a write: missing file = empty schedule; a file that is not JSON is kept as schedule.json.bad-<time>; a read that
+// keeps failing for another reason (busy on Windows) throws, so a busy file never turns into an empty schedule.
+function readForWrite() {
+  const f = F('schedule.json'); let txt;
+  try { txt = retryBusy(() => fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return normSchedule(null); throw e; }
+  try { return normSchedule(JSON.parse(txt)); } catch { try { fs.copyFileSync(f, `${f}.bad-${Date.now()}`); } catch {} return normSchedule(null); }
+}
+export function saveSchedule(s) { withScheduleLock(() => writePrivate(F('schedule.json'), { version: 1, settings: s.settings, items: s.items })); return s; }
+// read-modify-write under the lock, from the freshest file, so a long upload never overwrites edits made meanwhile in the UI
+export function mutate(fn) { return withScheduleLock(() => { const s = readForWrite(); const r = fn(s); saveSchedule(s); return r; }); }
 const STATES = ['planned', 'uploading', 'done', 'reminded', 'error'];
 const cleanTags = h => (Array.isArray(h) ? h : String(h || '').split(/[\s,]+/)).map(t => String(t).trim().replace(/^#+/, '').replace(/\s+/g, '')).filter(Boolean).map(t => '#' + t);
 function normItem(o, base = {}) {
@@ -143,7 +161,11 @@ export function captionsFor(file, platform) {
 export function autoSchedule(videos, platforms, { from } = {}) {
   platforms = platforms.filter(p => PLATFORMS[p]); if (!platforms.length) throw new Error('Chọn ít nhất 1 nền tảng');
   if (!videos.length) throw new Error('Chọn ít nhất 1 video');
-  const s = loadSchedule(), start = from ? parseWhen(from) : now(), minT = start.getTime() + 10 * 60e3;
+  // free slots are picked from the file as it is under the lock: two auto-schedules at once cannot take the same slot
+  return withScheduleLock(() => autoScheduleLocked(videos, platforms, from));
+}
+function autoScheduleLocked(videos, platforms, from) {
+  const s = readForWrite(), start = from ? parseWhen(from) : now(), minT = start.getTime() + 10 * 60e3;
   const taken = new Set(s.items.filter(x => x.state !== 'error').map(x => `${x.platform}|${new Date(x.when).getTime()}`));
   const day0 = vnDate(start), added = [];
   let di = 0, si = 0;

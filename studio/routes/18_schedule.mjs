@@ -1,6 +1,8 @@
 // Lịch đăng + Kết nối YouTube (scripts/publish.mjs làm phần việc thật). Lịch dùng chung cho mọi dự án: ~/.ai-video-studio/schedule.json.
 // Có hẹn giờ dự phòng: mỗi 60 s chạy `publish.mjs run-due` (khoá chung publish.lock với hàng đợi Tự lái, nên không bao giờ chạy trùng).
 // Tắt bằng AVS_NO_SCHEDULE_TIMER=1. Spec: references/publish-schedule.md
+// Mọi ghi schedule.json đi qua PUB.addItem/updateItem/removeItem/setSettings/autoSchedule, giữ schedule.json.lock (M40):
+// Studio sửa lịch cùng lúc với run-due (tiến trình con) hay CLI không làm mất thay đổi của nhau.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';

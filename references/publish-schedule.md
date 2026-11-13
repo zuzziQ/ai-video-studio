@@ -32,6 +32,8 @@ Tiến trình: dòng `@@ <0..1> <bước>`; lỗi: mã thoát ≠ 0 + câu tiế
 
 **Ai gọi `run-due`**: hàng đợi Tự lái (A1) mỗi phút; nếu không có, route Studio tự chạy mỗi 60 s (chỉ khi có mục `planned/uploading`; tắt bằng `AVS_NO_SCHEDULE_TIMER=1`). Chống chạy trùng bằng `~/.ai-video-studio/publish.lock` do chính `run-due` giữ (`{pid, started}`; khoá của pid đã chết hoặc > 6 giờ bị coi là cũ). Tiến trình cha giữ sẵn khoá rồi spawn `run-due` làm con trực tiếp cũng được (khoá có `pid === ppid` được chấp nhận).
 
+**Ghi `schedule.json`** (M40): mọi lần đọc–sửa–ghi (`mutate`, `addItem`, `updateItem`, `removeItem`, `setSettings`, `autoSchedule`, các bước cập nhật trạng thái trong `run-due`) giữ `schedule.json.lock` bằng `withFileLock` của `scripts/file_lock.mjs` (cùng cơ chế với `queue.json`), nên Studio, `run-due` và CLI ghi cùng lúc không làm mất mục. `schedule.json` không phải JSON thì được giữ lại thành `schedule.json.bad-<thời điểm>` trước khi ghi đè; đọc lỗi tạm thời trên Windows (EPERM/EBUSY) được thử lại, không bị coi là lịch trống.
+
 ## Kết nối YouTube (OAuth client của chính người dùng — repo không chứa bí mật nào)
 1. Google Cloud Console → tạo dự án → bật **YouTube Data API v3**.
 2. Google Auth Platform (OAuth consent screen): External, thêm Gmail của kênh vào **Test users**. Bấm **Publish app** (In production) để refresh token không hết hạn sau 7 ngày (app chưa xác minh vẫn dùng được cho chính mình, qua màn cảnh báo).
