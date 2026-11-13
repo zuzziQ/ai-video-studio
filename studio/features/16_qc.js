@@ -148,7 +148,7 @@
       await loadVa(); showVariants(); rerender();
     });
   }
-  const vfile = (dir, f) => `/api/variants/file?dir=${encodeURIComponent(dir)}&f=${encodeURIComponent(f)}`;
+  const vfile = (dir, f) => avsUrl(`/api/variants/file?dir=${encodeURIComponent(dir)}&f=${encodeURIComponent(f)}`);
   function showVariants() {
     const v = va; if (!v) return S.toast('Chưa có phiên bản nào');
     const cols = [{ dir: v.base, name: 'Gốc', desc: 'Dự án ban đầu', hook: v.base_hook, still: v.base_still, video: v.base_video }, ...v.variants];

@@ -186,7 +186,7 @@
     const figs = [...document.querySelectorAll('#aiqc figure')];
     for (const [k, t] of ts.entries()) {
       figs[k].querySelector('.ph, img').outerHTML = '<div class="ph"><i class="ti ti-loader-2 spin"></i></div>';
-      const r = await S.api('/api/still?t=' + t);
+      const r = await S.api('/api/still', { t });
       figs[k].querySelector('.ph').outerHTML = r.out ? `<img src="/project/${esc(r.out)}?${Date.now()}" title="Bấm để tới ${fmt(t)}">` : `<div class="ph" title="${esc(r.error || '')}"><i class="ti ti-alert-triangle" style="color:var(--bad)"></i></div>`;
       const img = figs[k].querySelector('img'); if (img) img.onclick = () => { S.closeModal(); S.setTime(t); };
     }

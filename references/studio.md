@@ -55,6 +55,8 @@ Mỗi lần lưu, Studio ghi `<dự án>/.studio/notes.md`, liệt kê mọi ghi
 Trường `_orig` trên một phần tử là bản thiết kế gốc (để dùng cho "Về thiết kế"). Phần tử có `_orig` nghĩa là người dùng đã tự chỉnh tay: khi dựng lại thì **giữ nguyên chỉnh sửa đó** trừ khi được yêu cầu.
 
 ## API (cho script)
+Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): header `X-AVS-Token: <token>`, riêng GET/HEAD nhận thêm `?avs_token=` (cho `<img>`/`<video>`). Editor nhận token qua `<meta name="avs-token">` của trang chính (`studio/auth.js` tự gắn vào fetch/XHR, URL media dùng `avsUrl()`); script cục bộ đọc `$AVS_HOME/studio-<port>.token` (mặc định `~/.ai-video-studio`, quyền 600). Thiếu/sai token → 401. Chỉ nhận đúng origin của server (Host loopback đúng cổng, `Origin` và `Sec-Fetch-Site` nếu có phải cùng origin) → khác thì 403. Body JSON ≤ 32 MB (`AVS_MAX_JSON_MB`), file tải lên ≤ 20 GB (`AVS_MAX_UPLOAD_MB`) → 413; body không có `Content-Length` → 411. Kiểm ở `studio/security.mjs`.
+
 | Đường dẫn | Việc |
 |---|---|
 | `GET /api/project` | `{timeline, captions, meta}` |
@@ -67,10 +69,10 @@ Trường `_orig` trên một phần tử là bản thiết kế gốc (để d�
 | `POST /api/export` | `{quality:"720"\|"1080"\|"4k", from?, to?}` |
 | `POST /api/new` | `{video, dir?, model?, pack?, title?, orient?:"vertical"|"horizontal"}` |
 | `GET /api/job`, `POST /api/job/cancel` | tiến độ / huỷ tác vụ |
-| `POST /api/open` | `{path}` → đổi dự án |
+| `POST /api/open` | `{path}` → đổi dự án. Chỉ thư mục có `timeline.json` (hoặc file timeline); từ chối (403) thư mục cấu hình `$AVS_HOME`, thư mục cha của nó, mọi thư mục con trừ `autopilot/`, `longform/`, `footage/`, và thư mục ẩn trong home (`~/.ssh`, `~/.claude`…) |
 | `GET /api/media`, `POST /api/upload?name=` | thư viện media (body = file) |
-| `GET /api/still?t=` | ảnh bìa → `out/cover_*.jpg` |
-| `GET /api/srt` | phụ đề → `out/<tên>.srt` |
+| `POST /api/still` | `{t}` → ảnh bìa `out/cover_*.jpg` |
+| `POST /api/srt` | phụ đề → `out/<tên>.srt` |
 | `GET /api/templates` | danh sách mẫu: `templates/*.json` + `templates/user/*.json`, kèm `preview:{mp4,jpg}` và `user` |
 | `POST /api/templates/save` | `{tpl, t}` → `templates/user/<id>.json` + ảnh bìa `templates/previews/<id>.jpg` |
 | `GET /templates/…` | file tĩnh của thư mục mẫu (preview mp4/jpg) |

@@ -44,7 +44,7 @@
   }
   function card(b) {
     const ini = (b.name || b.title || '?').split(/\s+/).slice(-2).map(w => w[0]).join('').toUpperCase();
-    return `<div class="bk-card ${cur() === b.id ? 'cur' : ''}"><div class="bk-top"><div class="bk-logo" style="background:${esc(b.primary || '#333')};color:${esc(b.light || '#fff')}">${b.logoUrl ? `<img src="${esc(b.logoUrl)}">` : esc(ini)}</div>
+    return `<div class="bk-card ${cur() === b.id ? 'cur' : ''}"><div class="bk-top"><div class="bk-logo" style="background:${esc(b.primary || '#333')};color:${esc(b.light || '#fff')}">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : esc(ini)}</div>
       <div class="bk-nm"><b>${esc(b.title || b.name)}</b><small>${esc([b.name, b.handle, b.phone].filter(Boolean).join(' · ') || 'chưa có thông tin')}</small></div>${cur() === b.id ? '<span class="pill">đang dùng</span>' : ''}</div>
       <div class="bk-sw">${['primary', 'accent', 'dark', 'light'].map(k => `<i title="${k} ${esc(b[k] || DEF[k])}" style="background:${esc(b[k] || DEF[k])}"></i>`).join('')}</div>
       <div class="bk-act"><button class="primary" data-bka="${esc(b.id)}"><i class="ti ti-check"></i> Áp dụng cho dự án</button><span class="grow"></span>
@@ -58,7 +58,7 @@
       ${inp('title', 'Tên bộ nhận diện (chỉ để bạn phân biệt)', 'VD: Kênh BĐS Sài Gòn')}
       <div class="bk-g4">${col('primary', 'Màu chính')}${col('accent', 'Màu nhấn')}${col('dark', 'Nền tối')}${col('light', 'Chữ sáng')}</div>
       <div class="bk-g2">${sel('font', 'Font chữ', FONTS)}${sel('disp', 'Font tiêu đề', FONTS)}</div>
-      <label>Logo (PNG nền trong là đẹp nhất)</label><div class="bk-up"><div class="bk-logo">${b.logoUrl ? `<img src="${esc(b.logoUrl)}">` : '<i class="ti ti-photo"></i>'}</div>
+      <label>Logo (PNG nền trong là đẹp nhất)</label><div class="bk-up"><div class="bk-logo">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : '<i class="ti ti-photo"></i>'}</div>
         <button id="bk-logo" ${b.id ? '' : 'disabled title="Lưu trước rồi tải logo"'}><i class="ti ti-upload"></i> Tải logo</button><input type="file" id="bk-file" accept="image/*" hidden></div>
       <div class="bk-g2">${inp('name', 'Tên hiển thị trong video', 'Kiệm AI')}${inp('handle', 'Kênh / handle', '@kiem.ai')}${inp('phone', 'Điện thoại', '09xx xxx xxx')}${inp('website', 'Website', 'vidu.vn')}</div>
       ${sel('pack', 'Gói style mặc định', [['', '— không đổi gói —'], ...packs()])}
