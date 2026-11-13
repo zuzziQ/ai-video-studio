@@ -4,7 +4,7 @@
 
 ```bash
 node scripts/render.mjs timeline.json out.mp4 [--from 0] [--to 10] [--audio mix.wav] [--workers N] [--fast] [--preset P]
-node scripts/render_hw.mjs    # máy này sẽ render ra sao: GPU hay SwiftShader, Chrome hay headless-shell, vsync, số nhân, số worker
+node scripts/render_hw.mjs    # máy này sẽ render ra sao: GPU hay SwiftShader, Chrome hay headless-shell, vsync, số nhân, số worker, encoder
 node scripts/install_headless_shell.mjs   # tải chrome-headless-shell khớp Chrome máy này vào $AVS_HOME (tuỳ chọn, M57)
 node scripts/render.mjs timeline.json x --still 12.5 still.jpg
 ```
@@ -28,11 +28,21 @@ node scripts/render.mjs timeline.json x --still 12.5 still.jpg
 - Preset x264 (CRF 17 giữ nguyên): các đoạn song song mặc định `veryfast` (SSIM 0,994 so với `medium`, CPU mã hoá ÷2,4); render
   một worker (gồm `--still`) giữ `medium`. Bản ghép cuối là `concat -c copy`, không nén lại. `--fast` = `veryfast` cả khi một worker;
   `--preset medium` lấy lại hành vi cũ cho mọi đoạn.
-- Dòng tiến độ giữ dạng `X.Xs / Ys` (studio đọc để vẽ thanh tiến độ); cuối cùng in `done -> out.mp4 (n frames, N workers, gpu|swiftshader, preset, fps)`.
+- Mã hoá phần cứng (`M52`): `render.mjs` (đoạn song song và một worker) và `export_multi.mjs` dùng `h264_nvenc` / `h264_qsv` /
+  `h264_videotoolbox` khi ffmpeg mở được, không thì libx264 như trên. Lần đầu mỗi encoder được dò bằng một lần mã hoá thử 8 khung, kết quả
+  lưu ở `$AVS_HOME/encoders.json` theo bản ffmpeg + hệ điều hành + driver NVIDIA (đổi một trong ba thì dò lại). `AVS_ENCODER=auto`
+  (mặc định) | `nvenc` | `qsv` | `videotoolbox` | `x264`; ép encoder phần cứng mà dò lỗi thì vẫn lùi libx264. NVENC: `-preset p5 -tune hq
+  -rc vbr -cq <crf+6> -b:v 0 -spatial-aq 1`, SSIM 0,991–0,995 so với libx264 cùng dự án, dung lượng gần bằng; `--preset`/`--fast` chỉ
+  áp cho libx264. Trên GTX 1660 Ti: 1080p 4 worker −17–29 % thời gian, CPU −40–50 %; `export_multi` nhanh ~2 lần
+  (`docs/perf/2026-11-13-m52-nvenc.md`).
+- **Cài đặt NVIDIA:** ffmpeg 9 cần driver NVIDIA **≥ 610** để mở NVENC (driver 560 báo lỗi phiên bản API và render tự dùng libx264).
+  Máy đo có driver 621.24 chạy được `h264_nvenc` và `hevc_nvenc`. Cập nhật driver xong không cần làm gì thêm: khoá cache đổi nên lần
+  render sau dò lại.
+- Dòng tiến độ giữ dạng `X.Xs / Ys` (studio đọc để vẽ thanh tiến độ); cuối cùng in `done -> out.mp4 (n frames, N workers, gpu|swiftshader, x264 <preset>|nvenc|qsv|videotoolbox, fps)`.
 - Huỷ (SIGTERM từ nút Huỷ của studio) sẽ tắt mọi Chrome/ffmpeg con và xoá file tạm.
 
 Số đo trên Windows 6 nhân + GTX 1660 Ti trước/sau `M50`/`M51`: `docs/perf/2026-11-13-m50-m51-gpu-workers.md`; `M57`:
-`docs/perf/2026-11-13-m57-novsync-headless-shell.md`.
+`docs/perf/2026-11-13-m57-novsync-headless-shell.md`; `M52`: `docs/perf/2026-11-13-m52-nvenc.md`.
 
 **Đo trên dự án demo 1080×1920, 30 fps (máy 15 nhân, đang có tải khác):**
 

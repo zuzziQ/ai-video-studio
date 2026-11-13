@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { pyBin } from './platform.mjs';
+import { pickEncoder, encoderArgs } from './render_hw.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PYBIN = pyBin(SKILL);
@@ -44,6 +45,8 @@ export async function deriveAspects(src, aspects, opts = {}) {
   const todo = [...new Set(aspects)].filter(a => a !== native && NOTES[`${native}>${a}`]);
   const outDir = opts.outDir || path.dirname(src), base = path.basename(src, '.mp4');
   const res = [];
+  // M52: NVENC/QSV/VideoToolbox when usable (render_hw.mjs pickEncoder), else libx264 medium crf 18 as before.
+  const venc = encoderArgs((opts.encoder || pickEncoder({ use: 'derive' })).kind, { preset: 'medium', crf: 18 });
   let keys = null;
   if (todo.some(a => !(vert && a === '16:9'))) {
     step('Dò mặt trên bản đã xuất (để cắt khung bám mặt)');
@@ -77,8 +80,7 @@ export async function deriveAspects(src, aspects, opts = {}) {
       [ow, oh] = a === '9:16' ? [even(H), even(H * 16 / 9)] : [cw, ch];
       vf = `[0:v]sendcmd=f='${cmd.replace(/'/g, "'\\''")}',crop=w=${cw}:h=${ch}:x=0:y=0,scale=${ow}:${oh}:flags=lanczos,setsar=1[v]`;
     }
-    await run('ffmpeg', ['-v', 'error', '-y', '-i', src, '-filter_complex', vf, '-map', '[v]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
-      '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', out], l => {
+    await run('ffmpeg', ['-v', 'error', '-y', '-i', src, '-filter_complex', vf, '-map', '[v]', '-map', '0:a?', ...venc, '-c:a', 'copy', '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', out], l => {
       const m = /out_time_ms=(\d+)/.exec(l); if (m) prog((n + Math.min(1, +m[1] / 1e6 / dur)) / todo.length);
     });
     fs.rmSync(path.join(outDir, `.${base}_${a.replace(':', 'x')}.cmd`), { force: true });

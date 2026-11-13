@@ -144,7 +144,16 @@ async function importOne([name, group, label], tools) {
   try {
     await pg.setViewport({ width: W, height: H });
     await pg.goto(pathToFileURL(path.join(dst, 'index.html')).href, { waitUntil: 'networkidle0', timeout: 45000 });
-    await pg.evaluate(async () => { await document.fonts.ready; const r = window.__hf?.buildReady; if (r?.then) await Promise.race([r, new Promise(z => setTimeout(z, 8000))]); await new Promise(z => setTimeout(z, 100)); });
+    // Same wait as engine/hf.js (M57, #75): buildReady is { [block]: Promise } (or one promise), and a module script with a
+    // top-level await can assign it after load — wait for it to appear (≤ 8 s), then for every promise in it.
+    await pg.evaluate(async () => {
+      const t0 = performance.now(), left = () => Math.max(0, 8000 - (performance.now() - t0));
+      const has = () => { const br = window.__hf?.buildReady; return !!br && (!!br.then || Object.keys(br).length > 0); };
+      if ([...document.scripts].some(s => s.text.includes('buildReady'))) while (!has() && left() > 0) await new Promise(z => setTimeout(z, 16));
+      const br = window.__hf?.buildReady, builds = br?.then ? [br] : Object.values(br || {});
+      await Promise.race([Promise.all([document.fonts.ready, ...builds]), new Promise(z => setTimeout(z, left()))]);
+      await new Promise(z => setTimeout(z, 100));
+    });
     await pg.addScriptTag({ content: SEEK });
     const tlOk = await pg.evaluate(id => !!(window.__timelines && (window.__timelines[id] || Object.keys(window.__timelines).length)), marked.root);
     if (!tlOk) return { name, fail: 'không có timeline' };

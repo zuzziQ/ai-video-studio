@@ -5,8 +5,10 @@
 //              (concat -c copy), audio muxed once at the end. Default min(4, physical cores-2), 3 above 1080p
 //              (render_hw.mjs renderPlan). --workers 1 = serial.
 // --fast:      ffmpeg -preset veryfast for a serial render too (parallel segments already use veryfast).
-// --preset P:  x264 preset for every encode (e.g. medium to get the old parallel output back).
+// --preset P:  x264 preset for every encode (e.g. medium to get the old parallel output back); x264 only, a hardware
+//              encoder (M52) keeps its own settings.
 // Chrome draws with the GPU when there is one (render_hw.mjs launchChrome); AVS_RENDER_GPU=0 forces SwiftShader.
+// Video is H.264 from NVENC/QSV/VideoToolbox when ffmpeg can open it, else libx264 (M52); AVS_ENCODER=x264 forces libx264.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -14,7 +16,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './platform.mjs';
 import { interceptCdn } from './net_cache.mjs';
-import { launchChrome, renderPlan, BACKGROUND_FLAGS } from './render_hw.mjs';
+import { launchChrome, renderPlan, pickEncoder, encoderArgs, encoderLabel, BACKGROUND_FLAGS } from './render_hw.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -78,7 +80,9 @@ const n = Math.round((t1 - t0) * fps);
 const defMix = path.resolve(tlDir, tl.audio?.mix || 'work/mix.wav');
 const audio = opt('--audio', tl.audio && fs.existsSync(defMix) ? defMix : null);
 const { workers, threads, preset } = renderPlan({ W, H, n, fps, workers: opt('--workers'), fast: args.includes('--fast'), preset: opt('--preset') });
-const venc = ['-c:v', 'libx264', '-preset', preset, '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), ...(threads ? ['-threads', String(threads)] : [])];
+// M52: NVENC/QSV/VideoToolbox when this machine's ffmpeg can open it (render_hw.mjs pickEncoder), else libx264 at `preset`.
+const enc = pickEncoder({ use: workers > 1 ? 'segment' : 'final' });
+const venc = [...encoderArgs(enc.kind, { preset, crf: 17, threads }), '-r', String(fps)];
 
 const started = Date.now();
 let done = 0, lastShown = -1;
@@ -135,4 +139,4 @@ if (workers === 1) {
 }
 process.stdout.write(`\r${t1.toFixed(1)}s / ${t1}s  (${((Date.now() - started) / 1000).toFixed(0)}s elapsed)`);
 // Explicit exit: a leftover puppeteer handle can otherwise keep node alive ~20 s after the file is written.
-process.stdout.write(`\ndone -> ${outPath}  (${n} frames, ${workers} worker${workers > 1 ? 's' : ''}, ${chrome}, ${preset}, ${(n / process.uptime()).toFixed(1)} fps, ${process.uptime().toFixed(1)}s)\n`, () => process.exit(0));
+process.stdout.write(`\ndone -> ${outPath}  (${n} frames, ${workers} worker${workers > 1 ? 's' : ''}, ${chrome}, ${encoderLabel(enc.kind, preset)}, ${(n / process.uptime()).toFixed(1)} fps, ${process.uptime().toFixed(1)}s)\n`, () => process.exit(0));
