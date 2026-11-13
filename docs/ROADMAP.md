@@ -26,7 +26,7 @@ Mỗi tính năng vào Studio theo hợp đồng sẵn có (`references/studio.m
 - Mã nằm ở `D:\ai\ai-video-studio`. `main` là lịch sử thật của repo gốc tới commit `168e1d3` (2026-11-12), khớp bản zip trừ một style người dùng `u_neon_hong_review_ai` (để ở nhánh máy `chore/zip-user-style`, chưa đẩy) và quyền thực thi của 5 file `.sh` mà zip làm mất.
 - Repo riêng tư `zuzziQ/ai-video-studio` đã tạo, `main` đã đẩy. Remote `origin` = zuzziQ, `upstream` = repo gốc (đẩy bị tắt). Repo chỉ cho squash merge, tự xoá nhánh khi merge.
 - Đã đăng ký với hub (zuzziQ/agent-hub#80); repo có `AGENTS.md`, `.rag/`, CI `gate`. Đã có nhãn, Milestone `S01`–`S06` và issue theo dõi (`M07`).
-- Đợt 1 đã viết xong và đã kiểm trên máy: 19 test qua, QC thật chạy được, hộp thoại thiết lập hoạt động trong trình duyệt.
+- Đã merge `S01`–`S06` (trừ các mục ghi `[ ]`/`[~]` bên dưới) và phần lớn `S07` (#1–#75). Driver NVIDIA 621.24 (2026-11-13): `h264_nvenc`, `hevc_nvenc` của ffmpeg 9 chạy thử được, `M52` hết bị chặn.
 
 ## 3. Hàng đợi
 
@@ -37,7 +37,7 @@ Làm trước mọi đợt sau. Thứ tự các mục là thứ tự thực hi�
 - [x] **`M01`** (`area/infra`): chốt ba quyết định ở mục 4. 2026-11-13: `C02` riêng tư, `C03` `zuzziQ/ai-video-studio`; `C01` chưa rõ nên giữ riêng tư.
 - [x] **`M02`** (`area/infra`): thay ảnh chụp zip bằng lịch sử thật của repo gốc. Clone `nguyentatkiem/ai-video-studio`, tìm commit khớp nội dung zip (so cây thư mục), đặt làm gốc của `main`, rồi áp lại phần sửa đợt 1 lên trên. Xong khi `git diff <commit gốc>` chỉ còn 7 file của đợt 1. Kết quả: gốc là `168e1d3`; nhánh `feat/ad-gates-qc` khác gốc đúng 7 file đợt 1 và file này.
 - [x] **`M03`** (`area/infra`): tạo repo `zuzziQ/ai-video-studio` bằng `gh repo create` (mặc định riêng tư, xem `C02`). Vì GitHub không cho fork riêng tư từ repo công khai, đây là repo mới, không phải fork. Remote `origin` = zuzziQ, remote `upstream` = repo gốc (chỉ kéo, không đẩy).
-- [~] **`M04`** (`area/infra`): commit theo hai bước rồi đẩy: (1) lịch sử gốc không đổi, (2) đợt 1 đi qua PR đầu tiên theo `S02`. Không ghi tên AI trong commit và PR (luật hub). Còn lại: bước (2), PR của nhánh `feat/ad-gates-qc`.
+- [x] **`M04`** (`area/infra`): commit theo hai bước rồi đẩy: (1) lịch sử gốc không đổi, (2) đợt 1 đi qua PR đầu tiên theo `S02`. Không ghi tên AI trong commit và PR (luật hub). Xong 2026-11-13: bước (2) là PR #1.
 - [x] **`M05`** (`area/docs`): ghi công theo `NOTICE`: giữ `LICENSE`, `NOTICE`, màn giới thiệu `studio/features/00_author.js`; thêm vào đầu `README.md` dòng "Dựa trên AI Video Studio của Nguyễn Tất Kiểm" kèm link repo gốc và một đoạn ngắn nói bản này thêm gì. Xong 2026-11-13: đoạn "Dựa trên…" ở đầu `README.md`; `.rag/sync.js --check` giữ dòng này cùng `LICENSE`, `NOTICE`, `00_author.js`.
 - [x] **`M06`** (`area/infra`): đăng ký với hub: tạo `D:\ai\projects\ai-video-studio.json` (theo `templates/project.template.json`, `access: owner`, `repo` trỏ zuzziQ), chạy `python3 D:/ai/scripts/sync.py`, rồi `project-doctor.py` đến khi sạch. `AGENTS.md` của dự án giữ phần ghi công của tác giả và thêm phần luật làm việc theo `templates/AGENTS.project.template.md`. Manifest ở zuzziQ/agent-hub#80 (đã merge). Trong repo: `AGENTS.md` theo mẫu (giữ khối ghi công), `CLAUDE.md` nạp `@AGENTS.md`, `.rag/` + `.rag.json`, `.mcp.json`, `.agents/ship-checks.json`, `.gitattributes` eol=lf, mẫu issue/PR. Xong 2026-11-13: sau #2 chạy `sync.py` ở bản checkout chính (bật 3 MCP); `project-doctor.py` sạch: D1–D9, D12, D13 xanh, D10/D11 không áp dụng.
 - [x] **`M07`** (`area/infra`): nhãn, Milestone và issue: `gh-labels.py` với các vùng `infra, qc, ads, llm, voice, export, security, docs`; `gh-roadmap-issues.py <dự án> --local` để xem kế hoạch, rồi `--apply`. Xong 2026-11-13: 27 nhãn (8 `area/`), 6 Milestone `S01`–`S06`, 45 issue (6 theo dõi + 39 mục, 6 mục `[x]` đóng ngay), sub-issue và bảng thứ tự đã gắn.
@@ -49,9 +49,9 @@ Làm trước mọi đợt sau. Thứ tự các mục là thứ tự thực hi�
 
 Mã đã xong trên máy, chờ `S01` để thành PR.
 
-- [~] **`M11`** (`area/ads`): `scripts/ad_gates.py`: 11 nhóm luật chính sách Meta/TikTok theo ngành, claim gate, điểm nguyên bản; đọc `timeline.ads`, in JSON. Kèm `scripts/tests/test_ad_gates.py` (19 test) và `references/ad-gates.md`. Còn lại: commit và PR.
-- [~] **`M12`** (`area/qc`): `scripts/ai_qc.mjs` gọi `ad_gates.py` khi `timeline.ads.on`, đưa vấn đề vào `.studio/qc.json` (loại `ad_policy`, `ad_claim`, `ad_originality`, khối `ads`). Còn lại: commit và PR.
-- [~] **`M13`** (`area/qc`): hộp thoại "Kiểm tra quảng cáo" trong `studio/features/16_qc.js` (bật/tắt, ngành, nền tảng, claim, cụm từ cấm). Còn lại: commit và PR.
+- [x] **`M11`** (`area/ads`): `scripts/ad_gates.py`: 11 nhóm luật chính sách Meta/TikTok theo ngành, claim gate, điểm nguyên bản; đọc `timeline.ads`, in JSON. Kèm `scripts/tests/test_ad_gates.py` (19 test) và `references/ad-gates.md`. Xong 2026-11-13 (PR #1).
+- [x] **`M12`** (`area/qc`): `scripts/ai_qc.mjs` gọi `ad_gates.py` khi `timeline.ads.on`, đưa vấn đề vào `.studio/qc.json` (loại `ad_policy`, `ad_claim`, `ad_originality`, khối `ads`). Xong 2026-11-13 (PR #1).
+- [x] **`M13`** (`area/qc`): hộp thoại "Kiểm tra quảng cáo" trong `studio/features/16_qc.js` (bật/tắt, ngành, nền tảng, claim, cụm từ cấm). Xong 2026-11-13 (PR #1).
 - [ ] **`M14`** (`area/ads`): chạy thử trên ít nhất 3 video quảng cáo thật, ghi lại báo sai và sót, chỉnh luật. Đặc biệt xem lại việc "tốt nhất", "cam kết", "100%" bị chặn mức cao trong khi luật chính sách chỉ cảnh báo "tốt nhất".
 - [x] **`M15`** (`area/qc`): chặn xuất khi `ads.blocked`: nút Xuất hỏi lại và mặc định dừng; `scripts/autopilot.mjs` và `queue.mjs` dừng ở bước QC. Có lối bỏ qua có ghi lý do cho lỗi không phải chính sách. Xong 2026-11-13: `scripts/export_gate.mjs` (lỗi `ad_policy` mức cao không bỏ qua được; claim/nguyên bản bỏ qua khi ghi lý do vào `qc.json` + `.studio/qc_overrides.log`), hộp thoại trong `16_qc.js` (thử trên Studio thật), `--qc-override` cho tự lái và `queue.mjs retry`. `POST /api/export` của `server.mjs` chưa tự kiểm (tệp nóng, việc sau).
 - [x] **`M16`** (`area/qc`): soát lại cổng quảng cáo sau `--fix` để vấn đề đã hết được đánh dấu đã sửa (hiện kết quả sau khi sửa vẫn là của lần soát trước). Xong 2026-11-13: `ai_qc.mjs` chạy lại `ad_gates.py` trên bản đã lưu; thử thật: scene thiếu file mang "Trị dứt điểm mụn" bị ẩn → 2 lỗi mức cao thành đã sửa, `ads.blocked` hết.
@@ -118,10 +118,12 @@ Từ lần đo 2026-11-13 trên Windows (i7-8700K 6 nhân, 32 GB, GTX 1660 Ti), 
 
 ## 5. Ưu tiên tiếp theo
 
-1. **`M11`–`M13`**: PR đầu tiên, đưa đợt 1 vào `main` (xong `M04`).
-2. **`M06`–`M08`**: nối hub, nhãn và issue, CI.
-3. **`C01`**: xác nhận quyền dùng mã Factory trước khi công khai repo.
-4. **`M33`, `M34`**: hai lỗi nền nên sửa trước khi làm lô lớn ở đợt 2.
+1. **`M52`**: mã hoá NVENC tuỳ chọn (driver đã đủ). Kèm sửa nhỏ `scripts/hf_import.mjs:147` vẫn chờ `buildReady` như một promise (cùng lỗi #75 đã sửa ở `engine/hf.js`, chỉ ảnh xem trước khi nhập khối).
+2. **`M50`**: chủ repo chốt nhiễu shader của `vfx-text-cursor`, `wireframe-portal-title` khi dựng bằng GPU (SSIM 0,85–0,89, `AVS_RENDER_GPU=0` cho bản đúng SwiftShader).
+3. **`M26`, `M27`**: phần giao diện Studio còn lại: chọn nhà cung cấp LLM, chọn giọng VieNeu; nối VieNeu vào `topic_video.mjs` (`M22` đã merge).
+4. **`M14`**: chạy thử cổng quảng cáo trên ít nhất 3 video quảng cáo thật.
+5. **`M29`**: đối chiếu lại 45 bài FreePD khi Wayback Machine cho truy cập.
+6. **`C01`**, **`C04`**, **`C05`**: quyết định của chủ repo.
 
 ## 6. Không làm
 
