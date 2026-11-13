@@ -26,6 +26,7 @@ Mở **một** Chrome headless, nạp engine, render ảnh tại: đầu/giữa/
 | `loudness`, `true_peak` | trộn thử bằng `mix_audio.py --stems` → `ebur128` (chuẩn −14 LUFS, ≤ −1 dBTP) | vừa/thấp |
 | `music_masking` | stem nhạc chỉ thấp hơn stem giọng < 8 dB ở > 20 % lúc nói | vừa/cao |
 | `silence` | bản trộn im (< −50 dBFS) > 1,2 s giữa video | thấp |
+| `ad_policy`, `ad_claim`, `ad_originality` | chỉ khi `timeline.ads.on`: lời thoại và chữ trên màn hình theo chính sách quảng cáo Meta/TikTok, đối chiếu claim, điểm nguyên bản so với các phiên bản (`scripts/ad_gates.py`, xem `references/ad-gates.md`). Chỉ báo, không tự sửa | thấp/vừa/cao |
 
 ### Bước 2 — Claude xem (tuỳ chọn)
 `claude -p --allowedTools Read --add-dir .studio/qc/review` với ≤ 14 ảnh (hook, chỗ có lỗi, rải đều) + JSON tóm tắt timeline (cảnh `sN`, chữ trên màn hình, phụ đề `cN`, nhạc, lỗi máy đã dò). Claude chấm 0–10: hook, dễ đọc, chính tả (dấu tiếng Việt), đa dạng, nhịp, thương hiệu, và trả về vấn đề kèm **bản sửa trong bộ lệnh an toàn**:

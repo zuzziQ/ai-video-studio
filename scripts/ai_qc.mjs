@@ -4,7 +4,8 @@
 //      element boxes read from the engine DOM (text off canvas, graphic over the speaker's face, caption under a big graphic),
 //      face boxes found by YuNet on "base layer" stills, timeline checks (same-layer overlap, > 6 s without a visual event,
 //      too dense, caption lines > 5 words, missing media, hook in the first 2 s), audio (LUFS / true peak of the mix,
-//      music masking speech from mix stems, silence gaps);
+//      music masking speech from mix stems, silence gaps); ad gates when timeline.ads.on (scripts/ad_gates.py: Meta/TikTok
+//      policy wording, claim gate, originality vs sibling variants — report only, never auto-fixed);
 //   2. Claude review (claude -p --allowedTools Read on a folder of stills + timeline summary): hook, readability, spelling,
 //      variety, pacing, brand → issues with fixes limited to a safe patch vocabulary;
 //   3. --fix: backup → deterministic fixes + validated Claude patches (changed items get _qc:true) → re-check → before/after stills.
@@ -34,7 +35,17 @@ const KIND_VI = {
   overlap: 'Cảnh chồng nhau', empty: 'Khoảng trống', dense: 'Quá dày', caption_long: 'Phụ đề dài', missing_media: 'Thiếu file',
   hook_missing: 'Thiếu hook', loudness: 'Độ to', true_peak: 'Đỉnh âm', music_masking: 'Nhạc át giọng', silence: 'Im lặng',
   hook: 'Hook', readability: 'Dễ đọc', spelling: 'Chính tả', variety: 'Đa dạng', pacing: 'Nhịp', brand: 'Thương hiệu', other: 'Khác',
+  ad_policy: 'Chính sách quảng cáo', ad_claim: 'Claim quảng cáo', ad_originality: 'Nguyên bản',
 };
+
+// ---------- ad gates (references/ad-gates.md) ----------
+// Runs scripts/ad_gates.py on the saved project. Off unless timeline.ads.on. A failure here never fails the whole QC run.
+export function adsPass(dir) {
+  return new Promise(ok => execFile(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/ad_gates.py'), dir], { maxBuffer: 1 << 24 }, (e, out, err) => {
+    if (e) return ok({ enabled: false, issues: [], error: String(err || e.message).trim().slice(0, 300) });
+    try { ok(JSON.parse(out)); } catch { ok({ enabled: false, issues: [], error: 'ad_gates.py trả kết quả không đọc được' }); }
+  }));
+}
 
 // ---------- project ----------
 export function loadProject(p) {
@@ -709,7 +720,10 @@ export async function runQC(src, o = {}) {
     for (const f of P.failed) { const rel = path.relative(dir, f.url); if (!stat.some(i => i.kind === 'missing_media' && i.file === rel)) stat.push({ t: r2(f.t ?? 0), kind: 'missing_media', severity: 'high', target: null, file: rel, msg: `Engine không tải được ${rel}` }); }
     let audio = { issues: [], stats: null };
     if (!o.noAudio) { say(.4, 'Trộn thử âm thanh, đo LUFS / nhạc át giọng'); try { audio = await audioPass(tl, dir, qcDir); } catch (e) { console.error('[qc] audio:', e.message.slice(0, 300)); } }
-    let det = [...stat, ...dom, ...audio.issues].map(i => ({ ...i, src: 'auto' }));
+    let ads = { enabled: false, issues: [] };
+    if (proj.tl.ads?.on) { say(.43, 'Soát chính sách quảng cáo, claim, độ nguyên bản'); ads = await adsPass(dir); if (ads.error) console.error('[qc] ads: ' + ads.error); }
+    const adIssues = (ads.issues || []).map(i => ({ t: r2(clamp(+i.t || 0, 0, tl.duration || 0)), kind: i.kind, severity: i.severity, target: null, msg: i.msg, code: i.code, note: i.ref || undefined }));
+    let det = [...stat, ...dom, ...audio.issues, ...adIssues].map(i => ({ ...i, src: 'auto' }));
     det.sort((a, b) => a.t - b.t);
     // Claude review
     let claude = { used: false }, patches = [];
@@ -795,12 +809,13 @@ export async function runQC(src, o = {}) {
     const aStills = fs.readdirSync(stillDir).filter(f => f.startsWith('a_')).sort().map(f => path.join(stillDir, f));
     await sheet(aStills.filter((f, i) => i % Math.max(1, Math.ceil(aStills.length / 24)) === 0), path.join(qcDir, 'sheet.jpg'), isVert(proj.tl));
     const issues = [...det, ...cIssues].sort((a, b) => a.t - b.t).map(i => ({ t: i.t, kind: i.kind, kind_vi: KIND_VI[i.kind] || i.kind, severity: i.severity, msg: i.msg, fixed: !!i.fixed,
-      src: i.src, target: i.target || undefined, fix: i.fix || undefined, note: i.note || undefined, new: i.new || undefined }));
+      src: i.src, code: i.code || undefined, target: i.target || undefined, fix: i.fix || undefined, note: i.note || undefined, new: i.new || undefined }));
     result = {
       version: 1, project: dir, created: new Date().toISOString(), hash, fix: !!o.fix,
       score: after ?? scoreBefore, before: scoreBefore, after,
       counts: { total: issues.length, fixed: issues.filter(i => i.fixed).length, high: issues.filter(i => i.severity === 'high' && !i.fixed).length },
       claude: { used: !!claude.used, model: claude.model, scores: claude.scores, summary: claude.summary, error: claude.error },
+      ads: ads.enabled || ads.error ? { enabled: !!ads.enabled, industry: ads.industry, industry_vi: ads.industry_vi, platforms: ads.platforms, claims: ads.claims, blocked: !!ads.blocked, originality: ads.originality || null, error: ads.error } : undefined,
       audio: audio.stats, issues, applied, backup: backup ? path.relative(dir, backup) : undefined,
       sheet: fs.existsSync(path.join(qcDir, 'sheet.jpg')) ? '.studio/qc/sheet.jpg' : undefined,
       compare_sheet: o.fix && fs.existsSync(path.join(qcDir, 'compare.jpg')) ? '.studio/qc/compare.jpg' : undefined, compare,
