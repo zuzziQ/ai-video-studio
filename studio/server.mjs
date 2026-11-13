@@ -184,13 +184,15 @@ function upload(req, name) {
   return new Promise((ok, bad) => {
     const safe = path.basename(name).replace(/[^\w.\-À-ỹ ]+/g, '_');
     fs.mkdirSync(P('media'), { recursive: true });
-    const dst = P(`media/${safe}`), out = fs.createWriteStream(dst);
+    // M54: xoá trước khi ghi (inode mới) — media/ của dự án anh em biến thể có thể là liên kết cứng tới bản gốc
+    const dst = P(`media/${safe}`); fs.rmSync(dst, { force: true });
+    const out = fs.createWriteStream(dst);
     req.pipe(out);
     out.on('error', bad);
     out.on('finish', () => {
       if (!VID.test(safe)) return ok({ name: safe });
       const fr = P(`media/${safe.replace(/\.\w+$/, '')}_frames`);
-      fs.mkdirSync(fr, { recursive: true });
+      fs.rmSync(fr, { recursive: true, force: true }); fs.mkdirSync(fr, { recursive: true });
       execFile('ffmpeg', ['-v', 'error', '-y', '-i', dst, '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease', '-q:v', '3', path.join(fr, '%05d.jpg')],
         e => (e ? bad(e) : extractAudio(dst, fr, () => ok({ name: safe }))));
     });

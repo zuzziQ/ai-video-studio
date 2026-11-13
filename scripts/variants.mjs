@@ -7,13 +7,14 @@
 //   [--seed 42] [--allow-low-source] [--estimate]: tổ hợp khán giả × góc × kết cấu × thời lượng × bố cục (scripts/variant_matrix.mjs),
 //   hook lấy từ thư viện hook (scripts/hooks_lib.mjs), cổng đa dạng nguồn (M20) và ước tính (M23) in ra trước khi chạy.
 //   Mỗi bản ghi trục vào variants.json (variants[].axes) và timeline._variant.axes. Spec: references/variant-matrix.md.
-import fs from 'node:fs'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
+import fs from 'node:fs'; import path from 'node:path'; import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readGate, gateText } from './export_gate.mjs';
 import { SKILL, PY, loadProject, saveProject, designOf, isBase, openEngine, engineInit, engineShot, askClaude, parseJson } from './ai_qc.mjs';
 import { loadLib, saveLib, libPath, libKey, projectContext, pickHook, markUsed, generateHooks } from './hooks_lib.mjs';
 import { AUDIENCES, ANGLES as M_ANGLES, NARRATIVES, FORMATS, sourceStats, checkSourceGate, matrixBrief, planMatrix, estimate, estimateText } from './variant_matrix.mjs';
 import { nextBatchPlan, freshSlot } from './ads_results.mjs';
+import { cloneProject } from './project_clone.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -171,8 +172,9 @@ function newSibling(dir, i) {
     if (prev && path.resolve(prev) === dir) fs.rmSync(dst, { recursive: true, force: true });
     else { let k = 2; while (fs.existsSync(`${dir}_v${i + 1}_${k}`)) k++; dst = `${dir}_v${i + 1}_${k}`; }
   }
-  try { execFileSync('cp', ['-cR', dir, dst]); } catch { fs.cpSync(dir, dst, { recursive: true }); } // APFS clone: instant, no extra disk
-  for (const f of ['out', 'variants.json', '.studio/history', '.studio/qc', '.studio/qc.json', '.studio/qc_backup.json']) fs.rmSync(path.join(dst, f), { recursive: true, force: true });
+  // M54: clone APFS trên macOS, nơi khác liên kết cứng khung + video nguồn (chỉ đọc), chép thật phần còn lại (scripts/project_clone.mjs)
+  const c = cloneProject(dir, dst, { skip: ['out', 'variants.json', '.studio/history', '.studio/qc', '.studio/qc.json', '.studio/qc_backup.json'] });
+  if (c.method !== 'clone') console.log(`[variants] ${path.basename(dst)}: liên kết ${c.linked} file (${(c.linkedBytes / 1e6).toFixed(1)} MB), chép ${c.copied} file (${(c.copiedBytes / 1e6).toFixed(1)} MB)${c.fallback ? ` · lùi về chép: ${c.fallback}` : ''}`);
   return dst;
 }
 
