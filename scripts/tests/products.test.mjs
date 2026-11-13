@@ -112,7 +112,11 @@ before(async () => {
   for (let i = 0; i < 50 && !fs.existsSync(tokenFile(PORT, HOME)); i++) await new Promise(r => setTimeout(r, 100));
   TOKEN = fs.readFileSync(tokenFile(PORT, HOME), 'utf8');
 });
-after(() => { srv?.kill(); fs.rmSync(TMP, { recursive: true, force: true }); });
+after(async () => {
+  // wait for the server to exit before removing its folder: on Windows a live process keeps files open (ENOTEMPTY)
+  if (srv && srv.exitCode == null) await new Promise(ok => { srv.once('exit', ok); srv.kill(); setTimeout(ok, 5000); });
+  fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+});
 
 test('routes need the session token', async () => {
   assert.equal((await call('/api/products', { token: null })).status, 401);
