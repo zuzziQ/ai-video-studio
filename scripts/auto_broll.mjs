@@ -16,7 +16,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { search as stockSearch, fetchMedia, sentences } from './ai_broll.mjs';
-import { spawnClaude } from './platform.mjs';
+import { askJSON } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -452,19 +452,11 @@ Trả về DUY NHẤT mảng JSON: [{"i":0,"o":1,"text":"…","vars":{},"query":
 
 ${JSON.stringify(req)}`;
   try {
-    const out = await new Promise((ok, bad) => {
-      const p = spawnClaude(['-p', '--output-format', 'json', '--model', opt('--model', 'sonnet')], { stdio: ['pipe', 'pipe', 'pipe'] });
-      p.stdin.on('error', () => {}); p.stdin.end(prompt); // stdin: long prompts exceed Windows' command-line limit
-      let o = '', e = ''; const t0c = Date.now(), tick = setInterval(() => say(Math.min(.5, .25 + (Date.now() - t0c) / 400000), `Claude đang chọn b-roll… ${Math.round((Date.now() - t0c) / 1000)}s`), 2000);
-      const tm = setTimeout(() => { p.kill(); bad(new Error('Claude quá 180 giây')); }, 180000);
-      p.stdout.on('data', d => (o += d)); p.stderr.on('data', d => (e += d));
-      p.on('error', () => { clearInterval(tick); clearTimeout(tm); bad(new Error('Không tìm thấy Claude Code CLI (lệnh "claude")')); });
-      p.on('close', c => { clearInterval(tick); clearTimeout(tm); c ? bad(new Error(`claude -p lỗi (mã ${c}): ${(e || o).slice(-200)}`)) : ok(o); });
-    });
-    let txt = out; try { txt = JSON.parse(out).result ?? out; } catch {}
-    const m = String(txt).match(/\[[\s\S]*\]/); if (!m) throw new Error('Claude không trả về JSON');
+    const t0c = Date.now();
+    const picks = await askJSON(prompt, { model: opt('--model', 'sonnet'), shape: 'array', timeout: 180000, timeoutMsg: 'Claude quá 180 giây', tickMs: 2000,
+      onTick: () => say(Math.min(.5, .25 + (Date.now() - t0c) / 400000), `Claude đang chọn b-roll… ${Math.round((Date.now() - t0c) / 1000)}s`) });
     let n = 0;
-    for (const x of JSON.parse(m[0])) {
+    for (const x of picks) {
       const s = slots[x.i]; if (!s || s.skip) continue;
       const c = s.C[+x.o];
       if (c && (c.kind !== 'aroll' || used.aroll <= quota.aroll)) { if (c !== s.pick) { s.alts = [s.pick, ...s.alts.filter(a => a !== c && a.kind !== s.pick.kind)].filter(a => CHEAP.has(a.kind)).slice(0, 3); s.pick = c; } n++; }

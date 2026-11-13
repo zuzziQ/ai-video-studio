@@ -32,7 +32,8 @@ function whichAll(name) {
 let CLAUDE = null;
 export function claudeCmd() {
   if (CLAUDE) return CLAUDE;
-  if (process.env.CLAUDE_BIN) return (CLAUDE = [process.env.CLAUDE_BIN, []]);
+  // CLAUDE_BIN may point at the CLI's cli.js (or any .js/.mjs stand-in, as the tests do): run it with this Node.
+  if (process.env.CLAUDE_BIN) return (CLAUDE = /\.[cm]?js$/i.test(process.env.CLAUDE_BIN) ? [process.execPath, [process.env.CLAUDE_BIN]] : [process.env.CLAUDE_BIN, []]);
   const home = os.homedir();
   if (IS_WIN) {
     const found = [...whichAll('claude'), path.join(home, '.local/bin/claude.exe'), path.join(process.env.APPDATA || '', 'npm/claude.cmd')].filter(f => fs.existsSync(f));

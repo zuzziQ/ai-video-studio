@@ -69,7 +69,7 @@ Mã đã xong trên máy, chờ `S01` để thành PR.
 
 ### **`S04`** Đợt 3: LLM chạy trên máy và giọng đọc
 
-- [ ] **`M25`** (`area/llm`): một lớp gọi LLM dùng chung: gom khoảng 8 chỗ `spawnClaude` về `scripts/llm.mjs` với giao diện "prompt → JSON, có hàm kiểm và thử lại". Chưa đổi hành vi.
+- [~] **`M25`** (`area/llm`): một lớp gọi LLM dùng chung: gom khoảng 8 chỗ `spawnClaude` về `scripts/llm.mjs` với giao diện "prompt → JSON, có hàm kiểm và thử lại". Chưa đổi hành vi. 2026-11-13: có `scripts/llm.mjs` (`runClaude`, `askJSON`, `parseLooseJSON`) + test CLI giả lập `scripts/tests/llm.test.mjs`; đã chuyển `ai_broll`, `ai_edit`, `auto_broll`, `broll_lib`, `feedback`, `publish_texts`, `style_lab`. Còn `ai_qc.mjs`, chuyển sau khi avs-ads-qc merge.
 - [ ] **`M26`** (`area/llm`): thêm Ollama làm nhà cung cấp thứ hai (cấu hình ở `~/.ai-video-studio/config.json`). Việc cần xem ảnh (QC khung hình, clone style) vẫn dùng Claude; việc chỉ có chữ (hook, kịch bản, caption đăng) chọn được.
 - [ ] **`M27`** (`area/voice`): giọng VieNeu: giữ máy chủ giọng của Factory chạy riêng trên 127.0.0.1, thêm làm lựa chọn TTS trong `dub.py`, `topic_video.mjs`, `batch.mjs` bên cạnh `say` và `edge-tts`. Chỉ bật nhái giọng sau khi `C04` rõ.
 - [ ] **`M28`** (`area/voice`): script cài VieNeu cho Windows (Factory mới có cho macOS và Linux).

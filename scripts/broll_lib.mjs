@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnClaude } from './platform.mjs';
+import { askJSON } from './llm.mjs';
 
 export const LIB = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'broll_lib');
 const IDX = path.join(LIB, 'index.json');
@@ -64,17 +64,8 @@ export async function autoTag({ ids, all = false, model = 'sonnet', onTick } = {
   const prompt = `Bạn gắn thẻ cho thư viện b-roll của một người làm video tiếng Việt. Hãy dùng công cụ Read mở từng ảnh dưới đây (đường dẫn tương đối trong thư mục hiện tại), rồi viết cho mỗi ảnh 6–12 thẻ TIẾNG VIỆT có dấu, viết thường: chủ thể, đồ vật, địa điểm, hành động, cảm xúc/không khí, ngành nghề liên quan (vd: "quán cà phê, ly cà phê, buổi sáng, ấm cúng, đồ uống, kinh doanh f&b"). Không bịa tên người hay thương hiệu.
 Trả về DUY NHẤT một object JSON {"<id>": ["thẻ", …], …}.
 ${todo.map(x => `- ${x.id}: ${x.thumb}`).join('\n')}`;
-  const out = await new Promise((ok, bad) => {
-    const p = spawnClaude(['-p', '--output-format', 'json', '--model', model, '--allowedTools', 'Read'], { cwd: LIB, stdio: ['pipe', 'pipe', 'pipe'] });
-    p.stdin.on('error', () => {}); p.stdin.end(prompt);
-    let o = '', e = ''; const tick = setInterval(() => onTick?.(), 1000), tm = setTimeout(() => { p.kill(); bad(new Error('Claude quá 5 phút')); }, 300000);
-    p.stdout.on('data', d => (o += d)); p.stderr.on('data', d => (e += d));
-    p.on('error', () => { clearInterval(tick); clearTimeout(tm); bad(new Error('Không tìm thấy Claude Code CLI (lệnh "claude")')); });
-    p.on('close', c => { clearInterval(tick); clearTimeout(tm); c ? bad(new Error(`claude -p lỗi (mã ${c}): ${(e || o).slice(-200)}`)) : ok(o); });
-  });
-  let txt = out; try { txt = JSON.parse(out).result ?? out; } catch {}
-  const m = String(txt).match(/\{[\s\S]*\}/); if (!m) throw new Error('Claude không trả về JSON');
-  const got = JSON.parse(m[0]); let n = 0;
+  const got = await askJSON(prompt, { model, args: ['--allowedTools', 'Read'], cwd: LIB, shape: 'object', timeout: 300000, timeoutMsg: 'Claude quá 5 phút', onTick: () => onTick?.() });
+  let n = 0;
   for (const it of items) if (Array.isArray(got[it.id])) { it.tags = [...new Set([...tagList(got[it.id]), ...it.tags])].slice(0, 24); it.tagged = 'claude'; n++; }
   save(items);
   return { tagged: n };

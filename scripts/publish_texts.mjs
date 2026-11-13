@@ -7,10 +7,10 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { PLATFORMS, probe } from '../studio/routes/52_publish.mjs';
-import { claudeBin, spawnClaude } from './platform.mjs';
+import { claudeBin } from './platform.mjs';
+import { runClaude, askJSON } from './llm.mjs';
 
 export { claudeBin };
-const extractJSON = s => { const a = s.indexOf('{'), b = s.lastIndexOf('}'); if (a < 0 || b < a) throw new Error('AI không trả về JSON'); return JSON.parse(s.slice(a, b + 1)); };
 export const asText = (P, d) => [
   `# ${P.name}`, d.title ? `\n## Tiêu đề\n${d.title}` : '', `\n## Caption\n${d.caption || ''}`, `\n## Hashtag\n${(d.hashtags || []).join(' ')}`,
   d.first_comment ? `\n## Bình luận đầu tiên\n${d.first_comment}` : '', d.thumb_time != null ? `\n## Ảnh bìa gợi ý\n${d.thumb_time}s${d.thumb_text ? ` — chữ trên bìa: ${d.thumb_text}` : ''}` : '',
@@ -40,20 +40,8 @@ Chỉ trả về JSON đúng dạng, không giải thích:
 }
 
 // claude -p … --output-format json → the model's text. onProc(child) lets callers kill it.
-export function askClaude(prompt, { model = 'sonnet', onProc } = {}) {
-  return new Promise((ok, bad) => {
-    const pr = spawnClaude(['-p', '--output-format', 'json', '--model', model], { cwd: os.tmpdir(), env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
-    pr.stdin.on('error', () => {}); pr.stdin.end(prompt); // stdin, not argv: long transcripts exceed Windows' command-line limit
-    onProc?.(pr); let out = '', err = '';
-    pr.stdout.on('data', d => (out += d)); pr.stderr.on('data', d => (err += d));
-    pr.on('error', e => bad(new Error(e.code === 'ENOENT' ? 'Không tìm thấy Claude Code CLI (lệnh `claude`). Cài Claude Code rồi chạy `claude` một lần để đăng nhập.' : e.message)));
-    pr.on('close', c => {
-      if (!(c === 0 || /^\s*\{[\s\S]*"is_error"/.test(out))) return bad(new Error(`claude -p lỗi (mã ${c}): ${(err || out).slice(-400)}`));
-      let r; try { r = JSON.parse(out); } catch { return bad(new Error('Kết quả claude -p không đọc được')); }
-      if (r.is_error) return bad(new Error(/not logged in|\/login|authenticat|api key/i.test(String(r.result)) ? 'Claude Code chưa đăng nhập. Mở Terminal, chạy lệnh "claude" một lần để đăng nhập rồi thử lại.' : 'Claude báo lỗi: ' + String(r.result).slice(0, 300)));
-      ok(String(r.result || ''));
-    });
-  });
+export async function askClaude(prompt, { model = 'sonnet', onProc } = {}) {
+  return (await runClaude(prompt, { model, cwd: os.tmpdir(), onProc })).text;
 }
 
 /** Generate publish texts. o: { dir, tl, captions, videoAbs, videoRel, platforms?, notes?, model?, onProc? } → publish.json doc */
@@ -61,7 +49,7 @@ export async function generatePublish({ dir, tl, captions, videoAbs, videoRel, p
   const plats = (platforms || Object.keys(PLATFORMS)).filter(k => PLATFORMS[k]);
   if (!plats.length) throw new Error('Chưa chọn nền tảng');
   const info = await probe(videoAbs);
-  const data = extractJSON(await askClaude(buildPrompt({ tl, captions, info, plats, notes }), { model, onProc }));
+  const data = await askJSON(buildPrompt({ tl, captions, info, plats, notes }), { model, cwd: os.tmpdir(), onProc, shape: 'object' });
   const PUB = path.join(dir, 'publish');
   fs.mkdirSync(PUB, { recursive: true });
   const doc = { video: videoRel, created: new Date().toISOString(), info, platforms: {} };

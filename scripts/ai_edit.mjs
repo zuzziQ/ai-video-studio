@@ -7,7 +7,8 @@
 import fs from 'node:fs';
 import os from 'node:os'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { findChrome, spawnClaude } from './platform.mjs';
+import { findChrome } from './platform.mjs';
+import { runClaude, askJSON, parseLooseJSON } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -118,34 +119,11 @@ Chỉ trả về DUY NHẤT một object JSON (không markdown, không giải th
 {"pack":"…","caption_style":"…","hook":"…","captions":[{"c":0,"words":["…"],"hl":[1],"br":[]}],"scenes":[{"type":"…","c":0,"w":0,"dur":2.5,"params":{}}],"music":{"mood":"…","gain":-20},"sfx":[{"name":"…","c":0,"w":0}],"summary":"1–2 câu tiếng Việt: vì sao chọn gói và cách dựng"}`;
 }
 
-export function callClaude(prompt, model = 'sonnet', onTick) {
-  return new Promise((ok, bad) => {
-    const p = spawnClaude(['-p', '--output-format', 'json', '--model', model], { stdio: ['pipe', 'pipe', 'pipe'], cwd: os.tmpdir() });
-    let out = '', err = '';
-    const tick = setInterval(() => onTick && onTick(), 1000);
-    p.stdout.on('data', d => (out += d)); p.stderr.on('data', d => (err += d));
-    p.on('error', e => { clearInterval(tick); bad(new Error(e.code === 'ENOENT' ? 'Không tìm thấy lệnh "claude" (Claude Code CLI). Cài Claude Code rồi thử lại.' : e.message)); });
-    p.on('close', code => {
-      clearInterval(tick);
-      if (code !== 0) {
-        let msg = err || out; try { const r = JSON.parse(out); if (r.result) msg = String(r.result); } catch {}
-        if (/not logged in|\/login|invalid api key|authenticat|unauthorized|oauth token/i.test(msg)) return bad(new Error('Claude Code chưa đăng nhập. Mở Terminal, chạy lệnh "claude" một lần để đăng nhập rồi thử lại.'));
-        if (/credit balance|usage limit|rate limit|quota/i.test(msg)) return bad(new Error('Tài khoản Claude đã hết lượt dùng tạm thời. Đợi một lúc rồi thử lại. (' + msg.slice(0, 160) + ')'));
-        return bad(new Error(`claude -p lỗi (mã ${code}): ${msg.slice(-300)}`));
-      }
-      try { const r = JSON.parse(out); if (r.is_error) return bad(new Error('Claude báo lỗi: ' + String(r.result).slice(0, 300))); ok(String(r.result || '')); }
-      catch { ok(out); }
-    });
-    p.stdin.end(prompt);
-  });
+// Kept for highlights.mjs, topic_video.mjs and tpl_fit.mjs: prompt → the model's text, and relaxed JSON object parsing.
+export async function callClaude(prompt, model = 'sonnet', onTick) {
+  return (await runClaude(prompt, { model, cwd: os.tmpdir(), onTick: onTick && (() => onTick()) })).text;
 }
-export function parseJson(s) {
-  s = String(s).replace(/^```(?:json)?\s*|```\s*$/gm, '');
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('không có JSON');
-  const body = s.slice(a, b + 1);
-  try { return JSON.parse(body); } catch { return JSON.parse(body.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')); }
-}
+export const parseJson = s => parseLooseJSON(s, { shape: 'object' });
 
 // ---------- validation: everything the model says is checked against the engine catalog and the transcript ----------
 const TKEY = /^(t|t0|t1|out|strike_at|[a-z_]*_t)$/;
@@ -297,17 +275,12 @@ async function main() {
   const prompt = buildPrompt(ctx);
   fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
   fs.writeFileSync(path.join(dir, '.studio/ai_prompt.txt'), prompt);
-  let p = .15, raw = null, lastErr = null;
+  let p = .15, t0 = 0;
   const model = opt('--model', o.model || 'sonnet');
-  for (let attempt = 0; attempt < 2 && !raw; attempt++) {
-    say(p, attempt ? 'Claude trả lời chưa đúng JSON — hỏi lại' : `Claude đang đọc lời thoại và lên bản dựng (${Math.round(prompt.length / 1000)}k ký tự, 20–90 giây)`);
-    const ask = attempt ? `${prompt}\n\nLần trước bạn trả lời không phải JSON hợp lệ (${lastErr}). Chỉ trả về JSON.` : prompt;
-    const t0 = Date.now();
-    const res = await callClaude(ask, model, () => { const s = (Date.now() - t0) / 1000; say(Math.min(.88, p + .7 * (1 - Math.exp(-s / 45))), `Claude đang lên bản dựng… ${Math.round(s)}s`); });
-    fs.writeFileSync(path.join(dir, '.studio/ai_raw.txt'), res);
-    try { raw = parseJson(res); } catch (e) { lastErr = e.message; p = .5; }
-  }
-  if (!raw) throw new Error('Claude không trả về JSON hợp lệ: ' + lastErr);
+  const raw = await askJSON(prompt, { model, cwd: os.tmpdir(), shape: 'object', retries: 1,
+    onAttempt: attempt => { if (attempt) p = .5; t0 = Date.now(); say(p, attempt ? 'Claude trả lời chưa đúng JSON — hỏi lại' : `Claude đang đọc lời thoại và lên bản dựng (${Math.round(prompt.length / 1000)}k ký tự, 20–90 giây)`); },
+    onTick: () => { const s = (Date.now() - t0) / 1000; say(Math.min(.88, p + .7 * (1 - Math.exp(-s / 45))), `Claude đang lên bản dựng… ${Math.round(s)}s`); },
+    onRaw: res => fs.writeFileSync(path.join(dir, '.studio/ai_raw.txt'), res) });
   say(.92, 'Kiểm tra và sửa kết quả');
   const plan = validate(raw, ctx);
   const out = path.resolve(dir, opt('--out', '.studio/ai_plan.json'));
