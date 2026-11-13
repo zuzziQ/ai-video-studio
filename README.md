@@ -150,6 +150,7 @@ Tuỳ chọn khi chạy từ PowerShell:
 - `.\install.cmd -Yes`: tự cài mọi thứ, không hỏi;
 - `-NoSkill`: không gắn vào Claude Code;
 - `-NoShortcut`: không tạo lối tắt.
+- `-NoCuda`: có GPU NVIDIA cũng không cài cuBLAS cho whisper (whisper chạy CPU).
 
 Muốn cài công cụ bằng tay trước, chạy trong PowerShell:
 ```powershell
