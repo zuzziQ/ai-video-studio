@@ -58,7 +58,7 @@ const CHROME = findChrome();
 
 async function open(W = 1280, H = 720) {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
-    args: ['--allow-file-access-from-files', '--disable-web-security', '--force-color-profile=srgb', '--hide-scrollbars'] });
+    args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'] });
   const page = await browser.newPage();
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
   page.on('console', m => { if (m.type() === 'error') console.error('[page]', m.text()); });

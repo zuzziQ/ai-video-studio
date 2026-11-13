@@ -36,7 +36,7 @@ var v=vars(),r=document.querySelector('[data-composition-id]')||document.documen
 
 const CHROME = findChrome();
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, protocolTimeout: 60000,
-  args: ['--allow-file-access-from-files', '--disable-web-security', '--force-color-profile=srgb', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+  args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
 
 function copyDir(a, b) {
   fs.mkdirSync(b, { recursive: true });

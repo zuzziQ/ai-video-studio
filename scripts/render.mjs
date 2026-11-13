@@ -27,7 +27,7 @@ const PRESET = args.includes('--fast') ? 'veryfast' : 'medium';
 
 const CHROME = findChrome();
 
-const launchArgs = ['--allow-file-access-from-files', '--disable-web-security', '--force-color-profile=srgb', '--hide-scrollbars',
+const launchArgs = ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars',
   '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
   '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']; // WebGL for 3D HyperFrames blocks
 const browsers = [];
