@@ -1,11 +1,12 @@
 """Translate captions (bilingual subtitles) and build a dubbed voice track. Spec: references/reframe-dub.md
 
-usage: python dub.py <timeline.json> --lang en [--from vi] [--no-translate] [--no-tts] [--tts say|edge] [--voice NAME]
+usage: python dub.py <timeline.json> --lang en [--from vi] [--no-translate] [--no-tts] [--tts say|edge|vieneu] [--voice NAME]
                      [--voice-gain 0.15] [--max-tempo 1.35] [--force]
        python dub.py --voices en            (list macOS `say` voices for a language)
 1. Translation (claude -p, batched JSON): captions are grouped into phrases (gap < 0.45 s, ≤ 7 s), each phrase is
    translated as a whole and split back over its caption segments -> caption["tr"]; TL.sub2 = {lang, on, style}.
-2. Dub: one TTS clip per phrase (macOS `say` offline, or edge-tts = Microsoft online voices, needs internet),
+2. Dub: one TTS clip per phrase (macOS `say` offline, edge-tts = Microsoft online voices, needs internet, or VieNeu =
+   local Vietnamese voices served on 127.0.0.1, see scripts/tts.py; no VieNeu server or lang != vi → falls back to edge-tts),
    sped up with atempo up to --max-tempo to fit until the next phrase; longer ones overrun (reported) and push the next.
    Written to work/dub_<lang>.wav (output time) -> track {id:"dub"} in TL.audio.tracks (+ TL.audio.dub = {file, lang, voice,
    engine} metadata); TL.audio.voice_gain dims the original voice in mix_audio.py (0 = mute, 1 = unchanged).
@@ -20,6 +21,9 @@ import sys
 import tempfile
 
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
+import tts as voices  # noqa: E402  (scripts/tts.py: engine choice, VieNeu client)
 
 LANGS = {"vi": "tiếng Việt", "en": "English", "zh": "简体中文 (Simplified Chinese)", "ja": "日本語 (Japanese)", "ko": "한국어 (Korean)",
          "th": "ภาษาไทย (Thai)", "fr": "Français", "de": "Deutsch", "es": "Español", "id": "Bahasa Indonesia", "ru": "Русский",
@@ -127,15 +131,8 @@ def tempo(x, k, tmp):
     return np.fromfile(b, np.float32)
 
 
-def tts(text, engine, voice, tmp, n):
-    if engine == "edge":
-        f = os.path.join(tmp, f"{n}.mp3")
-        r = subprocess.run([sys.executable, "-m", "edge_tts", "--voice", voice, "--text", text, "--write-media", f], capture_output=True, text=True)
-        if r.returncode:
-            raise SystemExit("edge-tts lỗi (cần Internet, `pip install edge-tts`): " + r.stderr[-200:])
-    else:
-        f = os.path.join(tmp, f"{n}.aiff")
-        subprocess.run(["say", "-v", voice, "-o", f, text], check=True)
+def tts(text, choice, tmp, n):
+    f = voices.synth(text, os.path.join(tmp, str(n)), choice)
     x = decode(f)
     nz = np.where(np.abs(x) > 0.01)[0]  # trim leading/trailing silence
     return x[max(0, nz[0] - 240):nz[-1] + 480] if len(nz) else x
@@ -149,7 +146,7 @@ def main():
     ap.add_argument("--no-translate", action="store_true")
     ap.add_argument("--no-tts", action="store_true")
     ap.add_argument("--force", action="store_true", help="dịch lại cả khi đã có tr cùng ngôn ngữ")
-    ap.add_argument("--tts", default="say", choices=["say", "edge"])
+    ap.add_argument("--tts", default="say", choices=["say", "edge", "vieneu"])
     ap.add_argument("--voice")
     ap.add_argument("--voice-gain", type=float)
     ap.add_argument("--max-tempo", type=float, default=1.35)
@@ -158,7 +155,8 @@ def main():
     if a.tts == "say" and not shutil.which("say"):  # Windows/Linux: no macOS voices → Microsoft online voices
         a.tts = "edge"
     if a.voices:
-        print(json.dumps({"say": say_voices(a.voices), "edge": EDGE.get(a.voices)}, ensure_ascii=False))
+        vn = voices.voice_names(voices.vieneu_health()) if a.voices == "vi" else []
+        print(json.dumps({"say": say_voices(a.voices), "edge": EDGE.get(a.voices), "vieneu": vn}, ensure_ascii=False))
         return
     tlp = os.path.abspath(a.timeline)
     base = os.path.dirname(tlp)
@@ -179,7 +177,16 @@ def main():
         tl["sub2"] = {"style": "plain", **sub2, "lang": a.lang, "on": True}
     report = {"lang": a.lang, "segments": len(caps_live), "phrases": len(groups)}
     if not a.no_tts:
-        voice = a.voice or (EDGE.get(a.lang) if a.tts == "edge" else (say_voices(a.lang) or [None])[0])
+        engine = a.tts
+        if engine == "vieneu":
+            choice = voices.resolve("vieneu", a.lang, a.voice, EDGE.get(a.lang))
+            engine = choice["engine"]
+            voice = choice["voice"]
+            if choice.get("fallback"):
+                report["fallback"] = {"from": "vieneu", "to": engine, "why": choice["fallback"]}
+        else:
+            voice = a.voice or (EDGE.get(a.lang) if engine == "edge" else (say_voices(a.lang) or [None])[0])
+            choice = {"engine": engine, "voice": voice}
         if not voice:
             raise SystemExit(f"macOS không có giọng `say` cho '{a.lang}'. Cài thêm giọng trong Cài đặt hệ thống › Trợ năng › Nội dung được đọc, hoặc chọn edge-tts.")
         dur = float(tl.get("duration") or caps_live[-1]["t1"] + 1)
@@ -192,7 +199,7 @@ def main():
                 continue
             t0 = caps_live[g[0]]["t0"]
             t_end = caps_live[groups[n + 1][0]]["t0"] if n + 1 < len(groups) else min(dur, caps_live[g[-1]]["t1"] + 0.8)
-            x = tts(text, a.tts, voice, tmp, n)
+            x = tts(text, choice, tmp, n)
             start = max(t0, cursor)
             slot = max(0.3, t_end - start - 0.06)
             k = len(x) / SR / slot
@@ -216,7 +223,7 @@ def main():
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-", "-ac", "2", os.path.join(base, rel)],
                        input=out.astype(np.float32).tobytes(), check=True)
         A = tl.setdefault("audio", {})
-        A["dub"] = {"file": rel, "lang": a.lang, "voice": voice, "engine": a.tts}
+        A["dub"] = {"file": rel, "lang": a.lang, "voice": voice, "engine": engine}
         # the dubbed voice is an extra audio track (TL.audio.tracks, mixed by mix_audio.py), id "dub", replaced on each run
         tracks = A.setdefault("tracks", [])
         tr = next((t for t in tracks if t.get("id") == "dub"), None)

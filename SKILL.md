@@ -18,6 +18,7 @@ Gồm 3 lớp:
 | AI dựng giúp (`scripts/ai_edit.mjs`), cắt lỗi nói (`fillers.py`), sửa video bằng chữ | `references/ai-edit.md` |
 | Làm sạch giọng (`voice_clean.py`), tự hạ nhạc, nhiều track âm thanh (`TL.audio.clean/duck/tracks`) | `references/audio.md` |
 | Bám mặt đổi khung (`face_track.py`, `clip.reframe`), xuất nhiều khổ, dịch + lồng tiếng (`dub.py`, `TL.sub2`) | `references/reframe-dub.md` |
+| Giọng đọc `say` / edge-tts / VieNeu (tiếng Việt, máy chủ trên 127.0.0.1, `scripts/tts.py`, cài Windows `scripts/install_vieneu.ps1`) | `references/voice.md` |
 | Keyframe (`kf`), mặt nạ (`mask`), tách nền, b-roll AI/stock (`ai_broll.mjs`) | `references/keyframes-mask-broll.md` |
 | Làm hàng loạt từ CSV/XLSX (`batch.mjs`), brand kit (`~/.ai-video-studio/brands.json`), gói đăng mạng xã hội | `references/batch-brands-publish.md` |
 | Render song song (`render.mjs --workers N --fast`), app Mac (`scripts/make_app.sh`) | `references/app-render.md` |

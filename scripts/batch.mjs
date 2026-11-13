@@ -3,6 +3,7 @@
 // usage:
 //   node scripts/batch.mjs <template-id | template.json | project_dir> <sheet.csv|.xlsx> <out_dir>
 //        [--map mapping.json] [--brand <brand-id>] [--voice auto|tts|none|beat] [--quality 720|1080] [--dur 12] [--rows 1,2|1-3]
+//        [--tts say|edge|vieneu] [--tts-voice NAME]   (giọng AI; job.json: tts_engine, tts_voice — VieNeu: scripts/tts.py)
 //   node scripts/batch.mjs --job <out_dir>/job.json                 (what Studio runs; resumable: finished rows are skipped)
 //   node scripts/batch.mjs --job job.json --preview <row> [--t 3] --out still.jpg   (still of one row, no audio, small size)
 //   node scripts/batch.mjs --parse <sheet>                          (columns + rows as JSON)
@@ -174,6 +175,20 @@ const sh = (cmd, argv, { cwd, onLine } = {}) => new Promise((ok, bad) => {
   p.on('error', bad);
   p.on('close', code => { CUR = null; code === 0 ? ok(log) : bad(new Error(`${path.basename(cmd)} lỗi (mã ${code}): ${log.trim().split('\n').slice(-2).join(' | ').slice(-300)}`)); });
 });
+// Giọng AI: 'say' (chỉ macOS), 'edge' (edge-tts, cần mạng) hoặc 'vieneu' (máy chủ giọng tiếng Việt trên 127.0.0.1).
+// Mặc định như cũ: say trên macOS, edge ở nơi khác. edge/vieneu đi qua scripts/tts.py; VieNeu không chạy thì nó lùi về edge-tts.
+export const ttsEngine = job => ['say', 'edge', 'vieneu'].includes(job.tts_engine) && !(job.tts_engine === 'say' && process.platform !== 'darwin') ? job.tts_engine : process.platform === 'darwin' ? 'say' : 'edge';
+export async function ttsFile(engine, voice, text, outBase, log = () => {}, py = PY) {
+  const neural = /Neural$/.test(voice || '');
+  const argv = ['-I', '-X', 'utf8', path.join(HERE, 'tts.py'), 'say', text, '--engine', engine, '--lang', 'vi', '--out', outBase + '.wav', '--python', py,
+    ...(engine === 'edge' ? ['--edge-voice', neural ? voice : 'vi-VN-HoaiMyNeural'] : voice && !neural ? ['--voice', voice] : []), ...(engine === 'vieneu' && neural ? ['--edge-voice', voice] : [])];
+  log(engine === 'vieneu' ? 'đọc lời bằng giọng VieNeu (máy chủ trên máy)' : 'đọc lời bằng giọng HoaiMy (edge-tts, cần mạng)');
+  let res = null;
+  await sh(py, argv, { onLine: l => { if (l.startsWith('TTS ')) res = JSON.parse(l.slice(4)); else if (l.startsWith('⚠')) log(l.replace(/^⚠\s*/, '')); } });
+  if (!res?.file || !fs.existsSync(res.file)) throw new Error('tts.py không trả file giọng đọc');
+  if (res.fallback) log(`VieNeu không dùng được (${res.fallback}) → đã đọc bằng edge-tts`);
+  return res.file;
+}
 const probeDur = f => +execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim() || 0;
 // Resolve a cell value (absolute / ~ / relative to the sheet, the project or examples/) to a local file; URLs are downloaded.
 async function resolveFile(v, ctx, destDir) {
@@ -319,9 +334,10 @@ export async function buildRow(job, i, { preview = false, dirOverride, log = () 
         tl = { ...base, duration: dur, aroll: { frames: 'work/frames/%05d.jpg' }, audio: { ...base.audio, voice: 'work/aroll.mp4' } };
       } else if (mode === 'tts') {
         if (!script) throw new Error('chế độ giọng AI cần cột lời đọc');
-        const aiff = path.join(dir, process.platform === 'darwin' ? 'work/voice.aiff' : 'work/voice.mp3'), wav = path.join(dir, 'work/voice.wav');
-        if (process.platform === 'darwin') { log('đọc lời bằng giọng Linh (say)'); await sh('say', ['-v', job.tts_voice || 'Linh', '-r', String(job.tts_rate || 175), '-o', aiff, script]); }
-        else { log('đọc lời bằng giọng HoaiMy (edge-tts, cần mạng)'); await sh(PY, ['-X', 'utf8', '-m', 'edge_tts', '--voice', /Neural$/.test(job.tts_voice || '') ? job.tts_voice : 'vi-VN-HoaiMyNeural', '--text', script, '--write-media', aiff]); }
+        const wav = path.join(dir, 'work/voice.wav'), engine = ttsEngine(job);
+        let aiff;
+        if (engine === 'say') { aiff = path.join(dir, 'work/voice.aiff'); log('đọc lời bằng giọng Linh (say)'); await sh('say', ['-v', job.tts_voice || 'Linh', '-r', String(job.tts_rate || 175), '-o', aiff, script]); }
+        else aiff = await ttsFile(engine, job.tts_voice, script, path.join(dir, 'work/voice'), log);
         await sh('ffmpeg', ['-v', 'error', '-y', '-i', aiff, '-af', 'apad=pad_dur=0.2', '-ar', '48000', '-ac', '2', wav]); fs.rmSync(aiff, { force: true });
         const vd = probeDur(wav); caps = ttsCaptions(script, vd);
         dur = +Math.max(vd + 2.4, +get("f:dur") || +job.dur || 0).toFixed(2);
@@ -432,7 +448,7 @@ if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fileUR
       const mapping = opt('--map') ? JSON.parse(fs.readFileSync(opt('--map'), 'utf8')) : autoMap(targetsOf(loadSource(s).doc), columns);
       fs.mkdirSync(path.resolve(out), { recursive: true });
       const jf = path.join(path.resolve(out), 'job.json');
-      fs.writeFileSync(jf, JSON.stringify({ source: s, sheet: path.resolve(sheet), mapping: mapping.mapping || mapping, brand: opt('--brand') || null, voice: opt('--voice', 'auto'), quality: opt('--quality', '1080'), dur: +opt('--dur', 0) || null, rows: opt('--rows') || null, out: path.resolve(out) }, null, 1));
+      fs.writeFileSync(jf, JSON.stringify({ source: s, sheet: path.resolve(sheet), mapping: mapping.mapping || mapping, brand: opt('--brand') || null, voice: opt('--voice', 'auto'), ...(opt('--tts') ? { tts_engine: opt('--tts') } : {}), ...(opt('--tts-voice') ? { tts_voice: opt('--tts-voice') } : {}), quality: opt('--quality', '1080'), dur: +opt('--dur', 0) || null, rows: opt('--rows') || null, out: path.resolve(out) }, null, 1));
       const st = await runJob(jf);
       for (const r of st.rows) console.log(`dòng ${r.i + 1}: ${r.state}${r.out ? ' → ' + r.out : ''}${r.error ? ' — ' + r.error : ''}`);
       process.exitCode = st.rows.some(r => r.state !== 'done') ? 2 : 0;
