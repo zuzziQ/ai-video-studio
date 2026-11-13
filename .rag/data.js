@@ -119,7 +119,7 @@ export const DOMAINS = {
     port: 5186,
     ssot_path: "docs/ROADMAP.md",
     keywords: ["roadmap", "ci", "gate", "verify", "unittest", "node --check", "pr-ship", "area"],
-    summary: "Kế hoạch SSOT ở docs/ROADMAP.md (đợt Sxx, mục Mxx). CI một job gate: nhãn, dòng Roadmap, .rag/sync.js --check, node --check, unittest; không render video.",
+    summary: "Kế hoạch SSOT ở docs/ROADMAP.md (đợt Sxx, mục Mxx). CI một job gate: nhãn, dòng Roadmap, .rag/sync.js --check, node --check, unittest Python, node --test scripts/tests/*.test.mjs; không render video.",
     guardrails: [
       "Phần thêm nằm ở file mới; không đọc .env* hay token ~/.ai-video-studio; commit/PR không ghi tên AI.",
       "CI chạy khi PR, chạy tay và lịch tuần, một job gate không cài dependency; không render video trong CI.",
