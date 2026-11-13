@@ -1,12 +1,15 @@
 // AI QC + A/B variants (references/qc-variants.md):
 //   POST /api/qc/run {fix, claude, model, fresh}  → job "qc": scripts/ai_qc.mjs → .studio/qc.json
 //   GET  /api/qc                                  → last report (+ backup flag)
+//   GET  /api/qc/gate                             → cổng chặn xuất (scripts/export_gate.mjs): {blocked, hard, overridable, issues, override, stale}
+//   POST /api/qc/override {reason}                → ghi lý do bỏ qua chặn xuất (chỉ lỗi claim / nguyên bản; lỗi chính sách → 400)
 //   POST /api/qc/undo                             → restore .studio/qc_backup.json (timeline + captions as before the fix)
 //   POST /api/variants/run {n, kind, export, quality} → job "variants": scripts/variants.mjs → <project>_v1.._vN + variants.json
 //   GET  /api/variants                            → variants.json of this project (or of its base when a variant is open)
 //   GET  /api/variants/file?dir=&f=               → a still / video inside one of the listed variant folders
 //   POST /api/variants/open {dir}                 → open a listed variant (or the base) in the Studio
 import fs from 'node:fs'; import path from 'node:path';
+import { readGate, recordOverride } from '../../scripts/export_gate.mjs';
 
 export default ctx => {
   const S = f => path.join(ctx.SKILL, 'scripts', f);
@@ -37,6 +40,12 @@ export default ctx => {
     if (p === '/api/qc') {
       const r = readJ(path.join(st, 'qc.json'));
       return ctx.json(res, r ? { ...r, can_undo: fs.existsSync(path.join(st, 'qc_backup.json')) } : { none: true, error: 'Chưa kiểm tra' }), true;
+    }
+    if (p === '/api/qc/gate') return ctx.json(res, readGate(ctx.project.dir)), true;
+    if (p === '/api/qc/override' && req.method === 'POST') {
+      const b = await ctx.body(req);
+      try { return ctx.json(res, recordOverride(ctx.project.dir, b.reason, { by: 'studio' })), true; }
+      catch (e) { return ctx.json(res, { error: e.message }, 400), true; }
     }
     if (p === '/api/qc/undo' && req.method === 'POST') {
       const f = path.join(st, 'qc_backup.json'), b = readJ(f);

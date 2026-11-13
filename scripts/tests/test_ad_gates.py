@@ -193,6 +193,59 @@ class Project(unittest.TestCase):
         self.assertEqual([i["code"] for i in r["issues"] if i["kind"] == "ad_originality"], ["BLOCK-04"])
         self.assertTrue(r["blocked"])
 
+    # ---- M17: phiên bản A/B của "Tạo phiên bản" (scripts/variants.mjs)
+    def _ab_group(self, kind="hook", ab_test=None, hooks=("Bạn đã biết điều này?", "Sự thật ít ai nói")):
+        lines = ["Serum dưỡng ẩm cho da khô mùa đông", "dùng hai lần mỗi ngày"]
+        base = project(self.tmp.name, "base", lines, ads={"on": True, "industry": "general"}, pack="review")
+        vs = []
+        for k, h in enumerate(hooks, 1):
+            sc = [{"type": "text", "t0": 0.05, "t1": 2.8, "_variant": True, "lines": [{"text": h.upper()}]}] if h else []
+            vs.append(project(self.tmp.name, f"base_v{k}", lines, ads={"on": True, "industry": "general"}, pack="review",
+                              scenes=sc, _variant={"base": base, "i": k, "kind": kind}))
+        v = {"base": base, "kind": kind, "variants": [{"dir": x} for x in vs]}
+        if ab_test is not None:
+            v["ab_test"] = ab_test
+        with open(os.path.join(base, "variants.json"), "w", encoding="utf-8") as f:
+            json.dump(v, f)
+        return base, vs
+
+    def test_hook_only_ab_variants_are_a_low_reminder(self):
+        base, vs = self._ab_group()
+        r = g.run(vs[0])
+        orig = [i for i in r["issues"] if i["kind"] == "ad_originality"]
+        self.assertEqual([(i["code"], i["severity"]) for i in orig], [("INFO-AB", "low")])
+        self.assertFalse(r["blocked"])
+        self.assertTrue(r["originality"]["ab"])
+        self.assertLess(r["originality"]["parts"]["hook"], g.AB_SAME)     # hook = chữ trên màn hình 3 giây đầu
+        self.assertEqual(r["originality"]["compared"], 2)                   # gốc + bản kia, không tự so với chính nó
+
+    def test_undeclared_group_still_blocks(self):
+        base, vs = self._ab_group(ab_test=False)
+        r = g.run(vs[0])
+        self.assertEqual([i["code"] for i in r["issues"] if i["kind"] == "ad_originality"], ["BLOCK-04"])
+        self.assertTrue(r["blocked"])
+
+    def test_ab_group_with_identical_hooks_blocks(self):
+        base, vs = self._ab_group(hooks=("Cùng một câu hook", "Cùng một câu hook"))
+        r = g.run(vs[0])
+        orig = [i for i in r["issues"] if i["kind"] == "ad_originality"]
+        self.assertTrue(any(i["code"] == "BLOCK-04" and "giống hệt" in i["msg"] for i in orig))
+
+    def test_outside_copy_blocks_even_inside_ab_group(self):
+        base, vs = self._ab_group()
+        twin = project(self.tmp.name, "copy", ["Serum dưỡng ẩm cho da khô mùa đông", "dùng hai lần mỗi ngày"], pack="review",
+                       scenes=[{"type": "text", "t0": 0.05, "t1": 2.8, "lines": [{"text": "BẠN ĐÃ BIẾT ĐIỀU NÀY?"}]}])
+        r = g.run(vs[0], [twin])
+        self.assertIn(("BLOCK-04", "high"), [(i["code"], i["severity"]) for i in r["issues"] if i["kind"] == "ad_originality"])
+        self.assertTrue(r["blocked"])
+
+    def test_self_is_excluded_when_paths_are_spelled_differently(self):
+        base, vs = self._ab_group()
+        alias = vs[0] + os.sep + "." + os.sep                               # cùng thư mục, viết khác
+        self.assertFalse(any(g.same_dir(x, alias) for x in g.sibling_dirs(alias, {"_variant": {"base": base}})))
+        self.assertTrue(g.same_dir(vs[0], alias))
+        self.assertEqual(len(g.sibling_dirs(alias, {"_variant": {"base": base}})), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

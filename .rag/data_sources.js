@@ -14,6 +14,7 @@ export const GUARDRAIL_SOURCES = {
   ],
   ads: [
     [{ file: "references/ad-gates.md", section: "Giới hạn" }],
+    [{ file: "references/ad-gates.md", section: "Chặn xuất" }],
   ],
   upstream: [
     [{ file: AG, section: "Kéo bản mới từ repo gốc (upstream)" }],
