@@ -1,0 +1,17 @@
+{
+  "checks": [
+    {
+      "id": "rag",
+      "cmd": ["node", ".rag/sync.js", "--check"],
+      "when": ["**"],
+      "fix": "đọc lại luật bị đổi, sửa .rag/data.js nếu cần, rồi node .rag/sync.js --pin"
+    },
+    {
+      "id": "unittest",
+      "cmd": ["python", "-m", "unittest", "discover", "-s", "scripts/tests"],
+      "when": ["scripts/**/*.py"],
+      "timeout": 120,
+      "fix": "python -m unittest discover -s scripts/tests -v"
+    }
+  ]
+}

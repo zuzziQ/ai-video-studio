@@ -1,0 +1,31 @@
+name: Việc cần làm
+description: Tính năng nhỏ, cải thiện, tài liệu hoặc việc vặt đã rõ phải làm gì
+title: "chore: "
+labels: ["status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tiêu đề theo Conventional Commit (`feat(vùng): ...`, `docs(vùng): ...`) để PR sau này dùng lại. Nếu thuộc một Issue theo dõi nhiều bước, ghi dòng đầu phần Vì sao: `Thứ tự: <mã> · Thuộc #<số-issue-theo-dõi>` và gắn vào Milestone tương ứng. Ý tưởng còn mơ hồ thì thảo luận ở Discussions trước.
+  - type: textarea
+    id: why
+    attributes:
+      label: Vì sao cần làm
+      description: Vấn đề hoặc nhu cầu, kèm số liệu nếu có.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Xong khi nào
+      description: Tiêu chí kiểm được, mỗi dòng một ý.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Ghi chú
+      description: Liên kết, tài liệu liên quan, rủi ro (auth, quyền, schema, deploy thì ghi rõ để gắn `risk/high`).

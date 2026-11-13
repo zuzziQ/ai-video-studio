@@ -1,0 +1,71 @@
+name: CI
+
+# Cổng PR theo D:/ai/templates/ci-gate.workflow.yml và D:/ai/docs/CI-BUDGET.md.
+# - Chạy khi PR, chạy tay và mỗi tuần một lần; KHÔNG chạy sau mỗi push vào main (W5). Chạy tay: gh workflow run CI --ref main
+# - Một job `gate` (W1): mọi kiểm tra đều nhẹ, không cài dependency, không render video; mỗi bước `if: always()` để thấy hết lỗi.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 2 * * 1' # thứ Hai 02:23 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # bước gán nhãn type/area/size (PR từ fork chỉ có quyền đọc, bước nhãn tự bỏ qua)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # check-roadmap-link so với nhánh gốc
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Tiêu đề và thân PR đi qua biến môi trường, không nhúng thẳng vào lệnh.
+      - name: Gán nhãn từ tiêu đề PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: bash .github/scripts/pr-labels.sh
+
+      - name: Kiểm dòng Roadmap trong thân PR (I8)
+        if: always() && github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          node scripts/check-roadmap-link.mjs --body-file "$RUNNER_TEMP/pr-body.md" --base "$BASE_REF" --title "$PR_TITLE"
+
+      - name: Knowledge pack (.rag/) khớp repo, ghi công còn nguyên
+        if: always()
+        run: node .rag/sync.js --check
+
+      - name: Cú pháp JS/MJS (node --check)
+        if: always()
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            node --check "$f" || { echo "::error file=$f::node --check lỗi"; fail=1; }
+          done < <(git ls-files 'scripts/*.mjs' 'studio/*.js' 'studio/*.mjs')
+          exit $fail
+
+      - name: Test Python (scripts/tests)
+        if: always()
+        run: python3 -m unittest discover -s scripts/tests

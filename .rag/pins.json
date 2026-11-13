@@ -1,0 +1,47 @@
+{
+  "chunk:attribution/attribution-rules": {
+    "hash": "6263b78b2975"
+  },
+  "chunk:attribution/attribution-readme": {
+    "hash": "b8576d4ee0f1"
+  },
+  "guardrail:attribution#0/0": {
+    "hash": "a640348ff85f"
+  },
+  "guardrail:attribution#1/0": {
+    "hash": "b8576d4ee0f1"
+  },
+  "chunk:studio/studio-api": {
+    "hash": "45bea0f041a5"
+  },
+  "chunk:studio/studio-plugin": {
+    "hash": "6b6f3865fc39"
+  },
+  "guardrail:studio#0/0": {
+    "hash": "6b6f3865fc39"
+  },
+  "guardrail:studio#1/0": {
+    "hash": "7b77c4684740"
+  },
+  "chunk:ads/ads-config": {
+    "hash": "686c15e95ce6"
+  },
+  "guardrail:ads#0/0": {
+    "hash": "a74f98fa748c"
+  },
+  "chunk:upstream/upstream-sync": {
+    "hash": "841e19b63f80"
+  },
+  "guardrail:upstream#0/0": {
+    "hash": "841e19b63f80"
+  },
+  "chunk:workflow/workflow-verify": {
+    "hash": "9f8d742d769f"
+  },
+  "guardrail:workflow#0/0": {
+    "hash": "9b9053458997"
+  },
+  "guardrail:workflow#1/0": {
+    "hash": "efe91f9f0fe0"
+  }
+}
