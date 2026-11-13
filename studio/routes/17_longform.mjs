@@ -90,7 +90,7 @@ export default ctx => {
         const topic = String(b.topic || '').trim().slice(0, 400);
         if (topic.length < 4) return J({ ok: false, error: 'Nhập chủ đề (ít nhất vài chữ)' }, 400);
         const out = path.join(ROOT, 'topics', `${slug(topic)}_${ctx.stamp()}`);
-        const voice = /^(Linh|edge:[\w-]+)$/.test(b.voice || '') ? b.voice : 'Linh';
+        const voice = /^(Linh|edge:[\w-]+|vieneu(:[\p{L}\p{N} ._()-]{1,60})?)$/u.test(b.voice || '') ? b.voice : 'Linh';
         const argv = [TOPIC, topic, '--out', out, '--dur', String(Math.max(15, Math.min(120, +b.dur || 45))), '--voice', voice,
           '--orient', b.orient === 'horizontal' ? 'horizontal' : 'vertical', ...(b.handle ? ['--handle', String(b.handle).slice(0, 40)] : []), ...(b.export ? ['--export'] : [])];
         const ok = ctx.startJob('topic', () => runCli(argv, r => { ctx.job.out = { dir: r?.dir || out, mp4: r?.mp4 || null, title: r?.title }; }), b);

@@ -146,12 +146,14 @@ def main():
     ap.add_argument("--no-translate", action="store_true")
     ap.add_argument("--no-tts", action="store_true")
     ap.add_argument("--force", action="store_true", help="dịch lại cả khi đã có tr cùng ngôn ngữ")
-    ap.add_argument("--tts", default="say", choices=["say", "edge", "vieneu"])
+    ap.add_argument("--tts", choices=["say", "edge", "vieneu"],
+                    help="mặc định: tts.default_engine trong config.json (Studio › Mô hình & giọng), không có thì say")
     ap.add_argument("--voice")
     ap.add_argument("--voice-gain", type=float)
     ap.add_argument("--max-tempo", type=float, default=1.35)
     ap.add_argument("--voices")
     a = ap.parse_args()
+    a.tts = a.tts or voices.default_engine() or "say"
     if a.tts == "say" and not shutil.which("say"):  # Windows/Linux: no macOS voices → Microsoft online voices
         a.tts = "edge"
     if a.voices:

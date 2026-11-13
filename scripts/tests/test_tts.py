@@ -112,6 +112,18 @@ class TtsTest(unittest.TestCase):
         self.assertEqual((r["engine"], r["voice"]), ("vieneu", "Ngoc"))
         self.assertEqual(err, "")
 
+    def test_default_engine_kept_with_other_keys(self):
+        with open(tts.config_path(), "w", encoding="utf-8") as f:
+            json.dump({"pexels": "k", "llm": {"text": "ollama"}}, f)
+        self.assertIsNone(tts.default_engine())
+        tts.write_default_engine("vieneu")
+        tts.write_vieneu_conf({"voice": "Binh"})
+        c = tts.read_config()
+        self.assertEqual((c["pexels"], c["llm"]["text"], c["tts"]["default_engine"], c["tts"]["vieneu"]["voice"]), ("k", "ollama", "vieneu", "Binh"))
+        self.assertEqual(tts.default_engine(), "vieneu")
+        with self.assertRaises(ValueError):
+            tts.write_default_engine("lạ")
+
     def test_config_voice_wins_over_server_default(self):
         tts.write_vieneu_conf({"url": self.url, "voice": "Binh"})
         self.assertEqual(self.resolve_quiet("vieneu", "vi")[0]["voice"], "Binh")

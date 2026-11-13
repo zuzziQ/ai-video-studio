@@ -42,8 +42,15 @@ node scripts/llm.mjs try provider=ollama                      # thử một lệ
 node scripts/llm.mjs set text=claude                          # quay về Claude
 ```
 
+`set url=…` chỉ nhận địa chỉ máy này (`http://127.0.0.1|localhost|[::1]:<cổng>`, hàm `loopbackUrl`).
+
+Trong Studio: nút **Mô hình & giọng** trên thanh trên, thẻ **Mô hình chữ (LLM)** (`studio/features/28_engines.js`,
+`studio/routes/28_engines.mjs`): chọn Claude/Ollama cho việc chỉ có chữ, địa chỉ Ollama (chỉ loopback), model (gợi ý từ `/api/tags`),
+ô dùng Claude khi Ollama hỏng (`fallback`), trạng thái Ollama, nút **Thử** (lưu rồi hỏi một câu JSON ngắn như `llm.mjs try`,
+báo nhà cung cấp thật đã trả lời, số giây, hoặc lỗi dễ hiểu). Biến môi trường đang ghi đè thì hộp thoại ghi "(biến môi trường)".
+
 Model nhỏ (3B–8B) làm caption và hook ổn; bản dựng của `ai_edit` (prompt dài, JSON phức tạp) nên giữ Claude hoặc dùng model ≥ 14B.
 
 ## Test
 
-`node --test scripts/tests/llm.test.mjs scripts/tests/llm_ollama.test.mjs`: CLI giả lập (`scripts/tests/fixtures/fake_claude.mjs`, qua `CLAUDE_BIN`) và máy chủ Ollama giả; không gọi AI thật.
+`node --test scripts/tests/llm.test.mjs scripts/tests/llm_ollama.test.mjs scripts/tests/engines_route.test.mjs`: CLI giả lập (`scripts/tests/fixtures/fake_claude.mjs`, qua `CLAUDE_BIN`) và máy chủ Ollama giả; không gọi AI thật.

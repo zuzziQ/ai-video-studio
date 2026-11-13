@@ -3,7 +3,8 @@
 // usage:
 //   node scripts/batch.mjs <template-id | template.json | project_dir> <sheet.csv|.xlsx> <out_dir>
 //        [--map mapping.json] [--brand <brand-id>] [--voice auto|tts|none|beat] [--quality 720|1080] [--dur 12] [--rows 1,2|1-3]
-//        [--tts say|edge|vieneu] [--tts-voice NAME]   (giọng AI; job.json: tts_engine, tts_voice — VieNeu: scripts/tts.py)
+//        [--tts say|edge|vieneu] [--tts-voice NAME]   (giọng AI; job.json: tts_engine, tts_voice — VieNeu: scripts/tts.py;
+//                                                      không ghi thì theo tts.default_engine trong config.json)
 //   node scripts/batch.mjs --job <out_dir>/job.json                 (what Studio runs; resumable: finished rows are skipped)
 //   node scripts/batch.mjs --job job.json --preview <row> [--t 3] --out still.jpg   (still of one row, no audio, small size)
 //   node scripts/batch.mjs --parse <sheet>                          (columns + rows as JSON)
@@ -19,6 +20,7 @@ import zlib from 'node:zlib';
 import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findChrome, linkPath, pyBin } from './platform.mjs';
+import { defaultEngine } from './tts_config.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
@@ -177,7 +179,9 @@ const sh = (cmd, argv, { cwd, onLine } = {}) => new Promise((ok, bad) => {
 });
 // Giọng AI: 'say' (chỉ macOS), 'edge' (edge-tts, cần mạng) hoặc 'vieneu' (máy chủ giọng tiếng Việt trên 127.0.0.1).
 // Mặc định như cũ: say trên macOS, edge ở nơi khác. edge/vieneu đi qua scripts/tts.py; VieNeu không chạy thì nó lùi về edge-tts.
-export const ttsEngine = job => ['say', 'edge', 'vieneu'].includes(job.tts_engine) && !(job.tts_engine === 'say' && process.platform !== 'darwin') ? job.tts_engine : process.platform === 'darwin' ? 'say' : 'edge';
+// Job không ghi tts_engine: theo giọng mặc định đặt trong Studio (config.json tts.default_engine, scripts/tts_config.mjs).
+const okEngine = e => ['say', 'edge', 'vieneu'].includes(e) && !(e === 'say' && process.platform !== 'darwin');
+export const ttsEngine = job => okEngine(job.tts_engine) ? job.tts_engine : okEngine(defaultEngine()) ? defaultEngine() : process.platform === 'darwin' ? 'say' : 'edge';
 export async function ttsFile(engine, voice, text, outBase, log = () => {}, py = PY) {
   const neural = /Neural$/.test(voice || '');
   const argv = ['-I', '-X', 'utf8', path.join(HERE, 'tts.py'), 'say', text, '--engine', engine, '--lang', 'vi', '--out', outBase + '.wav', '--python', py,
