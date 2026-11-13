@@ -3,10 +3,16 @@
 // when the transcript gives a clean cut) and/or a different style pack (the pack's own recipe). Spec: references/qc-variants.md.
 // usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both] [--export] [--quality 720|1080] [--model sonnet] [--no-claude]
 // Writes <project>/variants.json {base, kind, variants:[{dir, name, hook, pack, desc, still, video}]}. Progress: "@@ <0..1> <step>".
+// Ma trận (M21): --kind matrix --n 40 [--audiences a,b] [--angles faq,tips] [--narratives …] [--durations 0,15,30] [--formats full,split]
+//   [--seed 42] [--allow-low-source] [--estimate]: tổ hợp khán giả × góc × kết cấu × thời lượng × bố cục (scripts/variant_matrix.mjs),
+//   hook lấy từ thư viện hook (scripts/hooks_lib.mjs), cổng đa dạng nguồn (M20) và ước tính (M23) in ra trước khi chạy.
+//   Mỗi bản ghi trục vào variants.json (variants[].axes) và timeline._variant.axes. Spec: references/variant-matrix.md.
 import fs from 'node:fs'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readGate, gateText } from './export_gate.mjs';
 import { SKILL, PY, loadProject, saveProject, designOf, isBase, openEngine, engineInit, engineShot, askClaude, parseJson } from './ai_qc.mjs';
+import { loadLib, saveLib, libPath, libKey, projectContext, pickHook, markUsed, generateHooks } from './hooks_lib.mjs';
+import { AUDIENCES, ANGLES as M_ANGLES, NARRATIVES, FORMATS, sourceStats, checkSourceGate, matrixBrief, planMatrix, estimate, estimateText } from './variant_matrix.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -120,12 +126,12 @@ function setHook(tl, caps, v, look, sfxOk) {
 }
 
 // ---------- style packs (engine recipes, run in the same headless Chrome) ----------
-async function recipes(E, tl, caps, want) {
-  return E.page.evaluate((ctx, want, SPECIAL, ORDER) => {
-    const ok = PACKS.filter(p => p.recipe && !SPECIAL.includes(p.id) && p.id !== ctx.cur && !(p.horizontal && ctx.vertical));
+async function recipes(E, tl, caps, want, ids = null) {
+  return E.page.evaluate((ctx, want, SPECIAL, ORDER, ids) => {
+    const ok = PACKS.filter(p => p.recipe && !SPECIAL.includes(p.id) && (ids ? ids.includes(p.id) : p.id !== ctx.cur) && !(p.horizontal && ctx.vertical));
     ok.sort((a, b) => (ORDER.indexOf(a.id) + 1 || 99) - (ORDER.indexOf(b.id) + 1 || 99));
     return ok.slice(0, want).map(p => { try { const r = p.recipe({ ...ctx, brand: BR() }); return { id: p.id, name: p.name, caption_style: r.caption_style, scenes: r.scenes || [], fx: r.fx || null, music: r.music || null }; } catch (e) { return null; } }).filter(Boolean);
-  }, { dur: tl.duration, captions: caps, vertical: (tl.height || 1920) > (tl.width || 1080), title: tl.title || '', cur: tl.pack }, want, [...SPECIAL], PACK_ORDER);
+  }, { dur: tl.duration, captions: caps, vertical: (tl.height || 1920) > (tl.width || 1080), title: tl.title || '', cur: tl.pack }, want, [...SPECIAL], PACK_ORDER, ids);
 }
 function setStyle(tl, r) {
   tl.pack = r.id;
@@ -156,8 +162,114 @@ async function exportProject(dir, quality, onP) {
   return out;
 }
 
+// ---------- sibling project <base>_v<i+1> (a full copy; a stale copy of this same base is replaced) ----------
+function newSibling(dir, i) {
+  let dst = `${dir}_v${i + 1}`;
+  if (fs.existsSync(dst)) {
+    const prev = (() => { try { return JSON.parse(fs.readFileSync(path.join(dst, 'timeline.json'), 'utf8'))._variant?.base; } catch { return null; } })();
+    if (prev && path.resolve(prev) === dir) fs.rmSync(dst, { recursive: true, force: true });
+    else { let k = 2; while (fs.existsSync(`${dir}_v${i + 1}_${k}`)) k++; dst = `${dir}_v${i + 1}_${k}`; }
+  }
+  try { execFileSync('cp', ['-cR', dir, dst]); } catch { fs.cpSync(dir, dst, { recursive: true }); } // APFS clone: instant, no extra disk
+  for (const f of ['out', 'variants.json', '.studio/history', '.studio/qc', '.studio/qc.json', '.studio/qc_backup.json']) fs.rmSync(path.join(dst, f), { recursive: true, force: true });
+  return dst;
+}
+
+// ---------- cut the timeline to `dur` seconds (matrix duration axis); 0 or ≥ length = keep ----------
+export function trimTo(tl, caps, dur) {
+  if (!(dur > 0) || dur >= (tl.duration || 0) - .3) return false;
+  const cut = arr => (arr || []).filter(x => (x.t0 ?? x.t ?? 0) < dur - .05).map(x => (x.t1 > dur ? { ...x, t1: dur } : x));
+  tl.scenes = cut(tl.scenes);
+  const kept = caps.filter(c => c.t0 < dur - .1).map(c => ({ ...c, t1: Math.min(c.t1, dur), words: (c.words || []).filter(w => w.s < dur).map(w => (w.e > dur ? { ...w, e: dur } : w)) })).filter(c => c.words.length);
+  caps.splice(0, caps.length, ...kept);
+  if (tl.clips?.length) {
+    const out = []; let t = 0;
+    for (const c of tl.clips) {
+      if (t >= dur - .05) break;
+      if (c.hidden) { out.push(c); continue; }
+      const sp = c.speed || 1, d = ((c.out ?? 3) - (c.in || 0)) / sp;
+      out.push(t + d > dur ? { ...c, out: r2((c.in || 0) + (dur - t) * sp) } : c); t += d;
+    }
+    tl.clips = out;
+  }
+  const A = tl.audio || {};
+  if (A.sfx) A.sfx = A.sfx.filter(x => x.t < dur - .05);
+  if (A.music) A.music = cut(A.music);
+  if (tl.fx) tl.fx = tl.fx.filter(f => f.t < dur - .05);
+  for (const k of ['grade', 'zoom', 'captionsHide']) if (tl[k]) tl[k] = cut(tl[k]);
+  tl.duration = r2(dur);
+  return true;
+}
+
+// ---------- matrix (M21) ----------
+export async function makeMatrix(src, o = {}) {
+  const base = loadProject(src), dir = base.dir, target = clamp(Math.round(+o.n || 10), 1, 1000);
+  const [DW, DH] = designOf(base.tl);
+  const stats = sourceStats(dir, base.tl), gate = checkSourceGate(stats, target, { allowLowSource: !!o.allowLowSource });
+  const brief = matrixBrief(base.tl, { audiences: o.audiences, angles: o.angles, narratives: o.narratives, durations: o.durations, formats: o.formats, seed: o.seed });
+  const ctx = projectContext(dir), lib = loadLib(libPath(ctx.key), libKey(ctx.key));
+  const plan = planMatrix(brief, stats, { duration: base.tl.duration, ads: !!base.tl.ads?.on, claims: ctx.claims }, target);
+  const est = estimate({ dir, tl: base.tl, target, plan, stats, gate, lib, export: !!o.export });
+  console.log(estimateText(est));
+  const summary = { theoretical: plan.theoretical, feasible: plan.feasible_count, rejected: plan.rejected_reasons, angles: plan.angle_distribution, quota: plan.quota, brief };
+  if (o.estimateOnly) { console.log('RESULT ' + JSON.stringify({ estimate: est, plan: summary })); return { estimate: est, plan: summary, variants: [] }; }
+  if (gate.blocked) throw new Error(`Cổng đa dạng nguồn: ${gate.warnings[0].message}. ${gate.warnings[0].hint} Vẫn muốn chạy: thêm --allow-low-source.`);
+  if (!plan.chosen.length) throw new Error(`Không có tổ hợp khả thi (${Object.entries(plan.rejected_reasons).map(([k, v]) => `${k} ${v}`).join(', ')}).`);
+  const chosen = plan.chosen, sfxOk = name => ['.flac', '.wav', '.mp3'].some(e => fs.existsSync(path.join(SKILL, 'assets/sfx', name + e)));
+  const out = [];
+  say(.04, 'Mở engine');
+  const E = await openEngine(dir);
+  try {
+    const want = [...new Set(chosen.map(c => FORMATS[c.format]?.pack).filter(Boolean))], packMap = {};
+    if (want.length) { await engineInit(E, base.tl, base.caps); for (const r of await recipes(E, base.tl, base.caps, want.length, want)) packMap[r.id] = r; }
+    for (let i = 0; i < chosen.length; i++) {
+      const c = chosen[i];
+      say(.06 + i / chosen.length * (o.export ? .5 : .9), `Tạo bản ${i + 1}/${chosen.length}: ${M_ANGLES[c.angle]?.label || c.angle}`);
+      let h = pickHook(lib, { angle: c.angle, seed: brief.seed + i });
+      if (!h) {
+        const g = await generateHooks(lib, ctx, { n: Math.max(3, Math.ceil((chosen.length - i) / 5)), angle: c.angle, useLlm: !o.noClaude, model: o.model, seed: brief.seed + i });
+        if (g.llm_error) console.error(`[variants] LLM: ${g.llm_error} — dùng hook mẫu`);
+        h = pickHook(lib, { angle: c.angle, seed: brief.seed + i });
+      }
+      if (!h) throw new Error(`Thư viện hook ${lib.file} hết hook còn lượt cho góc ${c.angle} và không sinh được hook mới qua cổng.`);
+      const dst = newSibling(dir, i);
+      markUsed(lib, h.id, dst);
+      const P = loadProject(dst), { tl, caps } = P;
+      const axes = { audience: c.audience, angle: c.angle, narrative: c.narrative, duration: c.duration || 0, format: c.format };
+      const v = { dir: dst, kind: 'matrix', axes, hook: h.text, hook_id: h.id, pack: tl.pack, score: c.score, name: `${M_ANGLES[c.angle]?.label || c.angle} · ${AUDIENCES[c.audience] || c.audience}` };
+      const packId = FORMATS[c.format]?.pack, notes = [];
+      if (packId) { if (packMap[packId]) { setStyle(tl, packMap[packId]); v.pack = packId; } else notes.push(`không có gói ${packId} hợp khổ hình này, giữ gói ${tl.pack || 'cũ'}`); }
+      dropOldHook(tl);
+      setHook(tl, caps, { hook: h.text }, LOOKS[Object.keys(NARRATIVES).indexOf(c.narrative) % LOOKS.length] || LOOKS[0], sfxOk);
+      if (c.duration && !trimTo(tl, caps, c.duration)) notes.push(`video đã ≤ ${c.duration}s, giữ nguyên độ dài`);
+      v.desc = [`Kết cấu ${NARRATIVES[c.narrative] || c.narrative}`, `bố cục ${FORMATS[c.format]?.label || c.format}`, c.duration ? `${c.duration}s` : 'giữ độ dài', ...notes].join(' · ');
+      if (c.quota_overflow) v.quota_overflow = true;
+      tl._variant = { base: dir, i: i + 1, kind: 'matrix', hook: h.text, hook_id: h.id, pack: v.pack, axes, created: new Date().toISOString() };
+      saveProject(P, tl, caps);
+      await engineInit(E, tl, caps);
+      v.still = '.studio/hook.jpg'; await engineShot(E, 1.2, path.join(dst, v.still), false);
+      out.push(v);
+    }
+    await engineInit(E, base.tl, base.caps); await engineShot(E, 1.2, path.join(dir, '.studio/hook.jpg'), false);
+  } finally { await E.browser.close().catch(() => {}); saveLib(lib); }
+  const g2 = o.export ? readGate(dir) : null;
+  if (g2?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(g2)})`);
+  if (o.export && !g2?.blocked) for (let i = 0; i < out.length; i++) {
+    say(.58 + i / out.length * .4, `Xuất bản ${i + 1}/${out.length}`);
+    out[i].video = await exportProject(out[i].dir, o.quality || '720', k => say(.58 + (i + k) / out.length * .4, `Xuất bản ${i + 1}/${out.length} · ${Math.round(k * 100)}%`));
+  }
+  const oldHook = (base.tl.scenes || []).filter(s => !s.hidden && !isBase(s, base.tl) && s.t0 < 1.5).map(s => s.text || s.lines?.map(L => L.text).join(' ') || s.value || '').filter(Boolean)[0] || '';
+  const res = { base: dir, created: new Date().toISOString(), kind: 'matrix', kind_vi: 'ma trận khán giả × góc × kết cấu × thời lượng × bố cục', n: out.length,
+    ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', size: `${DW}x${DH}`, hook_library: lib.file,
+    axes: ['audience', 'angle', 'narrative', 'duration', 'format'], plan: summary, source_gate: { ok: gate.ok, need: gate.need, have: gate.have, warnings: gate.warnings },
+    estimate: est, variants: out };
+  fs.writeFileSync(path.join(dir, 'variants.json'), JSON.stringify(res, null, 1));
+  return res;
+}
+
 // ---------- main ----------
 export async function makeVariants(src, o = {}) {
+  if (o.kind === 'matrix') return makeMatrix(src, o);
   const base = loadProject(src), dir = base.dir, n = clamp(+o.n || 3, 1, 5), kind = ['hook', 'style', 'both'].includes(o.kind) ? o.kind : 'hook';
   if (!base.caps.length && kind !== 'style') throw new Error('Dự án chưa có phụ đề — cần lời thoại để viết hook.');
   const [DW, DH] = designOf(base.tl);
@@ -187,14 +299,7 @@ export async function makeVariants(src, o = {}) {
     // 3. sibling projects
     for (let i = 0; i < n; i++) {
       say(.3 + i / n * .25, `Tạo phiên bản ${i + 1}/${n}`);
-      let dst = `${dir}_v${i + 1}`;
-      if (fs.existsSync(dst)) {
-        const prev = (() => { try { return JSON.parse(fs.readFileSync(path.join(dst, 'timeline.json'), 'utf8'))._variant?.base; } catch { return null; } })();
-        if (prev && path.resolve(prev) === dir) fs.rmSync(dst, { recursive: true, force: true });
-        else { let k = 2; while (fs.existsSync(`${dir}_v${i + 1}_${k}`)) k++; dst = `${dir}_v${i + 1}_${k}`; }
-      }
-      try { execFileSync('cp', ['-cR', dir, dst]); } catch { fs.cpSync(dir, dst, { recursive: true }); } // APFS clone: instant, no extra disk
-      for (const f of ['out', 'variants.json', '.studio/history', '.studio/qc', '.studio/qc.json', '.studio/qc_backup.json']) fs.rmSync(path.join(dst, f), { recursive: true, force: true });
+      const dst = newSibling(dir, i);
       const P = loadProject(dst); let { tl, caps } = P;
       const v = { dir: dst, kind, name: '', desc: '', hook: '', pack: tl.pack };
       if (kind !== 'hook') { const r = packs[i % packs.length]; setStyle(tl, r); v.pack = r.id; v.name = r.name; v.desc = `Gói ${r.name}`; }
@@ -231,11 +336,14 @@ export async function makeVariants(src, o = {}) {
 
 async function main() {
   const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-  const src = args.find((a, i) => !a.startsWith('--') && !(i > 0 && ['--n', '--kind', '--model', '--quality'].includes(args[i - 1])));
-  if (!src) { console.error('usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both] [--export] [--quality 720|1080] [--no-claude]'); process.exit(2); }
-  const r = await makeVariants(src, { n: +opt('--n', 3), kind: opt('--kind', 'hook'), export: args.includes('--export'), quality: opt('--quality', '720'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude') });
-  for (const v of r.variants) console.log(`${path.basename(v.dir)}: ${v.name} · hook “${v.hook}” · ${v.pack}${v.teaser ? ` · teaser ${v.teaser.dur}s` : ''}${v.video ? ` → ${v.video}` : ''}`);
-  console.log(`variants: ${path.join(r.base, 'variants.json')}`);
+  const VAL = ['--n', '--kind', '--model', '--quality', '--audiences', '--angles', '--narratives', '--durations', '--formats', '--seed'];
+  const src = args.find((a, i) => !a.startsWith('--') && !(i > 0 && VAL.includes(args[i - 1])));
+  if (!src) { console.error('usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both|matrix] [--export] [--quality 720|1080] [--no-claude]\n  matrix: [--audiences a,b] [--angles x,y] [--narratives …] [--durations 0,15,30] [--formats full,split] [--seed 42] [--allow-low-source] [--estimate]'); process.exit(2); }
+  const r = await makeVariants(src, { n: +opt('--n', 3), kind: opt('--kind', 'hook'), export: args.includes('--export'), quality: opt('--quality', '720'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude'),
+    audiences: opt('--audiences'), angles: opt('--angles'), narratives: opt('--narratives'), durations: opt('--durations'), formats: opt('--formats'), seed: opt('--seed') != null ? +opt('--seed') : undefined,
+    allowLowSource: args.includes('--allow-low-source'), estimateOnly: args.includes('--estimate') });
+  for (const v of r.variants) console.log(`${path.basename(v.dir)}: ${v.name} · hook “${v.hook}” · ${v.pack}${v.axes ? ` · ${v.desc}` : ''}${v.teaser ? ` · teaser ${v.teaser.dur}s` : ''}${v.video ? ` → ${v.video}` : ''}`);
+  if (r.base) console.log(`variants: ${path.join(r.base, 'variants.json')}`);
   say(1, 'Xong');
   process.exit(0);
 }

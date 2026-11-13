@@ -171,12 +171,14 @@ export async function generateHooks(lib, ctx, o = {}) {
   let cands = [], source = 'template', llmError = null;
   if (o.useLlm !== false) {
     try {
-      const ask = o.ask || (await import('./llm.mjs')).askJSON;
+      const ask = o.ask || (await import('./llm.mjs')).askJSON, t0 = Date.now();
       cands = await ask(hookPrompt(ctx, existing, n, angle), {
         task: 'text', model: o.model || 'sonnet', cwd: os.tmpdir(), timeout: 180000, shape: 'object', retries: 1,
         validate: v => { const hs = (Array.isArray(v?.hooks) ? v.hooks : []).map(String).filter(s => s.trim()); if (hs.length < 3) throw new Error('cần mảng "hooks" ≥ 3 câu'); return hs; },
       });
       source = 'llm';
+      // thời gian một lần gọi, cho ước tính lô lớn (variant_matrix.estimate); giữ 20 lần gần nhất
+      lib.stats = { ...(lib.stats || {}), llm_s: [...(lib.stats?.llm_s || []), Math.round((Date.now() - t0) / 100) / 10].slice(-20) };
     } catch (e) { llmError = e.message; cands = []; }
   }
   if (!cands.length) { cands = templateHooks(ctx, (o.seed ?? 0) + existing.length); source = 'template'; }
