@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome } from './platform.mjs';
-import { runClaude, askJSON, parseLooseJSON } from './llm.mjs';
+import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -119,9 +119,10 @@ Chỉ trả về DUY NHẤT một object JSON (không markdown, không giải th
 {"pack":"…","caption_style":"…","hook":"…","captions":[{"c":0,"words":["…"],"hl":[1],"br":[]}],"scenes":[{"type":"…","c":0,"w":0,"dur":2.5,"params":{}}],"music":{"mood":"…","gain":-20},"sfx":[{"name":"…","c":0,"w":0}],"summary":"1–2 câu tiếng Việt: vì sao chọn gói và cách dựng"}`;
 }
 
-// Kept for highlights.mjs, topic_video.mjs and tpl_fit.mjs: prompt → the model's text, and relaxed JSON object parsing.
+// Kept for highlights.mjs, topic_video.mjs and tpl_fit.mjs: prompt → the model's text (text-only: Claude or the Ollama
+// model picked in config.json), and relaxed JSON object parsing.
 export async function callClaude(prompt, model = 'sonnet', onTick) {
-  return (await runClaude(prompt, { model, cwd: os.tmpdir(), onTick: onTick && (() => onTick()) })).text;
+  return (await runLLM(prompt, { task: 'text', model, cwd: os.tmpdir(), onTick: onTick && (() => onTick()) })).text;
 }
 export const parseJson = s => parseLooseJSON(s, { shape: 'object' });
 
@@ -277,7 +278,7 @@ async function main() {
   fs.writeFileSync(path.join(dir, '.studio/ai_prompt.txt'), prompt);
   let p = .15, t0 = 0;
   const model = opt('--model', o.model || 'sonnet');
-  const raw = await askJSON(prompt, { model, cwd: os.tmpdir(), shape: 'object', retries: 1,
+  const raw = await askJSON(prompt, { task: 'text', model, cwd: os.tmpdir(), shape: 'object', retries: 1,
     onAttempt: attempt => { if (attempt) p = .5; t0 = Date.now(); say(p, attempt ? 'Claude trả lời chưa đúng JSON — hỏi lại' : `Claude đang đọc lời thoại và lên bản dựng (${Math.round(prompt.length / 1000)}k ký tự, 20–90 giây)`); },
     onTick: () => { const s = (Date.now() - t0) / 1000; say(Math.min(.88, p + .7 * (1 - Math.exp(-s / 45))), `Claude đang lên bản dựng… ${Math.round(s)}s`); },
     onRaw: res => fs.writeFileSync(path.join(dir, '.studio/ai_raw.txt'), res) });

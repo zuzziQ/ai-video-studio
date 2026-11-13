@@ -77,7 +77,7 @@ export function deriveFeedbackRules(entries) {
 
 // Prompt → JSON object (also used by telegram.mjs). Stops the CLI after `timeout` ms.
 export function askClaudeJSON(prompt, { model = 'sonnet', timeout = 240000 } = {}) {
-  return askJSON(prompt, { model, timeout, shape: 'object' });
+  return askJSON(prompt, { task: 'text', model, timeout, shape: 'object' });
 }
 
 const qcIssues = dirs => {

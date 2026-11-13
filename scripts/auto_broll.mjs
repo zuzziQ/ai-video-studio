@@ -453,7 +453,7 @@ Trả về DUY NHẤT mảng JSON: [{"i":0,"o":1,"text":"…","vars":{},"query":
 ${JSON.stringify(req)}`;
   try {
     const t0c = Date.now();
-    const picks = await askJSON(prompt, { model: opt('--model', 'sonnet'), shape: 'array', timeout: 180000, timeoutMsg: 'Claude quá 180 giây', tickMs: 2000,
+    const picks = await askJSON(prompt, { task: 'text', model: opt('--model', 'sonnet'), shape: 'array', timeout: 180000, timeoutMsg: 'Claude quá 180 giây', tickMs: 2000,
       onTick: () => say(Math.min(.5, .25 + (Date.now() - t0c) / 400000), `Claude đang chọn b-roll… ${Math.round((Date.now() - t0c) / 1000)}s`) });
     let n = 0;
     for (const x of picks) {

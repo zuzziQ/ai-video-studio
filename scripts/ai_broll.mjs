@@ -167,7 +167,7 @@ Chọn tối đa ${n} câu đáng chèn b-roll nhất (minh hoạ ý chính, s�
 Thêm "why" (≤ 12 từ tiếng Việt). Trả về DUY NHẤT một mảng JSON, không giải thích: [{"i":0,"kind":"preset","id":"...","text":"...","why":"..."},{"i":3,"kind":"stock","query":"...","why":"..."}]
 
 ${JSON.stringify(cands)}`;
-  const picks = await askJSON(prompt, { model, shape: 'array' });
+  const picks = await askJSON(prompt, { task: 'text', model, shape: 'array' });
   const byI = Object.fromEntries(sents.map(s => [s.i, s]));
   return picks.filter(x => x && byI[x.i] && (x.kind === 'stock' ? x.query : ids.has(x.id)))
     .map(x => ({ ...byI[x.i], ...x, text: byI[x.i].text, ...(x.kind === 'preset' ? { label: String(x.text || '').slice(0, 24), preset: cat.find(e => e.id === x.id) } : {}) }));

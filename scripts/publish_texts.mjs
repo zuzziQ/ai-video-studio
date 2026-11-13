@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { PLATFORMS, probe } from '../studio/routes/52_publish.mjs';
 import { claudeBin } from './platform.mjs';
-import { runClaude, askJSON } from './llm.mjs';
+import { runLLM, askJSON } from './llm.mjs';
 
 export { claudeBin };
 export const asText = (P, d) => [
@@ -41,7 +41,7 @@ Chỉ trả về JSON đúng dạng, không giải thích:
 
 // claude -p … --output-format json → the model's text. onProc(child) lets callers kill it.
 export async function askClaude(prompt, { model = 'sonnet', onProc } = {}) {
-  return (await runClaude(prompt, { model, cwd: os.tmpdir(), onProc })).text;
+  return (await runLLM(prompt, { task: 'text', model, cwd: os.tmpdir(), onProc })).text;
 }
 
 /** Generate publish texts. o: { dir, tl, captions, videoAbs, videoRel, platforms?, notes?, model?, onProc? } → publish.json doc */
@@ -49,7 +49,7 @@ export async function generatePublish({ dir, tl, captions, videoAbs, videoRel, p
   const plats = (platforms || Object.keys(PLATFORMS)).filter(k => PLATFORMS[k]);
   if (!plats.length) throw new Error('Chưa chọn nền tảng');
   const info = await probe(videoAbs);
-  const data = await askJSON(buildPrompt({ tl, captions, info, plats, notes }), { model, cwd: os.tmpdir(), onProc, shape: 'object' });
+  const data = await askJSON(buildPrompt({ tl, captions, info, plats, notes }), { task: 'text', model, cwd: os.tmpdir(), onProc, shape: 'object' });
   const PUB = path.join(dir, 'publish');
   fs.mkdirSync(PUB, { recursive: true });
   const doc = { video: videoRel, created: new Date().toISOString(), info, platforms: {} };
