@@ -21,6 +21,11 @@ GHI CÔNG KHI SAO CHÉP, SỬA ĐỔI HOẶC PHÁT HÀNH LẠI
 Thành phần bên thứ ba giữ giấy phép riêng: HyperFrames (HeyGen, Apache-2.0) trong
 engine/hf/ (xem engine/hf/LICENSE-HyperFrames.txt), Emoji 3D Fluent (Microsoft, MIT),
 YuNet (OpenCV Zoo, MIT), Simple Icons (CC0), Google Fonts (OFL).
+Thư viện nhạc CC0 tuỳ chọn (assets/music/cc0/catalog.json, scripts/music_cc0.py) chỉ
+là danh mục; file nhạc không nằm trong repo mà tải theo yêu cầu từ archive.org và
+opengameart.org. Các bài giữ giấy phép CC0 1.0 của tác giả: Komiku (loyaltyfreakmusic.com),
+Kimiko Ishizaka (Open Goldberg Variations), SpiderDave, jestar, Emma_MA (OpenGameArt);
+nguồn và ngày đối chiếu ghi theo từng bài trong danh mục.
 Các gói print, broadcast, explain, montage (engine/packs/) và 7 mẫu preset chuyển thể
 phong cách từ ghost-editor (https://github.com/kurbaitaev/ghost-editor, MIT,
 Copyright (c) 2026 kurbaitaev — engine/packs/LICENSE-ghost-editor.txt); các style
