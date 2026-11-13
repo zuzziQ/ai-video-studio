@@ -118,12 +118,11 @@ Từ lần đo 2026-11-13 trên Windows (i7-8700K 6 nhân, 32 GB, GTX 1660 Ti), 
 
 ## 5. Ưu tiên tiếp theo
 
-1. **`M52`**: mã hoá NVENC tuỳ chọn (driver đã đủ). Kèm sửa nhỏ `scripts/hf_import.mjs:147` vẫn chờ `buildReady` như một promise (cùng lỗi #75 đã sửa ở `engine/hf.js`, chỉ ảnh xem trước khi nhập khối).
-2. **`M50`**: chủ repo chốt nhiễu shader của `vfx-text-cursor`, `wireframe-portal-title` khi dựng bằng GPU (SSIM 0,85–0,89, `AVS_RENDER_GPU=0` cho bản đúng SwiftShader).
-3. **`M26`, `M27`**: phần giao diện Studio còn lại: chọn nhà cung cấp LLM, chọn giọng VieNeu; nối VieNeu vào `topic_video.mjs` (`M22` đã merge).
-4. **`M14`**: chạy thử cổng quảng cáo trên ít nhất 3 video quảng cáo thật.
+1. **`M50`**: chủ repo xem trực tiếp khung GPU và SwiftShader của `vfx-text-cursor` (chỉ khác hạt nhiễu) và `wireframe-portal-title` (đường lưới chéo GPU sáng hơn rõ) rồi chốt; `AVS_RENDER_GPU=0` cho bản đúng SwiftShader.
+2. **`M14`**: chủ repo chạy thử cổng quảng cáo trên ít nhất 3 video quảng cáo thật.
+3. **`M27`**: nhái giọng VieNeu (`C04` đã chốt cho dùng).
+4. **`M26`**: thử với Ollama thật khi máy có cài.
 5. **`M29`**: đối chiếu lại 45 bài FreePD khi Wayback Machine cho truy cập (thử lại 2026-11-13 vẫn 429).
-6. **`M27`**: nhái giọng VieNeu (`C04` đã chốt cho dùng).
 
 ## 6. Không làm
 
