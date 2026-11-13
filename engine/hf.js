@@ -47,6 +47,7 @@
     for (const el of [L, C]) el.style.cssText = `position:absolute;left:0;top:0;width:${stage.style.width};height:${stage.style.height};transform:${stage.style.transform};transform-origin:0 0;overflow:hidden;pointer-events:none`;
   }
   const absUrl = v => (typeof v === 'string' && /\.(jpe?g|png|webp|gif|svg|mp4)$/i.test(v) && !/^(https?:|data:|file:)/.test(v) ? new URL(url(v), document.baseURI).href : v);
+  const hasBuild = w => { const br = w.__hf?.buildReady; return !!br && (!!br.then || Object.keys(br).length > 0); };
   function frame(key, blk) {
     let f = FR.get(key);
     if (f) return f;
@@ -57,6 +58,10 @@
     const ready = new Promise(res => ifr.addEventListener('load', res, { once: true })).then(async () => {
       const w = ifr.contentWindow, d = w.document;
       if (b.layer === 'over') { const st = d.createElement('style'); st.textContent = 'html,body{background:transparent!important}'; d.head.appendChild(st); }
+      // M57: a block whose module script hits a top-level await (font/model fetch) publishes buildReady only after the
+      // iframe's load event; seeking before that raced its warm-up draws at other times (wrong first frame). Wait for it.
+      if ([...d.scripts].some(s => s.text.includes('buildReady')))
+        for (const t0 = performance.now(); !hasBuild(w) && performance.now() - t0 < 8000;) await new Promise(r => setTimeout(r, 16));
       // M57: blocks publish buildReady as { [block]: Promise } (fonts, models, textures built async), not as one promise
       const br = w.__hf?.buildReady, builds = br?.then ? [br] : Object.values(br || {});
       await Promise.race([Promise.all([d.fonts?.ready, ...builds]), new Promise(r => setTimeout(r, 8000))]);
