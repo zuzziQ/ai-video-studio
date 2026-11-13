@@ -113,12 +113,17 @@ export async function filterHooks(cands, existing, gate) {
 
 // ---------- cổng chính sách + claim: ad_gates.py trên một dự án tạm, mỗi hook là một scene chữ ----------
 const SLOT = 10; // giây giữa hai hook trong dự án tạm (ad_gates trả lỗi theo t)
-/** ads: { claims, blocked, industry, platforms } như timeline.ads. → [{ok, reasons}] cùng thứ tự texts. */
+/**
+ * ads: { claims, blocked, industry, platforms } như timeline.ads, hoặc ngữ cảnh của projectContext. Có `product` (Product Brain,
+ * M18) thì dự án tạm trỏ thẳng tới hồ sơ để ad_gates.py tự áp luật của hồ sơ (bằng chứng, hết hạn, cấm), chỉ kèm claim/cụm
+ * từ cấm riêng của dự án (`own`). → [{ok, reasons}] cùng thứ tự texts.
+ */
 export async function gateHooks(texts, ads = {}, { py = pyBin(SKILL), script = path.join(SKILL, 'scripts/ad_gates.py') } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-hookgate-'));
   try {
+    const src = ads.product ? { product: ads.product, claims: ads.own?.claims || [], blocked: ads.own?.blocked || [] } : { claims: ads.claims || [], blocked: ads.blocked || [] };
     const tl = { width: 1080, height: 1920, duration: texts.length * SLOT, captions: [],
-      ads: { on: true, claims: ads.claims || [], blocked: ads.blocked || [], ...(ads.industry ? { industry: ads.industry } : {}), ...(ads.platforms ? { platforms: ads.platforms } : {}) },
+      ads: { on: true, ...src, ...(ads.industry ? { industry: ads.industry } : {}), ...(ads.platforms ? { platforms: ads.platforms } : {}) },
       scenes: texts.map((t, i) => ({ type: 'text', t0: i * SLOT, t1: i * SLOT + 2, text: t })) };
     fs.writeFileSync(path.join(tmp, 'timeline.json'), JSON.stringify(tl));
     const out = await new Promise((ok, bad) => {
@@ -171,12 +176,14 @@ export async function generateHooks(lib, ctx, o = {}) {
   let cands = [], source = 'template', llmError = null;
   if (o.useLlm !== false) {
     try {
-      const ask = o.ask || (await import('./llm.mjs')).askJSON;
+      const ask = o.ask || (await import('./llm.mjs')).askJSON, t0 = Date.now();
       cands = await ask(hookPrompt(ctx, existing, n, angle), {
         task: 'text', model: o.model || 'sonnet', cwd: os.tmpdir(), timeout: 180000, shape: 'object', retries: 1,
         validate: v => { const hs = (Array.isArray(v?.hooks) ? v.hooks : []).map(String).filter(s => s.trim()); if (hs.length < 3) throw new Error('cần mảng "hooks" ≥ 3 câu'); return hs; },
       });
       source = 'llm';
+      // thời gian một lần gọi, cho ước tính lô lớn (variant_matrix.estimate); giữ 20 lần gần nhất
+      lib.stats = { ...(lib.stats || {}), llm_s: [...(lib.stats?.llm_s || []), Math.round((Date.now() - t0) / 100) / 10].slice(-20) };
     } catch (e) { llmError = e.message; cands = []; }
   }
   if (!cands.length) { cands = templateHooks(ctx, (o.seed ?? 0) + existing.length); source = 'template'; }
@@ -217,9 +224,15 @@ export function projectContext(dir) {
       try { prod = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; break; } catch { /* chưa có hồ sơ */ }
     }
   }
-  const claims = [...(Array.isArray(prod.claims) ? prod.claims : []), ...(Array.isArray(ads.claims) ? ads.claims : [])]
-    .filter(c => c && String(c.text || '').trim()).map((c, i) => ({ id: String(c.id || `c${i + 1}`), text: String(c.text), status: c.status || 'approved' }));
+  // Luật hồ sơ (references/products.md): claim "approved" thiếu bằng chứng tính là chờ duyệt, quá `expires` là hết hạn.
+  const today = new Date().toISOString().slice(0, 10);
+  const prodStatus = c => { const s = c.status || 'pending'; if (s !== 'approved') return s; if (!String(c.evidence || '').trim()) return 'pending'; return c.expires && String(c.expires) < today ? 'expired' : s; };
+  const claimList = (list, st) => (Array.isArray(list) ? list : []).filter(c => c && String(c.text || '').trim())
+    .map((c, i) => ({ id: String(c.id || `c${i + 1}`), text: String(c.text), status: st(c) }));
+  const own = { claims: claimList(ads.claims, c => c.status || 'approved'), blocked: (ads.blocked || []).map(String) };
+  const claims = [...claimList(prod.claims, prodStatus), ...own.claims];
   return {
+    product: typeof ads.product === 'string' && ads.product ? ads.product : undefined, own,
     key: ads.product || path.basename(path.resolve(dir)),
     name: prod.name || ads.name || tl.brand?.name || tl.title || path.basename(path.resolve(dir)),
     category: prod.category || '', usp: prod.usp || ads.usp || '', usage: prod.usage || '',
