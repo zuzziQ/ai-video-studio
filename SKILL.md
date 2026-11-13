@@ -28,6 +28,7 @@ Gồm 3 lớp:
 | Bám lời thoại: chọn mẫu xong mọi graphic tự khớp clip — canh thời điểm theo câu nói, viết lại chữ giữ chỗ + emoji, thay ảnh mẫu bằng ảnh stock theo lời nói, nhấn từ khoá phụ đề; chưa có phụ đề thì tự tạo (`scripts/tpl_fit.mjs`, `/api/tplfit`, nút "Bám lời thoại") | `references/tpl-fit.md` |
 | Kiểm tra quảng cáo trong QC: chính sách Meta/TikTok theo ngành, claim gate, điểm nguyên bản giữa các phiên bản (`TL.ads`, `scripts/ad_gates.py`, nút "Thiết lập" ở thẻ Kiểm tra chất lượng) | `references/ad-gates.md` |
 | Hồ sơ sản phẩm dùng chung (Product Brain): claim kèm bằng chứng, cụm từ cấm, FAQ; dự án trỏ tới bằng `TL.ads.product` (panel Sản phẩm, `scripts/products.mjs`) | `references/products.md` |
+| Gói Ads Manager Meta/TikTok để tải lên tay: tên file theo mã bản, `ads_mapping.csv` (chữ, CTA, trang đích + UTM), kiểm spec, loại bản bị QC chặn (`scripts/ads_pack.mjs`) | `references/ads-pack.md` |
 | Viết thêm tính năng cho Studio: `studio/routes/*.mjs` + `studio/features/*.js` (đối tượng `Studio`) | `references/studio.md` |
 
 ## Chọn gói theo nội dung
