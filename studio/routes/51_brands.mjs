@@ -32,7 +32,11 @@ export default ctx => async (req, res, p, u) => {
   }
   const body = await ctx.body(req);
   if (p === '/api/brands/save') {
-    const list = load(), src = body.brand || {};
+    const list = load(), src = body.brand;
+    if (!src || typeof src !== 'object' || Array.isArray(src)) return J({ error: 'Thiếu dữ liệu thương hiệu' }, 400);
+    if (!src.id && !String(src.title || src.name || '').trim()) return J({ error: 'Đặt tên thương hiệu trước khi lưu' }, 400);
+    // Pack ids are registered by the engine in the browser (window.PACKS); the server can only check the shape. The editor checks it exists.
+    if (src.pack && !/^[A-Za-z0-9_-]{1,60}$/.test(String(src.pack))) return J({ error: 'Gói style không hợp lệ' }, 400);
     let b = src.id && list.find(x => x.id === src.id);
     if (!b) { b = { id: newId(src.title || src.name), created: new Date().toISOString() }; list.push(b); }
     for (const k of KEYS) if (k in src && k !== 'logo') { if (src[k] === '' || src[k] == null) delete b[k]; else b[k] = String(src[k]).slice(0, 300); }

@@ -50,7 +50,12 @@ export default ctx => async (req, res, p, u) => {
   const J = (o, c) => (ctx.json(res, o, c), true);
   if (!ctx.project) return J({ error: 'Chưa mở dự án' }, 400);
   const PUB = ctx.P('publish');
-  const vid = rel => { const f = ctx.under(ctx.project.dir, rel || ''); return f && fs.existsSync(f) ? f : null; };
+  // A rendered video file inside the project (an empty or folder path must not count: it would send the project folder to claude -p).
+  const vid = rel => {
+    if (typeof rel !== 'string' || !/\.(mp4|mov|m4v|webm)$/i.test(rel)) return null;
+    const f = ctx.under(ctx.project.dir, rel);
+    try { return f && fs.statSync(f).isFile() ? f : null; } catch { return null; }
+  };
   if (p === '/api/publish/platforms') return J(Object.fromEntries(Object.entries(PLATFORMS).map(([k, v]) => [k, { name: v.name, note: v.note, maxDur: v.maxDur }])));
   if (p === '/api/publish/videos') {
     const d = ctx.P('out'); const list = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.mp4') && !f.includes('.part.')).map(f => ({ path: `out/${f}`, mtime: fs.statSync(path.join(d, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime) : [];

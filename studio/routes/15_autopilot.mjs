@@ -96,9 +96,21 @@ export default ctx => {
       }
       if (p === '/api/autopilot/clear') return J({ ok: true, removed: clearDone() });
       if (p === '/api/autopilot/settings') {
-        const patch = {};
-        for (const k of ['notify', 'appDrop', 'profile']) if (k in b) patch[k] = b[k];
-        if (b.watch) patch.watch = b.watch;
+        // Typed patch only: a string spread into settings.watch used to land in autopilot.json as {"0":"s",…}.
+        const patch = {}, obj = v => v && typeof v === 'object' && !Array.isArray(v);
+        for (const k of ['notify', 'appDrop']) if (k in b) { if (typeof b[k] !== 'boolean') return J({ error: `${k} phải là true/false` }, 400); patch[k] = b[k]; }
+        if ('profile' in b) { if (typeof b.profile !== 'string') return J({ error: 'profile phải là chuỗi' }, 400); patch.profile = b.profile; }
+        if (b.watch != null) {
+          if (!obj(b.watch)) return J({ error: 'watch phải là object' }, 400);
+          const w = {};
+          if ('on' in b.watch) { if (typeof b.watch.on !== 'boolean') return J({ error: 'watch.on phải là true/false' }, 400); w.on = b.watch.on; }
+          if ('folders' in b.watch) {
+            const f = b.watch.folders, str = v => v == null || typeof v === 'string';
+            if (!Array.isArray(f) || !f.every(x => obj(x) && typeof x.in === 'string' && str(x.done) && str(x.processed) && str(x.profile))) return J({ error: 'watch.folders phải là danh sách {in, done, processed, profile}' }, 400);
+            w.folders = f;
+          }
+          patch.watch = w;
+        }
         return J({ ok: true, settings: saveSettings(patch) });
       }
       if (p === '/api/autopilot/agent') return J(b.on ? await agentInstall() : await agentUninstall());
@@ -119,7 +131,7 @@ export default ctx => {
         return J({ error: 'hành động lạ' }, 400);
       }
       if (p === '/api/autopilot/learn') { const r = tryLearn(true); return J(r ? { ...r, profiles: profilesOut() } : { ok: false, why: 'Dự án đang mở không phải do Tự lái làm (hoặc chưa chạy xong)' }); }
-    } catch (e) { return J({ error: e.message }, 500); }
+    } catch (e) { return J({ error: e.message }, e.status || 500); }
     return false;
   };
 };

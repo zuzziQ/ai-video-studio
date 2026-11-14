@@ -33,7 +33,7 @@ export default ctx => {
   };
   return async (req, res, p) => {
     if (!p.startsWith('/api/agent/')) return false;
-    const J = o => (ctx.json(res, o), true);
+    const J = (o, c) => (ctx.json(res, o, c), true);
     const b = req.method === 'POST' ? await ctx.body(req) : {};
     try {
       if (p === '/api/agent/state') {
@@ -58,6 +58,13 @@ export default ctx => {
         if (!bot) return J({ error: 'Bot chưa chạy' });
         const c = loadCfg(); for (const a of c.allowed) await bot.send(a.id, '👋 Tin thử từ AI Video Studio — kết nối ổn!');
         return J({ ok: true, sent: c.allowed.length });
+      }
+      if (p === '/api/agent/feedback') {
+        // An empty entry used to land in feedback.jsonl and skew the "Tự cải tiến" numbers.
+        const r = +b.rating, hasTags = Array.isArray(b.tags) && b.tags.length, hasText = typeof b.comment === 'string' && b.comment.trim();
+        if (b.rating != null && !(Number.isInteger(r) && r >= 1 && r <= 5)) return J({ error: 'Điểm phải từ 1 đến 5' }, 400);
+        if (b.tags != null && !Array.isArray(b.tags)) return J({ error: 'tags phải là danh sách' }, 400);
+        if (b.rating == null && !hasTags && !hasText) return J({ error: 'Phản hồi trống: chấm sao, chọn thẻ hoặc viết nhận xét' }, 400);
       }
       if (p === '/api/agent/feedback') return J({ ok: true, entry: addFeedback({ video: b.video, project: b.project || ctx.project?.dir, rating: b.rating, tags: b.tags || [], comment: b.comment || '', source: 'studio' }) });
       if (p === '/api/agent/improve') return J(await improve({ claude: b.claude !== false }));

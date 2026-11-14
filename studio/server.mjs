@@ -263,7 +263,12 @@ function run(cmd, argv, onLine) {
     p.stdout.on('data', feeder()); p.stderr.on('data', feeder());
     // Missing ffmpeg/python: reject the job instead of crashing the server with an unhandled 'error' event.
     p.on('error', e => bad(new Error(e.code === 'ENOENT' ? `Không tìm thấy ${path.basename(cmd)} — chạy lại bộ cài (install)` : e.message)));
-    p.on('close', code => (code === 0 ? ok() : bad(new Error(`${path.basename(cmd)} lỗi (mã ${code})`))));
+    p.on('close', code => {
+      if (code === 0) return ok();
+      // Python without the installer's venv: name the missing module instead of a bare "python lỗi (mã 1)".
+      const mod = /ModuleNotFoundError: No module named '([\w.]+)'/.exec(job.log)?.[1];
+      bad(new Error(mod ? `Thiếu thư viện Python "${mod.split('.')[0]}" — chạy lại bộ cài (install.cmd / install.sh)` : `${path.basename(cmd)} lỗi (mã ${code})`));
+    });
   });
 }
 async function exportVideo({ quality = '1080', from, to, aspects }) {

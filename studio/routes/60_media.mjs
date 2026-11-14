@@ -77,8 +77,8 @@ export default ctx => {
     }
     if (p === '/api/stock/fetch' && req.method === 'POST') {
       const b = await ctx.body(req);
-      try { ctx.json(res, await (await ab()).fetchMedia(b.url, ctx.project.dir, { kind: b.kind, name: b.name || b.meta?.title || 'broll', dur: b.dur || 3, vertical: vertical(), meta: b.meta || {} })); }
-      catch (e) { ctx.json(res, { error: e.message }, 500); }
+      try { ctx.json(res, await (await ab()).fetchMedia(b.url, ctx.project.dir, { kind: b.kind === 'video' ? 'video' : 'photo', name: b.name || b.meta?.title || 'broll', dur: b.dur || 3, vertical: vertical(), meta: b.meta || {} })); }
+      catch (e) { ctx.json(res, { error: e.message }, e.status || 500); }
       return true;
     }
     const jobs = { '/api/segment': ['segment', segment], '/api/sticker': ['sticker', sticker], '/api/broll/suggest': ['broll_suggest', suggest], '/api/genimage': ['genimage', genimage] };
