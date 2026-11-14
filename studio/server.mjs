@@ -258,7 +258,8 @@ function run(cmd, argv, onLine) {
     const p = spawn(cmd, argv, { cwd: project?.dir || process.cwd() });
     job.proc = p;
     // Lines are reassembled across chunks so a long progress/JSON line never reaches onLine cut in half.
-    const feeder = () => { let rest = ''; return d => { const s = d.toString(); job.log = (job.log + s).slice(-6000); const ls = (rest + s).split(/[\r\n]/); rest = ls.pop(); ls.forEach(line); }; };
+    let own = ''; // this process's output only (job.log spans every command of the job)
+    const feeder = () => { let rest = ''; return d => { const s = d.toString(); job.log = (job.log + s).slice(-6000); own = (own + s).slice(-6000); const ls = (rest + s).split(/[\r\n]/); rest = ls.pop(); ls.forEach(line); }; };
     const line = l => { if (l && onLine) try { onLine(l); } catch (e) { console.error('onLine', e.message); } };
     p.stdout.on('data', feeder()); p.stderr.on('data', feeder());
     // Missing ffmpeg/python: reject the job instead of crashing the server with an unhandled 'error' event.
@@ -266,7 +267,7 @@ function run(cmd, argv, onLine) {
     p.on('close', code => {
       if (code === 0) return ok();
       // Python without the installer's venv: name the missing module instead of a bare "python lỗi (mã 1)".
-      const mod = /ModuleNotFoundError: No module named '([\w.]+)'/.exec(job.log)?.[1];
+      const mod = /python/i.test(path.basename(cmd)) ? /ModuleNotFoundError: No module named '([\w.]+)'/.exec(own)?.[1] : null;
       bad(new Error(mod ? `Thiếu thư viện Python "${mod.split('.')[0]}" — chạy lại bộ cài (install.cmd / install.sh)` : `${path.basename(cmd)} lỗi (mã ${code})`));
     });
   });

@@ -66,7 +66,7 @@ export default ctx => {
         if (b.tags != null && !Array.isArray(b.tags)) return J({ error: 'tags phải là danh sách' }, 400);
         if (b.rating == null && !hasTags && !hasText) return J({ error: 'Phản hồi trống: chấm sao, chọn thẻ hoặc viết nhận xét' }, 400);
       }
-      if (p === '/api/agent/feedback') return J({ ok: true, entry: addFeedback({ video: b.video, project: b.project || ctx.project?.dir, rating: b.rating, tags: b.tags || [], comment: b.comment || '', source: 'studio' }) });
+      if (p === '/api/agent/feedback') return J({ ok: true, entry: addFeedback({ video: b.video, project: b.project || ctx.project?.dir, rating: b.rating == null ? undefined : +b.rating, tags: b.tags || [], comment: b.comment || '', source: 'studio' }) });
       if (p === '/api/agent/improve') return J(await improve({ claude: b.claude !== false }));
       if (p === '/api/agent/suggest') return J(await refreshSuggestions({ claude: b.claude !== false }));
       if (p === '/api/agent/act') return J(await actSuggestion(b.id, b.action === 'dismiss' ? 'dismiss' : 'apply'));

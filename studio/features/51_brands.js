@@ -38,7 +38,8 @@
     const keep = Object.fromEntries(Object.entries(Studio.TL.brand || {}).filter(([k]) => !KEYS.includes(k)));
     Studio.TL.brand = { ...keep, ...r.brand };
     let msg = `Đã áp thương hiệu “${r.title}”`;
-    const packOk = r.pack && (Studio.win?.PACKS || []).some(p => p.id === r.pack);
+    // PACKS is empty until the engine iframe has loaded: only call a pack missing when the list is known.
+    const known = Studio.win?.PACKS || [], packOk = r.pack && (!known.length || known.some(p => p.id === r.pack));
     if (r.pack && !packOk) msg += ` (gói “${r.pack}” không còn trên máy này — giữ gói hiện tại)`;
     else if (r.pack && r.pack !== Studio.TL.pack && confirm(`Thương hiệu này dùng gói style mặc định “${r.pack}”. Đổi gói của dự án sang gói này?`)) { Studio.TL.pack = r.pack; msg += ' + đổi gói (bấm “Dựng tự động theo gói” nếu muốn dựng lại)'; }
     Studio.changed(); updateSwitch(); Studio.toast(msg);

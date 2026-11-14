@@ -54,7 +54,9 @@ const post = async (p, b, raw) => {
 test('net_guard chặn loopback, mạng nội bộ, link-local và IPv6 tương ứng', () => {
   for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', '::', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:7f00:1'])
     assert.equal(isBlockedIp(ip), true, ip);
-  for (const ip of ['8.8.8.8', '151.101.1.1', '2606:4700::1111']) assert.equal(isBlockedIp(ip), false, ip);
+  for (const ip of ['::7f00:1', '::127.0.0.1', '2002:7f00:1::', '64:ff9b::127.0.0.1', '64:ff9b::a00:1']) assert.equal(isBlockedIp(ip), true, ip);
+  // public, incl. Clash/Surge fake-ip (198.18/15) and NAT64 of a public IPv4 (DNS64 on IPv6-only networks)
+  for (const ip of ['8.8.8.8', '151.101.1.1', '2606:4700::1111', '198.18.0.5', '64:ff9b::808:808', '2002:808:808::1']) assert.equal(isBlockedIp(ip), false, ip);
 });
 
 test('assertPublicUrl: chỉ http(s), tên miền trỏ về IP nội bộ bị chặn sau khi phân giải', async () => {
@@ -75,6 +77,17 @@ test('safeFetch kiểm lại từng bước chuyển hướng: host công khai c
   assert.deepEqual(seen, ['https://cdn.example/a.jpg']); // the redirect target was never requested
   const ok = async () => new Response('img', { status: 200 });
   assert.equal(await (await safeFetch('https://cdn.example/a.jpg', {}, { lookup, fetchImpl: ok })).text(), 'img');
+});
+
+test('safeFetch chặn DNS rebinding: lần phân giải thứ hai trả 127.0.0.1 thì không kết nối', async () => {
+  let hits = 0;
+  const target = http.createServer((req, res) => { hits++; res.end('secret'); });
+  await new Promise(ok => target.listen(0, '127.0.0.1', ok));
+  let n = 0;
+  const lookup = async () => [{ address: n++ === 0 ? '93.184.216.34' : '127.0.0.1', family: 4 }];
+  await assert.rejects(safeFetch(`http://rebind.example:${target.address().port}/`, {}, { lookup }), /nội bộ/);
+  assert.equal(hits, 0);
+  target.close();
 });
 
 test('/api/stock/fetch từ chối URL nội bộ bằng 400 (SSRF)', async () => {
@@ -123,6 +136,8 @@ test('/api/brands/save từ chối body rỗng và gói style sai dạng', async
   assert.equal((await post('/api/brands/save', { brand: { title: 'X', pack: '../../evil' } })).status, 400);
   const ok = await post('/api/brands/save', { brand: { title: 'TEST-brand', pack: 'u_bds_den_gold' } });
   assert.equal(ok.status, 200); assert.equal(ok.j.pack, 'u_bds_den_gold');
+  assert.equal((await post('/api/brands/save', { brand: { id: ok.j.id, title: '' } })).status, 400); // would wipe the saved title
+  assert.equal((await post('/api/brands/save', { brand: { id: ok.j.id, phone: '0900' } })).status, 200); // partial edit keeps working
 });
 
 test('/api/agent/feedback không ghi phản hồi trống hoặc điểm ngoài 1–5', async () => {
@@ -130,8 +145,8 @@ test('/api/agent/feedback không ghi phản hồi trống hoặc điểm ngoài 
   for (const b of [{}, { rating: 9 }, { rating: 'x' }, { tags: 'a' }, { comment: '   ' }])
     assert.equal((await post('/api/agent/feedback', b)).status, 400, JSON.stringify(b));
   assert.equal(fs.existsSync(fb) ? fs.readFileSync(fb, 'utf8').trim() : '', '');
-  const ok = await post('/api/agent/feedback', { video: 'out/v.mp4', rating: 4 });
-  assert.equal(ok.status, 200); assert.equal(ok.j.entry.rating, 4);
+  const ok = await post('/api/agent/feedback', { video: 'out/v.mp4', rating: '4' });
+  assert.equal(ok.status, 200); assert.equal(ok.j.entry.rating, 4); // stored as a number
 });
 
 test('cloneProject chép được thư mục là liên kết (junction trên Windows) thay vì báo "Recursive option not enabled"', () => {
