@@ -6,7 +6,11 @@
 //   POST /api/engines/voice {url, voice, default_engine}        ghi khoá tts (url chỉ loopback; voice phải là giọng có sẵn)
 //   POST /api/engines/voice/start          bật máy chủ VieNeu (python scripts/tts.py vieneu-start)
 //   POST /api/engines/voice/preview {voice, text?}              đọc thử một câu ngắn bằng VieNeu → audio/wav
-// Không nhái giọng (chờ C04). Ghi config.json: gộp vào file, giữ mọi khoá khác, quyền 600 (llm.mjs, tts_config.mjs).
+//   POST /api/engines/voice/clone?name=&consent=1&start=&ext=  body thô = file mẫu (≤ 50 MB), header X-AVS-Consent-Note (tuỳ chọn,
+//                                          encodeURIComponent) → giọng nhái (tts.py vieneu-clone)
+//   POST /api/engines/voice/rm {name}      xoá giọng nhái
+// Nhái giọng (C04 đã chốt cho dùng) bắt buộc xác nhận quyền dùng giọng. Ghi config.json: gộp vào file, giữ mọi khoá khác,
+// quyền 600 (llm.mjs, tts_config.mjs).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,12 +19,15 @@ import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const MODEL_RE = /^[\w.:/-]{1,100}$/;
+const VOICE_NAME_RE = /^[\p{L}\p{N}_][\p{L}\p{N}_ .-]{0,39}$/u; // khớp NAME_RE của vieneu_server.py
+const CLONE_MAX_BYTES = 50 * 1024 * 1024;
+const CLONE_EXT = new Set(['wav', 'mp3', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'webm', 'mp4', 'mov', 'mkv']);
 const PREVIEW_TEXT = 'Xin chào, đây là giọng đọc thử của AI Video Studio.';
 const TRY_PROMPT = 'Trả về DUY NHẤT JSON {"ok": true, "loi_chao": "<một câu chào tiếng Việt ngắn>"}';
 const bad = (m, status = 400) => Object.assign(new Error(m), { status });
 
 export default ctx => {
-  let L = null, T = null, busy = { try: false, start: false, preview: false };
+  let L = null, T = null, busy = { try: false, start: false, preview: false, clone: false };
   const mods = async () => {
     L ||= await import(pathToFileURL(path.join(ctx.SKILL, 'scripts/llm.mjs')).href);
     T ||= await import(pathToFileURL(path.join(ctx.SKILL, 'scripts/tts_config.mjs')).href);
@@ -48,13 +55,25 @@ export default ctx => {
       return { reachable: true, models, has_model: models.some(m => m === model || m === model + ':latest') };
     } catch (e) { return { reachable: false, error: String(e.cause?.code || e.name || e.message) }; }
   }
-  const voicesOf = h => (h?.voices || []).filter(v => v && typeof v.name === 'string').slice(0, 50)
-    .map(v => ({ name: v.name, gender: v.gender || null, region: v.region || null, style: v.style || null }));
+  const voicesOf = h => (h?.voices || []).filter(v => v && typeof v.name === 'string').slice(0, 200) // 10 có sẵn + ≤ 50 giọng nhái
+    .map(v => ({ name: v.name, gender: v.gender || null, region: v.region || null, style: v.style || null, kind: v.kind === 'clone' ? 'clone' : 'preset' }));
   async function vieneuStatus() {
     const t = T.ttsConfig(), h = await T.vieneuHealth(t.vieneu.url), vp = T.readConfig().tts?.vieneu?.python;
     return { url: t.vieneu.url, running: !!h?.ready, loaded: !!h?.loaded, voices: voicesOf(h), default: h?.default || null,
-      installed: !!(vp && fs.existsSync(vp)), clone: false };
+      installed: !!(vp && fs.existsSync(vp)), clone: !!h?.clone };
   }
+  // Ghi body thô ra file tạm. Luôn settle (kể cả khi client huỷ giữa chừng) để finally xoá file tạm và nhả busy.
+  // Quá giới hạn (dù Content-Length khai ít hơn) → cắt kết nối, không đọc tiếp.
+  const saveUpload = (req, file, max) => new Promise((ok, bad) => {
+    let n = 0, done = false; const w = fs.createWriteStream(file);
+    const fail = e => { if (done) return; done = true; req.unpipe(w); w.destroy(); bad(e); };
+    req.on('data', c => { n += c.length; if (n > max) { fail(Object.assign(new Error('File mẫu quá lớn (tối đa 50 MB)'), { status: 413 })); req.destroy(); } });
+    req.on('aborted', () => fail(Object.assign(new Error('Đã huỷ gửi file'), { status: 400 })));
+    req.on('close', () => { if (!req.complete) fail(Object.assign(new Error('Đã huỷ gửi file'), { status: 400 })); });
+    req.on('error', fail); w.on('error', fail);
+    w.on('finish', () => { if (!done) { done = true; ok(n); } });
+    req.pipe(w);
+  });
 
   return async (req, res, p) => {
     if (!p.startsWith('/api/engines')) return false;
@@ -104,7 +123,7 @@ export default ctx => {
       if (b.default_engine !== undefined) patch.default_engine = b.default_engine;
       if (b.voice !== undefined) {
         patch.voice = b.voice;
-        if (b.voice) { // máy chủ đang chạy: tên phải nằm trong 10 giọng có sẵn (không nhận giọng nhái)
+        if (b.voice) { // máy chủ đang chạy: tên phải là giọng có sẵn hoặc giọng nhái đã tạo
           const names = voicesOf(await T.vieneuHealth(patch.url)).map(v => v.name);
           if (names.length && !names.includes(b.voice)) throw bad('VieNeu không có giọng này. Giọng có sẵn: ' + names.join(', '));
         }
@@ -145,6 +164,41 @@ export default ctx => {
         for (const f of [out, out.replace(/\.wav$/, '') + '.wav']) fs.rmSync(f, { force: true });
       }
       return true;
+    }
+    if (p === '/api/engines/voice/clone') {
+      const u = new URL(req.url, 'http://x'), q = k => String(u.searchParams.get(k) || '');
+      const name = q('name').normalize('NFC').trim(), ext = q('ext').toLowerCase().replace(/^\./, '') || 'wav';
+      // trần riêng 50 MB theo Content-Length (UPLOAD_ROUTES chỉ chặn ở mức upload chung): trả 413 trước khi đọc body
+      if (+(req.headers['content-length'] || 0) > CLONE_MAX_BYTES) { res.setHeader('Connection', 'close'); throw bad('File mẫu quá lớn (tối đa 50 MB)', 413); }
+      if (q('consent') !== '1') { req.resume(); throw bad('Cần xác nhận bạn là chủ giọng hoặc đã được chủ giọng đồng ý'); }
+      if (!VOICE_NAME_RE.test(name)) { req.resume(); throw bad('Tên giọng 1–40 ký tự: chữ, số, khoảng trắng, . - _'); }
+      if (!CLONE_EXT.has(ext)) { req.resume(); throw bad('Định dạng file mẫu không hỗ trợ: ' + ext); }
+      const start = Math.max(0, Math.min(36000, +q('start') || 0));
+      if (busy.clone) { req.resume(); throw bad('Đang tạo một giọng nhái khác', 409); }
+      busy.clone = true;
+      const tmp = path.join(os.tmpdir(), `avs-clone-${crypto.randomBytes(6).toString('hex')}.${ext}`);
+      try {
+        await saveUpload(req, tmp, CLONE_MAX_BYTES);
+        const st = await vieneuStatus();
+        if (!st.running) throw bad('Máy chủ giọng VieNeu chưa chạy. Bấm "Bật máy chủ" trước.', 409);
+        // ghi chú đồng ý đi trong header (không nằm trong URL/log); dạng --opt=giá trị để chữ bắt đầu bằng '-' không thành tuỳ chọn
+        let note = ''; try { note = decodeURIComponent(String(req.headers['x-avs-consent-note'] || '')); } catch { /* giữ rỗng */ }
+        note = note.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 300);
+        const r = await py(['vieneu-clone', `--name=${name}`, `--audio=${tmp}`, '--consent', `--start=${start}`, `--note=${note}`], 900000);
+        const cl = r.out.split(/\r?\n/).find(l => l.startsWith('CLONE ')), info = cl ? JSON.parse(cl.slice(6)) : null;
+        if (r.code || !info) throw bad(lastLine(r.err) || 'Không tạo được giọng nhái', 502);
+        ctx.json(res, { ok: true, ...info, vieneu: await vieneuStatus() });
+      } finally { busy.clone = false; fs.rmSync(tmp, { force: true }); }
+      return true;
+    }
+    if (p === '/api/engines/voice/rm') {
+      const b = await ctx.body(req), name = String(b.name || '');
+      const st = await vieneuStatus();
+      if (!st.running) throw bad('Máy chủ giọng VieNeu chưa chạy', 409);
+      if (!st.voices.some(v => v.kind === 'clone' && v.name === name)) throw bad('Không có giọng nhái này', 404);
+      const r = await py(['vieneu-voice-rm', `--name=${name}`], 30000);
+      if (r.code) throw bad(lastLine(r.err) || 'Không xoá được giọng nhái', 502);
+      ctx.json(res, { ok: true, vieneu: await vieneuStatus(), cfg: await view() }); return true;
     }
     return false;
   };

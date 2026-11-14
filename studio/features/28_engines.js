@@ -1,8 +1,9 @@
 // Mô hình & giọng (M26, M27): hộp thoại chọn nhà cung cấp LLM cho việc chỉ có chữ (Claude / Ollama trên máy) và giọng VieNeu
-// (máy chủ trên máy, 10 giọng có sẵn, không nhái giọng). API: studio/routes/28_engines.mjs. Cấu hình ở ~/.ai-video-studio/config.json.
+// (máy chủ trên máy, 10 giọng có sẵn + giọng nhái có xác nhận quyền dùng giọng). API: studio/routes/28_engines.mjs.
+// Cấu hình ở ~/.ai-video-studio/config.json.
 (() => {
   const { $, esc } = Studio;
-  const S = { tab: 'llm', cfg: null, st: null, loading: false, trying: false, tryRes: null, starting: false, playing: '', err: '' };
+  const S = { tab: 'llm', cfg: null, st: null, loading: false, trying: false, tryRes: null, starting: false, playing: '', err: '', cloning: false, cloneOk: '' };
   const css = document.createElement('style');
   css.textContent = `
   .eng-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line2); margin: 0 0 10px; }
@@ -27,7 +28,13 @@
   .eng-voice.on { border-color: var(--acc-line); background: var(--acc-soft); }
   .eng-voice .nm { flex: 1; min-width: 0; font-size: 12px; } .eng-voice .nm small { display: block; color: var(--tx3); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .eng-voice button { flex: none; padding: 3px 7px; }
-  .eng-warn { color: var(--warn); }`;
+  .eng-warn { color: var(--warn); }
+  .eng-clone { border: 1px dashed var(--line2); border-radius: 8px; padding: 10px; margin-top: 10px; min-width: 0; }
+  .eng-clone h4 { margin: 0 0 6px; font-size: 12.5px; }
+  .eng-clone .row2 > div { min-width: 0; }
+  #modal .eng-clone input[type=file] { width: 100%; min-width: 0; font-size: 11.5px; }
+  #modal .eng-clone input[type=number] { width: 100%; box-sizing: border-box; }
+  .eng-clone label.check { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; margin-top: 8px; line-height: 1.4; }`;
   document.head.appendChild(css);
 
   const box = () => $('#modalbox');
@@ -71,18 +78,21 @@
 
   function voiceTab() {
     const t = S.cfg.tts, v = S.st?.vieneu, voices = v?.voices || [], cur = t.vieneu.voice || v?.default || '';
+    const nClone = voices.filter(x => x.kind === 'clone').length, nPreset = voices.length - nClone;
     const stat = S.loading && !S.st ? `${dot(null)}<span>Đang kiểm máy chủ giọng…</span>`
-      : v?.running ? `${dot(true)}<span>Máy chủ VieNeu đang chạy ở <code>${esc(t.vieneu.url)}</code> · ${voices.length} giọng có sẵn${v.loaded ? '' : ' · model nạp ở câu đầu (chậm vài chục giây)'}</span>`
+      : v?.running ? `${dot(true)}<span>Máy chủ VieNeu đang chạy ở <code>${esc(t.vieneu.url)}</code> · ${nPreset} giọng có sẵn${nClone ? ` · ${nClone} giọng nhái` : ''}${v.loaded ? '' : ' · model nạp ở câu đầu (chậm vài chục giây)'}</span>`
       : `${dot(false)}<span>Máy chủ VieNeu không chạy ở <code>${esc(t.vieneu.url)}</code>.${v?.installed ? '' : ' Chưa cài: chạy <code>scripts\\install_vieneu.ps1</code> một lần.'}</span>${v?.installed ? `<button data-eng="start" ${S.starting ? 'disabled' : ''}><i class="ti ti-power"></i> ${S.starting ? 'Đang bật…' : 'Bật máy chủ'}</button>` : ''}`;
     const engines = [['vieneu', 'VieNeu', 'Trên máy, tiếng Việt; không chạy thì lùi edge-tts'], ['edge', 'Edge', 'Microsoft, cần Internet'], ...(S.cfg.platform === 'darwin' ? [['say', 'macOS say', 'Offline']] : [])];
     const de = t.default_engine || (S.cfg.platform === 'darwin' ? 'say' : 'edge');
-    return `<p class="eng-help">Giọng đọc tiếng Việt chạy trên máy (VieNeu, 10 giọng có sẵn, giấy phép Apache-2.0). Không có nhái giọng.</p>
+    return `<p class="eng-help">Giọng đọc tiếng Việt chạy trên máy (VieNeu, 10 giọng có sẵn, giấy phép Apache-2.0) và giọng nhái tạo từ một đoạn ghi âm.</p>
       <div class="eng-st" id="eng-vst">${stat}<button data-eng="recheck" title="Kiểm lại"><i class="ti ti-refresh"></i></button></div>
       <span class="lbl">Giọng VieNeu${voices.length ? '' : ' (bật máy chủ để xem danh sách)'}</span>
       ${voices.length ? `<div class="eng-voices">${voices.map(x => `<label class="eng-voice ${x.name === cur ? 'on' : ''}"><input type="radio" name="eng-voice" value="${esc(x.name)}" ${x.name === cur ? 'checked' : ''}>
           <span class="nm">${esc(x.name)}<small title="${esc(x.style || '')}">${esc(x.style || [x.gender, x.region].filter(Boolean).join(' · '))}</small></span>
-          <button data-eng="play" data-v="${esc(x.name)}" title="Nghe thử" ${S.playing ? 'disabled' : ''}><i class="ti ${S.playing === x.name ? 'ti-loader-2' : 'ti-volume'}"></i></button></label>`).join('')}</div>`
+          <button data-eng="play" data-v="${esc(x.name)}" title="Nghe thử" ${S.playing ? 'disabled' : ''}><i class="ti ${S.playing === x.name ? 'ti-loader-2' : 'ti-volume'}"></i></button>
+          ${x.kind === 'clone' ? `<button data-eng="rmclone" data-v="${esc(x.name)}" title="Xoá giọng nhái"><i class="ti ti-trash"></i></button>` : ''}</label>`).join('')}</div>`
         : `<div class="eng-help">${cur ? `Đang chọn: <b>${esc(cur)}</b>` : 'Chưa chọn giọng (dùng giọng mặc định của máy chủ).'}</div>`}
+      ${v?.running && v.clone ? cloneBox() : v?.running ? '<p class="eng-help eng-warn">Máy chủ VieNeu đang chạy bản cũ chưa có nhái giọng: tắt tiến trình máy chủ rồi bấm "Bật máy chủ" lại.</p>' : ''}
       <span class="lbl">Câu đọc thử</span><input type="text" id="eng-ptext" maxlength="200" placeholder="Xin chào, đây là giọng đọc thử của AI Video Studio.">
       <span class="lbl">Giọng mặc định cho job Hàng loạt, Lồng tiếng và Video từ chủ đề</span>
       <div class="eng-seg">${engines.map(([k, n, d]) => `<label class="${de === k ? 'on' : ''}"><input type="radio" name="eng-de" value="${k}" ${de === k ? 'checked' : ''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>
@@ -91,17 +101,63 @@
       <div class="actions"><button data-eng="close">Đóng</button><button class="primary" data-eng="save-voice"><i class="ti ti-device-floppy"></i> Lưu</button></div>`;
   }
 
+  function cloneBox() {
+    return `<div class="eng-clone"><h4><i class="ti ti-user-plus"></i> Tạo giọng nhái</h4>
+      <p class="eng-help">Một file ghi âm hoặc video có <b>một người</b> nói rõ, ít tạp âm; lấy 3–30 giây từ mốc bắt đầu. Máy chủ chỉ lưu đặc trưng giọng ở
+        <code>~/.ai-video-studio/vieneu/voices</code>, không giữ file mẫu. Lần đầu mất vài chục giây (nạp model).</p>
+      <div class="row2"><div><span class="lbl">File mẫu</span><input type="file" id="eng-cfile" accept="audio/*,video/*,.m4a,.mp3,.wav,.mp4,.mov"></div>
+        <div><span class="lbl">Tên giọng</span><input type="text" id="eng-cname" maxlength="40" placeholder="vd Giọng Minh" autocomplete="off"></div></div>
+      <div class="row2"><div><span class="lbl">Bắt đầu từ giây</span><input type="number" id="eng-cstart" min="0" step="0.5" value="0"></div>
+        <div><span class="lbl">Ghi chú đồng ý (ai, khi nào)</span><input type="text" id="eng-cnote" maxlength="300" placeholder="vd Chính tôi, 15/11/2026" autocomplete="off"></div></div>
+      <label class="check"><input type="checkbox" id="eng-cconsent"> <span>Tôi là chủ giọng này hoặc đã được chủ giọng đồng ý cho dùng. Không dùng giọng nhái để mạo danh hay
+        làm quảng cáo giả lời người khác; nền tảng (Meta, TikTok) có thể yêu cầu ghi rõ nội dung dùng giọng AI.</span></label>
+      ${S.cloneOk ? `<div class="eng-res ok">${esc(S.cloneOk)}</div>` : ''}
+      <div class="actions"><button data-eng="clone" ${S.cloning ? 'disabled' : ''}><i class="ti ${S.cloning ? 'ti-loader-2' : 'ti-wand'}"></i> ${S.cloning ? 'Đang tạo giọng…' : 'Tạo giọng'}</button></div></div>`;
+  }
+  async function createClone() {
+    const f = $('#eng-cfile')?.files?.[0], name = $('#eng-cname').value.trim();
+    S.err = ''; S.cloneOk = '';
+    if (!f) S.err = 'Chọn file mẫu giọng';
+    else if (!name) S.err = 'Đặt tên cho giọng nhái';
+    else if (!$('#eng-cconsent').checked) S.err = 'Cần tick ô xác nhận quyền dùng giọng';
+    else if (f.size > 50 * 1024 * 1024) S.err = 'File mẫu quá lớn (tối đa 50 MB): cắt ngắn bớt trước';
+    if (S.err) return render();
+    const ext = (f.name.match(/\.([a-z0-9]{2,5})$/i) || [, 'wav'])[1].toLowerCase();
+    const qs = new URLSearchParams({ name: name.normalize('NFC'), consent: '1', ext, start: String(+$('#eng-cstart').value || 0) });
+    const headers = { 'X-AVS-Consent-Note': encodeURIComponent($('#eng-cnote').value.trim()) }; // ghi chú có thể chứa tên người: không đưa vào URL
+    S.cloning = true; render();
+    try {
+      const r = await fetch('/api/engines/voice/clone?' + qs, { method: 'POST', body: f, headers }).then(x => x.json()).catch(e => ({ error: e.message }));
+      if (r.error || !r.ok) throw new Error(r.error || 'Không tạo được giọng nhái');
+      S.st = { ...(S.st || {}), vieneu: r.vieneu };
+      S.cloneOk = `Đã tạo giọng "${r.name}" từ ${r.seconds} giây mẫu. Bấm loa để nghe thử, chọn rồi Lưu để dùng làm giọng mặc định.`;
+      for (const id of ['#eng-cname', '#eng-cnote']) if ($(id)) $(id).value = '';
+    } catch (e) { S.err = 'Tạo giọng lỗi: ' + e.message; }
+    S.cloning = false; if (isOpen()) render();
+  }
+  async function removeClone(name) {
+    if (!confirm(`Xoá giọng nhái "${name}"? Job đang đặt giọng này sẽ phải chọn giọng khác.`)) return;
+    const r = await Studio.api('/api/engines/voice/rm', { name }).catch(e => ({ error: e.message }));
+    if (r.error) { S.err = r.error; return render(); }
+    S.st = { ...(S.st || {}), vieneu: r.vieneu }; if (r.cfg) S.cfg = r.cfg; S.err = ''; Studio.toast('Đã xoá giọng nhái'); render();
+  }
+
   function render() {
     if (!S.cfg) return;
     if (S.cfg.error) return Studio.modal(`<div class="eng"><h3>Mô hình & giọng</h3><div class="eng-res bad">${esc(S.cfg.error)}</div><div class="actions"><button data-eng="close">Đóng</button></div></div>`);
     // giữ những gì người dùng đang nhập/chọn mà chưa lưu (render lại sau lỗi, sau khi kiểm trạng thái…)
-    const keep = { url: $('#eng-url')?.value, model: $('#eng-model')?.value, vurl: $('#eng-vurl')?.value, ptext: $('#eng-ptext')?.value };
+    const keep = { url: $('#eng-url')?.value, model: $('#eng-model')?.value, vurl: $('#eng-vurl')?.value, ptext: $('#eng-ptext')?.value,
+      cname: $('#eng-cname')?.value, cnote: $('#eng-cnote')?.value, cstart: $('#eng-cstart')?.value };
+    const cfile = $('#eng-cfile')?.files, cconsent = $('#eng-cconsent')?.checked;
     const radios = Object.fromEntries(['eng-text', 'eng-voice', 'eng-de'].map(n => [n, box()?.querySelector(`.eng input[name="${n}"]:checked`)?.value]));
     const fb = $('#eng-fb')?.checked;
     Studio.modal(`<div class="eng"><h3><i class="ti ti-cpu"></i> Mô hình & giọng</h3>
       <div class="eng-tabs">${[['llm', 'ti-message-chatbot', 'Mô hình chữ (LLM)'], ['voice', 'ti-microphone', 'Giọng VieNeu']].map(([k, i, n]) => `<button data-engtab="${k}" class="${S.tab === k ? 'on' : ''}"><i class="ti ${i}"></i> ${n}</button>`).join('')}</div>
       ${S.tab === 'llm' ? llmTab() : voiceTab()}</div>`);
-    for (const [id, k] of [['#eng-url', 'url'], ['#eng-model', 'model'], ['#eng-vurl', 'vurl'], ['#eng-ptext', 'ptext']]) if (keep[k] != null && $(id)) $(id).value = keep[k];
+    for (const [id, k] of [['#eng-url', 'url'], ['#eng-model', 'model'], ['#eng-vurl', 'vurl'], ['#eng-ptext', 'ptext'], ['#eng-cname', 'cname'], ['#eng-cnote', 'cnote'], ['#eng-cstart', 'cstart']])
+      if (keep[k] != null && $(id)) $(id).value = keep[k];
+    if (cfile?.length && $('#eng-cfile')) $('#eng-cfile').files = cfile; // giữ file đã chọn khi vẽ lại
+    if (cconsent && $('#eng-cconsent')) $('#eng-cconsent').checked = true;
     for (const [n, v] of Object.entries(radios)) {
       const el = v != null && [...box().querySelectorAll(`.eng input[name="${n}"]`)].find(i => i.value === v);
       if (el) { el.checked = true; el.closest('.eng-seg, .eng-voices')?.querySelectorAll('label').forEach(l => l.classList.toggle('on', l.contains(el))); }
@@ -153,6 +209,8 @@
     }
     if (a === 'save-voice') return saveVoice();
     if (a === 'play') return play(b.dataset.v);
+    if (a === 'clone') return createClone();
+    if (a === 'rmclone') return removeClone(b.dataset.v);
     if (a === 'start') {
       S.starting = true; S.err = ''; render();
       const r = await Studio.api('/api/engines/voice/start', {}).catch(err => ({ ok: false, error: err.message }));

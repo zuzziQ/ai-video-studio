@@ -40,6 +40,7 @@ def wav_bytes(seconds=0.4, sr=24000):
 
 class Fake(BaseHTTPRequestHandler):
     calls = []
+    clones = []
 
     def log_message(self, *a):
         pass
@@ -54,11 +55,17 @@ class Fake(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self._send(200, {"ready": True, "clone": False, "voices": VOICES, "default": "Ngoc"})
+            return self._send(200, {"ready": True, "clone": True, "voices": VOICES + [{"name": "Mẫu", "kind": "clone"}], "default": "Ngoc"})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        if self.path == "/voices":
+            Fake.clones.append(body)
+            return self._send(200, {"name": body.get("name"), "seconds": 4.0})
+        if self.path == "/voices/delete":
+            Fake.clones.append({"deleted": body.get("name")})
+            return self._send(200, {"ok": True}) if body.get("name") == "Mẫu" else self._send(404, {"error": "Không có giọng nhái"})
         Fake.calls.append(body)
         if body.get("voice") not in [v["name"] for v in VOICES]:
             return self._send(400, {"error": "Không có giọng này"})
@@ -180,12 +187,65 @@ class TtsTest(unittest.TestCase):
         self.assertEqual(c["pexels"], "k")
         self.assertEqual(c["tts"]["vieneu"], {"url": self.url, "python": "C:/v/python.exe", "voice": "Binh"})
 
-    def test_status_reports_running_and_no_clone(self):
+    def test_status_reports_running_and_clones(self):
         os.environ["AVS_VIENEU_URL"] = self.url
         s = tts.status()["vieneu"]
         self.assertTrue(s["running"])
-        self.assertFalse(s["clone"])
-        self.assertEqual(s["voices"], ["Ngoc", "Binh"])
+        self.assertTrue(s["clone"])
+        self.assertEqual(s["voices"], ["Ngoc", "Binh", "Mẫu"])
+        self.assertEqual(s["clones"], ["Mẫu"])
+
+    def test_clone_needs_consent_and_running_server(self):
+        os.environ["AVS_VIENEU_URL"] = self.url
+        n = len(Fake.clones)
+        with self.assertRaises(SystemExit) as e:
+            tts.vieneu_clone("A", __file__, consent=False)
+        self.assertIn("--consent", str(e.exception))
+        os.environ["AVS_VIENEU_URL"] = "http://127.0.0.1:%d" % free_port()
+        with self.assertRaises(SystemExit) as e:
+            tts.vieneu_clone("A", __file__, consent=True)
+        self.assertIn("không chạy", str(e.exception))
+        os.environ["AVS_VIENEU_URL"] = "http://example.com:8771"
+        with self.assertRaises(ValueError):
+            tts.vieneu_clone("A", __file__, consent=True)
+        self.assertEqual(len(Fake.clones), n, "không gửi gì khi bị chặn")
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "cần ffmpeg")
+    def test_cli_clone_converts_and_trims(self):
+        src = os.path.join(self.home, "mau.wav")
+        with open(src, "wb") as f:
+            f.write(wav_bytes(40.0, 44100))  # 40 s, 44,1 kHz → cắt còn 30 s, 24 kHz mono
+        env = {**os.environ, "AVS_VIENEU_URL": self.url, "PYTHONIOENCODING": "utf-8"}
+        cli = [sys.executable, "-I", "-X", "utf8", os.path.join(SCRIPTS, "tts.py")]
+        r = subprocess.run(cli + ["vieneu-clone", "--name", "Giọng Minh", "--audio", src, "--consent", "--note", "Chính tôi"],
+                           capture_output=True, text=True, env=env, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads([x for x in r.stdout.splitlines() if x.startswith("CLONE ")][0][6:]), {"name": "Giọng Minh", "seconds": 4.0})
+        body = Fake.clones[-1]
+        self.assertEqual((body["name"], body["consent"], body["consent_note"]), ("Giọng Minh", True, "Chính tôi"))
+        import base64
+        with wave.open(io.BytesIO(base64.b64decode(body["audio_b64"]))) as w:
+            self.assertEqual((w.getnchannels(), w.getframerate(), w.getsampwidth()), (1, tts.CLONE_SR, 2))
+            self.assertAlmostEqual(w.getnframes() / w.getframerate(), 30.0, delta=0.1)
+        # --start gần cuối: còn 2 s < 3 s → báo quá ngắn, không gửi
+        n = len(Fake.clones)
+        r = subprocess.run(cli + ["vieneu-clone", "--name", "B", "--audio", src, "--consent", "--start", "38"],
+                           capture_output=True, text=True, env=env, encoding="utf-8")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("quá ngắn", r.stderr)
+        self.assertEqual(len(Fake.clones), n)
+        r = subprocess.run(cli + ["vieneu-clone", "--name", "B", "--audio", os.path.join(self.home, "khong-co.wav"), "--consent"],
+                           capture_output=True, text=True, env=env, encoding="utf-8")
+        self.assertIn("Không thấy file", r.stderr)
+
+    def test_voice_rm_clears_default(self):
+        os.environ["AVS_VIENEU_URL"] = self.url
+        tts.write_vieneu_conf({"voice": "Mẫu"})
+        tts.vieneu_voice_rm("Mẫu")
+        self.assertEqual(Fake.clones[-1], {"deleted": "Mẫu"})
+        self.assertEqual(tts.vieneu_conf().get("voice"), "")
+        with self.assertRaises(RuntimeError):
+            tts.vieneu_voice_rm("Ngoc")
 
     def test_cli_say(self):
         env = {**os.environ, "AVS_VIENEU_URL": self.url, "PYTHONIOENCODING": "utf-8"}
