@@ -80,6 +80,7 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/engines`, `GET /api/engines/status` | cấu hình LLM + giọng (chỉ khoá `llm`/`tts`, không khoá bí mật), trạng thái Ollama/VieNeu |
 | `POST /api/engines/llm`, `POST /api/engines/llm/try` | `{text, fallback, url, model}` (url chỉ loopback) · thử một câu JSON |
 | `POST /api/engines/voice`, `…/voice/start`, `…/voice/preview` | `{url, voice, default_engine}` · bật máy chủ VieNeu · `{voice, text}` → `audio/wav` |
+| `POST /api/perf/advise` | `{goal:"nhanh"\|"song-song"\|"chat-luong", job?:{W,H,fps,sec,count}, llm?:false}` → `{profile, overrides, reason, provider, pick, candidates}`: luật sinh ứng viên, LLM chỉ chọn (M68, `references/perf-profile.md`); không lưu; 400 sai kiểu, 409 đang bận |
 
 Server chỉ nghe ở `127.0.0.1` và chỉ phục vụ file trong `studio/`, `engine/`, `assets/`, thư mục mẫu và thư mục dự án. Thư mục mẫu mặc định là `<skill>/templates`, đổi bằng `--templates <dir>` hoặc biến `AVS_TEMPLATES`.
 

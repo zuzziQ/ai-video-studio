@@ -51,3 +51,21 @@ node scripts/perf.mjs log --n 20
 - `hwSnapshot({ run?, env?, encoders? }) → { cores, ram, gpu[], chrome, encoder }`
 - `planFor({ W, H, fps, sec, perf, hw })`, `perfEnv(r)`, `lowerPriority(pid, priority)`
 - `acquireRenderSlot({ slots, onWait, pollMs }) → { release(), waited_s }`, `slotHolders()`, `appendPerfLog(entry)`, `readPerfLog({ n })`
+
+## AI chọn profile (M68)
+
+Mã: `scripts/perf_advisor.mjs` (lõi), `scripts/perf_advise_cli.mjs` (CLI), `studio/routes/31_perfai.mjs` (API), skill Claude Code `.agents/skills/toi-uu-may/SKILL.md`.
+
+- **Luật tất định** `candidates({ hw, log, job, goal, load })` sinh 2–4 ứng viên `{ profile, overrides, workers, why, est }` hợp lệ (cùng miền với `savePerf`; `overrides` chỉ khác `{}` khi profile là `tuy-chinh`). Mục tiêu: `nhanh` → `toc-do` (lô ≥ 5 video ghi rõ), `song-song` (vừa render vừa làm việc khác) → `tiet-kiem`, rồi nửa số nhân thật + BelowNormal; `chat-luong` → `chat-luong`. Không encoder phần cứng → `tuy-chinh` x264 veryfast. RAM trống < 6 GB → hạ worker theo RAM (~0,7 GB mỗi worker 1080p, chừa 1,5 GB). Đang có lượt render khác hoặc CPU ≥ 60 % → thêm `tiet-kiem`.
+- **Ước thời gian** `est = { fps, sec, runs }`: trung vị fps của `perf_log` cùng profile (+ cùng số worker với `tuy-chinh`) và cùng W×H; chưa có số đo → `null`.
+- **LLM chỉ chọn:** `advise({ goal, job, useLlm })` gửi qua `llm.mjs` (`task: 'text'`, đúng lựa chọn Claude/Ollama trong config, `cwd` = thư mục tạm) gói gồm phần cứng không đường dẫn, tải hiện tại (lượt render đang giữ chỗ, % CPU), ≤ 20 dòng `perf_log` (chỉ các trường số đo), job, goal và danh sách ứng viên. Mọi chuỗi giống đường dẫn hay token bị lọc (`scrub`). LLM trả `{ pick, reason }`; chỉ số sai, JSON hỏng, lỗi hay quá 60 s → ứng viên đầu, `provider: 'rules'`, kèm `llm_error`. Lý do cắt còn ≤ 2 câu.
+- **Kết quả** `{ profile, overrides, reason, provider: 'claude'|'ollama'|'rules', pick, candidates, llm_error? }`. Không lưu gì: người dùng hoặc panel lưu bằng `savePerf` / `perf.mjs set`.
+- **Lô song song** (số bản song song × worker): chờ báo cáo `M66`.
+
+```bash
+node scripts/perf_advise_cli.mjs --goal nhanh            # Claude/Ollama chọn, in bảng ứng viên + lệnh áp dụng
+node scripts/perf_advise_cli.mjs --goal song-song --no-llm --json
+node scripts/perf_advise_cli.mjs --goal nhanh --count 10 --W 1080 --H 1920 --sec 45
+```
+
+API Studio: `POST /api/perf/advise {goal, job?: {W, H, fps, sec, count}, llm?: false}` → kết quả trên; sai kiểu → 400, đang có lượt khác → 409.
