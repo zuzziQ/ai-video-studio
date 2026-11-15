@@ -50,7 +50,8 @@ test('config.json chọn Ollama: việc chữ đi Ollama, đúng model, JSON mod
   assert.deepEqual(v, { from: 'ollama' });
   assert.equal(reqs.length, 1);
   assert.equal(reqs[0].url, '/api/generate');
-  assert.deepEqual(reqs[0].body, { model: 'qwen2.5:7b', prompt: 'VIẾT HOOK', stream: false, format: 'json' });
+  // num_ctx: Ollama's small default context would cut long prompts (M61)
+  assert.deepEqual(reqs[0].body, { model: 'qwen2.5:7b', prompt: 'VIẾT HOOK', stream: false, options: { num_ctx: 4096 }, format: 'json' });
   answer = () => ({ status: 200, body: { response: 'Đây: [{"i":0}]' } });
   assert.deepEqual(await llm.askJSON('p', { task: 'text', shape: 'array' }), [{ i: 0 }]);
   assert.equal(reqs[1].body.format, undefined); // JSON mode only for objects: it would wrap an array in an object

@@ -27,6 +27,10 @@
       }
       await S.reload();
       const x = j.out || {}, miss = [...new Set(x.missing || [])];
+      // nothing from a template on the timeline: say so instead of "khớp: 0 chữ, 0 ảnh, 0 cảnh" (no model call happened)
+      if (!x.fit) return S.modal(`<h3><i class="ti ti-info-circle"></i> Chưa có cảnh mẫu để bám lời thoại</h3>
+        <p>${x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : ''}“Bám lời thoại” viết lại chữ và canh thời gian cho các cảnh của một <b>mẫu</b>. Chọn một mẫu ở panel <b>Mẫu</b> rồi bấm “Dùng mẫu”: mẫu sẽ tự bám lời thoại.</p>
+        <div class="actions"><button class="primary" onclick="closeModal()">OK</button></div>`);
       const ai = x.claude && x.claude !== 'ok' ? `<p class="muted"><i class="ti ti-alert-triangle"></i> Không dùng được Claude (${esc(x.claude)}), chữ được lấy thẳng từ lời nói — nên đọc lại.</p>` : '';
       if (miss.length || ai) {
         S.modal(`<h3><i class="ti ti-check"></i> Mẫu đã khớp lời thoại</h3>

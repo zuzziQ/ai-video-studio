@@ -50,7 +50,7 @@ export default ctx => {
     if (!captions.length) throw new Error('Dự án chưa có phụ đề để đọc');
     ctx.job.step = 'Claude đang đọc phụ đề và chọn b-roll…'; ctx.job.progress = .1;
     const tick = setInterval(() => { ctx.job.progress = Math.min(.95, ctx.job.progress + .02); }, 1000);
-    try { ctx.job.out = await (await ab()).suggest(captions, { model, n }); } finally { clearInterval(tick); }
+    try { ctx.job.out = await (await ab()).suggest(captions, { model, n, onProc: p => { ctx.job.proc = p; } }); } finally { clearInterval(tick); }
   }
   async function genimage({ prompt, provider }) {
     if (!prompt) throw new Error('Thiếu mô tả ảnh');

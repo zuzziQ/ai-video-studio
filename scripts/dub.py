@@ -24,6 +24,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
 import tts as voices  # noqa: E402  (scripts/tts.py: engine choice, VieNeu client)
+from llm_bridge import LlmError, LlmUnavailable, ask  # noqa: E402  (model calls go through scripts/llm.mjs)
 
 LANGS = {"vi": "tiếng Việt", "en": "English", "zh": "简体中文 (Simplified Chinese)", "ja": "日本語 (Japanese)", "ko": "한국어 (Korean)",
          "th": "ภาษาไทย (Thai)", "fr": "Français", "de": "Deutsch", "es": "Español", "id": "Bahasa Indonesia", "ru": "Русский",
@@ -51,16 +52,16 @@ def say_voices(lang):
 
 
 def claude(prompt):
-    exe = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
-    if not os.path.exists(exe):
-        raise SystemExit("Không tìm thấy Claude Code CLI (lệnh `claude`) để dịch. Cài Claude Code hoặc tự điền trường tr cho phụ đề.")
-    r = subprocess.run([exe, "-p", "--output-format", "json", "--model", "sonnet"], input=prompt, capture_output=True, text=True, timeout=600)
-    if r.returncode:
-        raise SystemExit(f"Claude CLI lỗi khi dịch: {(r.stderr or r.stdout)[-300:]}")
-    res = json.loads(r.stdout).get("result", "")
+    """Dịch qua scripts/llm.mjs (Claude hoặc Ollama theo cấu hình). Không có mô hình → dừng với câu dễ hiểu."""
+    try:
+        res = ask(prompt, model="sonnet", timeout=600)
+    except LlmUnavailable as e:
+        raise SystemExit(f"{e} Hoặc tự điền trường tr cho phụ đề.") from None
+    except LlmError as e:
+        raise ValueError(str(e)) from None  # quá giờ / lỗi tạm: vòng thử lại của translate() xử lý
     m = re.search(r"\[[\s\S]*\]", res)
     if not m:
-        raise ValueError("Claude không trả về JSON")
+        raise ValueError("Mô hình không trả về JSON")
     return json.loads(m.group(0))
 
 

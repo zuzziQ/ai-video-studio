@@ -42,15 +42,17 @@ function classify({ code, msg, isError }) {
  *  args       extra CLI args, e.g. ['--allowedTools', 'Read'] or ['--resume', id]
  *  cwd        working dir of the CLI (default: the caller's; text-only jobs pass os.tmpdir() so no project files leak in)
  *  env        env for the child (platform.mjs still strips Claude Code session variables)
- *  timeout    ms; 0 = none. On timeout the process tree is stopped and LlmError kind 'timeout' is thrown
+ *  timeout    ms (default DEFAULT_TIMEOUT: 15 min, AVS_LLM_TIMEOUT_S); 0 = none. On timeout the process tree is stopped and LlmError kind 'timeout' is thrown
  *  timeoutMsg message for that error (default "Claude quá N giây")
  *  onTick     called every tickMs (default 1000) with elapsed seconds — progress lines
  *  onProc     called with the child right after spawn, so a job can cancel it
  *  stream     true: --output-format stream-json --verbose --include-partial-messages; onEvent(e) sees every event
  * → { text: the model's answer, result: the CLI's final JSON object (or null), code }
  */
+export const DEFAULT_TIMEOUT = () => (+process.env.AVS_LLM_TIMEOUT_S > 0 ? +process.env.AVS_LLM_TIMEOUT_S : 900) * 1000;
 export function runClaude(prompt, opts = {}) {
-  const { model = 'sonnet', args = [], cwd, env, timeout = 0, timeoutMsg, onTick, tickMs = 1000, onProc, stream = false, onEvent } = opts;
+  // no timeout given → DEFAULT_TIMEOUT (a hung CLI must not hold the job slot until the server restarts); 0 = none, on purpose
+  const { model = 'sonnet', args = [], cwd, env, timeout = DEFAULT_TIMEOUT(), timeoutMsg, onTick, tickMs = 1000, onProc, stream = false, onEvent } = opts;
   const a = ['-p', '--output-format', stream ? 'stream-json' : 'json', ...(stream ? ['--verbose', '--include-partial-messages'] : [])];
   if (model && model !== 'default') a.push('--model', model);
   a.push(...args);
@@ -187,6 +189,9 @@ export function pickProvider({ task, provider, args = [] } = {}) {
 }
 
 const CLAUDE_MODEL = /^(sonnet|opus|haiku|default|claude[\w.-]*)$/i;
+// Ollama's default context (2–4k tokens) silently drops the start of long prompts (ai_edit catalog, highlights, publish):
+// size it to the prompt (~2.5 chars per token for Vietnamese) plus room for the answer, 4k–32k.
+export const numCtx = prompt => Math.min(32768, Math.max(4096, 1024 * Math.ceil((String(prompt).length / 2.5 + 2048) / 1024)));
 /**
  * One Ollama call (POST {url}/api/generate, stream:false). opts: model / ollamaModel, url, timeout, timeoutMsg, onTick,
  * tickMs, onProc, jsonShape ('object' → Ollama's JSON mode). onProc gets a handle with kill(), so a job cancel (killTree)
@@ -208,7 +213,7 @@ export async function runOllama(prompt, opts = {}) {
     let r, body;
     try {
       r = await fetch(url + '/api/generate', { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, stream: false, ...(opts.jsonShape === 'object' ? { format: 'json' } : {}) }) });
+        body: JSON.stringify({ model, prompt, stream: false, options: { num_ctx: numCtx(prompt) }, ...(opts.jsonShape === 'object' ? { format: 'json' } : {}) }) });
       body = await r.text();
     } catch (e) {
       if (why) throw aborted();
@@ -253,6 +258,25 @@ async function cli(argv) {
     const has = models ? models.some(m => m === c.ollama.model || m === c.ollama.model + ':latest') : null;
     console.log(JSON.stringify({ config: CONFIG(), ...c, ollama_reachable: !!models, ollama_models: models, has_model: has, ...(err ? { ollama_error: err } : {}) }, null, 1));
     return;
+  }
+  // ask: prompt on stdin → model text on stdout, through runLLM (provider choice, Claude env cleanup, --setting-sources "",
+  // Windows claude.cmd resolution, timeout). For the Python scripts (scripts/llm_bridge.py) so they never spawn claude
+  // themselves. Exit 3 = timeout, 4 = no model available (CLI missing / not logged in / Ollama down), 1 = other error.
+  if (cmd === 'ask') {
+    const prompt = await new Promise((ok, bad) => { let s = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', d => (s += d)); process.stdin.on('end', () => ok(s)); process.stdin.on('error', bad); });
+    if (!prompt.trim()) { console.error('Thiếu prompt (gửi qua stdin)'); process.exit(1); }
+    const timeout = Math.max(5, Math.min(3600, +kv.timeout || 600)) * 1000;
+    try {
+      // cwd = temp folder: no project CLAUDE.md / files reach a text prompt
+      const r = await runLLM(prompt, { task: kv.task || 'text', model: kv.model || 'sonnet', timeout, cwd: os.tmpdir(), ...(kv.provider ? { provider: kv.provider } : {}),
+        ...(kv.shape === 'object' ? { jsonShape: 'object' } : {}) });
+      process.stdout.write(r.text);
+      if (r.fallbackFrom) console.error(`(Ollama không dùng được, chuyển sang Claude: ${r.fallbackFrom})`);
+      return;
+    } catch (e) {
+      console.error(e.message);
+      process.exit(e?.kind === 'timeout' ? 3 : ['missing', 'login', 'quota'].includes(e?.kind) || (e?.kind === 'model' && /ollama/i.test(e.message)) ? 4 : 1);
+    }
   }
   if (cmd === 'try') {
     const prompt = rest.filter(a => !/^\w+=/.test(a)).join(' ') || 'Trả về DUY NHẤT JSON {"ok": true, "loi_chao": "<một câu chào tiếng Việt ngắn>"}';

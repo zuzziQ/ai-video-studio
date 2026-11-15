@@ -17,6 +17,17 @@ export const asText = (P, d) => [
   `\n## Trang upload\n${P.url}`, `\n(Lưu ý: ${P.note})\n`,
 ].filter(Boolean).join('\n');
 
+// What the model wrote → only the known fields, as strings of sane length; hashtags from an array or a "#a #b" string;
+// thumb_time a number inside the video (QA: a string of hashtags used to throw on .map).
+export function cleanPlatform(d, dur = 0) {
+  const str = (v, n) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim().slice(0, n) : '');
+  const tags = (Array.isArray(d.hashtags) ? d.hashtags : typeof d.hashtags === 'string' ? d.hashtags.split(/[\s,]+/) : [])
+    .map(h => String(h).replace(/^#+/, '').replace(/\s+/g, '')).filter(Boolean).slice(0, 15).map(h => '#' + h.slice(0, 60));
+  const t = Number(d.thumb_time);
+  return { title: str(d.title, 200), caption: str(d.caption, 2200), hashtags: [...new Set(tags)], first_comment: str(d.first_comment, 500),
+    thumb_time: Number.isFinite(t) && t >= 0 ? Math.round(Math.min(t, dur > 0 ? dur : t) * 10) / 10 : null, thumb_text: str(d.thumb_text, 80) };
+}
+
 export function buildPrompt({ tl, captions, info, plats, notes }) {
   const lines = captions.filter(c => !c.hidden).map(c => `[${c.t0.toFixed(1)}s] ${c.words.map(w => w.w).join(' ')}`).join('\n').slice(0, 9000);
   const onScreen = [...new Set((tl.scenes || []).flatMap(s => [s.title, s.name, s.text, s.question, s.value].filter(x => typeof x === 'string')))].slice(0, 30).join(' | ');
@@ -49,12 +60,15 @@ export async function generatePublish({ dir, tl, captions, videoAbs, videoRel, p
   const plats = (platforms || Object.keys(PLATFORMS)).filter(k => PLATFORMS[k]);
   if (!plats.length) throw new Error('Chưa chọn nền tảng');
   const info = await probe(videoAbs);
-  const data = await askJSON(buildPrompt({ tl, captions, info, plats, notes }), { task: 'text', model, cwd: os.tmpdir(), onProc, shape: 'object' });
+  const dur = +(info?.dur ?? tl.duration) || 0;
+  // at least one asked platform with a caption, else one more try (askJSON retries); fields are cleaned by cleanPlatform
+  const data = await askJSON(buildPrompt({ tl, captions, info, plats, notes }), { task: 'text', model, cwd: os.tmpdir(), onProc, shape: 'object', retries: 1,
+    validate: d => { if (!plats.some(k => d?.[k] && typeof d[k] === 'object' && String(d[k].caption || d[k].title || '').trim())) throw new Error('thiếu caption cho các nền tảng đã chọn'); return d; } });
   const PUB = path.join(dir, 'publish');
   fs.mkdirSync(PUB, { recursive: true });
   const doc = { video: videoRel, created: new Date().toISOString(), info, platforms: {} };
-  for (const k of plats) if (data[k]) {
-    const d = data[k]; d.hashtags = (d.hashtags || []).map(h => '#' + String(h).replace(/^#+/, '').replace(/\s+/g, ''));
+  for (const k of plats) if (data[k] && typeof data[k] === 'object') {
+    const d = cleanPlatform(data[k], dur);
     doc.platforms[k] = d; fs.writeFileSync(path.join(PUB, `${k}.txt`), asText(PLATFORMS[k], d));
   }
   fs.writeFileSync(path.join(PUB, 'publish.json'), JSON.stringify(doc, null, 1));

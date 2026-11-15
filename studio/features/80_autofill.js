@@ -13,14 +13,14 @@
   .af .seg button { flex-direction: column; gap: 1px; padding: 5px 2px; font-size: 11.5px; }
   .af .seg button small { display: block; font-weight: 500; font-size: 9.5px; color: var(--tx3); white-space: nowrap; }
   .af .big { width: 100%; justify-content: center; padding: 12px; font-size: 13.5px; font-weight: 700; margin: 2px 0 8px; gap: 8px; }
-  .af .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-  .af .row3 button { justify-content: center; padding: 7px 4px; font-size: 11.5px; }
+  .af .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .af .row3 button { justify-content: center; padding: 7px 4px; font-size: 11.5px; min-width: 0; white-space: normal; line-height: 1.25; }
   .af .stat { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 0; }
   .af .stat span { background: var(--bg2); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 8px; font-size: 11px; color: var(--tx2); }
   .af .last { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--rs); padding: 8px 10px; font-size: 11.5px; color: var(--tx2); line-height: 1.5; margin-top: 8px; }
   .af label.sw { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; }
-  .af .goals { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-bottom: 8px; }
-  .af .goals button { justify-content: flex-start; gap: 6px; padding: 7px 8px; font-size: 11.5px; text-align: left; }
+  .af .goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 8px; }
+  .af .goals button { justify-content: flex-start; gap: 6px; padding: 7px 8px; font-size: 11.5px; text-align: left; min-width: 0; white-space: normal; line-height: 1.25; }
   .af .goals button.on { border-color: var(--acc-line); background: var(--acc-soft); color: var(--tx); }
   .af .chips .chip small { color: var(--warn); font-size: 9.5px; margin-left: 3px; }
   .af .vr { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 11.5px; color: var(--tx2); }

@@ -2,7 +2,9 @@
 
 > Phần thêm của bản `zuzziQ/ai-video-studio` (M25, M26). Dựa trên AI Video Studio của Nguyễn Tất Kiểm.
 
-Mọi chỗ gọi AI trong `scripts/` đi qua `scripts/llm.mjs` (trừ `scripts/ai_qc.mjs`, chuyển sau).
+Mọi chỗ gọi AI trong `scripts/` đi qua `scripts/llm.mjs` (trừ `scripts/ai_qc.mjs`, chuyển sau). Script Python (`dub.py` dịch, `fillers.py` dò câu nói hỏng, `auto_sfx.py` chọn mood nhạc) gọi qua `scripts/llm_bridge.py` → `node scripts/llm.mjs ask` (prompt qua stdin, chữ của mô hình ra stdout; mã 3 = quá giờ, 4 = không có mô hình: thiếu `claude`, chưa đăng nhập, hết lượt, Ollama tắt). Không script Python nào được tự chạy `claude` (`llm_bridge.test.mjs` kiểm).
+
+`runClaude` không nhận `timeout` thì dùng mặc định 15 phút (`AVS_LLM_TIMEOUT_S`); `timeout: 0` là cố ý không giới hạn. Ollama được đặt `num_ctx` theo độ dài prompt (4k–32k) để không bị cắt mất đầu prompt dài.
 
 | Hàm | Việc |
 |---|---|
@@ -16,7 +18,7 @@ Lỗi là `LlmError` có `kind`: `missing`, `login`, `quota`, `model`, `exit`, `
 
 ## Chọn nhà cung cấp
 
-- Việc **chỉ có chữ** đánh dấu `task: 'text'`: gợi ý b-roll (`ai_broll`, `auto_broll --claude`), AI dựng giúp và hook (`ai_edit`, kèm `highlights`, `topic_video`, `tpl_fit` qua `callClaude`), góp ý (`feedback`), nội dung đăng (`publish_texts`). Chạy bằng nhà cung cấp chọn trong cấu hình.
+- Việc **chỉ có chữ** đánh dấu `task: 'text'`: dịch phụ đề, dò câu nói hỏng, mood nhạc (qua `llm_bridge.py`), gợi ý b-roll (`ai_broll`, `auto_broll --claude`), AI dựng giúp và hook (`ai_edit`, kèm `highlights`, `topic_video`, `tpl_fit` qua `callClaude`), góp ý (`feedback`), nội dung đăng (`publish_texts`). Chạy bằng nhà cung cấp chọn trong cấu hình.
 - Việc **cần xem ảnh hoặc dùng công cụ** (`broll_lib` gắn thẻ ảnh, `style_lab`, QC khung hình) luôn dùng Claude. Có `--allowedTools` trong `args` cũng bị ép về Claude.
 - Model Claude (`sonnet`, `opus`, `haiku`, `default`) không phải model Ollama: khi chạy Ollama thì dùng model trong cấu hình.
 

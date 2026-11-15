@@ -108,7 +108,8 @@ const NUM = /\d+(?:[.,]\d+)?\s*(?:%|tỷ|triệu|nghìn|k|đ|m²|năm|ngày|gi�
 const FRAME = (s, dur) => s.keep || s.t1 - s.t0 >= dur * .4;
 function mine(s) { return (s._tpl || s._recipe) && !s._orig && !s._auto; }
 
-export async function fitProject(src, { claude = false, model = 'sonnet', images = true, dry = false, say = () => {} } = {}) {
+// onProc / cancelled: from a Studio job, so 'Dừng' stops the model call and does not fall back to the automatic fit
+export async function fitProject(src, { claude = false, model = 'sonnet', images = true, dry = false, say = () => {}, onProc, cancelled = () => false } = {}) {
   const { dir, tlFile, tl, caps } = loadProject(src);
   if (!caps.length) throw new Error('Dự án chưa có lời thoại (phụ đề) — cần tạo lời thoại trước.');
   const dur = tl.duration, sents = sentences(caps);
@@ -156,12 +157,12 @@ Chỉ trả về DUY NHẤT một object JSON:
     try {
       for (let a = 0; a < 2 && !plan; a++) {
         const res = await callClaude(a ? prompt + '\n\nLần trước không phải JSON hợp lệ. Chỉ trả về JSON.' : prompt, model,
-          () => say(Math.min(.7, .15 + .55 * (1 - Math.exp(-(Date.now() - t0) / 40000))), `Claude đang viết lại chữ theo lời thoại… ${Math.round((Date.now() - t0) / 1000)}s`));
+          () => say(Math.min(.7, .15 + .55 * (1 - Math.exp(-(Date.now() - t0) / 40000))), `Claude đang viết lại chữ theo lời thoại… ${Math.round((Date.now() - t0) / 1000)}s`), { onProc });
         fs.writeFileSync(path.join(dir, '.studio/tplfit_raw.txt'), res);
         try { plan = parseJson(res); } catch { plan = null; }
       }
       sum.claude = plan ? 'ok' : 'Claude không trả JSON hợp lệ — dùng cách tự động';
-    } catch (e) { sum.claude = e.message; }
+    } catch (e) { if (cancelled()) throw e; sum.claude = e.message; }
   }
   const byI = new Map((Array.isArray(plan?.scenes) ? plan.scenes : []).map(x => [+x.i, x]));
 

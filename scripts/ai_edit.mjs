@@ -121,8 +121,9 @@ Chỉ trả về DUY NHẤT một object JSON (không markdown, không giải th
 
 // Kept for highlights.mjs, topic_video.mjs and tpl_fit.mjs: prompt → the model's text (text-only: Claude or the Ollama
 // model picked in config.json), and relaxed JSON object parsing.
-export async function callClaude(prompt, model = 'sonnet', onTick) {
-  return (await runLLM(prompt, { task: 'text', model, cwd: os.tmpdir(), onTick: onTick && (() => onTick()) })).text;
+// extra: more runLLM options, e.g. { onProc } so a Studio job cancel can stop the call
+export async function callClaude(prompt, model = 'sonnet', onTick, extra = {}) {
+  return (await runLLM(prompt, { task: 'text', model, cwd: os.tmpdir(), ...extra, onTick: onTick && (() => onTick()) })).text;
 }
 export const parseJson = s => parseLooseJSON(s, { shape: 'object' });
 

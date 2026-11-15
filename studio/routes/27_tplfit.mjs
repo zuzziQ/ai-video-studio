@@ -25,9 +25,9 @@ export default ctx => async (req, res, p) => {
     const { fitProject } = await import(pathToFileURL(path.join(ctx.SKILL, 'scripts/tpl_fit.mjs')).href);
     const k0 = made ? .6 : 0;
     const sum = await fitProject(ctx.project.tlFile, { claude: b.claude !== false, model: b.model || 'sonnet', images: b.images !== false,
-      say: (pr, s) => { job.progress = k0 + (1 - k0) * pr; job.step = s; } });
+      say: (pr, s) => { job.progress = k0 + (1 - k0) * pr; job.step = s; }, onProc: p => { job.proc = p; }, cancelled: () => !!job.cancelled });
     job.out = { ...sum, transcribed: made };
-    job.step = `Xong: ${sum.texts} chữ, ${sum.images} ảnh theo lời thoại`;
+    job.step = sum.fit ? `Xong: ${sum.texts} chữ, ${sum.images} ảnh theo lời thoại` : 'Không có cảnh mẫu cần bám lời thoại — áp một mẫu trước';
   }, {});
   ctx.json(res, ok ? { ok: true } : { error: 'Đang có tác vụ khác chạy, đợi xong rồi thử lại.' }, ok ? 200 : 409);
   return true;
