@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { askJSON } from './llm.mjs';
 import { safeFetch } from './net_guard.mjs';
+import { videoArgs } from './encoder_cli.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
@@ -112,8 +113,11 @@ export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur =
     if (kind === 'video') {
       const dst = path.join(md, base + '.mp4'), total = +run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmp]).trim() || 0;
       const ss = total > dur + 1 ? total / 2 - dur / 2 : 0;
-      run('ffmpeg', ['-v', 'error', '-y', '-ss', ss.toFixed(2), '-i', tmp, '-t', String(dur), '-an', '-vf', `fps=30,scale=${W / 1.5}:${H / 1.5}:force_original_aspect_ratio=increase,crop=${W / 1.5}:${H / 1.5},setsar=1`,
-        '-c:v', 'libx264', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', dst]);
+      // M65: NVENC/QSV khi dùng được (encoder_cli.mjs), lỗi lúc chạy thì làm lại bằng libx264 như cũ.
+      const v = videoArgs({ crf: 20, x264: ['-c:v', 'libx264', '-crf', '20', '-pix_fmt', 'yuv420p'] });
+      const enc = venc => run('ffmpeg', ['-v', 'error', '-y', '-ss', ss.toFixed(2), '-i', tmp, '-t', String(dur), '-an', '-vf', `fps=30,scale=${W / 1.5}:${H / 1.5}:force_original_aspect_ratio=increase,crop=${W / 1.5}:${H / 1.5},setsar=1`,
+        ...venc, '-movflags', '+faststart', dst]);
+      try { enc(v.args); } catch (e) { if (!v.hw) throw e; enc(v.fallback); }
       const fr = path.join(md, base + '_frames'); fs.mkdirSync(fr, { recursive: true });
       run('ffmpeg', ['-v', 'error', '-y', '-i', dst, '-q:v', '3', path.join(fr, '%05d.jpg')]);
       const count = fs.readdirSync(fr).filter(f => f.endsWith('.jpg')).length;
