@@ -18,12 +18,40 @@ Mặc định giữ như cũ: `dub.py` dùng `say` (máy không có `say` thì `
   `$AVS_HOME/vieneu/venv` (không đụng Python của Studio). Model (~1 GB) tải từ Hugging Face lần đọc đầu vào
   `$AVS_HOME/vieneu/hf-cache`.
 - Máy chủ `scripts/vieneu_server.py` (viết cho Studio, không lấy mã Factory) chỉ nghe `127.0.0.1`:
-  - `GET /health` → `{ready, loaded, clone: false, voices: [{name, gender, region, style}], default}`
-  - `POST /tts` `{text, voice}` → `audio/wav` (48 kHz). Không ghi file theo đường dẫn client gửi.
+  - `GET /health` → `{ready, loaded, clone: true, voices: [{name, gender, region, style, kind: preset|clone}], default}`
+  - `POST /tts` `{text, voice}` → `audio/wav` (48 kHz). `voice` là tên giọng có sẵn hoặc giọng nhái; body có
+    `ref`/`ref_audio`/`voice: {…}` bị trả 403 (không nhận đường dẫn hay dữ liệu mẫu ở đây).
+  - `POST /voices` `{name, audio_b64, consent: true, consent_note?}` → `{name, seconds}`: tạo giọng nhái (body ≤ 8 MB).
+  - `POST /voices/delete` `{name}` → `{ok}`: xoá giọng nhái (giọng có sẵn không xoá được).
   - Từ chối request có `Origin` (trang web trong trình duyệt) và body không phải JSON; câu ≤ 5.000 ký tự.
-- **Chỉ 10 giọng có sẵn** (các giọng `featured` 1..10 trong `voices_v3_turbo.json` của gói), mặc định `Hải Đăng`.
-  **Nhái giọng tắt**: máy chủ không có endpoint nhận file mẫu, body có `ref`/`ref_audio`/`voice: {kind: clone}` bị trả 403.
-  Chỉ bật sau khi `C04` (giấy phép thương mại của VieNeu cho nhái giọng) rõ.
+- **10 giọng có sẵn** (các giọng `featured` 1..10 trong `voices_v3_turbo.json` của gói), mặc định `Hải Đăng`.
+
+### Nhái giọng (M27, `C04` đã chốt cho dùng)
+
+- Mẫu: 3–30 giây **một người** nói rõ, ít tạp âm (ghi âm hoặc video bất kỳ ffmpeg đọc được). `tts.py vieneu-clone` dùng ffmpeg
+  đổi về WAV 24 kHz mono, cắt tối đa 30 s từ `--start`, gửi base64 tới `POST /voices`.
+- Trước khi gửi, `tts.py` kiểm mẫu: ffmpeg không đọc được / video không có tiếng / im lặng / âm đều (tiếng bíp, ù, nhiễu, đo
+  độ to và zero-crossing theo khung 30 ms) / dưới 2 s có tiếng nói theo VAD Silero của faster-whisper (có trong venv; thiếu
+  thì bỏ bước VAD) → thoát mã 12, Studio trả 400. Trùng tên giọng nhái hoặc giọng có sẵn → mã 13, Studio trả 409 (route kiểm
+  trước khi nhận file). Lỗi khác của máy chủ → 502.
+- Máy chủ trích đặc trưng giọng (`encode_reference` của gói: khử ồn, cắt lặng, speaker embedding 192 chiều + mã tham chiếu) trên
+  CPU, lưu `$AVS_HOME/vieneu/voices/<hash tên>.json` (`{name, created, seconds, consent, speaker_emb, codes}`), **không giữ file
+  âm thanh mẫu**; file tạm của mẫu xoá ngay. Khi đọc, giọng nhái truyền cho `infer()` dưới dạng `{speaker_emb, codes}`.
+- Bắt buộc `consent: true` (CLI `--consent`, Studio có ô tick): người dùng là chủ giọng hoặc đã được chủ giọng đồng ý; ghi chú đồng ý
+  (`--note`) lưu kèm giọng. Không dùng để mạo danh hay làm lời chứng thực giả.
+- Tên giọng 1–40 ký tự (chữ, số, khoảng trắng, `. - _`), không trùng giọng có sẵn; tối đa 50 giọng nhái.
+- Giọng nhái gọi theo tên như giọng có sẵn ở mọi nơi: `tts.py say --voice`, `dub.py --voice`, `batch.mjs --tts-voice`,
+  `topic_video.mjs --voice vieneu:<tên>`, giọng mặc định trong Studio. Xoá giọng đang là giọng mặc định thì cấu hình về giọng của máy chủ.
+- Đo trên máy dev (i7-8700K, CPU): tạo giọng từ mẫu 5 s ~12 s gồm nạp model; đọc một câu ngắn ~1,5 s. Kiểm khách quan: mẫu đọc bằng
+  `Hải Đăng` → giọng nhái → câu mới, speaker embedding của câu mới gần `Hải Đăng` nhất (cosine 0,60; giọng kế tiếp 0,35).
+
+```powershell
+python scripts\tts.py vieneu-clone --name "Giọng Minh" --audio mau.m4a --consent --note "Chính tôi, 15/11/2026" [--start 3] [--seconds 20]
+python scripts\tts.py say "Xin chào" --engine vieneu --voice "Giọng Minh" --out thu.wav
+python scripts\tts.py vieneu-voice-rm --name "Giọng Minh"
+```
+
+Máy chủ bật từ bản trước (chưa có nhái giọng) trả `clone: false`: tắt tiến trình rồi `tts.py vieneu-start` lại.
 - Gói cài tối thiểu không có watermark âm thanh (`vieneu[watermark]` cần thêm thư viện nặng). Đăng lên Meta/TikTok vẫn phải
   gắn nhãn nội dung AI.
 
@@ -85,7 +113,9 @@ Nút **Mô hình & giọng** trên thanh trên (`studio/features/28_engines.js`,
 trạng thái máy chủ (chạy/không, nút **Bật máy chủ** = `tts.py vieneu-start`), chọn 1 trong 10 giọng có sẵn, **nghe thử** một câu ngắn
 (≤ 200 ký tự, đọc thật qua `tts.py say`, trả `audio/wav`, file tạm xoá ngay), đặt **giọng mặc định** cho Hàng loạt, Lồng tiếng và
 Video từ chủ đề, sửa địa chỉ máy chủ (chỉ loopback). Panel **Lồng tiếng** có thêm lựa chọn "VieNeu trên máy"; panel **Video dài**
-(chủ đề → video) có giọng "VieNeu". Không có nhái giọng (`C04`).
+(chủ đề → video) có giọng "VieNeu". Khối **Tạo giọng nhái** trong cùng thẻ: chọn file mẫu (≤ 50 MB), tên, giây bắt đầu, ghi chú đồng ý,
+tick ô xác nhận quyền dùng giọng → `POST /api/engines/voice/clone` (body thô, chạy `tts.py vieneu-clone`); giọng nhái hiện trong
+danh sách với dòng "Giọng nhái · ngày", có nút nghe thử và xoá (`POST /api/engines/voice/rm`).
 
 `batch.mjs`: giọng của dòng là `tts_voice` trong `job.json`; tên giọng edge (đuôi `Neural`) chỉ dùng cho edge-tts.
 
@@ -94,7 +124,7 @@ Video từ chủ đề, sửa địa chỉ máy chủ (chỉ loopback). Panel **
 `python -m unittest scripts.tests.test_tts scripts.tests.test_vieneu_server` và
 `node --test scripts/tests/tts_batch.test.mjs scripts/tests/engines_route.test.mjs`: máy chủ VieNeu giả trên 127.0.0.1, edge-tts giả
 (`scripts/tests/fixtures/fake_edge_tts`), không cần mạng hay gói `vieneu`. `engines_route.test.mjs` kiểm route Studio: GET không lộ
-khoá/token/đường dẫn python, POST từ chối URL không phải loopback, giữ khoá khác của `config.json`, giọng phải có sẵn, `pickVoice`
-của `topic_video.mjs`.
-
-Còn lại (M27): nhái giọng chờ `C04`.
+khoá/token/đường dẫn python, POST từ chối URL không phải loopback, giữ khoá khác của `config.json`, giọng phải có sẵn hoặc giọng nhái,
+`pickVoice` của `topic_video.mjs`, nhái giọng (thiếu xác nhận / tên lạ / định dạng lạ / máy chủ tắt bị chặn, tạo → chọn → xoá).
+`test_vieneu_server.py` kiểm cổng của `/voices` (xác nhận, tên, trùng giọng có sẵn, base64, WAV, độ dài 3–30 s, giới hạn body,
+tên file theo hash) và đọc lại giọng nhái từ đĩa; `test_tts.py` kiểm `vieneu-clone` (ffmpeg đổi 44,1 kHz → 24 kHz mono, cắt 30 s).

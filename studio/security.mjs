@@ -100,7 +100,7 @@ export const limits = () => ({
   upload: (+process.env.AVS_MAX_UPLOAD_MB || 20 * 1024) * MB, // raw 4K phone footage
 });
 // Routes that stream the raw request body to disk. Routes that buffer it in memory (/api/batch/sheet) keep the JSON cap.
-export const UPLOAD_ROUTES = /^\/api\/(upload|pick\/upload|autopilot\/upload|longform\/upload|stylelab\/upload|brolllib\/upload|brands\/logo)$/;
+export const UPLOAD_ROUTES = /^\/api\/(upload|pick\/upload|autopilot\/upload|longform\/upload|stylelab\/upload|brolllib\/upload|brands\/logo|engines\/voice\/clone)$/;
 // 0 when the body may be read, else the HTTP status to answer. Node's parser stops a body at its Content-Length, so the
 // declared length is the real ceiling; bodies without one (chunked) are refused.
 export function bodyStatus(req, p, lim = limits()) {

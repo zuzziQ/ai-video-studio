@@ -5,12 +5,15 @@
                                                          đọc một câu; in "TTS {json}" (file thật, engine thật đã dùng)
   python tts.py vieneu-config [--url http://127.0.0.1:8771] [--python <venv python>] [--voice TÊN] [--default-engine vieneu|edge|say]
   python tts.py vieneu-start [--wait 60]                 bật máy chủ giọng VieNeu (chạy nền, chỉ nghe 127.0.0.1)
+  python tts.py vieneu-clone --name TÊN --audio mau.m4a --consent [--note …] [--start 0] [--seconds 30]
+                                                         tạo giọng nhái từ 3–30 s nói rõ; in "CLONE {json}"
+  python tts.py vieneu-voice-rm --name TÊN               xoá giọng nhái
 
 VieNeu chạy ở một máy chủ riêng (scripts/vieneu_server.py, trong môi trường Python riêng do install_vieneu.ps1 tạo),
 cấu hình ở $AVS_HOME/config.json khoá "tts": {"vieneu": {"url", "python", "voice"}, "default_engine"}. default_engine là giọng
 mặc định của job batch/dub khi job không ghi engine (Studio đặt ở hộp "Mô hình & giọng"). Chỉ nhận địa chỉ 127.0.0.1/localhost.
-Không có máy chủ (hoặc ngôn ngữ không phải tiếng Việt) thì báo rõ ra stderr và lùi về edge-tts. Chỉ giọng có sẵn:
-nhái giọng không bật (C04). Chỉ dùng thư viện chuẩn (dub.py/batch.mjs gọi bằng python -I).
+Không có máy chủ (hoặc ngôn ngữ không phải tiếng Việt) thì báo rõ ra stderr và lùi về edge-tts. Giọng nhái (C04 đã chốt cho
+dùng) tạo bằng vieneu-clone, gọi theo tên như giọng có sẵn. Chỉ dùng thư viện chuẩn (dub.py/batch.mjs gọi bằng python -I).
 """
 import argparse
 import json
@@ -146,6 +149,153 @@ def voice_names(health):
     return [v.get("name") for v in (health or {}).get("voices") or [] if v.get("name")]
 
 
+def clone_names(health):
+    return [v.get("name") for v in (health or {}).get("voices") or [] if v.get("name") and v.get("kind") == "clone"]
+
+
+# ---------------------------------------------------------------- nhái giọng (M27, C04 đã chốt cho dùng)
+CLONE_SR = 24000
+CLONE_MIN_SEC, CLONE_MAX_SEC = 3.0, 30.0
+CLONE_MIN_SPEECH = 2.0  # giây có tiếng nói tối thiểu trong mẫu
+
+
+class CloneError(RuntimeError):
+    """Lỗi do người dùng sửa được (mẫu / tên giọng). main() in thông báo rồi thoát mã `code`:
+    12 = mẫu không dùng được (Studio trả 400), 13 = trùng tên (409). Không dùng 2: argparse thoát mã 2 khi sai tham số.
+    Kế thừa RuntimeError: nơi gọi _post_json chỉ bắt RuntimeError vẫn nhận thông báo gọn."""
+
+    def __init__(self, msg, code=12):
+        super().__init__(msg)
+        self.code = code
+
+
+def _post_json(path, body, url=None, timeout=60):
+    """POST JSON tới máy chủ VieNeu → dict; lỗi HTTP → RuntimeError có thông báo của máy chủ."""
+    try:
+        with _request(url or vieneu_conf()["url"], path, body, timeout=timeout) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read() or b"{}").get("error") or str(e)
+        except ValueError:
+            msg = str(e)
+        if e.code in (400, 409):  # máy chủ từ chối mẫu / tên: lỗi người dùng sửa được, không phải máy chủ hỏng
+            raise CloneError(msg, 13 if e.code == 409 else 12) from None
+        raise RuntimeError(f"VieNeu lỗi: {msg}") from None
+
+
+def speech_check(pcm, sr=CLONE_SR):
+    """Kiểm thô (chỉ thư viện chuẩn) mẫu PCM 16-bit mono có giống giọng nói: không im lặng, đủ giây có tiếng, và
+    độ to/độ "rè" (zero-crossing) dao động theo âm tiết. Âm đều (tiếng bíp, ù, nhiễu trắng) gần như không dao động.
+    Trả số giây có tiếng; không đạt → CloneError."""
+    from array import array
+    a = array("h")
+    a.frombytes(pcm[: len(pcm) // 2 * 2])
+    if sys.byteorder == "big":
+        a.byteswap()
+    n = int(sr * 0.03)
+    rms, zcr = [], []
+    for i in range(0, len(a) - n + 1, n):
+        f = a[i:i + n:2]  # lấy 1/2 mẫu: đủ cho độ to và zero-crossing, nhanh gấp đôi
+        rms.append((sum(x * x for x in f) / len(f)) ** 0.5)
+        zcr.append(sum(1 for j in range(1, len(f)) if (f[j - 1] < 0) != (f[j] < 0)) / len(f))
+    if not rms or max(rms) < 200:  # ≈ −44 dBFS
+        raise CloneError("Mẫu gần như im lặng: chọn đoạn có người nói rõ, to vừa phải.")
+    p95 = sorted(rms)[int(len(rms) * 0.95)]
+    act = [k for k, v in enumerate(rms) if v > max(0.1 * p95, 150)]
+    secs = len(act) * n / sr
+    if secs < CLONE_MIN_SPEECH:
+        raise CloneError(f"Mẫu có quá ít tiếng ({secs:.1f} s); cần ít nhất {CLONE_MIN_SPEECH:g} giây nói rõ.")
+
+    def cv(v):
+        m = sum(v) / len(v)
+        return (sum((x - m) ** 2 for x in v) / len(v)) ** 0.5 / m if m else 0.0
+    if cv([rms[k] for k in act]) < 0.2 and cv([zcr[k] for k in act]) < 0.1:
+        raise CloneError("Mẫu không giống giọng nói (âm đều như tiếng bíp, tiếng ù hoặc nhiễu). Chọn đoạn một người nói rõ.")
+    return secs
+
+
+def vad_speech_seconds(pcm, sr=CLONE_SR):
+    """Số giây có tiếng nói theo VAD Silero của faster-whisper (có trong venv của Studio); không có thư viện → None."""
+    try:
+        import numpy as np
+        from faster_whisper.vad import VadOptions, get_speech_timestamps
+    except Exception:
+        return None
+    x = np.frombuffer(pcm[: len(pcm) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
+    y = np.interp(np.arange(0, len(x), sr / 16000.0), np.arange(len(x)), x).astype(np.float32)  # → 16 kHz
+    try:
+        ts = get_speech_timestamps(y, VadOptions(min_silence_duration_ms=300))
+    except Exception:
+        return None
+    return sum(t["end"] - t["start"] for t in ts) / 16000.0
+
+
+def clone_sample(src, seconds=CLONE_MAX_SEC, start=0.0):
+    """File âm thanh/video bất kỳ → WAV PCM 16-bit mono 24 kHz, cắt tối đa `seconds` giây từ `start` (ffmpeg)."""
+    if not os.path.isfile(src):
+        raise SystemExit(f"Không thấy file mẫu giọng: {src}")
+    seconds = max(CLONE_MIN_SEC, min(CLONE_MAX_SEC, float(seconds)))
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-ss", str(max(0.0, float(start))), "-i", src, "-t", str(seconds),
+                            "-vn", "-ac", "1", "-ar", str(CLONE_SR), "-f", "s16le", "-"], capture_output=True)
+    except FileNotFoundError:
+        raise SystemExit("Cần ffmpeg trong PATH để đọc file mẫu giọng.") from None
+    if r.returncode:
+        err = r.stderr.decode("utf-8", "replace")
+        if "does not contain any stream" in err or "matches no streams" in err:
+            raise CloneError("File mẫu không có tiếng (video không có track âm thanh).")
+        raise CloneError("File mẫu không đọc được: không phải file âm thanh/video, hoặc file bị hỏng.")
+    import io
+    import wave
+    pcm = r.stdout  # PCM thô: tự dựng header WAV (ffmpeg ghi WAV ra pipe thì không biết trước độ dài)
+    secs = len(pcm) / (2.0 * CLONE_SR)
+    if secs < CLONE_MIN_SEC:
+        raise CloneError(f"Mẫu giọng quá ngắn ({secs:.1f} s); cần ít nhất {CLONE_MIN_SEC:g} giây nói rõ.")
+    speech_check(pcm)
+    vad = vad_speech_seconds(pcm)
+    if vad is not None and vad < CLONE_MIN_SPEECH:
+        raise CloneError(f"Không nghe thấy tiếng nói trong mẫu (chỉ ~{vad:.1f} s giống lời nói). Chọn đoạn một người nói rõ, ít nhạc nền.")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(CLONE_SR)
+        w.writeframes(pcm[: len(pcm) // 2 * 2])
+    return buf.getvalue(), secs
+
+
+def vieneu_clone(name, src, consent, seconds=CLONE_MAX_SEC, start=0.0, note="", url=None):
+    """Tạo giọng nhái `name` từ file mẫu. Bắt buộc consent (người dùng là chủ giọng hoặc được chủ giọng đồng ý)."""
+    if not consent:
+        raise SystemExit("Cần --consent: xác nhận bạn là chủ giọng hoặc đã được chủ giọng đồng ý cho dùng giọng này.")
+    import unicodedata
+    name = unicodedata.normalize("NFC", name).strip()  # macOS/trình duyệt có thể gửi dạng NFD
+    url = url or vieneu_conf()["url"]
+    check_loopback(url)
+    h = vieneu_health(url)
+    if not h or not h.get("ready"):
+        raise SystemExit(f"Máy chủ giọng VieNeu không chạy ở {url}. {INSTALL_HINT}")
+    if not h.get("clone"):
+        raise SystemExit("Máy chủ VieNeu đang chạy bản cũ không có nhái giọng: tắt rồi bật lại (python scripts/tts.py vieneu-start).")
+    if name in voice_names(h):  # trùng giọng nhái cũ hoặc tên một giọng có sẵn (giọng nhái sẽ che giọng có sẵn)
+        raise CloneError(f"Đã có giọng tên '{name}': đặt tên khác, hoặc xoá giọng nhái cũ trước.", 13)
+    import base64
+    wav, secs = clone_sample(src, seconds, start)
+    # lần đầu: nạp model + trích đặc trưng giọng trên CPU, có thể mất vài chục giây
+    r = _post_json("/voices", {"name": name, "audio_b64": base64.b64encode(wav).decode("ascii"), "consent": True,
+                               "consent_note": note or ""}, url, timeout=900)
+    return {"name": r.get("name", name), "seconds": r.get("seconds", round(secs, 2))}
+
+
+def vieneu_voice_rm(name, url=None):
+    _post_json("/voices/delete", {"name": name}, url)
+    conf = vieneu_conf()
+    if conf.get("voice") == name:  # giọng mặc định vừa bị xoá → về giọng mặc định của máy chủ
+        write_vieneu_conf({"voice": ""})
+    return True
+
+
 # ---------------------------------------------------------------- chọn engine
 def warn(msg):
     print("⚠ " + msg, file=sys.stderr, flush=True)
@@ -240,7 +390,7 @@ def status():
         "edge": {"voice_vi": EDGE_VI, "needs_internet": True},
         "vieneu": {"url": conf["url"], "installed": bool(conf.get("python") and os.path.exists(conf["python"])),
                    "running": bool(h and h.get("ready")), "voices": voice_names(h), "default": conf.get("voice") or (h or {}).get("default"),
-                   "clone": False},
+                   "clone": bool(h and h.get("clone")), "clones": clone_names(h)},
         "default_engine": default_engine(),
     }
 
@@ -264,6 +414,15 @@ def main(argv=None):
     c.add_argument("--default-engine", choices=ENGINES, help="giọng mặc định của job batch/dub")
     st = sub.add_parser("vieneu-start")
     st.add_argument("--wait", type=float, default=60)
+    cl = sub.add_parser("vieneu-clone", help="tạo giọng nhái từ một file âm thanh/video (3–30 s nói rõ, một người)")
+    cl.add_argument("--name", required=True, help="tên giọng (1–40 ký tự)")
+    cl.add_argument("--audio", required=True, help="file mẫu: wav/mp3/m4a/mp4…")
+    cl.add_argument("--consent", action="store_true", help="xác nhận bạn là chủ giọng hoặc đã được chủ giọng đồng ý")
+    cl.add_argument("--note", default="", help="ghi chú về sự đồng ý (ai, khi nào), lưu kèm giọng")
+    cl.add_argument("--start", type=float, default=0.0, help="bắt đầu lấy mẫu từ giây thứ")
+    cl.add_argument("--seconds", type=float, default=CLONE_MAX_SEC, help=f"độ dài mẫu, {CLONE_MIN_SEC:g}–{CLONE_MAX_SEC:g} s")
+    rm = sub.add_parser("vieneu-voice-rm", help="xoá một giọng nhái")
+    rm.add_argument("--name", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "status":
         print(json.dumps(status(), ensure_ascii=False, indent=1))
@@ -282,6 +441,21 @@ def main(argv=None):
               + (f", default_engine={a.default_engine}" if a.default_engine else ""))
     elif a.cmd == "vieneu-start":
         return vieneu_start(a.wait)
+    elif a.cmd == "vieneu-clone":
+        try:
+            r = vieneu_clone(a.name, a.audio, a.consent, a.seconds, a.start, a.note)
+        except CloneError as e:
+            print(str(e), file=sys.stderr, flush=True)
+            return e.code
+        except (RuntimeError, ValueError) as e:
+            raise SystemExit(str(e)) from None
+        print("CLONE " + json.dumps(r, ensure_ascii=False), flush=True)
+    elif a.cmd == "vieneu-voice-rm":
+        try:
+            vieneu_voice_rm(a.name)
+        except (RuntimeError, ValueError, CloneError) as e:
+            raise SystemExit(str(e)) from None
+        print(f"Đã xoá giọng nhái '{a.name}'")
     return 0
 
 
