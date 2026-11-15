@@ -141,7 +141,9 @@ class ServerTest(unittest.TestCase):
             c.putheader("Content-Type", "application/json")
             c.putheader("Content-Length", str(n))
             c.endheaders()
-            if n <= vs.MAX_VOICE_BODY:
+            # gửi body chỉ khi máy chủ sẽ đọc nó (/voices dưới trần mẫu). Đường bị từ chối sớm (413) không đọc body rồi
+            # đóng kết nối: client còn đang gửi thì Windows RST (WinError 10053), test chập chờn.
+            if path == "/voices" and n <= vs.MAX_VOICE_BODY:
                 c.send(b"{}" + b" " * (n - 2))
             return c.getresponse().status
         finally:
