@@ -628,7 +628,8 @@ def music_auto(caps, words, audio):
         return "bỏ qua nhạc tự động (đã có nhạc riêng của bạn)"
     if tl.get("pack") == "beatslide" or tl.get("beats"):
         return "bỏ qua nhạc tự động (video dựng theo nhịp nhạc)"
-    was = [w for m in music if m.get("_auto") for w in m.get("_was", [])] or [m for m in music if not m.get("_auto") and not (m.get("_ai") or m.get("manual"))]
+    # M62: the "AI dựng giúp" bed (_ai) is replaced too (kept in _was), else two full-length beds played at once.
+    was = [w for m in music if m.get("_auto") for w in m.get("_was", [])] or [m for m in music if not m.get("_auto") and not m.get("manual")]
     base = next((m.get("mood") for m in was if m.get("mood")), None) or PACK_MOOD.get(tl.get("pack"), "corporate_upbeat")
     base = re.sub(r"_\d+$", "", base)
     # sections ≥ 8 s at caption boundaries
@@ -680,7 +681,7 @@ def music_auto(caps, words, audio):
                     "fade_in": .3 if i == 0 else .8, "fade_out": 1.5 if i == len(plan) - 1 else .8, "_auto": True})
     if was:
         out[0]["_was"] = was  # "Xoá phần tự động" puts these back
-    audio["music"] = [m for m in music if m.get("_auto") is None and (m.get("file") or m.get("_ai") or m.get("manual"))] + out
+    audio["music"] = [m for m in music if m.get("_auto") is None and (m.get("file") or m.get("manual"))] + out
     return "nhạc: " + " → ".join(f"{m['mood']} ({m['t0']:.0f}–{m['t1']:.0f}s)" for m in out)
 
 

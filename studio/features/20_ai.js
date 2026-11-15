@@ -145,7 +145,8 @@
     if (plan.hook) TL.title = plan.hook;
     TL.scenes = [...(TL.scenes || []).filter(s => !mine(s)), ...JSON.parse(JSON.stringify(plan.scenes))];
     TL.audio = TL.audio || {};
-    TL.audio.music = [...(TL.audio.music || []).filter(m => !m._ai && !(m.t0 <= .05 && m.t1 >= TL.duration - .1)), { ...plan.music, t1: TL.duration }];
+    // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
+    TL.audio.music = [...(TL.audio.music || []).filter(m => !m._ai && !m._auto && !(m.t0 <= .05 && m.t1 >= TL.duration - .1)), { ...plan.music, t1: TL.duration }];
     TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai), ...plan.sfx.map(x => ({ ...x }))];
     let n = 0;
     for (const e of plan.captions) {

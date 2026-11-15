@@ -36,6 +36,14 @@ function slIcon(icon, size, tone = 'black') {
 }
 const PERSON_SVG = c => `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="${c}" stroke-width="1.6"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.8 4-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>`;
 const SPARK = `<svg viewBox="0 0 24 24" width=".8em" height=".8em" style="vertical-align:-.05em"><path fill="currentColor" d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" opacity=".95"/><path fill="currentColor" d="M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7z" opacity=".7"/></svg>`;
+// End-title parts from a plain string: first word white, the rest orange italic (the look of the sample title).
+function slTitleParts(v) {
+  if (Array.isArray(v)) return v.length ? v : null;
+  const str = String(v || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  if (!str) return null;
+  const sp = str.indexOf(' ');
+  return sp < 0 ? [{ text: str, color: '#fff' }] : [{ text: str.slice(0, sp + 1), color: '#fff' }, { text: str.slice(sp + 1), color: '#FF7A2E', italic: true }];
+}
 const inOut = (t, t0, t1, din = .3, dout = .2) => (t1 == null ? 1 : 1 - E.inCubic(prog(t, t1 - dout, dout))) * E.outCubic(prog(t, t0, din));
 
 // ---------- extra text styles for lines[] (textLine in vertical.js) ----------
@@ -107,6 +115,7 @@ const SMOD = {
   },
 
   // Dot-matrix LED word ("TIN SHOCK"): dark dotted panel, letters type on one by one with an orange glow.
+  // M62: the dot mask only paints the text box; padding (cancelled by a negative margin) keeps stacked marks (Ế, Ậ).
   led_text(s, t, lt) {
     const size = s.size || 74, x = s.x ?? SLW() / 2, y = s.y ?? 400, col = s.color || SL.led;
     const chars = [...(s.text || 'TIN SHOCK')], cps = s.cps || 14;
@@ -119,6 +128,7 @@ const SMOD = {
       background-image:radial-gradient(circle,rgba(255,255,255,.07) ${dot * .4}px,transparent ${dot * .5}px);background-size:${dot}px ${dot}px"></div>`;
     return { front: `<div class="abs"${cidAttr(s)} style="left:${x}px;top:${y}px;transform:translate(-50%,-50%);opacity:${o.toFixed(3)}">${panel}
       <div style="position:relative;font-family:var(--disp);font-weight:900;font-size:${size}px;line-height:1;letter-spacing:.06em;white-space:nowrap;color:${col};
+        padding:.45em 0 .3em;margin:-.45em 0 -.3em;
         -webkit-mask-image:${mask};mask-image:${mask};-webkit-mask-size:${dot}px ${dot}px;mask-size:${dot}px ${dot}px;
         filter:brightness(1.25) drop-shadow(0 0 3px ${col}) drop-shadow(0 0 12px ${col}88)">${txt}</div></div>` };
   },
@@ -208,10 +218,17 @@ const SMOD = {
 
   // End title on black: mixed-style title, swoosh, logo pill, italic question.
   // title: [{ text, color, font, italic, weight }], pill: { icon, text }, question
+  // Title (M62): s.title (parts or a string) → the project title (TL.title: "Video mới", AI hook) → the sample title.
   title_card(s, t, lt) {
     const y = s.y ?? 560;
-    const parts = (s.title || [{ text: 'SKI', color: '#fff' }, { text: 'LL AI EDIT VIDEO', color: '#FF7A2E', italic: true }]).map(p =>
+    const ps = slTitleParts(s.title) || slTitleParts(typeof TL === 'object' && TL ? TL.title : '') || [{ text: 'SKI', color: '#fff' }, { text: 'LL AI EDIT VIDEO', color: '#FF7A2E', italic: true }];
+    const parts = ps.map(p =>
       `<span style="color:${p.color || '#fff'};font-family:${p.font || 'var(--disp)'};font-style:${p.italic ? 'italic' : 'normal'};font-weight:${p.weight || 900}">${esc(p.text)}</span>`).join('');
+    // Long titles shrink to fit the frame, then wrap to two lines.
+    const avail = SLW() - 80, base = s.size || 50, len = [...ps.map(p => p.text).join('')].length || 1;
+    let fz = Math.min(base, Math.floor(avail / (len * .62)));
+    const wrap = fz < 32; if (wrap) fz = Math.min(base, 40);
+    const tstyle = wrap ? `white-space:normal;max-width:${avail}px;margin:0 auto;line-height:1.12` : 'white-space:nowrap';
     const k1 = E.outCubic(prog(lt, 0, .45)), k2 = E.outCubic(prog(lt, .25, .5)), k3 = E.outBack(prog(lt, .45, .4), 1.6), k4 = E.outCubic(prog(lt, .7, .4));
     const pill = s.pill === false ? '' : `<div style="display:inline-flex;align-items:center;gap:10px;background:#fff;border-radius:10px;padding:8px 20px 8px 14px;margin-top:22px;
       transform:scale(${k3.toFixed(3)});opacity:${clamp(k3 * 2).toFixed(2)}">${s.pill?.icon === '' ? '' : slIcon(s.pill?.icon || 'si:claude', 34, 'black')}
@@ -219,7 +236,7 @@ const SMOD = {
     return {
       back: `<div class="full" style="background:${s.bg || 'radial-gradient(ellipse at 50% 45%,#16151a 0%,#050506 70%)'}"></div>`,
       front: `<div class="abs"${cidAttr(s)} style="left:0;right:0;top:${y}px;text-align:center">
-        <div style="font-size:${s.size || 50}px;letter-spacing:.01em;white-space:nowrap;opacity:${k1.toFixed(3)};transform:translateY(${((1 - k1) * 20).toFixed(1)}px)">${parts}</div>
+        <div style="font-size:${fz}px;letter-spacing:.01em;${tstyle};opacity:${k1.toFixed(3)};transform:translateY(${((1 - k1) * 20).toFixed(1)}px)">${parts}</div>
         <svg width="460" height="40" viewBox="0 0 460 40" style="display:block;margin:-4px auto 0"><defs><linearGradient id="sw" x1="0" x2="1"><stop offset="0" stop-color="#7B61FF" stop-opacity="0"/><stop offset=".5" stop-color="#9B8CFF"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>
           <path d="M10,32 Q230,-6 450,26" fill="none" stroke="url(#sw)" stroke-width="4" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="${(1 - k2).toFixed(3)}"/></svg>
         ${pill}
