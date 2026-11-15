@@ -74,7 +74,7 @@
   // What a fix will do, shown as a suggestion the user accepts (machine fixes by issue kind, Claude fixes by patch op).
   const AUTO_FIX = { text_offcanvas: 'Dời / thu nhỏ chữ vào trong khung', face_cover: 'Dời graphic khỏi khuôn mặt', caption_overlap: 'Dời graphic tránh phụ đề (hoặc ẩn phụ đề lúc đó)',
     overlap: 'Rút ngắn cảnh trước để hết chồng lớp', empty: 'Thêm chữ từ khoá vào đoạn trống', caption_long: 'Tách phụ đề thành dòng ≤ 4 từ', missing_media: 'Ẩn cảnh / bỏ SFX bị thiếu file',
-    hook_missing: 'Thêm chữ hook lớn ở đầu video', music_masking: 'Hạ nhạc nền để nghe rõ giọng' };
+    hook_missing: 'Thêm chữ hook lớn ở đầu video', music_masking: 'Hạ nhạc nền để nghe rõ giọng', music_quiet: 'Tăng nhạc nền cho nghe được' };
   // Claude patch ops (scripts/ai_qc.mjs validatePatch)
   const CL_FIX = {
     text: f => `Sửa chữ “${f.from}” → “${f.to}”`, move: f => `Dời ${f.target} (${f.dx || 0}, ${f.dy || 0} px)`, resize: f => `Đổi cỡ ${f.target} × ${f.scale}`,

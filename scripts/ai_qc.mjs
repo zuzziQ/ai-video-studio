@@ -35,7 +35,7 @@ const WEIGHT = { high: 15, med: 7, low: 3 };
 const KIND_VI = {
   text_offcanvas: 'Chữ tràn khung', text_unsafe: 'Chữ ngoài vùng an toàn', face_cover: 'Graphic che mặt', caption_overlap: 'Phụ đề đè graphic',
   overlap: 'Cảnh chồng nhau', empty: 'Khoảng trống', dense: 'Quá dày', caption_long: 'Phụ đề dài', missing_media: 'Thiếu file',
-  hook_missing: 'Thiếu hook', loudness: 'Độ to', true_peak: 'Đỉnh âm', music_masking: 'Nhạc át giọng', silence: 'Im lặng',
+  hook_missing: 'Thiếu hook', loudness: 'Độ to', true_peak: 'Đỉnh âm', music_masking: 'Nhạc át giọng', music_quiet: 'Nhạc quá nhỏ', silence: 'Im lặng',
   hook: 'Hook', readability: 'Dễ đọc', spelling: 'Chính tả', variety: 'Đa dạng', pacing: 'Nhịp', brand: 'Thương hiệu', other: 'Khác',
   ad_policy: 'Chính sách quảng cáo', ad_claim: 'Claim quảng cáo', ad_originality: 'Nguyên bản',
 };
@@ -395,6 +395,10 @@ async function audioPass(tl, dir, qcDir) {
       const first = sp.find(i => m[i] - v[i] > -8);
       issues.push({ t: r2(first * .1), kind: 'music_masking', severity: masked / sp.length > .45 ? 'high' : 'med', target: 'music', need_db: r2(Math.min(12, Math.max(3, stats.music_vs_voice_db + 14))),
         msg: `Nhạc nền át giọng ở ${stats.masked_pct}% lúc nói (nhạc chỉ thấp hơn giọng ${-stats.music_vs_voice_db} dB, nên ≥ 12 dB)` });
+    } else if (sp.length && stats.music_vs_voice_db != null && stats.music_vs_voice_db < -30) {
+      // M63: gain −18…−20 plus ducking left the bed ~32–44 dB under the voice, i.e. silent; aim for ~24 dB under.
+      issues.push({ t: 0, kind: 'music_quiet', severity: 'low', target: 'music', need_db: r2(Math.min(20, -24 - stats.music_vs_voice_db)),
+        msg: `Nhạc nền gần như không nghe thấy (thấp hơn giọng ${-stats.music_vs_voice_db} dB lúc nói, nên khoảng 18–26 dB)` });
     }
   }
   // silence gaps in the final mix (> 1.2 s below −50 dBFS) inside the video
@@ -584,7 +588,7 @@ function applyClaude(tl, caps, patches, P) {
   }
   return done;
 }
-function applyDeterministic(tl, caps, issues, P, touched) {
+export function applyDeterministic(tl, caps, issues, P, touched) {
   const [DW, DH] = designOf(tl), fixed = new Set(), M = { x: 20, y: 24, w: DW - 40, h: DH - 48 };
   const sceneRects = i => P.samples.filter(s => s.m.scenes[i]).map(s => ({ t: s.t, face: s.face, cap: s.m.cap ? bbox(s.m.cap.texts) : null, rects: [...s.m.scenes[i].els, ...s.m.scenes[i].texts] }));
   // 1. per-scene placement (text off canvas, face covered, caption covered) — one solve per scene
@@ -661,6 +665,8 @@ function applyDeterministic(tl, caps, issues, P, touched) {
   }
   // 6. music masking speech → lower the music bed
   for (const is of issues.filter(x => x.kind === 'music_masking')) if (!touched.has('gain')) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) - is.need_db); mark(m); } is.fix = { op: 'gain', db: -is.need_db }; fixed.add(is); }
+  // 6b. music bed too quiet to hear → raise it (M63)
+  for (const is of issues.filter(x => x.kind === 'music_quiet')) if (!touched.has('gain')) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) + is.need_db); mark(m); } is.fix = { op: 'gain', db: is.need_db }; fixed.add(is); }
   // 7. captions longer than 5 words (or off canvas) → split into ≤ 4-word lines, timing from the words
   const split = [];
   caps.forEach((c, k) => { if ((c.words.length > 5 || c._qc_split) && !c.hidden) split.push(k); delete c._qc_split; });
@@ -796,7 +802,7 @@ export async function runQC(src, o = {}) {
         for (const r of again) if (r.fix) { const orig = det.find(i => same(i, r)); if (orig) { orig.fix = r.fix; orig.fixed = true; } }
       }
       let a2 = { issues: [] };
-      if (!o.noAudio && (applied.some(p => p.op === 'gain') || det.some(i => i.kind === 'music_masking' && i.fixed))) { try { a2 = await audioPass(tl, dir, qcDir); audio.after = a2.stats; } catch {} }
+      if (!o.noAudio && (applied.some(p => p.op === 'gain') || det.some(i => (i.kind === 'music_masking' || i.kind === 'music_quiet') && i.fixed))) { try { a2 = await audioPass(tl, dir, qcDir); audio.after = a2.stats; } catch {} }
       else a2.issues = audio.issues.filter(i => !i.fixed);
       recheck.push(...a2.issues.map(i => ({ ...i, src: 'auto' })));
       // an auto issue counts as fixed only if the re-check no longer finds it

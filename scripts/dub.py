@@ -25,6 +25,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
 import tts as voices  # noqa: E402  (scripts/tts.py: engine choice, VieNeu client)
 from llm_bridge import LlmError, LlmUnavailable, ask  # noqa: E402  (model calls go through scripts/llm.mjs)
+from sub_split import fit_parts  # noqa: E402  (split a translated phrase back over its caption fragments)
 
 LANGS = {"vi": "tiếng Việt", "en": "English", "zh": "简体中文 (Simplified Chinese)", "ja": "日本語 (Japanese)", "ko": "한국어 (Korean)",
          "th": "ภาษาไทย (Thai)", "fr": "Français", "de": "Deutsch", "es": "Español", "id": "Bahasa Indonesia", "ru": "Русский",
@@ -75,16 +76,6 @@ def group(caps, gap=0.45, maxlen=5.0, maxn=6):
     return gs
 
 
-def split_like(text, weights):
-    toks = text.split() if " " in text.strip() else list(text)  # CJK / Thai: split by characters
-    sep = " " if " " in text.strip() else ""
-    tot, out, k = sum(weights) or 1, [], 0
-    for n, w in enumerate(weights):
-        e = len(toks) if n == len(weights) - 1 else round(len(toks) * sum(weights[:n + 1]) / tot)
-        out.append(sep.join(toks[k:e])); k = e
-    return out
-
-
 def translate(caps, groups, src, dst):
     text = lambda c: " ".join(w["w"] for w in c["words"])
     for b in range(0, len(groups), 40):
@@ -96,6 +87,8 @@ def translate(caps, groups, src, dst):
                   "Translate each phrase naturally and concisely as spoken language (keep it short enough to be spoken in about the same time), "
                   "then split your translation back into exactly as many fragments as the input phrase has, in the same order, "
                   "so each fragment roughly matches the meaning of its source fragment (a fragment may be empty \"\" only if unavoidable). "
+                  "Do not pull words of a later fragment into an earlier one: each fragment is shown while its source fragment is spoken, "
+                  "so it should translate only what that fragment says (fragments need not be full sentences). "
                   "Keep brand / product names (ChatGPT, Claude, CapCut…) as is. Add normal punctuation and capitalization.\n"
                   f"Return ONLY the JSON array (same shape: {len(data)} arrays with lengths {[len(d) for d in data]}), no commentary.\n\n"
                   + json.dumps(data, ensure_ascii=False))
@@ -110,9 +103,8 @@ def translate(caps, groups, src, dst):
         else:
             raise SystemExit("Claude trả về bản dịch sai cấu trúc 2 lần — thử lại sau.")
         for g, parts in zip(batch, out):
-            parts = [str(p).strip() for p in parts]
-            if len(parts) != len(g):  # wrong fragment count: split the phrase proportionally to the source word counts
-                parts = split_like(" ".join(parts), [len(caps[i]["words"]) for i in g])
+            # wrong fragment count, or words pulled into earlier fragments: split proportionally to the source word counts
+            parts = fit_parts(parts, [len(caps[i]["words"]) for i in g])
             for i, p in zip(g, parts):
                 caps[i]["tr"] = p
         print(f"dịch {min(b + 40, len(groups))}/{len(groups)} câu", flush=True)

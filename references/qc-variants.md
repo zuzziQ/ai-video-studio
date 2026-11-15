@@ -25,6 +25,7 @@ Mở **một** Chrome headless, nạp engine, render ảnh tại: đầu/giữa/
 | `missing_media` | file trong timeline không có, engine báo tải hỏng, SFX/nhạc/b-roll id không có trong thư viện | cao |
 | `loudness`, `true_peak` | trộn thử bằng `mix_audio.py --stems` → `ebur128` (chuẩn −14 LUFS, ≤ −1 dBTP) | vừa/thấp |
 | `music_masking` | stem nhạc chỉ thấp hơn stem giọng < 8 dB ở > 20 % lúc nói | vừa/cao |
+| `music_quiet` | trung vị lúc nói: stem nhạc thấp hơn stem giọng > 30 dB (nhạc gần như không nghe thấy). Tự sửa: tăng gain nhạc về khoảng −24 dB dưới giọng, tối đa +20 dB mỗi lần; nâng quá tay thì `music_masking` bắt lại (M63) | thấp |
 | `silence` | bản trộn im (< −50 dBFS) > 1,2 s giữa video | thấp |
 | `ad_policy`, `ad_claim`, `ad_originality` | chỉ khi `timeline.ads.on`: lời thoại và chữ trên màn hình theo chính sách quảng cáo Meta/TikTok, đối chiếu claim, điểm nguyên bản so với các phiên bản (`scripts/ad_gates.py`, xem `references/ad-gates.md`). Chỉ báo, không tự sửa | thấp/vừa/cao |
 

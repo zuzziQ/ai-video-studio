@@ -80,6 +80,7 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/engines`, `GET /api/engines/status` | cấu hình LLM + giọng (chỉ khoá `llm`/`tts`, không khoá bí mật), trạng thái Ollama/VieNeu |
 | `POST /api/engines/llm`, `POST /api/engines/llm/try` | `{text, fallback, url, model}` (url chỉ loopback) · thử một câu JSON |
 | `POST /api/engines/voice`, `…/voice/start`, `…/voice/preview` | `{url, voice, default_engine}` · bật máy chủ VieNeu · `{voice, text}` → `audio/wav` |
+| `GET /api/frames/check`, `POST /api/frames/rebuild` | chuỗi khung hình của timeline có thư mục trống `[{seq, fps, src}]` (`src`: video tạo lại được, `null` nếu không còn) · job tách lại bằng ffmpeg ở cỡ thiết kế. Mở dự án thiếu khung hình (chép thiếu `work/frames`) thì Studio hỏi tạo lại (`63_frames`, M63) |
 | `GET /api/perf` | profile hiệu năng đã lưu + `custom`, `active`/`resolved` (sau biến môi trường), danh sách profile (nhãn + mô tả), máy này (`hwSnapshot`, không đường dẫn; giữ 30 s, `?fresh=1` đo lại), kế hoạch 720p/1080p/4k, `env` (tên biến `AVS_*` đang ghi đè → có/không) |
 | `POST /api/perf` | `{profile?, custom?}` kiểm bằng `ENCODER_CHOICES`, `X264_PRESETS`, `PRIORITIES`, `WHISPER_DEVICES`, `MAX_WORKERS`, `MAX_SLOTS`; sai → 400 `{error}`, không ghi |
 | `GET /api/perf/log?n=20` | `readPerfLog` (mới nhất cuối, tối đa 500) |

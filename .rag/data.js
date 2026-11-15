@@ -62,7 +62,7 @@ export const DOMAINS = {
         layer: "domain",
         title: "Hợp đồng plugin: route và feature",
         file_path: "references/studio.md",
-        lines: "91-103",
+        lines: "92-104",
         keywords: ["route", "feature", "ctx", "startJob", "addPanel", "addTopButton", "pollJob"],
         content: "Chữ ký route (ctx => (req,res,p,u) => bool), các hàm của ctx và đối tượng Studio, danh sách tính năng có sẵn theo số thứ tự.",
       },
