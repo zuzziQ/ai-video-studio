@@ -19,7 +19,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './platform.mjs';
 import { interceptCdn } from './net_cache.mjs';
-import { launchChrome, renderPlan, pickEncoder, encoderArgs, encoderLabel, BACKGROUND_FLAGS } from './render_hw.mjs';
+import { launchChrome, renderPlan, segmentRanges, pickEncoder, encoderArgs, encoderLabel, BACKGROUND_FLAGS } from './render_hw.mjs';
 import { resolvePerf, lowerPriority, acquireRenderSlot, appendPerfLog } from './perf_profile.mjs';
 
 const args = process.argv.slice(2);
@@ -140,8 +140,7 @@ if (workers === 1) {
 } else {
   tmp = fs.mkdtempSync(path.join(path.dirname(path.resolve(outPath)), '.render_'));
   try {
-    const per = Math.ceil(n / workers), segs = [];
-    for (let w = 0; w < workers; w++) { const a = w * per, b = Math.min(n, a + per); if (a < b) segs.push({ a, b, file: path.join(tmp, `seg${w}.mp4`) }); }
+    const segs = segmentRanges(n, workers, fps).map(([a, b], w) => ({ a, b, file: path.join(tmp, `seg${w}.mp4`) })); // M69: µs-exact lengths
     await Promise.all(segs.map(s => renderRange(s.a, s.b, s.file, false))).catch(e => { abort(); throw e; });
     fs.writeFileSync(path.join(tmp, 'list.txt'), segs.map(s => `file '${s.file.replace(/'/g, "'\\''")}'`).join('\n'));
     await ffmpeg([

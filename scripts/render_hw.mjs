@@ -184,6 +184,17 @@ export function renderPlan({ W, H, n, fps, workers = null, fast = false, preset 
   };
 }
 
+// M69: frames [a, b) of each worker's segment. Segment length is a whole number of microseconds (30 fps → multiple of 3
+// frames): concat -c copy times segments in µs, so 316/30 s pushed every later frame ~0.33 ms off the 1/fps grid with NVENC
+// (docs/perf/2026-11-15-m66-batch-parallel.md mục 4). Non-integer fps keeps the plain split.
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+export function segmentRanges(n, workers, fps) {
+  const step = Number.isInteger(fps) && fps > 0 ? fps / gcd(fps, 1e6) : 1;
+  const per = Math.ceil(Math.ceil(n / Math.max(1, workers)) / step) * step, out = [];
+  for (let a = 0; a < n; a += per) out.push([a, Math.min(n, a + per)]);
+  return out;
+}
+
 // ---------- video encoder (M52) ----------
 // Hardware H.264 when this ffmpeg + driver can really open it, else libx264. One short test encode per encoder, cached in
 // $AVS_HOME/encoders.json under a key of the ffmpeg version, OS and GPU driver (a driver or ffmpeg update probes again).
