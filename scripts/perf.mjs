@@ -13,7 +13,7 @@ const asJson = rest.includes('--json');
 const die = m => { console.error(m); process.exit(2); };
 
 if (cmd === 'doctor') {
-  const hw = hwSnapshot(), perf = resolvePerf({ hw: hw.cores });
+  const perf = resolvePerf(), hw = hwSnapshot({ env: { ...process.env, AVS_ENCODER: perf.encoder } }); // encoder theo profile
   const out = { hw, config: loadPerf(), perf, plan_1080p: planFor({ perf, hw }), render_slots: slotHolders().map(({ pid, at, W, H }) => ({ pid, at, W, H })) };
   if (asJson) console.log(JSON.stringify(out, null, 1));
   else {

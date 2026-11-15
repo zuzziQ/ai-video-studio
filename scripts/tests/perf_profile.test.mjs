@@ -91,7 +91,22 @@ test('M64: slot của pid đã chết được dọn', () => {
   assert.ok(P.tryTakeSlot({ slots: 2 }), 'slots 2 cho lượt thứ hai');
   P.releaseSlot(tok);
   assert.equal(P.slotHolders().length, 1);
+  // pid còn sống (bị dùng lại) nhưng không nhịp quá SLOT_STALE_MS → dọn; nhịp mới thì giữ
+  const old = new Date(Date.now() - P.SLOT_STALE_MS - 1000).toISOString();
+  fs.writeFileSync(P.slotFile(), JSON.stringify({ holders: [{ pid: process.pid, host: os.hostname(), tok: 'y', at: old, beat: old }] }));
+  assert.equal(P.slotHolders().length, 0);
+  const t2 = P.tryTakeSlot({ slots: 1 });
+  assert.ok(P.beatSlot(t2));
+  assert.equal(P.beatSlot('khong-co'), false);
+  assert.equal(P.slotHolders().length, 1);
   fs.rmSync(P.slotFile(), { force: true });
+});
+
+test('M64: can-bang giữ encoder tự động như cũ (AVS_ENCODER=auto ≡ không đặt)', async () => {
+  const { encoderWanted } = await import(pathToFileURL(path.join(path.dirname(MOD), 'render_hw.mjs')).href);
+  const cb = P.resolvePerf({ perf: { profile: 'can-bang', custom: {} }, hw: { physical: 6 }, env: {} });
+  assert.equal(encoderWanted({ AVS_ENCODER: cb.encoder }), encoderWanted({}));
+  assert.equal(P.resolvePerf({ perf: { profile: 'can-bang', custom: {} }, hw: { physical: 6 }, env: { AVS_ENCODER: 'hevc' } }).encoder, 'auto');
 });
 
 test('M64: hai tiến trình cùng render, slots 1 → chỉ một lượt chạy một lúc', async () => {
@@ -100,7 +115,7 @@ test('M64: hai tiến trình cùng render, slots 1 → chỉ một lượt chạ
   const code = `import { acquireRenderSlot } from ${JSON.stringify(pathToFileURL(MOD).href)};
 import fs from 'node:fs';
 const s = await acquireRenderSlot({ slots: 1, pollMs: 50, onWait: () => process.stdout.write('Đang chờ lượt render khác…\\n') });
-const a = Date.now(); await new Promise(r => setTimeout(r, 700)); const b = Date.now();
+const a = Date.now(); await new Promise(r => setTimeout(r, 1500)); const b = Date.now();
 fs.appendFileSync(${JSON.stringify(out)}, JSON.stringify({ a, b, w: s.waited_s }) + '\\n');
 process.exit(0);`;
   const run = () => new Promise((ok, bad) => {

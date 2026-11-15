@@ -86,14 +86,16 @@ const audio = opt('--audio', tl.audio && fs.existsSync(defMix) ? defMix : null);
 // M64: profile hiệu năng (perf_profile.mjs). Cờ CLI > biến môi trường > profile; can-bang = hành vi tự động như trước.
 const perf = resolvePerf({ profile: opt('--profile'), job: { kind: 'render', cli: { workers: opt('--workers'), preset: opt('--preset'), fast: args.includes('--fast') } } });
 lowerPriority(process.pid, perf.priority); // tiet-kiem: Chrome + ffmpeg mở sau đây thừa hưởng BelowNormal
-const freeGB = os.freemem() / 2 ** 30;
+// Tối đa perf.slots lượt render cùng lúc trên cả máy (Studio, hàng đợi, CLI); chỗ tự nhả khi thoát. Xin chỗ trước rồi mới
+// đo RAM: lúc đang chờ thì lượt kia còn chiếm RAM.
+const slot = await acquireRenderSlot({ slots: perf.slots, info: { W, H, frames: n }, onWait: () => process.stdout.write('Đang chờ lượt render khác…\n') });
+// RAM chỉ hạ worker tự động/của profile, không hạ --workers gõ tay; macOS: os.freemem() bỏ qua bộ nhớ cache nên không dùng.
+const freeGB = perf.from.workers === 'cli' || process.platform === 'darwin' ? null : os.freemem() / 2 ** 30;
 const { workers, threads, preset, ramCap } = renderPlan({ W, H, n, fps, workers: perf.workers, preset: perf.preset, freeMemGB: freeGB });
 if (ramCap) console.error(`[render] RAM trống ${freeGB.toFixed(1)} GB: hạ ${ramCap} → ${workers} worker`);
 // M52: NVENC/QSV/VideoToolbox when this machine's ffmpeg can open it (render_hw.mjs pickEncoder), else libx264 at `preset`.
 const enc = pickEncoder({ use: workers > 1 ? 'segment' : 'final', env: { ...process.env, AVS_ENCODER: perf.encoder } });
 const venc = [...encoderArgs(enc.kind, { preset, crf: 17, threads }), '-r', String(fps)];
-// M64: tối đa perf.slots lượt render cùng lúc trên cả máy (Studio, hàng đợi, CLI); chỗ tự nhả khi thoát.
-const slot = await acquireRenderSlot({ slots: perf.slots, info: { W, H, frames: n }, onWait: () => process.stdout.write('Đang chờ lượt render khác…\n') });
 
 const started = Date.now();
 let done = 0, lastShown = -1;

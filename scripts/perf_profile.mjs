@@ -17,6 +17,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { withFileLock, retryBusy } from './file_lock.mjs';
 import { readConfig, writeConfig } from './tts_config.mjs';
+import { CONFIG } from './llm.mjs';
 import { avsHome, physicalCores, renderPlan, encoderWanted, pickEncoder, gpuWanted, novsyncWanted, findHeadlessShell } from './render_hw.mjs';
 
 // ---------- profiles ----------
@@ -78,10 +79,12 @@ export function savePerf(obj = {}) {
   for (const k of Object.keys(obj)) if (k !== 'profile' && k !== 'custom') throw bad(`Không có khoá perf.${k}`);
   if (obj.profile !== undefined && !Object.hasOwn(PROFILES, obj.profile)) throw bad('profile phải là: ' + Object.keys(PROFILES).join(', '));
   const patch = obj.custom !== undefined ? cleanCustom(obj.custom, true) : {};
-  const cur = readConfig(), was = loadPerf();
-  cur.perf = { ...(cur.perf && typeof cur.perf === 'object' && !Array.isArray(cur.perf) ? cur.perf : {}),
-    profile: obj.profile ?? was.profile, custom: { ...was.custom, ...patch } };
-  writeConfig(cur);
+  withFileLock(CONFIG() + '.lock', () => {
+    const cur = readConfig(), was = loadPerf();
+    cur.perf = { ...(cur.perf && typeof cur.perf === 'object' && !Array.isArray(cur.perf) ? cur.perf : {}),
+      profile: obj.profile ?? was.profile, custom: { ...was.custom, ...patch } };
+    writeConfig(cur);
+  });
   return loadPerf();
 }
 
@@ -147,7 +150,11 @@ export const slotFile = (env = process.env) => path.join(avsHome(env), 'render_s
 const alive = pid => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 const readSlots = f => { try { const j = JSON.parse(retryBusy(() => fs.readFileSync(f, 'utf8'))); return Array.isArray(j?.holders) ? j.holders : []; } catch { return []; } };
 const writeSlots = (f, holders) => { const tmp = `${f}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify({ holders }, null, 1)); retryBusy(() => fs.renameSync(tmp, f)); };
-const live = h => h && typeof h === 'object' && (h.host !== os.hostname() ? Date.now() - Date.parse(h.at) < 12 * 3600e3 : alive(h.pid));
+// Người giữ chỗ ghi lại `beat` mỗi SLOT_BEAT_MS; chỗ không nhịp quá SLOT_STALE_MS là của tiến trình bị giết cứng mà pid đã
+// được tiến trình khác dùng lại (Windows dùng lại pid rất nhanh), nên cũng được dọn.
+export const SLOT_BEAT_MS = 30e3, SLOT_STALE_MS = 5 * 60e3;
+const fresh = h => Date.now() - Date.parse(h.beat || h.at) < SLOT_STALE_MS;
+const live = h => !!h && typeof h === 'object' && fresh(h) && (h.host !== os.hostname() || alive(h.pid));
 // slotHolders() → lượt render đang giữ chỗ (đã bỏ pid chết), không ghi gì.
 export function slotHolders({ env = process.env } = {}) { return readSlots(slotFile(env)).filter(live); }
 // Một lần thử: dọn chỗ của pid đã chết, lấy chỗ khi còn trống (< slots). → token hoặc null.
@@ -158,8 +165,20 @@ export function tryTakeSlot({ slots = 1, env = process.env, pid = process.pid, i
     const all = readSlots(f), holders = all.filter(live);
     if (holders.length >= Math.max(1, slots)) { if (holders.length !== all.length) writeSlots(f, holders); return null; }
     const tok = crypto.randomBytes(6).toString('hex');
-    writeSlots(f, [...holders, { pid, host: os.hostname(), tok, at: new Date().toISOString(), ...info }]);
+    const at = new Date().toISOString();
+    writeSlots(f, [...holders, { ...info, pid, host: os.hostname(), tok, at, beat: at }]);
     return tok;
+  });
+}
+// Nhịp của người giữ chỗ: ghi lại `beat`. → false khi chỗ đã bị dọn, true khi còn.
+export function beatSlot(tok, { env = process.env } = {}) {
+  const f = slotFile(env);
+  return withFileLock(f + '.lock', () => {
+    const all = readSlots(f), me = all.find(h => h?.tok === tok);
+    if (!me) return false;
+    me.beat = new Date().toISOString();
+    writeSlots(f, all);
+    return true;
   });
 }
 export function releaseSlot(tok, { env = process.env } = {}) {
@@ -178,7 +197,11 @@ export async function acquireRenderSlot({ slots = 1, onWait = null, pollMs = 100
     if (!told) { told = true; try { onWait?.(slotHolders({ env })); } catch { /* chỉ là thông báo */ } }
     await new Promise(r => setTimeout(r, pollMs));
   }
-  const release = () => { if (tok) { const t = tok; tok = null; releaseSlot(t, { env }); process.off('exit', release); } };
+  // Chỗ bị dọn nhầm (máy treo quá SLOT_STALE_MS): ghi lại chỗ của mình, kể cả khi vượt slots (lượt này đã đang render).
+  const retake = () => { const t = tryTakeSlot({ slots: slotHolders({ env }).length + 1, env, info }); if (t) tok = t; };
+  const beat = setInterval(() => { try { if (tok && !beatSlot(tok, { env })) retake(); } catch { /* lần nhịp sau */ } }, SLOT_BEAT_MS);
+  beat.unref();
+  const release = () => { clearInterval(beat); if (tok) { const t = tok; tok = null; releaseSlot(t, { env }); } process.off('exit', release); };
   process.on('exit', release);
   return { release, waited_s: Math.round((Date.now() - t0) / 100) / 10 };
 }
