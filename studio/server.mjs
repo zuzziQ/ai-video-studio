@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
 import { shortErr } from '../scripts/err_text.mjs';
+import { resolvePerf, PROFILES } from '../scripts/perf_profile.mjs';
 import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson, cookieOk, sessionCookie, launchKeyOk, launchUrl } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -282,7 +283,7 @@ function run(cmd, argv, onLine) {
     });
   });
 }
-async function exportVideo({ quality = '1080', from, to, aspects }) {
+async function exportVideo({ quality = '1080', from, to, aspects, profile }) {
   const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
   // Missing source files (project moved / work/ deleted): say which one instead of a python/node stack trace.
   for (const f of [tl.aroll?.frames && path.dirname(tl.aroll.frames), tl.audio?.voice]) if (f && !fs.existsSync(P(f))) throw new Error(`Thiếu file nguồn: ${f} — dự án bị di chuyển hoặc đã xoá thư mục work/`);
@@ -306,9 +307,12 @@ async function exportVideo({ quality = '1080', from, to, aspects }) {
   const tmpTl = path.join(project.dir, `.export_${process.pid}.json`);
   fs.renameSync(tmp, tmpTl);
   try {
-    await run('node', [path.join(SKILL, 'scripts/render.mjs'), tmpTl, P(out), ...(mix ? ['--audio', mix] : []), ...(from != null ? ['--from', String(from)] : []), ...(to != null ? ['--to', String(to)] : [])], l => {
+    // M64: profile hiệu năng (body.profile khi hợp lệ, không thì $AVS_HOME/config.json); render.mjs chờ lượt khi máy đang render.
+    const perf = resolvePerf({ profile: typeof profile === 'string' && Object.hasOwn(PROFILES, profile) ? profile : undefined, job: { kind: 'export' } });
+    await run('node', [path.join(SKILL, 'scripts/render.mjs'), tmpTl, P(out), '--profile', perf.profile, ...(mix ? ['--audio', mix] : []), ...(from != null ? ['--from', String(from)] : []), ...(to != null ? ['--to', String(to)] : [])], l => {
+      if (/^Đang chờ lượt render/.test(l)) { job.step = 'Đang chờ lượt render khác…'; return; }
       const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l);
-      if (m) job.progress = Math.min(.99, (+m[1] - (from ?? 0)) / total);
+      if (m) { job.step = 'Render khung hình'; job.progress = Math.min(.99, (+m[1] - (from ?? 0)) / total); }
     });
   } finally { fs.rmSync(tmpTl, { force: true }); }
   job.out = out;
