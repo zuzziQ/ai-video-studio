@@ -11,6 +11,7 @@
 // mutate(), which holds queue.json.lock (exclusive create) for the few milliseconds it takes — see withFileLock().
 //   node scripts/queue.mjs run [--daemon]        (run until the queue is empty; --daemon: keep running + watch folders)
 //   node scripts/queue.mjs agent install|uninstall|status      (LaunchAgent com.aivideostudio.watch)
+import { shortErr, scrubPaths } from './err_text.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -276,7 +277,10 @@ export class Runner {
     p.on('close', code => {
       this.child = null; this.item = null; this.idleSince = Date.now();
       if (code !== 0) { const cur = loadQueue().items.find(x => x.id === it0.id); sweepRenderTmp(renderRoots(cur || it0), startedMs); }
-      const errLine = (log.match(/^LỖI: .*$/gm) || []).pop()?.slice(5) || log.trim().split('\n').slice(-2).join(' | ').slice(-300);
+      // A traceback's useful line is its last one (ModuleNotFoundError …), not the "import numpy as np" frame above it.
+      // An explicit "LỖI:" line wins unless it is that import frame; machine paths never reach the queue UI or Telegram.
+      const said = (log.match(/^LỖI: .*$/gm) || []).pop()?.slice(5);
+      const errLine = scrubPaths(said && !/^\s*import\s/.test(said) ? said : /ModuleNotFoundError/.test(log) ? shortErr(log) : said || log.trim().split('\n').slice(-2).join(' | ').slice(-300));
       const outputs = result?.outputs || (it0.opts?.out ? [it0.opts.out] : []), now = new Date().toISOString();
       // final state decided under the lock from the freshest item: a cancel flag set after the last tick still counts
       const finish = () => mutate(q => {

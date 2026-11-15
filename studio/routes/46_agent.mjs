@@ -70,7 +70,7 @@ export default ctx => {
       if (p === '/api/agent/improve') return J(await improve({ claude: b.claude !== false }));
       if (p === '/api/agent/suggest') return J(await refreshSuggestions({ claude: b.claude !== false }));
       if (p === '/api/agent/act') return J(await actSuggestion(b.id, b.action === 'dismiss' ? 'dismiss' : 'apply'));
-    } catch (e) { return J({ error: e.message }); }
-    return J({ error: 'không rõ yêu cầu' });
+    } catch (e) { return J({ error: e.message }, e.status || 500); }
+    return J({ error: 'không rõ yêu cầu' }, 404);
   };
 };

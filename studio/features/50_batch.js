@@ -3,8 +3,9 @@
   const { $, esc } = Studio;
   const S = { source: 'file:bds-can-ho.template.json', sheet: null, targets: [], mapping: {}, voice: 'auto', quality: '1080', dur: '', rows: '', brand: '', prevRow: 0, prevT: 2.5,
     img: null, busy: false, run: null, status: null, sources: null, brands: [], history: [], showText: false, page: null /* null = follow the running row */ };
+  const okSt = st => (st && !st.error ? st : null); // {error} (lô đã xoá) → no status, never render its rows
   const stUrl = () => `/api/batch/status?dir=${encodeURIComponent(S.run)}&page=${S.page == null ? 'auto' : S.page}`;
-  const refreshStatus = async () => { if (S.run) { S.status = await Studio.api(stUrl()); rerender(); } };
+  const refreshStatus = async () => { if (S.run) { S.status = okSt(await Studio.api(stUrl())); rerender(); } };
   const css = document.createElement('style');
   css.textContent = `
   .bt-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
@@ -90,7 +91,7 @@
     clearInterval(timer);
     timer = setInterval(async () => {
       const [st, job] = await Promise.all([Studio.api(stUrl()), Studio.api('/api/job')]);
-      S.status = st; S.job = job;
+      S.status = okSt(st); S.job = job;
       if (!job || job.kind !== 'batch' || job.state !== 'running') { clearInterval(timer); timer = null; S.history = await Studio.api('/api/batch/list').catch(() => S.history); }
       rerender();
     }, 1000);
@@ -201,7 +202,7 @@
       if (!confirm('Mở dự án của dòng này trong Studio? (lưu dự án hiện tại trước)')) return;
       await Studio.saveNow(); const r = await Studio.api('/api/open', { path: Studio.META.dir + '/' + b.dataset.bproj }); if (r.ok) location.reload(); else Studio.toast(r.error || 'Lỗi');
     }));
-    B.querySelectorAll('[data-bhist]').forEach(b => (b.onclick = async () => { S.run = b.dataset.bhist; S.page = null; S.status = await Studio.api(stUrl()); S.job = await Studio.api('/api/job'); if (S.job?.kind === 'batch' && S.job.state === 'running') poll(); render(); }));
+    B.querySelectorAll('[data-bhist]').forEach(b => (b.onclick = async () => { S.run = b.dataset.bhist; S.page = null; S.status = okSt(await Studio.api(stUrl())); S.job = await Studio.api('/api/job'); if (S.job?.kind === 'batch' && S.job.state === 'running') poll(); render(); }));
   }
   Studio.addPanel('batch', 'ti-stack-2', 'Hàng loạt', () => { render(); if (!S.sources) init(); });
   Studio.onReady(async () => {

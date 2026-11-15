@@ -50,7 +50,12 @@ export default ctx => {
     for (const v of list) { v.info = await probe(v.file); v.scheduled = [...new Set(PUB.loadSchedule().items.filter(x => x.file === v.file && x.state !== 'error').map(x => x.platform))]; v.hasCaptions = !!(v.project && fs.existsSync(path.join(v.project, 'publish/publish.json'))); }
     return list;
   }
-  const resolveFile = f => { if (!f) return null; if (path.isAbsolute(f)) return f; return ctx.project ? ctx.under(ctx.project.dir, f) : null; };
+  // Only a video file (absolute paths are allowed: the schedule lists exports of any project).
+  const resolveFile = f => {
+    if (typeof f !== 'string' || !VID.test(f)) return null; // older items with other extensions (CLI) are not served here
+    const abs = path.isAbsolute(f) ? f : ctx.project ? ctx.under(ctx.project.dir, f) : null;
+    try { return abs && fs.statSync(abs).isFile() ? abs : null; } catch { return null; }
+  };
   const view = () => {
     const s = PUB.loadSchedule();
     return { now: PUB.now().toISOString(), settings: s.settings, items: s.items.sort((a, b) => Date.parse(a.when) - Date.parse(b.when)).map(x => ({ ...x, name: path.basename(x.file || ''), exists: !!x.file && fs.existsSync(x.file) })),
@@ -91,7 +96,7 @@ export default ctx => {
       if (p === '/api/schedule/auto') return J({ ok: true, items: PUB.autoSchedule((b.files || []).map(resolveFile).filter(Boolean), b.platforms || [], { from: b.from }) });
       if (p === '/api/schedule/run') return J(runDue(true) ? { ok: true } : { error: 'Đang chạy rồi' });
       if (p === '/api/schedule/reveal') { const it = PUB.loadSchedule().items.find(x => x.id === b.id); if (it && fs.existsSync(it.file)) revealPath(it.file); return J({ ok: !!it }); }
-      if (p === '/api/schedule/copy') { const it = PUB.loadSchedule().items.find(x => x.id === b.id); return J(it ? { text: PUB.postText(it) } : { error: 'không thấy' }); }
+      if (p === '/api/schedule/copy') { const it = PUB.loadSchedule().items.find(x => x.id === b.id); return J(it ? { text: PUB.postText(it) } : { error: 'không thấy' }, it ? 200 : 404); }
       if (p === '/api/youtube/client') return J({ ok: true, ...PUB.saveClient(b.json) });
       if (p === '/api/youtube/connect') {
         const { url, done } = await PUB.startYoutubeAuth({ open: b.open !== false });

@@ -35,6 +35,13 @@ export default ctx => {
     if (p === '/api/ai/fillers' && req.method === 'POST') {
       const b = await ctx.body(req);
       const inF = path.join(st, 'fillers_in.json'), outF = path.join(st, 'fillers.json');
+      // Same shape fillers.py reads (captions with .words, or a flat word list); a word without numeric s/e used to come back as a Python traceback (500).
+      if (b.words != null) {
+        if (!Array.isArray(b.words)) return ctx.json(res, { error: 'words phải là danh sách' }, 400), true;
+        const flat = b.words.length && b.words[0] && 'words' in b.words[0] ? b.words.flatMap(c => (Array.isArray(c?.words) ? c.words : [null])) : b.words;
+        if (!flat.every(w => w && typeof w === 'object' && (!String(w.w ?? '').trim() || (Number.isFinite(w.s) && Number.isFinite(w.e)))))
+          return ctx.json(res, { error: 'Mỗi từ cần {w, s, e} với s, e là số giây' }, 400), true;
+      }
       fs.writeFileSync(inF, JSON.stringify(Array.isArray(b.words) ? b.words : ctx.readProject().captions));
       fs.rmSync(outF, { force: true });
       if (b.claude) {

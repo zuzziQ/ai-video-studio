@@ -1,5 +1,6 @@
 // Gói đăng mạng xã hội (bản trung thực: KHÔNG tự đăng). AI (claude -p) viết tiêu đề / caption / hashtag / bình luận đầu / gợi ý ảnh bìa
 // cho từng nền tảng từ lời thoại; kiểm tra thông số MP4; xuất ảnh bìa; mở trang upload + hiện file trong Finder; lưu <project>/publish/<nền tảng>.txt.
+import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -98,13 +99,16 @@ export default ctx => async (req, res, p, u) => {
     // full-size still (render.mjs --still) → publish/cover_<t>s.jpg
     const t = Math.max(0, +b.t || 0);
     const tl = JSON.parse(fs.readFileSync(ctx.project.tlFile, 'utf8')), vert = (tl.height || 720) > (tl.width || 1280);
+    const fr = tl.aroll?.frames && path.dirname(tl.aroll.frames);
+    if (fr && !fs.existsSync(ctx.P(fr))) return J({ error: `Thiếu file nguồn: ${fr} — dự án bị di chuyển hoặc đã xoá thư mục work/` }, 400);
     const tmp = path.join(ctx.project.dir, `.cover_${process.pid}.json`);
     fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? 1080 : 1920, height: vert ? 1920 : 1080 }));
     fs.mkdirSync(PUB, { recursive: true });
     const out = path.join(PUB, `cover_${t.toFixed(1).replace('.', '_')}s.jpg`);
-    return new Promise(ok => execFile('node', [path.join(ctx.SKILL, 'scripts/render.mjs'), tmp, out, '--still', String(t), out], { timeout: 120000 }, e => {
+    return new Promise(ok => execFile('node', [path.join(ctx.SKILL, 'scripts/render.mjs'), tmp, out, '--still', String(t), out], { timeout: 120000 }, (e, so, se) => {
       fs.rmSync(tmp, { force: true });
-      ok(e ? J({ error: 'Không render được ảnh bìa: ' + e.message }, 500) : J({ out: path.relative(ctx.project.dir, out), url: '/project/' + path.relative(ctx.project.dir, out) + '?' + Date.now() }));
+      if (e) console.error('publish/cover:', e.message); // full command + stack stay in the server log
+      ok(e ? J({ error: 'Không render được ảnh bìa: ' + shortErr(se, 'render lỗi') }, 500) : J({ out: path.relative(ctx.project.dir, out), url: '/project/' + path.relative(ctx.project.dir, out) + '?' + Date.now() }));
     }));
   }
   if (p === '/api/publish/open') {

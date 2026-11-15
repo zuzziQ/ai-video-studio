@@ -1,5 +1,6 @@
 // Làm hàng loạt: template / dự án hiện tại × bảng tính (CSV, XLSX) → mỗi dòng một dự án + MP4. Engine: scripts/batch.mjs.
 // Batches live in <project>/batch/<name>_<stamp>/ (job.json, status.json, 01_<row>/…); sheets uploaded to <project>/batch/_sheets/.
+import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -73,7 +74,12 @@ export default ctx => {
     const B = () => req.method === 'POST' ? ctx.body(req) : {};
     if (p === '/api/batch/sources') return ctx.json(res, { sources: sources(), project: path.basename(ctx.project.dir) }), true;
     if (p === '/api/batch/targets') {
-      const b = await B(), src = loadSource(srcOf(b.source || 'project'));
+      const b = await B();
+      let src;
+      try { src = loadSource(srcOf(b.source || 'project')); } catch (e) {
+        const missing = e.code === 'ENOENT' || /không thấy/i.test(e.message);
+        return ctx.json(res, { error: (missing ? 'Không thấy nguồn mẫu: ' : 'Nguồn mẫu hỏng: ') + shortErr(e.message) }, missing ? 404 : 400), true;
+      }
       const targets = targetsOf(src.doc);
       return ctx.json(res, { targets, mapping: b.columns ? autoMap(targets, b.columns) : {}, needs: src.doc.needs || [], aspect: src.doc.aspect }), true;
     }
@@ -82,7 +88,12 @@ export default ctx => {
       if (!/\.(csv|xlsx|tsv|txt)$/i.test(name)) return ctx.json(res, { error: 'Chỉ nhận .csv hoặc .xlsx' }, 400), true;
       const dir = path.join(root(), '_sheets'); fs.mkdirSync(dir, { recursive: true });
       const f = path.join(dir, `${ctx.stamp()}_${name}`); fs.writeFileSync(f, await raw(req));
-      try { return ctx.json(res, sheetInfo(f)), true; } catch (e) { return ctx.json(res, { error: 'Không đọc được bảng tính: ' + e.message }, 400), true; }
+      try { return ctx.json(res, sheetInfo(f)), true; } catch (e) {
+        fs.rmSync(f, { force: true }); // a sheet that cannot be read is not kept in _sheets/
+        // Parser internals (RangeError "outside buffer bounds" on a broken/empty file) mean nothing to the user.
+        const why = e instanceof RangeError || /buffer|offset|bounds/i.test(e.message) ? 'file rỗng hoặc không phải CSV/XLSX hợp lệ' : e.message;
+        return ctx.json(res, { error: 'Không đọc được bảng tính: ' + why }, 400), true;
+      }
     }
     if (p === '/api/batch/example') {
       const f = path.join(EX, 'bds-can-ho-vi-du.csv');
@@ -141,6 +152,8 @@ export default ctx => {
     if (p === '/api/batch/status') {
       const d = ctx.under(ctx.project.dir, u.searchParams.get('dir') || ''), pg = u.searchParams.get('page');
       const st = withUrls(d && status(d), pg == null ? null : pg, Math.min(200, Math.max(10, +u.searchParams.get('size') || PAGE)));
+      // A batch folder whose child has not written status.json yet (just started) is "no status yet" (200 null), not missing.
+      if (!st && !(d && fs.existsSync(path.join(d, 'job.json')))) return ctx.json(res, { error: 'không thấy lô này' }, 404), true;
       return ctx.json(res, st && { ...st, pausing: !!(d && runningHere(d) && CTRL.pause && !CTRL.pause.hit) }), true;
     }
     if ((p === '/api/batch/pause' || p === '/api/batch/cancel') && req.method === 'POST') {
@@ -158,7 +171,9 @@ export default ctx => {
     }
     if (p === '/api/batch/list') {
       const r = root(); if (!fs.existsSync(r)) return ctx.json(res, []), true;
-      return ctx.json(res, fs.readdirSync(r).filter(f => !f.startsWith('_') && fs.existsSync(path.join(r, f, 'job.json'))).sort().reverse().map(f => {
+      // newest first by when the batch was made (job.json), not by name: names start with the user's title
+      const made = f => { try { return fs.statSync(path.join(r, f, 'job.json')).mtimeMs; } catch { return 0; } };
+      return ctx.json(res, fs.readdirSync(r).filter(f => !f.startsWith('_') && fs.existsSync(path.join(r, f, 'job.json'))).sort((a, b) => made(b) - made(a)).map(f => {
         const st = status(path.join(r, f));
         return { dir: rel(path.join(r, f)), name: f, total: st?.total || 0, done: st ? st.rows.filter(x => x.state === 'done').length : 0, updated: st?.updated, cancelled: !!st?.cancelled };
       })), true;

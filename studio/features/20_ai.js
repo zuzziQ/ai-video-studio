@@ -211,7 +211,7 @@
     const done = res => { flBusy = false; if (res.error) { S.toast('Lỗi dò: ' + res.error); fl = null; } else { fl = res; flSel = new Set(res.cuts.map((c, i) => (c.conf >= .6 ? i : -1)).filter(i => i >= 0)); } renderAi(); };
     if (body.claude) {
       const r = await S.api('/api/ai/fillers', body);
-      if (!r.ok) { flBusy = false; renderAi(); return S.toast('Đang có tác vụ khác chạy'); }
+      if (!r.ok) { flBusy = false; renderAi(); return S.toast(r.error || 'Đang có tác vụ khác chạy'); }
       S.modal(`<h3><i class="ti ti-scissors"></i> Đang dò lỗi nói…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
       S.pollJob(async j => { S.closeModal(); done(j.state === 'done' ? await S.api('/api/ai/fillers') : { error: j.step }); });
     } else done(await S.api('/api/ai/fillers', body));

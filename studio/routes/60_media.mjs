@@ -82,7 +82,7 @@ export default ctx => {
       return true;
     }
     const jobs = { '/api/segment': ['segment', segment], '/api/sticker': ['sticker', sticker], '/api/broll/suggest': ['broll_suggest', suggest], '/api/genimage': ['genimage', genimage] };
-    if (jobs[p] && req.method === 'POST') { const b = await ctx.body(req); ctx.json(res, { ok: ctx.startJob(jobs[p][0], jobs[p][1], b) }); return true; }
+    if (jobs[p] && req.method === 'POST') { const b = await ctx.body(req), ok = ctx.startJob(jobs[p][0], jobs[p][1], b); ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409); return true; }
     return false;
   };
 };
