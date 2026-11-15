@@ -112,7 +112,7 @@ Bảng màu: ember, light, neon, ocean, violet, gold, forest, sunset, candy, mon
 1. Chọn "pack" và "caption_style" (một trong: ${cat.captionStyles.join(', ')}; thường dùng kiểu phụ đề của gói).
 2. Sửa phụ đề để hiển thị: sửa lỗi nhận dạng (tên riêng, chính tả, dấu), viết hoa tên riêng, có thể rút gọn từ thừa bằng cách để chuỗi rỗng "" cho từ đó. KHÔNG được đổi số lượng từ của dòng (mỗi từ giữ nguyên thời gian). "hl" = chỉ số các từ cần nhấn mạnh (1–2 từ khoá/dòng, không phải dòng nào cũng cần), "br" = chỉ số từ mà sau đó xuống dòng. Chỉ trả về các dòng có thay đổi.
 3. Viết "hook": câu mở đầu giật tít ≤ 40 ký tự dựa trên nội dung. Cảnh đầu tiên (c=0,w=0) là cảnh hook hiển thị câu này.
-4. Đặt ${n[0]}–${n[1]} cảnh graphic: mỗi cảnh bắt đầu ĐÚNG lúc người nói nói từ khoá liên quan, chỉ định bằng "c" (chỉ số dòng) và "w" (chỉ số từ). "dur" 1.5–6 giây. Các cảnh không chồng lên nhau về thời gian. Cảnh cuối nên là CTA/kết. "params" theo đúng cấu trúc ví dụ của type đó, viết nội dung thật bằng tiếng Việt có dấu, ngắn gọn: mỗi trường chữ dài xấp xỉ chữ trong ví dụ (graphic được thiết kế cho độ dài đó; trường số/giá trị chỉ vài ký tự). Mọi trường thời gian bên trong params (t, reveal_t, …) tính bằng giây KỂ TỪ khi cảnh bắt đầu. Dùng b-roll có chủ đề khớp nội dung.
+4. Đặt ${n[0]}–${n[1]} cảnh graphic: mỗi cảnh bắt đầu ĐÚNG lúc người nói nói từ khoá liên quan, chỉ định bằng "c" (chỉ số dòng) và "w" (chỉ số từ). "dur" 1.5–6 giây. Các cảnh không chồng lên nhau về thời gian. Cảnh cuối nên là CTA/kết. "params" theo đúng cấu trúc ví dụ của type đó, viết nội dung thật bằng tiếng Việt có dấu, ngắn gọn: mỗi trường chữ dài xấp xỉ chữ trong ví dụ (graphic được thiết kế cho độ dài đó; trường số/giá trị chỉ vài ký tự; một dòng chữ ngắn tối đa 20 ký tự, dài hơn sẽ bị cắt nên tự rút gọn). Mọi trường thời gian bên trong params (t, reveal_t, …) tính bằng giây KỂ TỪ khi cảnh bắt đầu. Dùng b-roll có chủ đề khớp nội dung.
 5. Chọn nhạc nền "music": {"mood": "...", "gain": -18 đến -22} và 3–8 SFX đặt tại từ khoá/chỗ graphic xuất hiện: {"name": "...", "c": số, "w": số}.
 
 Chỉ trả về DUY NHẤT một object JSON (không markdown, không giải thích ngoài JSON) theo dạng:
@@ -149,14 +149,21 @@ function clampT(o, t0, t1, top = true) {
   }
 }
 // Text length follows the example of the same field (graphics are designed for that much text), with a hard cap.
-function cleanText(o, ex, key = '') {
+// M62: at least 20 characters (a 12 floor cut "Chọn hiệu ứng" to "Chọn hiệu ứ…"), and cut at a word boundary.
+export function cleanText(o, ex, key = '') {
   if (Array.isArray(o)) return o.slice(0, 8).map(x => cleanText(x, Array.isArray(ex) ? ex[0] : undefined, key));
   if (o && typeof o === 'object') { const r = {}; for (const [k, v] of Object.entries(o)) r[k] = cleanText(v, ex && typeof ex === 'object' ? ex[k] : undefined, k); return r; }
   if (typeof o === 'string') {
-    const max = Math.min(LONG_TEXT.has(key) ? 140 : 70, typeof ex === 'string' && ex.length ? Math.max(12, Math.ceil(ex.length * 1.8)) : 70);
-    return o.length > max ? o.slice(0, max - 1).trimEnd() + '…' : o;
+    const max = Math.min(LONG_TEXT.has(key) ? 140 : 70, typeof ex === 'string' && ex.length ? Math.max(20, Math.ceil(ex.length * 1.8)) : 70);
+    return o.length > max ? cutWords(o, max) : o;
   }
   return o;
+}
+// Keep whole words (a single over-long word is cut as before) and drop a dangling separator before the ellipsis.
+function cutWords(s, max) {
+  const cut = s.slice(0, max - 1), sp = cut.search(/\s\S*$/);
+  const keep = /\s/.test(s[max - 1] || '') ? cut : sp >= max * .5 ? cut.slice(0, sp) : cut;
+  return keep.replace(/[\s,.;:+&/–—-]+$/u, '') + '…';
 }
 function fixBroll(o, lib, used) {
   if (Array.isArray(o)) return o.forEach(x => fixBroll(x, lib, used));

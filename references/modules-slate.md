@@ -28,7 +28,8 @@ Mỗi chunk trong `captions.json`:
 - Mỗi shot nói thẳng vào camera = 1 `frame_grid`. Đổi shot bằng `enter:"blur"` kèm `fx punch amp .04`.
 
 ### `title_card`: thẻ kết
-`{ type, t0, t1, title:[{text,color,font,italic,weight}], size=50, y=560, pill:{icon,text}|false, question, bg }`
+`{ type, t0, t1, title:[{text,color,font,italic,weight}]|"chữ", size=50, y=560, pill:{icon,text}|false, question, bg }`
+Thiếu `title` thì dùng tiêu đề dự án (`TL.title`: tiêu đề ở "Video mới" hoặc hook của AI dựng giúp), viết hoa, chữ đầu trắng, phần sau cam nghiêng; tiêu đề dài tự thu nhỏ rồi xuống 2 dòng (M62).
 
 ## Graphic
 | module | tham số | dùng khi |
