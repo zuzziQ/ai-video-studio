@@ -11,6 +11,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './platform.mjs';
+import { videoArgs } from './encoder_cli.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(here, '..');
@@ -76,21 +77,27 @@ async function shot(page, t) {
   return page.screenshot({ type: 'jpeg', quality: 90 });
 }
 
-async function renderClip(ctx, e, out, dur, framesDir) {
+// M65: NVENC/QSV khi dùng được (encoder_cli.mjs); ffmpeg phần cứng lỗi lúc chạy thì dựng lại clip bằng libx264 medium như cũ.
+const X264 = ['-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-pix_fmt', 'yuv420p'];
+async function renderClip(ctx, e, out, dur, framesDir, venc = null) {
+  const v = out && !venc ? videoArgs({ crf: 23, x264: X264 }) : null;
   await load(ctx.page, e, dur, ctx.W, ctx.H);
   const n = Math.round(dur * 30);
-  let ff = null;
+  let ff = null, done = null, dead = false;
   if (out) {
     ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'mjpeg', '-i', '-',
-      '-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
+      ...(venc || v.args), '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
+    ff.stdin.on('error', () => {}); // ffmpeg died early: the exit code below decides
+    done = new Promise(r => ff.on('close', c => { dead = true; r(c ?? 1); }));
   }
   if (framesDir) fs.mkdirSync(framesDir, { recursive: true });
   for (let i = 0; i < n; i++) {
     const buf = await shot(ctx.page, i / 30);
     if (framesDir) fs.writeFileSync(path.join(framesDir, String(i + 1).padStart(5, '0') + '.jpg'), buf);
-    if (ff && !ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
+    if (ff && !dead && !ff.stdin.write(buf)) await Promise.race([new Promise(r => ff.stdin.once('drain', r)), done]);
   }
-  if (ff) { ff.stdin.end(); await new Promise(r => ff.on('close', r)); }
+  const code = ff ? (ff.stdin.end(), await done) : 0;
+  if (code && v?.hw) return renderClip(ctx, e, out, dur, null, v.fallback);
   return n;
 }
 
