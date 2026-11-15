@@ -105,6 +105,8 @@ export default ctx => {
       const b = await B();
       const dir = b.resume ? ctx.under(ctx.project.dir, b.resume) : path.join(root(), `${String(b.name || 'hang-loat').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'hang-loat'}_${ctx.stamp()}`);
       if (!dir) return ctx.json(res, { error: 'thư mục không hợp lệ' }, 400), true;
+      // Refuse before writing job.json: a 409 used to leave an empty batch folder that /api/batch/list showed as 0/0 forever.
+      if (ctx.job?.state === 'running') return ctx.json(res, { error: 'Đang có tác vụ khác chạy' }, 409), true;
       let jf;
       try { jf = b.resume ? path.join(dir, 'job.json') : writeJob(dir, b); } catch (e) { return ctx.json(res, { error: e.message }, 400), true; }
       if (!fs.existsSync(jf)) return ctx.json(res, { error: 'không thấy job.json' }, 404), true;
@@ -133,6 +135,7 @@ export default ctx => {
         const st = status(dir), bad = st ? st.rows.filter(r => r.state !== 'done').length : 0;
         ctx.job.step = bad ? `Xong, ${bad} dòng lỗi` : `Xong ${st?.total || 0} video`;
       });
+      if (!ok && !b.resume) fs.rmSync(dir, { recursive: true, force: true }); // lost the race to another job: drop the new folder
       return ctx.json(res, ok ? { ok: true, dir: rel(dir) } : { error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
     }
     if (p === '/api/batch/status') {

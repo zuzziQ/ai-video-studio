@@ -23,6 +23,15 @@ export function isShared(rel) {
 
 const norm = r => r.replace(/\\/g, '/');
 const skipped = (rel, skip) => skip.some(s => rel === s || rel.startsWith(s + '/'));
+// Re-create a link as a link. On Windows batch rows point work/ at the source with a junction (platform.mjs linkPath);
+// fs.cpSync on a junction to a folder throws "Recursive option not enabled". A link that cannot be re-created
+// (file symlink without admin rights on Windows) is copied as what it points to; a dangling link is dropped.
+function copyLink(a, b) {
+  const target = fs.readlinkSync(a);
+  let dir = false; try { dir = fs.statSync(a).isDirectory(); } catch {}
+  try { fs.symlinkSync(target, b, process.platform === 'win32' ? (dir ? 'junction' : 'file') : undefined); }
+  catch { if (fs.existsSync(a)) fs.cpSync(a, b, { recursive: true, dereference: true }); }
+}
 
 /**
  * Nhân bản thư mục dự án src → dst (dst chưa tồn tại).
@@ -51,7 +60,7 @@ export function cloneProject(src, dst, o = {}) {
       if (skipped(r, skip)) continue;
       const a = path.join(from, e.name), b = path.join(to, e.name);
       if (e.isDirectory()) { walk(r); continue; }
-      if (e.isSymbolicLink()) { fs.cpSync(a, b, { verbatimSymlinks: true }); continue; }
+      if (e.isSymbolicLink()) { copyLink(a, b); continue; }
       const size = fs.statSync(a).size;
       if (canLink && isShared(r)) {
         try { fs.linkSync(a, b); st.linked++; st.linkedBytes += size; continue; }

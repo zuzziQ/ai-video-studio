@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { askJSON } from './llm.mjs';
+import { safeFetch } from './net_guard.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
@@ -103,7 +104,7 @@ const slug = s => fold(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slic
 export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur = 3, vertical = true, meta = {} } = {}) {
   const md = path.join(dir, 'media'); fs.mkdirSync(md, { recursive: true });
   let base = `${slug(name)}`; for (let i = 1; fs.existsSync(path.join(md, base + (kind === 'video' ? '.mp4' : '.jpg'))); i++) base = `${slug(name)}_${i}`;
-  const r = await fetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(120000) });
+  const r = await safeFetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(120000) });
   if (!r.ok) throw new Error(`tải thất bại (${r.status})`);
   const tmp = path.join(os.tmpdir(), `avs_dl_${process.pid}_${Date.now()}`); fs.writeFileSync(tmp, Buffer.from(await r.arrayBuffer()));
   const [W, H] = vertical ? [1080, 1920] : [1920, 1080];

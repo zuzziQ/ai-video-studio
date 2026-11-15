@@ -110,6 +110,6 @@ export default ctx => {
         ctx.openProject(dir); return J({ ok: true });
       }
       return J({ error: 'not found' }, 404);
-    } catch (e) { return J({ ok: false, error: e.message }, 500); }
+    } catch (e) { return J({ ok: false, error: e.message }, e.status || 500); }
   };
 };

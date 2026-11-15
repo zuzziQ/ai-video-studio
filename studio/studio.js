@@ -547,7 +547,12 @@ $('#insp').addEventListener('click', async e => {
   if (a === 'audition') new Audio(sfxUrl(o.name)).play();
   if (a === 'json') {
     try {
-      const v = JSON.parse($('#insp [data-f="json"]').value); touch(o);
+      const v = JSON.parse($('#insp [data-f="json"]').value);
+      // Only an object with the same kind of block: an array or a value used to wipe every field ({"0":…,"1":…}).
+      if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('cần một object {…}');
+      for (const k of ['t0', 't1', 't']) if (k in o && k in v && !Number.isFinite(v[k])) throw new Error(`${k} phải là số`);
+      if (o.type != null && v.type == null) throw new Error('thiếu "type"');
+      touch(o);
       for (const k of Object.keys(o)) if (!['cid', '_orig', 'lines', 'nodes', 'note'].includes(k)) delete o[k];
       Object.assign(o, v); changed(true); toast('Đã áp dụng');
     } catch (err) { toast('JSON lỗi: ' + err.message); }

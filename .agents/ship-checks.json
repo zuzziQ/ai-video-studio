@@ -15,7 +15,7 @@
     },
     {
       "id": "nodetest",
-      "cmd": ["node", "--test", "scripts/tests/queue.test.mjs", "scripts/tests/queue_telegram.test.mjs", "scripts/tests/server_paths.test.mjs", "scripts/tests/studio_security.test.mjs", "scripts/tests/publish.test.mjs", "scripts/tests/products.test.mjs", "scripts/tests/script_gate.test.mjs"],
+      "cmd": ["node", "--test", "scripts/tests/queue.test.mjs", "scripts/tests/queue_telegram.test.mjs", "scripts/tests/server_paths.test.mjs", "scripts/tests/studio_security.test.mjs", "scripts/tests/publish.test.mjs", "scripts/tests/products.test.mjs", "scripts/tests/script_gate.test.mjs", "scripts/tests/qa_inputs.test.mjs"],
       "when": ["scripts/**/*.mjs", "studio/**"],
       "timeout": 180,
       "fix": "node --test scripts/tests/*.test.mjs"

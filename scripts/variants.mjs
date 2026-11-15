@@ -173,7 +173,7 @@ function newSibling(dir, i) {
     else { let k = 2; while (fs.existsSync(`${dir}_v${i + 1}_${k}`)) k++; dst = `${dir}_v${i + 1}_${k}`; }
   }
   // M54: clone APFS trên macOS, nơi khác liên kết cứng khung + video nguồn (chỉ đọc), chép thật phần còn lại (scripts/project_clone.mjs)
-  const c = cloneProject(dir, dst, { skip: ['out', 'variants.json', '.studio/history', '.studio/qc', '.studio/qc.json', '.studio/qc_backup.json'] });
+  const c = cloneProject(dir, dst, { skip: ['out', 'batch', 'variants.json', '.studio/history', '.studio/qc', '.studio/qc.json', '.studio/qc_backup.json'] });
   if (c.method !== 'clone') console.log(`[variants] ${path.basename(dst)}: liên kết ${c.linked} file (${(c.linkedBytes / 1e6).toFixed(1)} MB), chép ${c.copied} file (${(c.copiedBytes / 1e6).toFixed(1)} MB)${c.fallback ? ` · lùi về chép: ${c.fallback}` : ''}`);
   return dst;
 }
