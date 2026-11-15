@@ -33,6 +33,7 @@ Cờ CLI của `render.mjs` (`--workers`, `--preset`, `--fast`, `--profile`) > b
 - **Ưu tiên:** `below_normal` hạ `render.mjs`, Chrome và ffmpeg con (`os.setPriority`); tiến trình GPU của Chrome tự đặt mức riêng. Job hàng đợi hạ cả tiến trình job (LLM, TTS, whisper chạy trong job cũng thấp).
 - **Nhật ký:** mỗi lượt render ghi một dòng `$AVS_HOME/perf_log.jsonl` (`at, profile, W, H, frames, workers, encoder, chrome, sec, fps, waited_s`), giữ 500 dòng.
 - **Studio:** `POST /api/export` nhận thêm `profile` (tên hợp lệ; sai thì dùng profile đã lưu), bước job hiện `Đang chờ lượt render khác…`.
+- **Panel Hiệu năng (M67):** `studio/features/29_perf.js` + `studio/routes/29_perf.mjs` (`GET|POST /api/perf`, `GET /api/perf/log`, `POST /api/perf/bench` = "Đo thử 10 s"); bảng API ở `references/studio.md`. Lượt đo thử cũng ghi vào `perf_log.jsonl`.
 
 ## CLI
 
