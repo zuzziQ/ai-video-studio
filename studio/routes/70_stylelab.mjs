@@ -106,10 +106,10 @@ export default ctx => {
     if (p === '/api/stylelab/analyze' && req.method === 'POST') {
       const b = await ctx.body(req);
       const src = path.resolve(String(b.path || '').replace(/^~(?=[\\/])/, os.homedir()));
-      if (!b.path || !fs.existsSync(src) || !fs.statSync(src).isFile()) return ctx.json(res, { error: 'Không thấy file video: ' + (b.path || '') }), true;
+      if (!b.path || !fs.existsSync(src) || !fs.statSync(src).isFile()) return ctx.json(res, { error: 'Không thấy file video: ' + (b.path || '') }, 400), true;
       const w = newW('clone'); fs.mkdirSync(wdir(w), { recursive: true }); fs.writeFileSync(path.join(wdir(w), 'src.txt'), src);
       const ok = runLab(['analyze', src, '--work', wdir(w)], w);
-      return ctx.json(res, ok ? { ok, w } : { error: 'Đang có tác vụ khác chạy (xuất video, AI…). Đợi xong rồi thử lại.' }), true;
+      return ctx.json(res, ok ? { ok, w } : { error: 'Đang có tác vụ khác chạy (xuất video, AI…). Đợi xong rồi thử lại.' }, ok ? 200 : 409), true;
     }
     if (p === '/api/stylelab/generate' && req.method === 'POST') {
       const b = await ctx.body(req);
@@ -120,11 +120,11 @@ export default ctx => {
       let w = b.w, argv;
       if (mode === 'clone') {
         const d = wdir(w);
-        if (!d || !fs.existsSync(path.join(d, 'analysis.json'))) return ctx.json(res, { error: 'Chưa phân tích video tham chiếu' }), true;
+        if (!d || !fs.existsSync(path.join(d, 'analysis.json'))) return ctx.json(res, { error: 'Chưa phân tích video tham chiếu' }, 400), true;
         const src = fs.existsSync(path.join(d, 'src.txt')) ? fs.readFileSync(path.join(d, 'src.txt'), 'utf8') : '';
         argv = ['clone', ...(src ? [src] : []), '--work', d, '--skip-analyze', ...extra];
       } else {
-        if (!String(b.desc || '').trim()) return ctx.json(res, { error: 'Hãy mô tả style bạn muốn' }), true;
+        if (!String(b.desc || '').trim()) return ctx.json(res, { error: 'Hãy mô tả style bạn muốn' }, 400), true;
         w = newW('describe'); const d = wdir(w); fs.mkdirSync(d, { recursive: true });
         fs.writeFileSync(path.join(d, 'desc.txt'), String(b.desc).slice(0, 3000));
         argv = ['describe', '--work', d, '--orient', b.orient === 'horizontal' ? 'horizontal' : 'vertical', ...extra];
@@ -135,7 +135,7 @@ export default ctx => {
       if (ctx.project && !process.env.AVS_FOOTAGE && !fs.existsSync(path.join(HOME, 'footage/clip-mau/timeline.json'))) argv.push('--footage', ctx.project.dir);
       fs.rmSync(path.join(wdir(w), 'result.json'), { force: true });
       const ok = runLab(argv, w);
-      return ctx.json(res, ok ? { ok, w } : { error: 'Đang có tác vụ khác chạy. Đợi xong rồi thử lại.' }), true;
+      return ctx.json(res, ok ? { ok, w } : { error: 'Đang có tác vụ khác chạy. Đợi xong rồi thử lại.' }, ok ? 200 : 409), true;
     }
     if (p === '/api/stylelab/analysis' || p === '/api/stylelab/result') {
       const d = wdir(q('w')), f = d && path.join(d, p.endsWith('analysis') ? 'analysis.json' : 'result.json');

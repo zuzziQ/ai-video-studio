@@ -11,6 +11,7 @@ import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
+import { shortErr } from '../scripts/err_text.mjs';
 import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -33,7 +34,7 @@ function openProject(p) {
 
 // Switching projects from the UI while a job runs would make that job write into the newly opened project.
 function switchProject(p) {
-  if (job?.state === 'running') throw new Error('Đang có tác vụ chạy (' + (job.step || job.kind) + ') — đợi xong hoặc huỷ rồi mới mở dự án khác');
+  if (job?.state === 'running') throw Object.assign(new Error('Đang có tác vụ chạy (' + (job.step || job.kind) + ') — đợi xong hoặc huỷ rồi mới mở dự án khác'), { status: 409 });
   openProject(p);
 }
 
@@ -105,7 +106,8 @@ function writeNotes(tl, captions) {
   return out.length;
 }
 function save({ timeline, captions }) {
-  if (!timeline || typeof timeline !== 'object' || Array.isArray(timeline)) throw new Error('Thiếu timeline — không lưu');
+  if (!timeline || typeof timeline !== 'object' || Array.isArray(timeline)) throw Object.assign(new Error('Thiếu timeline — không lưu'), { status: 400 });
+  if (captions != null && !Array.isArray(captions)) throw Object.assign(new Error('captions phải là danh sách'), { status: 400 });
   const tl = timeline;
   const capFile = typeof tl.captions === 'string' ? tl.captions : (captions?.length ? 'work/captions.json' : null);
   if (capFile) { fs.mkdirSync(path.dirname(P(capFile)), { recursive: true }); fs.writeFileSync(P(capFile), JSON.stringify(captions || [], null, 1)); tl.captions = capFile; }
@@ -205,13 +207,20 @@ function srt(captions) {
 function still(t, dest) {
   return new Promise((ok, bad) => {
     const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
+    // Same source check as exportVideo: a moved project / deleted work/ must not surface as an fs.readdir stack.
+    for (const f of [tl.aroll?.frames && path.dirname(tl.aroll.frames)]) if (f && !fs.existsSync(P(f))) return bad(Object.assign(new Error(`Thiếu file nguồn: ${f} — dự án bị di chuyển hoặc đã xoá thư mục work/`), { status: 400 }));
     const vert = (tl.height || 720) > (tl.width || 1280);
     const tmp = path.join(project.dir, `.still_${process.pid}.json`);
     fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? 1080 : 1920, height: vert ? 1920 : 1080 }));
     fs.mkdirSync(P('out'), { recursive: true });
     const out = dest || `out/cover_${String(t).replace('.', '_')}s.jpg`;
     const abs = path.isAbsolute(out) ? out : P(out);
-    execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, abs, '--still', String(t), abs], e => { fs.rmSync(tmp, { force: true }); e ? bad(e) : ok(out); });
+    execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, abs, '--still', String(t), abs], (e, so, se) => {
+      fs.rmSync(tmp, { force: true });
+      // Short reason for the user (render.mjs's last stderr line), never the command line or a Node stack with machine paths.
+      if (e) console.error('still:', e.message);
+      e ? bad(Object.assign(new Error('Không chụp được khung hình: ' + shortErr(se, 'render lỗi')), { status: 500 })) : ok(out);
+    });
   });
 }
 
@@ -236,6 +245,7 @@ function templateList() {
 const slug = s => String(s || 'mau').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'mau';
 // Save the current project as a user template (+ a small cover still rendered at time t).
 async function saveTemplate({ tpl, t = 1 }) {
+  if (!tpl || typeof tpl !== 'object' || Array.isArray(tpl) || !String(tpl.name || '').trim()) throw Object.assign(new Error('Thiếu mẫu hoặc tên mẫu'), { status: 400 });
   const dir = path.join(TPL_DIR, 'user');
   fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(path.join(TPL_DIR, 'previews'), { recursive: true });
   let id = 'u-' + slug(tpl.name);
@@ -414,8 +424,19 @@ const server = http.createServer(async (req, res) => {
       return execFile('node', [path.join(SKILL, 'scripts/broll.mjs'), 'search', q], { maxBuffer: 1 << 22 }, (e, out) =>
         json(res, (out || '').split('\n').filter(Boolean).slice(0, 30).map(l => { const m = l.trim().split(/\s{2,}/); return { id: m[1], template: m[2], text: m[3] }; }).filter(x => x.id)));
     }
-    if (p === '/api/export' && req.method === 'POST') { const b = await body(req); const ok = startJob('export', exportVideo, b); return json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }); }
-    if (p === '/api/new' && req.method === 'POST') { const b = await body(req); const ok = startJob('new', newProject, b); return json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }); }
+    if (p === '/api/export' && req.method === 'POST') {
+      const b = await body(req), num = v => v == null || (typeof v === 'number' && Number.isFinite(v) && v >= 0);
+      if (b.quality != null && !['720', '1080', '4k'].includes(String(b.quality))) return json(res, { ok: false, error: 'Chất lượng phải là 720, 1080 hoặc 4k' }, 400);
+      if (!num(b.from) || !num(b.to) || (b.from != null && b.to != null && b.to <= b.from)) return json(res, { ok: false, error: 'Đoạn xuất (from/to) không hợp lệ' }, 400);
+      if (b.aspects != null && !Array.isArray(b.aspects)) return json(res, { ok: false, error: 'aspects phải là danh sách' }, 400);
+      const ok = startJob('export', exportVideo, { ...b, quality: b.quality == null ? undefined : String(b.quality) });
+      return json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409);
+    }
+    if (p === '/api/new' && req.method === 'POST') {
+      const b = await body(req);
+      if (typeof b.video !== 'string' || !b.video.trim()) return json(res, { ok: false, error: 'Chọn video thô trước' }, 400);
+      const ok = startJob('new', newProject, b); return json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409);
+    }
     if (p === '/api/autosfx' && req.method === 'POST') {
       const b = await body(req);
       return execFile(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/auto_sfx.py'), project.tlFile, ...(b.keep ? ['--keep-manual'] : [])], (e, out, err) =>
@@ -424,7 +445,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/media') return json(res, mediaList());
     if (p === '/api/upload' && req.method === 'POST') { await upload(req, u.searchParams.get('name') || 'file.bin'); return json(res, mediaList()); }
     // Writing files: POST only (M37).
-    if (p === '/api/still' && req.method === 'POST') { const b = await body(req); return still(+b.t || 0).then(out => json(res, { out })).catch(e => json(res, { error: e.message }, 500)); }
+    if (p === '/api/still' && req.method === 'POST') { const b = await body(req); return still(Math.max(0, +b.t || 0)).then(out => json(res, { out })).catch(e => json(res, { error: e.message }, e.status || 500)); }
     if (p === '/api/srt' && req.method === 'POST') {
       const { captions } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
       const out = `out/${path.basename(project.dir)}.srt`; fs.writeFileSync(P(out), srt(captions)); return json(res, { out });

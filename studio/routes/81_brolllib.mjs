@@ -3,6 +3,7 @@
 //   GET  /api/brolllib                        → items · GET /api/brolllib/file?f=<file in the library>
 //   POST /api/brolllib/upload?name=&tags=     → raw body = the file → item
 //   POST /api/brolllib/tags {id, tags} · /rm {id} · /tag {ids?, all?} (Claude looks at the pictures; job "brolltag")
+import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,7 +37,7 @@ export default ctx => {
         finally { fs.rmSync(tmp, { force: true }); }
       }
       const b = await ctx.body(req);
-      if (p === '/api/brolllib/tags') return ctx.json(res, lib.setTags(String(b.id), b.tags) || { error: 'không thấy' }), true;
+      if (p === '/api/brolllib/tags') { const it = lib.setTags(String(b.id), b.tags); return ctx.json(res, it || { error: 'không thấy' }, it ? 200 : 404), true; }
       if (p === '/api/brolllib/rm') return ctx.json(res, { ok: lib.remove(String(b.id)) }), true;
       if (p === '/api/brolllib/tag') {
         const ok = ctx.startJob('brolltag', async () => {
@@ -44,9 +45,9 @@ export default ctx => {
           const r = await lib.autoTag({ ids: Array.isArray(b.ids) ? b.ids : undefined, all: !!b.all, onTick: () => { ctx.job.progress = Math.min(.95, (Date.now() - t0) / 120000); } });
           ctx.job.out = r; ctx.job.step = `Đã gắn thẻ ${r.tagged} mục`;
         }, {});
-        return ctx.json(res, ok ? { ok } : { error: 'Đang có tác vụ khác chạy' }), true;
+        return ctx.json(res, ok ? { ok } : { error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
       }
-    } catch (e) { return ctx.json(res, { error: e.message }, 400), true; }
+    } catch (e) { return ctx.json(res, { error: shortErr(e.message) }, 400), true; } // e.g. ffmpeg's whole log for a file that is not an image/video
     return false;
   };
 };

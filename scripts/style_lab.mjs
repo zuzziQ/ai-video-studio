@@ -12,6 +12,7 @@
 // Common: [--footage <project>] (default ~/.ai-video-studio/footage/clip-mau) — talking-head footage for validation + preview.
 // Env: AVS_SKILLS_DIR (default ~/.claude/skills), AVS_HOME (default ~/.ai-video-studio), CLAUDE_BIN.
 // Progress lines "@@ <0..1> <step>" on stdout; the run's result is <work>/result.json.
+import { shortErr } from './err_text.mjs';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -529,7 +530,7 @@ function analyze(video, work, p0 = 0, p1 = 1) {
     let err = '';
     p.stdout.on('data', d => String(d).split('\n').forEach(l => { const m = /^@@ ([\d.]+) (.*)$/.exec(l); if (m) say(p0 + (p1 - p0) * +m[1], 'Phân tích video: ' + m[2]); }));
     p.stderr.on('data', d => (err += d));
-    p.on('close', c => { child = null; c === 0 ? ok() : bad(new Error('Phân tích video lỗi: ' + (err.match(/LỖI: .*/)?.[0] || err.trim().split('\n').slice(-2).join(' ')))); });
+    p.on('close', c => { child = null; c === 0 ? ok() : bad(new Error('Phân tích video lỗi: ' + (err.match(/LỖI: .*/)?.[0] || shortErr(err, `python lỗi (mã ${c})`)))); });
   });
 }
 

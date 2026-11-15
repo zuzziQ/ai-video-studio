@@ -123,6 +123,9 @@ export default ctx => {
       }
       if (p === '/api/autopilot/profile') {
         const a = b.action;
+        // An unknown id used to surface as a 500 ("không thấy hồ sơ") from scripts/profile.mjs.
+        if (['duplicate', 'delete', 'default', 'reset'].includes(a) && !loadStore().profiles.some(x => x.id === b.id)) return J({ error: 'Không thấy hồ sơ này' }, 404);
+        if (a === 'delete' && loadStore().profiles.length <= 1) return J({ error: 'Cần giữ ít nhất 1 hồ sơ' }, 409);
         if (a === 'save') return J({ ok: true, profile: upsertProfile(b.profile || {}), profiles: profilesOut() });
         if (a === 'duplicate') return J({ ok: true, profile: duplicateProfile(b.id), profiles: profilesOut() });
         if (a === 'delete') { deleteProfile(b.id); return J({ ok: true, profiles: profilesOut() }); }

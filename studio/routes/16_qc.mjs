@@ -35,7 +35,7 @@ export default ctx => {
         await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); });
         ctx.job.out = '.studio/qc.json';
       });
-      return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }), true;
+      return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
     }
     if (p === '/api/qc') {
       const r = readJ(path.join(st, 'qc.json'));
@@ -64,7 +64,7 @@ export default ctx => {
         await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); });
         ctx.job.out = 'variants.json';
       });
-      return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }), true;
+      return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
     }
     if (p === '/api/variants') { const f = variantsFile(); return ctx.json(res, f ? { ...readJ(f), current: ctx.project.dir } : { none: true }), true; }
     if (p === '/api/variants/file') {

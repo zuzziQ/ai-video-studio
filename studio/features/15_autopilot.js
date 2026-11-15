@@ -80,7 +80,7 @@
     <div class="ap-row2"><select id="ap-prof">${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === S.profile ? 'selected' : ''}>${esc(p.name)}${p.id === defProfile() ? ' (mặc định)' : ''}</option>`).join('')}</select>
       <button id="ap-pick"><i class="ti ti-file-upload"></i> Chọn file</button></div>
     <label class="ap-lbl">Hoặc đường dẫn video / thư mục dự án trên máy</label>
-    <div class="ap-row2"><input id="ap-path" placeholder="/Users/ban/Movies/clip.mov" value="${esc(S.path)}"><button id="ap-add" title="Thêm vào hàng đợi"><i class="ti ti-plus"></i> Thêm</button></div>
+    <div class="ap-row2"><input id="ap-path" placeholder="${/Win/i.test(navigator.platform || navigator.userAgent) ? 'D:\\Video\\clip.mp4' : '/Users/ban/Movies/clip.mov'}" value="${esc(S.path)}"><button id="ap-add" title="Thêm vào hàng đợi"><i class="ti ti-plus"></i> Thêm</button></div>
     <div id="ap-live"></div>
     <div id="ap-watch"></div>
     <div id="ap-profiles"></div>`;

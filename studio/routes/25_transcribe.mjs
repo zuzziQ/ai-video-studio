@@ -13,7 +13,10 @@ export default ctx => async (req, res, p) => {
   }
   if (p !== '/api/transcribe' || req.method !== 'POST') return false;
   const b = await ctx.body(req);
-  const model = ['small', 'medium', 'large-v3-turbo', 'large-v3'].includes(b.model) ? b.model : 'large-v3-turbo';
+  const MODELS = ['small', 'medium', 'large-v3-turbo', 'large-v3'];
+  // An unknown name used to fall back silently to large-v3-turbo (a ~1.5 GB first download).
+  if (b.model != null && !MODELS.includes(b.model)) return ctx.json(res, { error: `Mô hình lạ “${b.model}” — chọn ${MODELS.join(', ')}` }, 400), true;
+  const model = b.model || 'large-v3-turbo';
   const lang = b.lang === 'auto' ? 'auto' : 'vi';
   const max = Math.min(8, Math.max(2, +b.max || 4));
   const ok = ctx.startJob('transcribe', () => transcribe(ctx, { model, lang, max }), {});
