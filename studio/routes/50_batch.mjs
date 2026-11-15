@@ -136,11 +136,11 @@ export default ctx => {
         }).then(() => null, e => e);
         if ((CTRL.cancel && err) || CTRL.pause?.hit) { // cancel that came after the batch had finished: nothing to cancel
           const st = settle(dir, CTRL.cancel ? 'cancel' : 'pause'), done = st ? st.rows.filter(r => r.state === 'done').length : 0;
-          throw new Error(CTRL.cancel ? `Đã huỷ lô — giữ ${done}/${st?.total || 0} video đã xong` : `Đã tạm dừng (${done}/${st?.total || 0} xong) — bấm “Chạy tiếp” để làm nốt`);
+          throw Object.assign(new Error(CTRL.cancel ? `Đã huỷ lô — giữ ${done}/${st?.total || 0} video đã xong` : `Đã tạm dừng (${done}/${st?.total || 0} xong) — bấm “Chạy tiếp” để làm nốt`), { stopped: CTRL.cancel ? 'cancelled' : 'paused' });
         }
         if (err) {
           const st = settle(dir, 'stop');
-          if (st?.rows.some(r => r.state === 'cancelled')) throw new Error('Đã dừng — bấm “Chạy tiếp” để làm nốt');
+          if (st?.rows.some(r => r.state === 'cancelled')) throw Object.assign(new Error('Đã dừng — bấm “Chạy tiếp” để làm nốt'), { stopped: 'paused' });
           if (!st || !st.rows.some(r => r.state === 'done')) throw err;
         }
         const st = status(dir), bad = st ? st.rows.filter(r => r.state !== 'done').length : 0;

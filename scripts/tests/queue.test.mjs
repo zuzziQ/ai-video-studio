@@ -98,6 +98,12 @@ test('clearDone: chỉ bỏ việc xong và việc đã huỷ; giữ việc ch�
   assert.deepEqual(ids(), ['x3', 'x4', 'x5']);
 });
 
+test('clearFailed: chỉ bỏ việc lỗi (nút "Xoá mục lỗi" riêng); giữ việc xong, đã huỷ, chờ, đang chạy', () => {
+  write([item('y1', 'done'), item('y2', 'error'), item('y3', 'queued'), item('y4', 'error'), item('y5', 'running'), item('y6', 'cancelled')]);
+  assert.equal(Q.clearFailed(), 2);
+  assert.deepEqual(ids(), ['y1', 'y3', 'y5', 'y6']);
+});
+
 test('queue.json thiếu hoặc hỏng: đọc ra hàng đợi rỗng, không ném lỗi; lần ghi sau tạo lại file', () => {
   fs.rmSync(QFILE, { force: true });
   assert.deepEqual(Q.loadQueue(), { version: 1, items: [] });

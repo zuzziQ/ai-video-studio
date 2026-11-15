@@ -136,6 +136,8 @@ export function requeue(it, step) {
   return it;
 }
 export function clearDone() { return mutate(q => { const n = q.items.length; q.items = q.items.filter(x => !['done', 'cancelled'].includes(x.state)); return n - q.items.length; }); }
+// Failed items are kept by clearDone (they may need "Thử lại"); the UI clears them with a separate button.
+export function clearFailed() { return mutate(q => { const n = q.items.length; q.items = q.items.filter(x => x.state !== 'error'); return n - q.items.length; }); }
 
 function argsFor(it) {
   const o = it.opts || {}, k = it.kind, A = [];
@@ -404,6 +406,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
     else if (cmd === 'remove') console.log(removeItem(a) ? 'ok' : 'không thể');
     else if (cmd === 'up' || cmd === 'down') console.log(moveItem(a, cmd === 'up' ? -1 : 1) ? 'ok' : 'không thể');
     else if (cmd === 'clear-done') console.log(clearDone());
+    else if (cmd === 'clear-failed') console.log(clearFailed());
     else if (cmd === 'pause' || cmd === 'resume' || cmd === 'cancel-all') console.log(batchControl(cmd === 'cancel-all' ? 'cancel' : cmd, a));
     else if (cmd === 'run') {
       const daemon = args.includes('--daemon');

@@ -62,13 +62,27 @@ export const fileAllowed = (f, home = AVS_HOME()) => forbiddenDir(path.dirname(r
 export const newToken = () => crypto.randomBytes(24).toString('base64url');
 export const TOKEN_HEADER = 'x-avs-token', TOKEN_PARAM = 'avs_token';
 // Header for every request; the query parameter only for GET/HEAD (media elements and links cannot send headers).
+const eqToken = (v, token) => {
+  if (!v || !token) return false;
+  const a = Buffer.from(String(v)), b = Buffer.from(token);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 export function tokenOk(req, u, token) {
   const h = req.headers[TOKEN_HEADER];
-  const v = typeof h === 'string' && h ? h : (req.method === 'GET' || req.method === 'HEAD') ? u.searchParams.get(TOKEN_PARAM) : null;
-  if (!v || !token) return false;
-  const a = Buffer.from(v), b = Buffer.from(token);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return eqToken(typeof h === 'string' && h ? h : (req.method === 'GET' || req.method === 'HEAD') ? u.searchParams.get(TOKEN_PARAM) : null, token);
 }
+// Browser session (M60): the main page and /project/* files need it, so another local process or OS user that can only reach
+// the port reads neither the token (in the page) nor the project's files. The browser gets it once from the launch link
+// http://localhost:<port>/?k=<token> (token = ~/.ai-video-studio/studio-<port>.token, this OS user only), then holds it as an
+// HttpOnly cookie. Cookies are per host, not per port: the port is in the name so two Studios side by side do not clash.
+export const cookieName = port => `avs_s_${+port}`;
+export function sessionCookie(port, token) { return `${cookieName(port)}=${token}; Path=/; HttpOnly; SameSite=Strict`; }
+export function cookieOk(req, port, token) {
+  const want = cookieName(port) + '=';
+  return eqToken(String(req.headers.cookie || '').split(/;\s*/).find(c => c.startsWith(want))?.slice(want.length), token);
+}
+export const launchKeyOk = (u, token) => eqToken(u.searchParams.get('k'), token); // ?k=<token> on the launch link
+export const launchUrl = (port, token) => `http://localhost:${+port}/?k=${encodeURIComponent(token)}`;
 export function tokenFile(port, home = AVS_HOME()) { return path.join(home, `studio-${port}.token`); }
 // For local CLI clients (scripts/app/launcher.sh): readable by this OS user only.
 export function writeTokenFile(port, token, home = AVS_HOME()) {

@@ -40,7 +40,11 @@ export function claudeCmd() {
     const exe = found.find(f => /\.exe$/i.test(f));
     if (exe) return (CLAUDE = [exe, []]);
     for (const cmd of found.filter(f => /\.(cmd|bat)$/i.test(f))) {
-      const cli = path.join(path.dirname(cmd), 'node_modules/@anthropic-ai/claude-code/cli.js');
+      const pkg = path.join(path.dirname(cmd), 'node_modules/@anthropic-ai/claude-code');
+      // newer npm releases ship a native bin/claude.exe (the shim calls it) instead of cli.js
+      const bin = path.join(pkg, 'bin/claude.exe');
+      if (fs.existsSync(bin)) return (CLAUDE = [bin, []]);
+      const cli = path.join(pkg, 'cli.js');
       if (fs.existsSync(cli)) return (CLAUDE = [process.execPath, [cli]]);
     }
     return (CLAUDE = ['claude.exe', []]);

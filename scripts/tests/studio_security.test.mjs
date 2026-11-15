@@ -9,7 +9,7 @@ import net from 'node:net';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { forbiddenDir, resolveProject, fileAllowed, tokenOk, sameOrigin, bodyStatus, readJson, tokenFile } from '../../studio/security.mjs';
+import { forbiddenDir, resolveProject, fileAllowed, tokenOk, sameOrigin, bodyStatus, readJson, tokenFile, cookieName } from '../../studio/security.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-sec-'));
@@ -110,7 +110,7 @@ test('readJson: caps the bytes it buffers', async () => {
 });
 
 // ---------- the real server ----------
-let srv, PORT, TOKEN;
+let srv, PORT, TOKEN, SESSION;
 const freePort = () => new Promise(ok => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
 function call(p, { method = 'GET', headers = {}, body, token = TOKEN, host } = {}) {
   return new Promise((ok, bad) => {
@@ -141,11 +141,35 @@ before(async () => {
 });
 after(() => { srv?.kill(); try { fs.rmSync(TMP, { recursive: true, force: true }); } catch {} });
 
-test('server: main page carries the token, the token file matches it', async () => {
-  const r = await call('/', { token: null });
+test('server: main page needs the browser session; the launch link ?k=<token> sets it; the page then carries the token', async () => {
+  const bare = await call('/', { token: null });
+  assert.equal(bare.status, 401); // a local process that only reaches the port does not get the token from the page
+  assert.ok(!bare.text.includes(TOKEN));
+  assert.equal((await call('/?k=' + 'x'.repeat(TOKEN.length), { token: null })).status, 401);
+  const res = await new Promise((ok, bad) => http.get({ host: '127.0.0.1', port: PORT, path: '/?k=' + encodeURIComponent(TOKEN) }, ok).on('error', bad));
+  res.resume();
+  assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/');
+  const ck = String(res.headers['set-cookie'] || '');
+  assert.match(ck, new RegExp(`^${cookieName(PORT)}=[A-Za-z0-9_-]{32,}; Path=/; HttpOnly; SameSite=Strict`));
+  const cookie = ck.split(';')[0];
+  SESSION = cookie.split('=')[1];
+  assert.notEqual(SESSION, TOKEN, 'cookie (cũng gửi tới cổng localhost khác) không phải token API');
+  assert.equal((await call('/api/project', { token: SESSION })).status, 401, 'giá trị cookie không dùng được làm X-AVS-Token');
+  const r = await call('/', { token: null, headers: { Cookie: cookie } });
   assert.equal(r.status, 200);
   assert.match(r.text, new RegExp(`<meta name="avs-token" content="${TOKEN}">`));
   assert.ok(TOKEN.length >= 32);
+  // another Studio's cookie (other port) does not count
+  assert.equal((await call('/', { token: null, headers: { Cookie: `${cookieName(PORT + 1)}=${SESSION}` } })).status, 401);
+  assert.equal((await call('/', { token: null, headers: { Cookie: `${cookieName(PORT)}=${TOKEN}` } })).status, 401, 'token API không thay được cookie');
+});
+
+test('server: /project/* needs the session cookie or the API token', async () => {
+  assert.equal((await call('/project/timeline.json', { token: null })).status, 401);
+  assert.equal((await call('/project/timeline.json', { token: null, headers: { Cookie: `${cookieName(PORT)}=${'x'.repeat(TOKEN.length)}` } })).status, 401);
+  assert.equal((await call('/project/timeline.json', { token: null, headers: { Cookie: `other=1; ${cookieName(PORT)}=${SESSION}` } })).status, 200);
+  assert.equal((await call('/project/timeline.json')).status, 200);
 });
 
 test('server: /api without or with a wrong token → 401', async () => {

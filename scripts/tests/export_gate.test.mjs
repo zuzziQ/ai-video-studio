@@ -16,7 +16,7 @@ process.env.AVS_NO_LAUNCHCTL = '1';
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const G = await import('../export_gate.mjs');
 const Q = await import('../queue.mjs');
-const { recheckAds } = await import('../ai_qc.mjs');
+const { recheckAds, qcKey, same } = await import('../ai_qc.mjs');
 test.after(() => fs.rmSync(HOME, { recursive: true, force: true }));
 
 const issue = (kind, code, t = 1, extra = {}) => ({ t, kind, severity: 'high', code, msg: `${code} ở ${t}s`, src: 'auto', ...extra });
@@ -100,4 +100,18 @@ test('autopilot: bước xuất dừng khi QC trước đó còn chặn (không 
   const st = JSON.parse(fs.readFileSync(path.join(d, '.studio/autopilot.json'), 'utf8'));
   assert.equal(st.state, 'blocked'); assert.equal(st.steps.export.blocked, true);
   assert.equal(fs.existsSync(path.join(d, 'out')), false);
+});
+
+test('qcKey: id gợi ý sửa ổn định giữa lượt kiểm tra và lượt sửa (nguồn, loại, đối tượng, thời điểm)', () => {
+  assert.equal(qcKey({ src: 'auto', kind: 'face_cover', target: 's3', t: 2.5 }), 'auto|face_cover|s3|2.50');
+  assert.equal(qcKey({ kind: 'empty', t: 7 }), 'auto|empty||7.00');
+  assert.equal(qcKey({ src: 'claude', kind: 'spelling', t: 1.234, target: 'c2' }), 'claude|spelling|c2|1.23');
+  assert.notEqual(qcKey({ src: 'auto', kind: 'overlap', target: 's1', t: 1 }), qcKey({ src: 'auto', kind: 'overlap', target: 's2', t: 1 }));
+});
+
+test('same: đoạn trống bị dời điểm bắt đầu (do thêm hook ở 0 s) vẫn là cùng vấn đề, không tính "phát sinh"', () => {
+  assert.equal(same({ kind: 'empty', t: 0, t1: 9 }, { kind: 'empty', t: 2.4, t1: 9 }), true);
+  assert.equal(same({ kind: 'empty', t: 0, t1: 7 }, { kind: 'empty', t: 12, t1: 20 }), false);
+  assert.equal(same({ kind: 'face_cover', target: 's1', t: 3 }, { kind: 'face_cover', target: 's1', t: 4 }), true);
+  assert.equal(same({ kind: 'face_cover', target: 's1', t: 3 }, { kind: 'face_cover', target: 's2', t: 3 }), false);
 });

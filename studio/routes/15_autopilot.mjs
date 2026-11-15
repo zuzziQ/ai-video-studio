@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { Runner, AVS_HOME, KINDS, loadQueue, addItem, cancelItem, retryItem, removeItem, moveItem, clearDone, loadSettings, saveSettings, agentInstall, agentUninstall } from '../../scripts/queue.mjs';
+import { Runner, AVS_HOME, KINDS, loadQueue, addItem, cancelItem, retryItem, removeItem, moveItem, clearDone, clearFailed, loadSettings, saveSettings, agentInstall, agentUninstall } from '../../scripts/queue.mjs';
 import { loadStore, upsertProfile, duplicateProfile, deleteProfile, setDefault, resetLearned, deriveRules, effectiveProfile, learnFromProject } from '../../scripts/profile.mjs';
 import { STEPS } from '../../scripts/autopilot.mjs';
 import { openPath, revealPath } from '../../scripts/platform.mjs';
@@ -95,6 +95,7 @@ export default ctx => {
         return J({ error: 'hành động lạ' }, 400);
       }
       if (p === '/api/autopilot/clear') return J({ ok: true, removed: clearDone() });
+      if (p === '/api/autopilot/clear-failed') return J({ ok: true, removed: clearFailed() });
       if (p === '/api/autopilot/settings') {
         // Typed patch only: a string spread into settings.watch used to land in autopilot.json as {"0":"s",…}.
         const patch = {}, obj = v => v && typeof v === 'object' && !Array.isArray(v);
