@@ -3,6 +3,8 @@
 Chỉ đo, không sửa mã sản phẩm. Mã đo: `scripts/bench/batch_parallel.mjs` (gọi `node scripts/render.mjs <tl> <out> --workers W`
 như tiến trình con, giống cách `variants.mjs` / `batch.mjs` gọi). Kết quả dùng cho luật lô song song của `M68` và cách đếm lượt của `M64`.
 
+**Đã áp dụng (M68):** luật lô ở `scripts/batch_parallel.mjs` (`batchPlan`), dùng trong `batch.mjs` và `variants.mjs`; xem `references/perf-profile.md` mục "Lô song song".
+
 **Kết quả ngắn:** với lô 6 bản, chạy nhiều bản cùng lúc với ít worker mỗi bản nhanh hơn hẳn cách hiện tại (1 bản × 4 worker, tuần tự).
 Tốt nhất là **6 bản × 1 worker**: 1080p 92,9 → **64,5 s** (−31 %), 720p 73,0 → **47,1 s** (−36 %). Phương án dung hoà **3 × 2**:
 −23 % / −32 %, bản đầu xong sau ~33 s thay vì 64 s. Tốc độ tăng theo **tổng số Chrome** (= tổng worker) tới ~6 (bằng số nhân thật),

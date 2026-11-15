@@ -15,6 +15,9 @@ import { loadLib, saveLib, libPath, libKey, projectContext, pickHook, markUsed, 
 import { AUDIENCES, ANGLES as M_ANGLES, NARRATIVES, FORMATS, sourceStats, checkSourceGate, matrixBrief, planMatrix, estimate, estimateText } from './variant_matrix.mjs';
 import { nextBatchPlan, freshSlot } from './ads_results.mjs';
 import { cloneProject } from './project_clone.mjs';
+import { resolvePerf, hwSnapshot } from './perf_profile.mjs';
+import { killTree } from './platform.mjs';
+import { batchGate, batchPlan, batchPixels, holdBatchSlot, otherRenders, parallelLimit, runPool } from './batch_parallel.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -145,10 +148,11 @@ function setStyle(tl, r) {
 }
 
 // ---------- export (same steps as the Studio's exportVideo: mix_audio.py → render.mjs) ----------
-function run(cmd, argv, cwd, onLine) {
-  return new Promise((ok, bad) => { const p = spawn(cmd, argv, { cwd }); let err = ''; p.stdout.on('data', d => d.toString().split(/[\r\n]/).forEach(l => l && onLine && onLine(l))); p.stderr.on('data', d => (err = (err + d).slice(-2000))); p.on('close', c => (c ? bad(new Error(`${path.basename(cmd)} lỗi (mã ${c}): ${err.slice(-300)}`)) : ok())); });
+const PROCS = new Set(); // child processes of the export (several when variants render in parallel, M68)
+function run(cmd, argv, cwd, onLine, env = null) {
+  return new Promise((ok, bad) => { const p = spawn(cmd, argv, { cwd, ...(env ? { env: { ...process.env, ...env } } : {}) }); PROCS.add(p); p.on('close', () => PROCS.delete(p)); let err = ''; p.stdout.on('data', d => d.toString().split(/[\r\n]/).forEach(l => l && onLine && onLine(l))); p.stderr.on('data', d => (err = (err + d).slice(-2000))); p.on('close', c => (c ? bad(new Error(`${path.basename(cmd)} lỗi (mã ${c}): ${err.slice(-300)}`)) : ok())); });
 }
-async function exportProject(dir, quality, onP) {
+async function exportProject(dir, quality, onP, { workers = null, env = null } = {}) {
   const tlFile = path.join(dir, 'timeline.json'), tl = JSON.parse(fs.readFileSync(tlFile, 'utf8'));
   const vert = (tl.height || 720) > (tl.width || 1280), [W, H] = quality === '1080' ? [1080, 1920] : [720, 1280];
   let mix = null;
@@ -159,9 +163,39 @@ async function exportProject(dir, quality, onP) {
   fs.mkdirSync(path.join(dir, 'out'), { recursive: true });
   const out = `out/${path.basename(dir)}.mp4`, tmp = path.join(dir, `.export_${process.pid}.json`);
   fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? W : H, height: vert ? H : W }));
-  try { await run('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, path.join(dir, out), ...(mix ? ['--audio', mix] : [])], dir, l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onP(+m[1] / +m[2]); }); }
+  try { await run('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, path.join(dir, out), ...(mix ? ['--audio', mix] : []), ...(workers ? ['--workers', String(workers)] : [])], dir, l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onP(+m[1] / +m[2]); }, env); }
   finally { fs.rmSync(tmp, { force: true }); }
   return out;
+}
+
+// Xuất mọi phiên bản (M68 lô song song): nhiều bản → lô giữ một lượt render cả máy, batchPlan chọn P bản × W worker,
+// render.mjs con chạy AVS_RENDER_SLOTS=0. Plan 1 → nhả chỗ, xuất lần lượt như cũ. Một bản lỗi thì lỗi cả lượt như cũ:
+// không bắt đầu bản mới, các bản đang chạy chạy xong rồi mới ném lỗi đầu tiên. Huỷ: queue/route giết cả cây tiến trình (killTree, taskkill /t trên Windows).
+async function exportAll(out, quality, label) {
+  const q = quality || '720', n = out.length;
+  let plan = { parallel: 1, workersEach: null }, hold = null;
+  const perf = resolvePerf();
+  if (!batchGate({ n, perf, limit: parallelLimit() })) {
+    hold = await holdBatchSlot({ perf, info: { variants: n }, onWait: () => say(.58, 'Đang chờ lượt render khác…') });
+    const [W, H] = batchPixels(q);
+    plan = batchPlan({ n, hw: hwSnapshot({ env: { ...process.env, AVS_ENCODER: perf.encoder } }), perf, load: { renders_running: otherRenders() }, W, H, limit: parallelLimit() });
+    if (plan.parallel > 1) console.error(`[variants] ${plan.why}`); else { hold.release(); hold = null; }
+  }
+  const prog = new Array(n).fill(0), tick = i => say(.58 + prog.reduce((a, b) => a + b, 0) / n * .4, `${label} ${i + 1}/${n} · ${Math.round(prog[i] * 100)}%`);
+  const errs = [];
+  // SIGTERM/SIGINT while exporting (POSIX caller that does not kill the group): stop every render.mjs tree (killTree,
+  // never process.kill(-pid)) instead of leaving them running. The queue/route on Windows kill the whole tree anyway.
+  const stop = async () => { await Promise.all([...PROCS].map(p => killTree(p))); hold?.release(); process.exit(130); };
+  process.on('SIGTERM', stop); process.on('SIGINT', stop);
+  try {
+    await runPool(out, plan.parallel, async (v, i) => {
+      if (errs.length) return; // một bản đã lỗi: không bắt đầu bản mới
+      say(.58 + prog.reduce((a, b) => a + b, 0) / n * .4, `${label} ${i + 1}/${n}`);
+      try { v.video = await exportProject(v.dir, q, k => { prog[i] = k; tick(i); }, plan.parallel > 1 ? { workers: plan.workersEach, env: hold.childEnv } : {}); prog[i] = 1; }
+      catch (e) { errs.push(e); if (plan.parallel === 1) throw e; }
+    });
+  } finally { hold?.release(); process.off('SIGTERM', stop); process.off('SIGINT', stop); }
+  if (errs.length) throw errs[0];
 }
 
 // ---------- sibling project <base>_v<i+1> (a full copy; a stale copy of this same base is replaced) ----------
@@ -271,10 +305,7 @@ export async function makeMatrix(src, o = {}) {
   } finally { await E.browser.close().catch(() => {}); saveLib(lib); }
   const g2 = o.export ? readGate(dir) : null;
   if (g2?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(g2)})`);
-  if (o.export && !g2?.blocked) for (let i = 0; i < out.length; i++) {
-    say(.58 + i / out.length * .4, `Xuất bản ${i + 1}/${out.length}`);
-    out[i].video = await exportProject(out[i].dir, o.quality || '720', k => say(.58 + (i + k) / out.length * .4, `Xuất bản ${i + 1}/${out.length} · ${Math.round(k * 100)}%`));
-  }
+  if (o.export && !g2?.blocked) await exportAll(out, o.quality, 'Xuất bản');
   const oldHook = (base.tl.scenes || []).filter(s => !s.hidden && !isBase(s, base.tl) && s.t0 < 1.5).map(s => s.text || s.lines?.map(L => L.text).join(' ') || s.value || '').filter(Boolean)[0] || '';
   const res = { base: dir, created: new Date().toISOString(), kind: 'matrix', kind_vi: 'ma trận khán giả × góc × kết cấu × thời lượng × bố cục', n: out.length,
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', size: `${DW}x${DH}`, hook_library: lib.file,
@@ -342,10 +373,7 @@ export async function makeVariants(src, o = {}) {
   // 4. optional export of every variant (not while the base project's QC blocks export: the variants share its words)
   const gate = o.export ? readGate(dir) : null;
   if (gate?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(gate)})`);
-  if (o.export && !gate?.blocked) for (let i = 0; i < out.length; i++) {
-    say(.58 + i / out.length * .4, `Xuất phiên bản ${i + 1}/${out.length}`);
-    out[i].video = await exportProject(out[i].dir, o.quality || '720', k => say(.58 + (i + k) / out.length * .4, `Xuất phiên bản ${i + 1}/${out.length} · ${Math.round(k * 100)}%`));
-  }
+  if (o.export && !gate?.blocked) await exportAll(out, o.quality, 'Xuất phiên bản');
   const baseVid = fs.existsSync(path.join(dir, 'out')) ? fs.readdirSync(path.join(dir, 'out')).filter(f => f.endsWith('.mp4')).map(f => `out/${f}`).sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs)[0] : null;
   const res = { base: dir, created: new Date().toISOString(), kind, kind_vi: { hook: 'khác hook mở đầu', style: 'khác gói style', both: 'khác hook + gói style' }[kind], n: out.length,
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', base_video: baseVid || undefined, size: `${DW}x${DH}`, variants: out };

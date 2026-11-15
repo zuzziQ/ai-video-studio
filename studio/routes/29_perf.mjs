@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 
 const MINE = new Set(['/api/perf', '/api/perf/log', '/api/perf/bench']);
 // Biến môi trường thắng profile (references/perf-profile.md). Chỉ đưa ra tên + có/không, không đưa giá trị.
-export const PERF_ENV = ['AVS_PERF_PROFILE', 'AVS_ENCODER', 'AVS_WHISPER_DEVICE', 'AVS_RENDER_SLOTS', 'AVS_RENDER_PRIORITY', 'AVS_RENDER_GPU'];
+export const PERF_ENV = ['AVS_PERF_PROFILE', 'AVS_ENCODER', 'AVS_WHISPER_DEVICE', 'AVS_RENDER_SLOTS', 'AVS_RENDER_PRIORITY', 'AVS_RENDER_GPU', 'AVS_BATCH_PARALLEL'];
 export const BENCH_SEC = 10, BENCH_MAX = 3, BENCH_DEFAULT = ['tiet-kiem', 'can-bang', 'toc-do'];
 const QUAL = [['720', 720, 1280], ['1080', 1080, 1920], ['4k', 2160, 3840]];
 const HW_TTL_MS = 30e3;

@@ -155,3 +155,13 @@ test('route: một yêu cầu một lúc (409 khi bận)', async () => {
   assert.equal((await first).status, 200);
   assert.equal((await post('/api/perf/advise', { goal: 'song-song' })).status, 200, 'hết bận');
 });
+
+test('lô (count > 1): mỗi ứng viên mang kế hoạch batchPlan, song-song giữ lần lượt', () => {
+  const fast = A.candidates({ hw: HW, goal: 'nhanh', job: { count: 6 }, load: LOAD });
+  assert.deepEqual([fast[0].batch.parallel, fast[0].batch.workersEach], [6, 1]);
+  assert.match(fast[0].why, /lô: 6 bản cùng lúc × 1 worker/);
+  const calm = A.candidates({ hw: HW, goal: 'song-song', job: { count: 6 }, load: LOAD });
+  assert.equal(calm[0].profile, 'tiet-kiem'); assert.equal(calm[0].batch.parallel, 1);
+  assert.equal(A.candidates({ hw: NOGPU, goal: 'nhanh', job: { count: 6 }, load: LOAD })[0].batch.parallel, 1, 'x264 → lần lượt');
+  assert.equal(A.candidates({ hw: HW, goal: 'nhanh', load: LOAD })[0].batch, undefined, 'một bản: không có batch');
+});

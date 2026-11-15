@@ -12,6 +12,7 @@
 import os from 'node:os';
 import { PROFILES, ENCODER_CHOICES, X264_PRESETS, PRIORITIES, WHISPER_DEVICES, MAX_WORKERS, MAX_SLOTS, resolvePerf, hwSnapshot, readPerfLog, slotHolders } from './perf_profile.mjs';
 import { askJSON, runLLM } from './llm.mjs';
+import { batchPlan, parallelLimit } from './batch_parallel.mjs';
 
 export const GOALS = ['nhanh', 'song-song', 'chat-luong'];
 export const GOAL_LABEL = { nhanh: 'xong nhanh nhất', 'song-song': 'vừa render vừa làm việc khác', 'chat-luong': 'file đẹp nhất' };
@@ -62,7 +63,7 @@ function effWorkers(profile, overrides, hw) {
 /**
  * Luật tất định → 2–4 ứng viên khác nhau, ứng viên đầu là đề xuất của luật.
  */
-export function candidates({ hw = {}, log = [], job = {}, goal = 'nhanh', load = {} } = {}) {
+export function candidates({ hw = {}, log = [], job = {}, goal = 'nhanh', load = {}, env = process.env } = {}) {
   const j = cleanJob(job), g = GOALS.includes(goal) ? goal : 'nhanh';
   const phys = Math.max(1, hw?.cores?.physical || 1), freeGB = num(hw?.ram?.free_gb, 16);
   // encoder đã dò (hwSnapshot) thắng; không dò được thì có GPU NVIDIA coi như có NVENC
@@ -96,7 +97,7 @@ export function candidates({ hw = {}, log = [], job = {}, goal = 'nhanh', load =
 
   if (g === 'nhanh') {
     if (!hwEnc) noGpu();
-    fit('toc-do', j.count >= BIG_BATCH ? `lô ${j.count} video: chạy hết nhân (nhân thật − 1, tối đa 5)` : 'nhanh nhất: worker = nhân thật − 1 (tối đa 5)');
+    fit('toc-do', j.count >= BIG_BATCH ? `lô ${j.count} video: tốc độ, chạy hết nhân` : 'nhanh nhất: worker = nhân thật − 1 (tối đa 5)');
     fit('can-bang', 'mặc định: tự chọn theo nhân, GPU và RAM, máy đỡ nặng hơn tốc độ');
     if (busy || cpuBusy) fit('tiet-kiem', busy ? 'đang có lượt render khác: 2 worker, ưu tiên thấp để không giành máy' : 'CPU đang bận: 2 worker, ưu tiên thấp');
   } else if (g === 'song-song') {
@@ -112,9 +113,19 @@ export function candidates({ hw = {}, log = [], job = {}, goal = 'nhanh', load =
   }
   // Tối thiểu 2 ứng viên.
   for (const p of ['can-bang', 'tiet-kiem']) if (out.length < 2) fit(p, p === 'can-bang' ? 'mặc định: tự chọn theo nhân, GPU và RAM' : '2 worker, ưu tiên thấp');
+  // Lô (count > 1, M66/M68): batchPlan của batch_parallel.mjs cho từng ứng viên → batch: { parallel, workersEach, why }
+  // (đúng kế hoạch batch.mjs / variants.mjs sẽ chạy với profile đó). est vẫn tính như render lần lượt.
   return out.slice(0, 4).map(({ key, ...c }) => {
     const workers = effWorkers(c.profile, c.overrides, hw);
-    return { ...c, workers, est: estimate(log, { profile: c.profile, workers }, j) };
+    const res = { ...c, workers, est: estimate(log, { profile: c.profile, workers }, j) };
+    if (j.count > 1) {
+      // cùng biến môi trường batch.mjs sẽ thấy (encoder, số lượt), trừ AVS_PERF_PROFILE: đang xét profile của ứng viên
+      const perf = resolvePerf({ profile: c.profile, perf: { profile: c.profile, custom: c.overrides }, hw: { physical: phys }, env: { ...env, AVS_PERF_PROFILE: '' }, job: {} });
+      const b = batchPlan({ n: j.count, hw, perf, load, W: j.W, H: j.H, limit: parallelLimit(env) });
+      res.batch = { parallel: b.parallel, workersEach: b.workersEach, why: b.why };
+      res.why += b.parallel > 1 ? `; lô: ${b.parallel} bản cùng lúc × ${b.workersEach} worker` : '; lô: render lần lượt';
+    }
+    return res;
   });
 }
 

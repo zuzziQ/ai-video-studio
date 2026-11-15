@@ -37,6 +37,6 @@ else {
   console.log(`Lý do: ${r.reason}`);
   if (r.llm_error) console.log(`(Không dùng được LLM: ${r.llm_error})`);
   console.log('Ứng viên:');
-  r.candidates.forEach((c, i) => console.log(`  ${i === r.pick ? '→' : ' '} [${i}] ${c.profile}${Object.keys(c.overrides).length ? ' ' + JSON.stringify(c.overrides) : ''}  worker ${c.workers ?? 'tự động'}${c.est ? `  ~${c.est.sec} s (${c.est.fps} fps, ${c.est.runs} lượt đo)` : ''}  — ${c.why}`));
+  r.candidates.forEach((c, i) => console.log(`  ${i === r.pick ? '→' : ' '} [${i}] ${c.profile}${Object.keys(c.overrides).length ? ' ' + JSON.stringify(c.overrides) : ''}  worker ${c.workers ?? 'tự động'}${c.est ? `  ~${c.est.sec} s (${c.est.fps} fps, ${c.est.runs} lượt đo)` : ''}${c.batch ? `  lô ${c.batch.parallel}×${c.batch.workersEach ?? 'tự động'}` : ''}  — ${c.why}`));
   console.log(`Áp dụng: ${out.set_command}`);
 }
