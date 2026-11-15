@@ -17,6 +17,10 @@ import subprocess
 import unicodedata
 import zlib
 from collections import defaultdict
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
+from llm_bridge import ask  # noqa: E402  (model calls go through scripts/llm.mjs)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("timeline")
@@ -686,13 +690,7 @@ def claude_moods(secs, base, names):
               "Trả về DUY NHẤT một mảng JSON các tên mood, đúng thứ tự, không giải thích.\n\n"
               + json.dumps([{"i": i, "t0": round(s["t0"], 1), "t1": round(s["t1"], 1), "text": s["text"][:400]} for i, s in enumerate(secs)], ensure_ascii=False))
     try:
-        r = subprocess.run([os.environ.get("CLAUDE_BIN", "claude"), "-p", "--output-format", "json", "--model", "sonnet"], input=prompt,
-                           capture_output=True, text=True, timeout=120)
-        txt = r.stdout
-        try:
-            txt = json.loads(txt).get("result", txt)
-        except Exception:
-            pass
+        txt = ask(prompt, model="sonnet", timeout=120)
         m = re.search(r"\[[\s\S]*?\]", txt or "")
         arr = json.loads(m.group(0)) if m else None
         if isinstance(arr, list) and len(arr) == len(secs) and all(x in names for x in arr):
@@ -700,7 +698,7 @@ def claude_moods(secs, base, names):
             return arr
         print("Claude trả về không hợp lệ -> dùng luật offline")
     except Exception as e:
-        print(f"Không gọi được Claude ({type(e).__name__}) -> dùng luật offline")
+        print(f"Không gọi được mô hình chữ ({e}) -> dùng luật offline")
     return None
 
 

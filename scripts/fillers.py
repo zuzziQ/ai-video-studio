@@ -8,10 +8,12 @@ A cut [a, b] is what to remove; the ripple (clips, captions, scenes, sfx) is don
 import argparse
 import json
 import re
-import shutil
-import subprocess
 import sys
 import unicodedata
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
+from llm_bridge import LlmError, LlmUnavailable, ask  # noqa: E402  (model calls go through scripts/llm.mjs)
 
 HESITATE = ["ờ", "ơ", "ừ", "ừm", "ờm", "ưm", "ậm", "à", "á", "hừm", "hmm", "um", "uh", "ừa"]
 PHRASES = ["thì là", "kiểu như", "kiểu là", "nói chung là", "đại loại là", "thực ra là", "cái kiểu", "là kiểu", "nói chung", "kiểu kiểu"]
@@ -100,32 +102,27 @@ for i in range(n - 1):
 # 4. false starts (sentence restarted) — needs Claude
 note = None
 if a.claude:
-    exe = shutil.which("claude")
-    if not exe:
-        note = "Không tìm thấy lệnh claude (Claude Code CLI) — bỏ qua phần câu nói hỏng."
-    else:
-        listing = " ".join(f"{k}:{w['w']}" for k, w in enumerate(words))
-        prompt = ("Đây là lời nói tiếng Việt (chỉ số:từ) đã nhận dạng tự động từ video người nói. Tìm các chỗ NÓI HỎNG: người nói bắt đầu một câu/cụm rồi bỏ dở và "
-                  "nói lại từ đầu (false start), hoặc nói vấp/sửa lời. Chỉ đánh dấu phần BỊ BỎ (lần nói hỏng), không đánh dấu lần nói lại. Không đánh dấu tiếng đệm hay "
-                  "từ lặp liền nhau (đã xử lý riêng). Nếu không có, trả mảng rỗng.\nTrả về DUY NHẤT JSON: {\"false_starts\":[{\"i0\":số,\"i1\":số,\"reason\":\"…\"}]}\n\n" + listing)
-        try:
-            r = subprocess.run([exe, "-p", "--output-format", "json", "--model", a.model], input=prompt, capture_output=True, text=True, timeout=240)
-            j = json.loads(r.stdout)
-            res = str(j.get("result", ""))
-            if r.returncode or j.get("is_error"):
-                raise RuntimeError("Claude Code chưa đăng nhập (chạy lệnh claude một lần để đăng nhập)" if re.search(r"not logged in|/login|authenticat|api key", res, re.I) else res[:160])
-            m = re.search(r"\{.*\}", res, re.S)
-            if not m:
-                raise RuntimeError("Claude trả lời không đúng định dạng")
-            for f in json.loads(m.group(0)).get("false_starts", []):
-                i0, i1 = int(f["i0"]), int(f["i1"])
-                if 0 <= i0 <= i1 < n and i1 - i0 < 15:
-                    x0, x1 = span(i0, i1)
-                    if i1 < n - 1:
-                        x1 = round(words[i1 + 1]["s"], 3)
-                    add(i0, i1, "false_start", "nói hỏng: " + str(f.get("reason", ""))[:80], 0.55, (x0, x1))
-        except Exception as e:  # CLI failure must not lose the local results
-            note = f"Claude lỗi ({e if isinstance(e, RuntimeError) else type(e).__name__}) — chỉ có kết quả dò tự động."
+    # model call through llm_bridge (provider choice, env, Windows handled in scripts/llm.mjs)
+    listing = " ".join(f"{k}:{w['w']}" for k, w in enumerate(words))
+    prompt = ("Đây là lời nói tiếng Việt (chỉ số:từ) đã nhận dạng tự động từ video người nói. Tìm các chỗ NÓI HỎNG: người nói bắt đầu một câu/cụm rồi bỏ dở và "
+              "nói lại từ đầu (false start), hoặc nói vấp/sửa lời. Chỉ đánh dấu phần BỊ BỎ (lần nói hỏng), không đánh dấu lần nói lại. Không đánh dấu tiếng đệm hay "
+              "từ lặp liền nhau (đã xử lý riêng). Nếu không có, trả mảng rỗng.\nTrả về DUY NHẤT JSON: {\"false_starts\":[{\"i0\":số,\"i1\":số,\"reason\":\"…\"}]}\n\n" + listing)
+    try:
+        res = ask(prompt, model=a.model, timeout=240)
+        m = re.search(r"\{.*\}", res, re.S)
+        if not m:
+            raise RuntimeError("Claude trả lời không đúng định dạng")
+        for f in json.loads(m.group(0)).get("false_starts", []):
+            i0, i1 = int(f["i0"]), int(f["i1"])
+            if 0 <= i0 <= i1 < n and i1 - i0 < 15:
+                x0, x1 = span(i0, i1)
+                if i1 < n - 1:
+                    x1 = round(words[i1 + 1]["s"], 3)
+                add(i0, i1, "false_start", "nói hỏng: " + str(f.get("reason", ""))[:80], 0.55, (x0, x1))
+    except LlmUnavailable as e:  # no model: keep the local results
+        note = f"{e} Bỏ qua phần câu nói hỏng."
+    except Exception as e:  # model failure must not lose the local results
+        note = f"Mô hình chữ lỗi ({e if isinstance(e, (RuntimeError, LlmError)) else type(e).__name__}) — chỉ có kết quả dò tự động."
 
 # merge overlapping cuts (keep the first reason)
 cuts.sort(key=lambda c: (c["a"], -c["b"]))

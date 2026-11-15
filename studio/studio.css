@@ -69,7 +69,7 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--acc)
 .logo .mark i:nth-child(3) { left: 15px; top: 7px; width: 3px; height: 11px; }
 .ver { font-size: 10px; font-weight: 700; color: var(--acc); background: var(--acc-soft); border-radius: 4px; padding: 1px 5px; }
 .sep { width: 1px; height: 22px; background: var(--line2); margin: 0 6px; }
-.proj { display: flex; align-items: center; gap: 7px; color: var(--tx2); max-width: 340px; min-width: 0; }
+.proj { display: flex; align-items: center; gap: 7px; color: var(--tx2); max-width: 340px; min-width: 110px; flex: 0 1 auto; }
 .proj #ptag { font-weight: 600; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 3em; }
 .status { font-size: 11px; color: var(--tx3); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
@@ -83,6 +83,13 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--acc)
 .selwrap select { width: 104px; padding-left: 30px; background-color: transparent; border-color: transparent; color: var(--tx2); }
 .selwrap select:hover { background-color: var(--bg3); }
 #top #export { padding: 7px 16px; }
+/* Features plug buttons into the top bar (Studio.addTopButton). Below 1760 px they go icon-only (the title keeps the label),
+   so "Xuất" stays on screen and the project name + save status keep room (QA 2026-11-15: Xuất cut off at 1440 px). */
+@media (max-width: 1760px) {
+  #top > button.ghost { font-size: 0; gap: 0; padding-left: 8px; padding-right: 8px; }
+  #top > button.ghost > i { font-size: 16px; }
+  #top > button.ghost .pct { font-size: 10.5px; }
+}
 
 /* ---------- main grid ---------- */
 main { position: absolute; top: 50px; left: 0; right: 0; bottom: var(--tlh); display: grid; grid-template-columns: 68px 312px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
@@ -134,7 +141,7 @@ body.expanded #lib, body.expanded #right { display: none; }
 #list .item .ck { color: var(--tx3); }
 
 /* templates */
-.tgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } /* minmax(0): a wide preview must not widen the column past the panel */
 .tpl { cursor: default; }
 .tpl .tv { position: relative; aspect-ratio: 9/16; border-radius: 9px; overflow: hidden; background: linear-gradient(160deg, #2A2540, #15171C 70%) center/cover no-repeat; border: 1px solid var(--line2); transition: border-color .15s, transform .2s, box-shadow .2s; }
 .tpl .tv.h { aspect-ratio: 16/9; }
