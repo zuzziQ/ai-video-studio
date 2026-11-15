@@ -52,7 +52,7 @@ export default ctx => {
   }
   // Only a video file (absolute paths are allowed: the schedule lists exports of any project).
   const resolveFile = f => {
-    if (typeof f !== 'string' || !/\.(mp4|mov|m4v|webm)$/i.test(f)) return null;
+    if (typeof f !== 'string' || !VID.test(f)) return null; // older items with other extensions (CLI) are not served here
     const abs = path.isAbsolute(f) ? f : ctx.project ? ctx.under(ctx.project.dir, f) : null;
     try { return abs && fs.statSync(abs).isFile() ? abs : null; } catch { return null; }
   };

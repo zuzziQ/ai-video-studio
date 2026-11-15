@@ -254,7 +254,7 @@ async function saveTemplate({ tpl, t = 1 }) {
   fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify(doc, null, 1));
   const big = path.join(TPL_DIR, 'previews', `.${id}_big.jpg`), jpg = path.join(TPL_DIR, 'previews', `${id}.jpg`);
   try {
-    await still(+t || 0, big);
+    await still(Math.max(0, +t || 0), big);
     await new Promise(ok => execFile('ffmpeg', ['-v', 'error', '-y', '-i', big, '-vf', 'scale=360:-2', '-q:v', '4', jpg], () => ok()));
   } catch (e) { console.error('template cover', e.message); }
   fs.rmSync(big, { force: true });

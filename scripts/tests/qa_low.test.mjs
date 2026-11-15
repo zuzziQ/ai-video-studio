@@ -29,6 +29,8 @@ test('shortErr: dòng cuối traceback, gợi ý cài lại khi thiếu thư vi�
   assert.match(s, /ENOENT/); assert.doesNotMatch(s, /Users|render\.mjs:40|Node\.js/);
   assert.equal(scrubPaths('mở /Users/an/Movies/a.mov và D:\\ai\\b.mp4 lỗi'), 'mở … và … lỗi');
   assert.equal(shortErr(''), 'lỗi không rõ');
+  assert.equal(scrubPaths('tải https://api.pexels.com/v1/search?q=a lỗi'), 'tải https://api.pexels.com/v1/search?q=a lỗi'); // URLs kept
+  assert.equal(shortErr(['ValueError: bad value', '@@ 0.5 Đang sửa lỗi chính tả', 'đã sửa một phần lỗi nhỏ'].join('\n')), 'ValueError: bad value');
 });
 
 let srv, PORT, TOKEN;
@@ -98,6 +100,11 @@ test('transcribe mô hình lạ, fillers từ thiếu s/e, agent yêu cầu lạ
 
 test('hàng loạt: status/targets không có trả 404, bảng tính hỏng báo dễ hiểu, danh sách mới nhất trước', async () => {
   assert.equal((await call('/api/batch/status?dir=khong-co', { method: 'GET' })).status, 404);
+  // just started: job.json written, the child has not written status.json yet → 200 null (the panel polls this every second)
+  fs.mkdirSync(path.join(PROJ, 'batch', 'vua-tao'), { recursive: true }); fs.writeFileSync(path.join(PROJ, 'batch', 'vua-tao', 'job.json'), '{}');
+  const fresh = await call('/api/batch/status?dir=batch/vua-tao', { method: 'GET' });
+  assert.equal(fresh.status, 200); assert.equal(fresh.j, null);
+  fs.rmSync(path.join(PROJ, 'batch', 'vua-tao'), { recursive: true });
   assert.equal((await call('/api/batch/targets', { body: { source: 'file:khong-co.template.json' } })).status, 404);
   const sh = await call('/api/batch/sheet?name=bang.xlsx', { raw: 'not a spreadsheet' });
   assert.equal(sh.status, 400); assert.doesNotMatch(sh.j.error, /buffer bounds|offset/i);

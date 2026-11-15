@@ -87,7 +87,7 @@
   }
   const jobModal = title => Studio.modal(`<h3>${title}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="jcancel">Dừng</button></div>`);
   async function runJob(path, body, title, done) {
-    const r = await Studio.api(path, body); if (!r.ok) return Studio.toast('Đang có tác vụ khác chạy');
+    const r = await Studio.api(path, body); if (!r.ok) return Studio.toast(r.error || 'Đang có tác vụ khác chạy');
     jobModal(title); $('#jcancel').onclick = () => Studio.api('/api/job/cancel', {});
     Studio.pollJob(j => { if (j.state === 'done') { Studio.closeModal(); done(j.out); } else Studio.modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`); });
   }

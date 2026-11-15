@@ -1,5 +1,6 @@
 // Làm hàng loạt: template / dự án hiện tại × bảng tính (CSV, XLSX) → mỗi dòng một dự án + MP4. Engine: scripts/batch.mjs.
 // Batches live in <project>/batch/<name>_<stamp>/ (job.json, status.json, 01_<row>/…); sheets uploaded to <project>/batch/_sheets/.
+import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -74,7 +75,11 @@ export default ctx => {
     if (p === '/api/batch/sources') return ctx.json(res, { sources: sources(), project: path.basename(ctx.project.dir) }), true;
     if (p === '/api/batch/targets') {
       const b = await B();
-      let src; try { src = loadSource(srcOf(b.source || 'project')); } catch (e) { return ctx.json(res, { error: 'Không thấy nguồn mẫu: ' + e.message }, 404), true; }
+      let src;
+      try { src = loadSource(srcOf(b.source || 'project')); } catch (e) {
+        const missing = e.code === 'ENOENT' || /không thấy/i.test(e.message);
+        return ctx.json(res, { error: (missing ? 'Không thấy nguồn mẫu: ' : 'Nguồn mẫu hỏng: ') + shortErr(e.message) }, missing ? 404 : 400), true;
+      }
       const targets = targetsOf(src.doc);
       return ctx.json(res, { targets, mapping: b.columns ? autoMap(targets, b.columns) : {}, needs: src.doc.needs || [], aspect: src.doc.aspect }), true;
     }
@@ -147,7 +152,8 @@ export default ctx => {
     if (p === '/api/batch/status') {
       const d = ctx.under(ctx.project.dir, u.searchParams.get('dir') || ''), pg = u.searchParams.get('page');
       const st = withUrls(d && status(d), pg == null ? null : pg, Math.min(200, Math.max(10, +u.searchParams.get('size') || PAGE)));
-      if (!st) return ctx.json(res, { error: 'không thấy lô này' }, 404), true;
+      // A batch folder whose child has not written status.json yet (just started) is "no status yet" (200 null), not missing.
+      if (!st && !(d && fs.existsSync(path.join(d, 'job.json')))) return ctx.json(res, { error: 'không thấy lô này' }, 404), true;
       return ctx.json(res, st && { ...st, pausing: !!(d && runningHere(d) && CTRL.pause && !CTRL.pause.hit) }), true;
     }
     if ((p === '/api/batch/pause' || p === '/api/batch/cancel') && req.method === 'POST') {

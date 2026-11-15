@@ -83,7 +83,7 @@
   const fail = j => Studio.modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
   async function startJob(path, body, title, done) {
     const r = await Studio.api(path, body);
-    if (!r.ok) return Studio.toast('Đang có tác vụ khác chạy');
+    if (!r.ok) return Studio.toast(r.error || 'Đang có tác vụ khác chạy');
     jobModal(title); $('#jcancel').onclick = () => Studio.api('/api/job/cancel', {});
     Studio.pollJob(j => (j.state === 'done' ? (Studio.closeModal(), done(j.out)) : fail(j)));
   }
