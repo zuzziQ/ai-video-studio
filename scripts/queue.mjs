@@ -22,6 +22,7 @@ import { notify } from './notify.mjs';
 import { killTree } from './platform.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
 import { scheduleHasDue } from './schedule_due.mjs';
+import { resolvePerf, perfEnv, lowerPriority } from './perf_profile.mjs';
 export { withFileLock };
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -262,7 +263,10 @@ export class Runner {
     this.cancelled = false;
     const argv = argsFor(it0), startedMs = Date.now();
     this.log(`queue: chạy ${it0.kind} ${it0.input} (lần ${attempt})`);
-    const p = spawn('node', [script, ...argv], { cwd: SKILL, detached: true, env: process.env });
+    // M64: profile hiệu năng cho cả job (render.mjs bên trong tự đọc profile, chờ lượt render; whisper theo profile).
+    const perf = resolvePerf({ job: { kind: 'queue' } });
+    const p = spawn('node', [script, ...argv], { cwd: SKILL, detached: true, env: { ...process.env, ...perfEnv(perf) } });
+    lowerPriority(p.pid, perf.priority);
     this.child = p;
     let log = '', last = 0, pending = {}, result = null;
     const flush = (force) => { if (force || Date.now() - last > 1000) { last = Date.now(); updSafe({ ...pending, log: log.slice(-1500) }, 'tiến độ'); pending = {}; } };

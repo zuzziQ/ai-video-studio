@@ -163,13 +163,24 @@ export function physicalCores() {
 // stops at 4 (measured on 6 cores / 12 threads: 4 GPU workers beat 6; with SwiftShader 3–4 beat 6), 3 above 1080p.
 // Never less than ~1 s of frames per worker. Parallel segments split the logical threads between their ffmpegs and use
 // x264 veryfast (SSIM 0.994 vs medium, ~2.4× less CPU); one worker writes the final file itself and keeps medium.
-export function renderPlan({ W, H, n, fps, workers = null, fast = false, preset = null, physical = physicalCores(), logical = logicalCores() }) {
+// M64: freeMemGB (RAM trống lúc bắt đầu) hạ số worker khi không đủ chỗ: ~0,7 GB mỗi worker 1080p (Chrome + ffmpeg đỉnh
+// 3,0 GB cho 4 worker, docs/perf/2026-11-13-m50-m51-gpu-workers.md mục 2), tỉ lệ theo số điểm ảnh, chừa 1,5 GB cho máy.
+// Không truyền freeMemGB thì như cũ. Khi bị hạ, kết quả có thêm ramCap (số worker trước khi hạ).
+export const RAM_PER_WORKER_1080P_GB = 0.7, RAM_RESERVE_GB = 1.5;
+export const ramPerWorkerGB = (W, H) => Math.max(0.35, RAM_PER_WORKER_1080P_GB * (W * H) / (1080 * 1920));
+export function renderPlan({ W, H, n, fps, workers = null, fast = false, preset = null, physical = physicalCores(), logical = logicalCores(), freeMemGB = null }) {
   const auto = Math.max(1, Math.min(W * H > 2.5e6 ? 3 : 4, physical - 2));
-  const w = Math.max(1, Math.min(Math.floor(+workers) || auto, Math.ceil(n / fps)));
+  let w = Math.max(1, Math.min(Math.floor(+workers) || auto, Math.ceil(n / fps)));
+  let ramCap = null;
+  if (freeMemGB != null && Number.isFinite(+freeMemGB)) {
+    const fit = Math.max(1, Math.floor((+freeMemGB - RAM_RESERVE_GB) / ramPerWorkerGB(W, H)));
+    if (fit < w) { ramCap = w; w = fit; }
+  }
   return {
     workers: w,
     threads: w > 1 ? Math.max(1, Math.floor(logical / w)) : 0, // 0 = let ffmpeg decide
     preset: preset || (fast || w > 1 ? 'veryfast' : 'medium'),
+    ...(ramCap ? { ramCap } : {}),
   };
 }
 

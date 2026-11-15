@@ -1,6 +1,8 @@
 // Render timeline.json through engine/index.html with headless Chrome, pipe JPEG frames into ffmpeg.
 // usage: node render.mjs <timeline.json> <out.mp4> [--from 0] [--to 10] [--still 12.5 still.jpg] [--audio mix.wav]
-//                        [--workers N] [--fast] [--preset P]
+//                        [--workers N] [--fast] [--preset P] [--profile tiet-kiem|can-bang|toc-do|chat-luong|tuy-chinh]
+// --profile:   profile hiệu năng (M64, scripts/perf_profile.mjs); mặc định theo $AVS_HOME/config.json (can-bang). Một lượt
+//              render chờ chỗ trống (tối đa perf.slots trên cả máy, in "Đang chờ lượt render khác…"), ghi perf_log.jsonl.
 // --workers N: N Chrome pages render contiguous chunks in parallel into temp segments, joined losslessly
 //              (concat -c copy), audio muxed once at the end. Default min(4, physical cores-2), 3 above 1080p
 //              (render_hw.mjs renderPlan). --workers 1 = serial.
@@ -10,6 +12,7 @@
 // Chrome draws with the GPU when there is one (render_hw.mjs launchChrome); AVS_RENDER_GPU=0 forces SwiftShader.
 // Video is H.264 from NVENC/QSV/VideoToolbox when ffmpeg can open it, else libx264 (M52); AVS_ENCODER=x264 forces libx264.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -17,6 +20,7 @@ import puppeteer from 'puppeteer-core';
 import { findChrome } from './platform.mjs';
 import { interceptCdn } from './net_cache.mjs';
 import { launchChrome, renderPlan, pickEncoder, encoderArgs, encoderLabel, BACKGROUND_FLAGS } from './render_hw.mjs';
+import { resolvePerf, lowerPriority, acquireRenderSlot, appendPerfLog } from './perf_profile.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -79,10 +83,17 @@ const n = Math.round((t1 - t0) * fps);
 // Audio: --audio, else tl.audio.mix, else the default mix_audio.py output (work/mix.wav) when it exists.
 const defMix = path.resolve(tlDir, tl.audio?.mix || 'work/mix.wav');
 const audio = opt('--audio', tl.audio && fs.existsSync(defMix) ? defMix : null);
-const { workers, threads, preset } = renderPlan({ W, H, n, fps, workers: opt('--workers'), fast: args.includes('--fast'), preset: opt('--preset') });
+// M64: profile hiệu năng (perf_profile.mjs). Cờ CLI > biến môi trường > profile; can-bang = hành vi tự động như trước.
+const perf = resolvePerf({ profile: opt('--profile'), job: { kind: 'render', cli: { workers: opt('--workers'), preset: opt('--preset'), fast: args.includes('--fast') } } });
+lowerPriority(process.pid, perf.priority); // tiet-kiem: Chrome + ffmpeg mở sau đây thừa hưởng BelowNormal
+const freeGB = os.freemem() / 2 ** 30;
+const { workers, threads, preset, ramCap } = renderPlan({ W, H, n, fps, workers: perf.workers, preset: perf.preset, freeMemGB: freeGB });
+if (ramCap) console.error(`[render] RAM trống ${freeGB.toFixed(1)} GB: hạ ${ramCap} → ${workers} worker`);
 // M52: NVENC/QSV/VideoToolbox when this machine's ffmpeg can open it (render_hw.mjs pickEncoder), else libx264 at `preset`.
-const enc = pickEncoder({ use: workers > 1 ? 'segment' : 'final' });
+const enc = pickEncoder({ use: workers > 1 ? 'segment' : 'final', env: { ...process.env, AVS_ENCODER: perf.encoder } });
 const venc = [...encoderArgs(enc.kind, { preset, crf: 17, threads }), '-r', String(fps)];
+// M64: tối đa perf.slots lượt render cùng lúc trên cả máy (Studio, hàng đợi, CLI); chỗ tự nhả khi thoát.
+const slot = await acquireRenderSlot({ slots: perf.slots, info: { W, H, frames: n }, onWait: () => process.stdout.write('Đang chờ lượt render khác…\n') });
 
 const started = Date.now();
 let done = 0, lastShown = -1;
@@ -102,6 +113,7 @@ for (const s of [process.stdout, process.stderr]) s.on('error', () => { abort();
 // One worker: frames [a, b) -> ffmpeg (segment file, or the final mp4 when serial).
 async function renderRange(a, b, file, withAudio) {
   const { browser, shot } = await openPage();
+  lowerPriority(browser.process()?.pid, perf.priority);
   const ff = spawn('ffmpeg', [
     '-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
     ...(withAudio ? ['-ss', String(t0), '-t', String(t1 - t0), '-i', audio] : []),
@@ -109,6 +121,7 @@ async function renderRange(a, b, file, withAudio) {
     ...venc, ...(file === outPath ? ['-movflags', '+faststart'] : ['-video_track_timescale', String(fps * 512)]), file,
   ], { stdio: ['pipe', 'inherit', 'inherit'] });
   procs.push(ff);
+  lowerPriority(ff.pid, perf.priority);
   const closed = new Promise((ok, bad) => ff.on('close', c => c ? bad(new Error(`ffmpeg exit ${c}`)) : ok()));
   for (let i = a; i < b; i++) {
     const buf = await shot(t0 + i / fps);
@@ -138,5 +151,9 @@ if (workers === 1) {
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 process.stdout.write(`\r${t1.toFixed(1)}s / ${t1}s  (${((Date.now() - started) / 1000).toFixed(0)}s elapsed)`);
+slot.release();
+// M64: một dòng số đo mỗi lượt vào $AVS_HOME/perf_log.jsonl (không chặn lượt render khi ghi lỗi).
+const sec = +((Date.now() - started) / 1000).toFixed(1);
+try { appendPerfLog({ profile: perf.profile, W, H, frames: n, workers, encoder: encoderLabel(enc.kind, preset), chrome, sec, fps: +(n / Math.max(sec, 0.1)).toFixed(1), waited_s: slot.waited_s }); } catch (e) { console.error('[perf] không ghi được perf_log:', e.message); }
 // Explicit exit: a leftover puppeteer handle can otherwise keep node alive ~20 s after the file is written.
 process.stdout.write(`\ndone -> ${outPath}  (${n} frames, ${workers} worker${workers > 1 ? 's' : ''}, ${chrome}, ${encoderLabel(enc.kind, preset)}, ${(n / process.uptime()).toFixed(1)} fps, ${process.uptime().toFixed(1)}s)\n`, () => process.exit(0));
