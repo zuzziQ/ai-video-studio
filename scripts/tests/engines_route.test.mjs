@@ -164,6 +164,17 @@ function wavBuf(sec, sr = 16000) {
 }
 const upload = async (qs, body) => { const r = await fetch(BASE + '/api/engines/voice/clone?' + new URLSearchParams(qs), { method: 'POST', body }); return { status: r.status, j: await r.json() }; };
 const hasFfmpeg = (await import('node:child_process')).spawnSync('ffmpeg', ['-version']).status === 0;
+const SPEECH = () => fs.readFileSync(path.join(SKILL, 'sample/clip-mau/work/aroll.mp4'));
+
+test('nhái giọng: mẫu không phải âm thanh / không có tiếng nói → 400 rõ ràng (không phải 502), không gửi tới máy chủ', { skip: !hasFfmpeg && 'cần ffmpeg' }, async () => {
+  setConf({ tts: { vieneu: { url: FAKE } } });
+  const n = CLONE_BODIES.length;
+  let r = await upload({ name: 'Mới', consent: '1', ext: 'mp3' }, Buffer.from('đây không phải âm thanh'));
+  assert.equal(r.status, 400); assert.match(r.j.error, /không đọc được/); assert.doesNotMatch(r.j.error, /Error opening|Invalid data/);
+  r = await upload({ name: 'Mới', consent: '1', ext: 'wav' }, wavBuf(6)); // tiếng sin đều
+  assert.equal(r.status, 400); assert.match(r.j.error, /không giống giọng nói|Không nghe thấy tiếng nói/);
+  assert.equal(CLONE_BODIES.length, n);
+});
 
 test('nhái giọng: chặn khi thiếu xác nhận, tên lạ, định dạng lạ, máy chủ tắt', async () => {
   setConf({ tts: { vieneu: { url: FAKE } } });
@@ -203,14 +214,27 @@ test('nhái giọng: tạo → chọn làm giọng mặc định → xoá', { sk
   setConf({ pexels: SECRET, tts: { vieneu: { url: FAKE } } });
   try {
     const note = '-Minh, chính tôi', nfd = 'Giọng Minh'.normalize('NFD');
-    const rr = await fetch(BASE + '/api/engines/voice/clone?' + new URLSearchParams({ name: nfd, consent: '1', ext: 'wav' }),
-      { method: 'POST', body: wavBuf(5), headers: { 'X-AVS-Consent-Note': encodeURIComponent(note) } });
+    // giọng nói thật (tiếng sin bị bộ kiểm giọng của tts.py chặn, xem test dưới)
+    const rr = await fetch(BASE + '/api/engines/voice/clone?' + new URLSearchParams({ name: nfd, consent: '1', ext: 'mp4' }),
+      { method: 'POST', body: SPEECH(), headers: { 'X-AVS-Consent-Note': encodeURIComponent(note) } });
     let r = { status: rr.status, j: await rr.json() };
     assert.equal(r.status, 200, r.j.error); assert.equal(r.j.name, 'Giọng Minh', 'tên NFD được chuẩn hoá NFC');
     const body = CLONE_BODIES.at(-1);
     assert.equal(body.consent, true); assert.equal(body.consent_note, note, 'ghi chú bắt đầu bằng "-" không thành tuỳ chọn');
     assert.equal(Buffer.from(body.audio_b64, 'base64').toString('latin1', 0, 4), 'RIFF');
+    // trùng tên (giọng nhái vừa tạo, hoặc một giọng có sẵn) → 409 trước khi nhận file; không gửi gì thêm tới máy chủ
+    const n = CLONE_BODIES.length;
+    for (const taken of ['Giọng Minh', 'Trúc Ly']) {
+      const d = await upload({ name: taken, consent: '1', ext: 'mp4' }, SPEECH());
+      assert.equal(d.status, 409, taken); assert.match(d.j.error, /Đã có giọng tên/);
+    }
+    assert.equal(CLONE_BODIES.length, n);
     assert.deepEqual(r.j.vieneu.voices.filter(v => v.kind === 'clone').map(v => v.name), ['Giọng Minh']);
+    // hai lần tạo cùng lúc: chỗ được giữ trước mọi await, nên đúng một lần chạy, lần kia 409 "Đang tạo…"
+    const pair = await Promise.all(['Song A', 'Song B'].map(nm => upload({ name: nm, consent: '1', ext: 'mp4' }, SPEECH())));
+    assert.deepEqual(pair.map(x => x.status).sort(), [200, 409], JSON.stringify(pair.map(x => x.j)));
+    assert.match(pair.find(x => x.status === 409).j.error, /Đang tạo/);
+    CLONES.splice(CLONES.findIndex(x => x.startsWith('Song')), 1);
     assert.equal((await post('/api/engines/voice', { voice: 'Giọng Minh' })).status, 200);
     assert.equal(conf().tts.vieneu.voice, 'Giọng Minh');
     assert.equal((await post('/api/engines/voice/rm', { name: 'Trúc Ly' })).status, 404, 'không xoá giọng có sẵn');

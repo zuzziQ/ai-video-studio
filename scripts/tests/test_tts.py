@@ -212,9 +212,7 @@ class TtsTest(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "cần ffmpeg")
     def test_cli_clone_converts_and_trims(self):
-        src = os.path.join(self.home, "mau.wav")
-        with open(src, "wb") as f:
-            f.write(wav_bytes(40.0, 44100))  # 40 s, 44,1 kHz → cắt còn 30 s, 24 kHz mono
+        src = self.speech_sample(40.0)  # 40 s giọng thật, 44,1 kHz → cắt còn 30 s, 24 kHz mono
         env = {**os.environ, "AVS_VIENEU_URL": self.url, "PYTHONIOENCODING": "utf-8"}
         cli = [sys.executable, "-I", "-X", "utf8", os.path.join(SCRIPTS, "tts.py")]
         r = subprocess.run(cli + ["vieneu-clone", "--name", "Giọng Minh", "--audio", src, "--consent", "--note", "Chính tôi"],
@@ -237,6 +235,40 @@ class TtsTest(unittest.TestCase):
         r = subprocess.run(cli + ["vieneu-clone", "--name", "B", "--audio", os.path.join(self.home, "khong-co.wav"), "--consent"],
                            capture_output=True, text=True, env=env, encoding="utf-8")
         self.assertIn("Không thấy file", r.stderr)
+
+    def speech_sample(self, seconds):
+        """Giọng nói thật (clip mẫu của repo, lặp lại cho đủ dài): mẫu tổng hợp như tiếng sin bị bộ kiểm giọng chặn."""
+        src = os.path.join(self.home, "mau.wav")
+        aroll = os.path.join(SCRIPTS, "..", "sample", "clip-mau", "work", "aroll.mp4")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-stream_loop", "-1", "-i", aroll, "-t", str(seconds), "-vn", "-ac", "1", "-ar", "44100", src], check=True)
+        return src
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "cần ffmpeg")
+    def test_cli_clone_rejects_bad_samples_and_taken_names(self):
+        env = {**os.environ, "AVS_VIENEU_URL": self.url, "PYTHONIOENCODING": "utf-8"}
+        cli = [sys.executable, "-I", "-X", "utf8", os.path.join(SCRIPTS, "tts.py")]
+        run = (lambda name, src: subprocess.run(cli + ["vieneu-clone", "--name", name, "--audio", src, "--consent"],
+                                                capture_output=True, text=True, env=env, encoding="utf-8"))
+        n = len(Fake.clones)
+        sine = os.path.join(self.home, "sin.wav")
+        with open(sine, "wb") as f:
+            f.write(wav_bytes(6.0))
+        silent = os.path.join(self.home, "lang.wav")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", "6", silent], check=True)
+        fake = os.path.join(self.home, "khong-phai-audio.mp3")
+        with open(fake, "w", encoding="utf-8") as f:
+            f.write("đây không phải âm thanh")
+        for src, want in ((sine, "không giống giọng nói"), (silent, "im lặng"), (fake, "không đọc được")):
+            r = run("Mới", src)
+            self.assertEqual(r.returncode, 12, r.stderr)  # 12 → Studio trả 400, không phải 502
+            self.assertIn(want, r.stderr)
+            self.assertNotIn("Traceback", r.stderr)
+        speech = self.speech_sample(8.0)
+        for taken in ("Mẫu", "Ngoc"):  # trùng giọng nhái cũ, hoặc tên giọng có sẵn
+            r = run(taken, speech)
+            self.assertEqual(r.returncode, 13, r.stderr)  # 13 → 409
+            self.assertIn("Đã có giọng tên", r.stderr)
+        self.assertEqual(len(Fake.clones), n, "mẫu hỏng / trùng tên thì không gửi gì tới máy chủ")
 
     def test_voice_rm_clears_default(self):
         os.environ["AVS_VIENEU_URL"] = self.url

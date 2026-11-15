@@ -30,6 +30,10 @@ Mặc định giữ như cũ: `dub.py` dùng `say` (máy không có `say` thì `
 
 - Mẫu: 3–30 giây **một người** nói rõ, ít tạp âm (ghi âm hoặc video bất kỳ ffmpeg đọc được). `tts.py vieneu-clone` dùng ffmpeg
   đổi về WAV 24 kHz mono, cắt tối đa 30 s từ `--start`, gửi base64 tới `POST /voices`.
+- Trước khi gửi, `tts.py` kiểm mẫu: ffmpeg không đọc được / video không có tiếng / im lặng / âm đều (tiếng bíp, ù, nhiễu, đo
+  độ to và zero-crossing theo khung 30 ms) / dưới 2 s có tiếng nói theo VAD Silero của faster-whisper (có trong venv; thiếu
+  thì bỏ bước VAD) → thoát mã 12, Studio trả 400. Trùng tên giọng nhái hoặc giọng có sẵn → mã 13, Studio trả 409 (route kiểm
+  trước khi nhận file). Lỗi khác của máy chủ → 502.
 - Máy chủ trích đặc trưng giọng (`encode_reference` của gói: khử ồn, cắt lặng, speaker embedding 192 chiều + mã tham chiếu) trên
   CPU, lưu `$AVS_HOME/vieneu/voices/<hash tên>.json` (`{name, created, seconds, consent, speaker_emb, codes}`), **không giữ file
   âm thanh mẫu**; file tạm của mẫu xoá ngay. Khi đọc, giọng nhái truyền cho `infer()` dưới dạng `{speaker_emb, codes}`.

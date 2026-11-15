@@ -175,9 +175,13 @@ export default ctx => {
       if (!CLONE_EXT.has(ext)) { req.resume(); throw bad('Định dạng file mẫu không hỗ trợ: ' + ext); }
       const start = Math.max(0, Math.min(36000, +q('start') || 0));
       if (busy.clone) { req.resume(); throw bad('Đang tạo một giọng nhái khác', 409); }
-      busy.clone = true;
+      busy.clone = true; // giữ chỗ trước mọi await: hai request cùng lúc không cùng lọt qua
       const tmp = path.join(os.tmpdir(), `avs-clone-${crypto.randomBytes(6).toString('hex')}.${ext}`);
       try {
+        // máy chủ tắt / trùng tên: báo ngay, không nhận cả file 50 MB rồi mới từ chối
+        const st0 = await vieneuStatus();
+        if (!st0.running) { req.resume(); throw bad('Máy chủ giọng VieNeu chưa chạy. Bấm "Bật máy chủ" trước.', 409); }
+        if ((st0.voices || []).some(v => v.name === name)) { req.resume(); throw bad(`Đã có giọng tên '${name}': đặt tên khác, hoặc xoá giọng nhái cũ trước.`, 409); }
         await saveUpload(req, tmp, CLONE_MAX_BYTES);
         const st = await vieneuStatus();
         if (!st.running) throw bad('Máy chủ giọng VieNeu chưa chạy. Bấm "Bật máy chủ" trước.', 409);
@@ -186,7 +190,8 @@ export default ctx => {
         note = note.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 300);
         const r = await py(['vieneu-clone', `--name=${name}`, `--audio=${tmp}`, '--consent', `--start=${start}`, `--note=${note}`], 900000);
         const cl = r.out.split(/\r?\n/).find(l => l.startsWith('CLONE ')), info = cl ? JSON.parse(cl.slice(6)) : null;
-        if (r.code || !info) throw bad(lastLine(r.err) || 'Không tạo được giọng nhái', 502);
+        // tts.py: mã 12 = mẫu không dùng được (không phải âm thanh, không có tiếng nói…), 13 = trùng tên; khác (kể cả 2 của argparse) = lỗi
+        if (r.code || !info) throw bad(lastLine(r.err) || 'Không tạo được giọng nhái', r.code === 12 ? 400 : r.code === 13 ? 409 : 502);
         ctx.json(res, { ok: true, ...info, vieneu: await vieneuStatus() });
       } finally { busy.clone = false; fs.rmSync(tmp, { force: true }); }
       return true;
