@@ -80,6 +80,7 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/engines`, `GET /api/engines/status` | cấu hình LLM + giọng (chỉ khoá `llm`/`tts`, không khoá bí mật), trạng thái Ollama/VieNeu |
 | `POST /api/engines/llm`, `POST /api/engines/llm/try` | `{text, fallback, url, model}` (url chỉ loopback) · thử một câu JSON |
 | `POST /api/engines/voice`, `…/voice/start`, `…/voice/preview` | `{url, voice, default_engine}` · bật máy chủ VieNeu · `{voice, text}` → `audio/wav` |
+| `GET /api/frames/check`, `POST /api/frames/rebuild` | chuỗi khung hình của timeline có thư mục trống `[{seq, fps, src}]` (`src`: video tạo lại được, `null` nếu không còn) · job tách lại bằng ffmpeg ở cỡ thiết kế. Mở dự án thiếu khung hình (chép thiếu `work/frames`) thì Studio hỏi tạo lại (`63_frames`, M63) |
 
 Server chỉ nghe ở `127.0.0.1` và chỉ phục vụ file trong `studio/`, `engine/`, `assets/`, thư mục mẫu và thư mục dự án. Thư mục mẫu mặc định là `<skill>/templates`, đổi bằng `--templates <dir>` hoặc biến `AVS_TEMPLATES`.
 
