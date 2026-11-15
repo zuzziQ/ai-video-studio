@@ -19,7 +19,10 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn, execFileSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { findChrome, linkPath, pyBin } from './platform.mjs';
+import { findChrome, linkPath, pyBin, killTree } from './platform.mjs';
+import { resolvePerf, hwSnapshot } from './perf_profile.mjs';
+import { batchGate, batchPlan, batchPixels, holdBatchSlot, otherRenders, parallelLimit, pipeline } from './batch_parallel.mjs';
+import { retryBusy } from './file_lock.mjs';
 import { defaultEngine } from './tts_config.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -169,13 +172,13 @@ export function brandFields(kit, dir) {
 
 // ---------- helpers ----------
 const slug = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
-let CUR = null; // running child process (killed on cancel)
-const sh = (cmd, argv, { cwd, onLine } = {}) => new Promise((ok, bad) => {
-  const p = spawn(cmd, argv, { cwd }); CUR = p; let log = '';
+const PROCS = new Set(); // running child processes (killed on cancel; several while rows render in parallel, M68)
+const sh = (cmd, argv, { cwd, onLine, env } = {}) => new Promise((ok, bad) => {
+  const p = spawn(cmd, argv, { cwd, ...(env ? { env: { ...process.env, ...env } } : {}) }); PROCS.add(p); let log = '';
   const feed = d => { const s = d.toString(); log = (log + s).slice(-3000); if (onLine) s.split(/[\r\n]/).forEach(l => l && onLine(l)); };
   p.stdout.on('data', feed); p.stderr.on('data', feed);
-  p.on('error', bad);
-  p.on('close', code => { CUR = null; code === 0 ? ok(log) : bad(new Error(`${path.basename(cmd)} lỗi (mã ${code}): ${log.trim().split('\n').slice(-2).join(' | ').slice(-300)}`)); });
+  p.on('error', e => { PROCS.delete(p); bad(e); });
+  p.on('close', code => { PROCS.delete(p); code === 0 ? ok(log) : bad(new Error(`${path.basename(cmd)} lỗi (mã ${code}): ${log.trim().split('\n').slice(-2).join(' | ').slice(-300)}`)); });
 });
 // Giọng AI: 'say' (chỉ macOS), 'edge' (edge-tts, cần mạng) hoặc 'vieneu' (máy chủ giọng tiếng Việt trên 127.0.0.1).
 // Mặc định như cũ: say trên macOS, edge ở nơi khác. edge/vieneu đi qua scripts/tts.py; VieNeu không chạy thì nó lùi về edge-tts.
@@ -372,7 +375,8 @@ function applyBrandTexts(tl, brand) {
   return walk(tl);
 }
 
-async function renderRow(dir, tl, onProgress) {
+// workers: --workers for render.mjs (lô song song, M68; null = theo profile); env: e.g. AVS_RENDER_SLOTS=0 while the batch holds the slot.
+async function renderRow(dir, tl, onProgress, { workers = null, env = null } = {}) {
   fs.mkdirSync(path.join(dir, 'out'), { recursive: true });
   const tlFile = path.join(dir, 'timeline.json');
   if (tl.audio && (tl.audio.voice || tl.audio.music?.length || tl.audio.sfx?.length || tl.clips?.some(c => c.audio))) {
@@ -380,7 +384,7 @@ async function renderRow(dir, tl, onProgress) {
   }
   const out = path.join(dir, 'out', `${path.basename(dir)}.mp4`), part = out.replace(/\.mp4$/, '.part.mp4');
   onProgress(0, 'render');
-  await sh('node', [path.join(HERE, 'render.mjs'), tlFile, part], { onLine: l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onProgress(Math.min(.99, +m[1] / +m[2]), 'render'); } });
+  await sh('node', [path.join(HERE, 'render.mjs'), tlFile, part, ...(workers ? ['--workers', String(workers)] : [])], { env, onLine: l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onProgress(Math.min(.99, +m[1] / +m[2]), 'render'); } });
   fs.renameSync(part, out);
   return out;
 }
@@ -391,7 +395,10 @@ function rowList(spec, n) {
   if (Array.isArray(spec)) return spec.filter(i => i >= 0 && i < n);
   return [...new Set(String(spec).split(',').flatMap(p => { const [a, b] = p.split('-').map(Number); return b ? Array.from({ length: b - a + 1 }, (_, k) => a + k - 1) : [a - 1]; }))].filter(i => i >= 0 && i < n);
 }
-export async function runJob(jobFile) {
+// deps (tests): { build(job, i, opts), render(dir, tl, onProgress, opts), hw, perf } replace buildRow / renderRow /
+// hwSnapshot() / resolvePerf(); signals: false → no SIGTERM/SIGINT handlers.
+export async function runJob(jobFile, deps = {}) {
+  const build = deps.build || buildRow, render = deps.render || renderRow;
   const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
   job.out = job.out || path.dirname(jobFile);
   const { rows } = parseSheet(job.sheet);
@@ -399,31 +406,70 @@ export async function runJob(jobFile) {
   const stFile = path.join(job.out, 'status.json');
   const prev = fs.existsSync(stFile) ? JSON.parse(fs.readFileSync(stFile, 'utf8')) : null;
   const st = { name: job.name || path.basename(job.out), total: todo.length, started: prev?.started || new Date().toISOString(), rows: todo.map(i => prev?.rows?.find(r => r.i === i) || { i, state: 'pending' }) };
-  const save = () => { st.updated = new Date().toISOString(); fs.writeFileSync(stFile, JSON.stringify(st, null, 1)); };
+  // atomic (tmp + rename): with rows rendering in parallel status.json is rewritten often while 50_batch.mjs polls it
+  // A failed write (Windows EBUSY past the retries) is logged, never thrown: it must not fail a row or crash the batch.
+  const save = () => {
+    st.updated = new Date().toISOString(); const tmp = `${stFile}.${process.pid}.tmp`;
+    try { fs.writeFileSync(tmp, JSON.stringify(st, null, 1)); retryBusy(() => fs.renameSync(tmp, stFile)); }
+    catch (e) { console.error('[batch] không ghi được status.json:', e.message); try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ } }
+  };
+  // Pause (M24/M68): <out>/.pause (written by 50_batch.mjs) → no new row starts; rows already rendering finish.
+  const pauseFile = path.join(job.out, '.pause');
+  fs.rmSync(pauseFile, { force: true });
   const emit = (r, extra = {}) => {
     const done = st.rows.filter(x => x.state === 'done').length;
-    const frac = (done + (r && r.state === 'running' ? r.progress || 0 : 0)) / Math.max(1, st.total);
+    const frac = (done + st.rows.reduce((a, x) => a + (x.state === 'running' ? x.progress || 0 : 0), 0)) / Math.max(1, st.total);
     console.log('@@ ' + JSON.stringify({ progress: +frac.toFixed(3), step: r ? `Dòng ${r.i + 1}/${rows.length}: ${r.step || r.state}` : extra.step, done, total: st.total }));
     save();
   };
-  let cur = null;
-  const stop = () => { if (CUR) CUR.kill('SIGTERM'); if (cur) { cur.state = 'cancelled'; cur.step = 'đã dừng'; } save(); BROWSER?.close().catch(() => {}); process.exit(130); };
-  process.on('SIGTERM', stop); process.on('SIGINT', stop);
-  for (const r of st.rows) {
-    if (r.state === 'done' && r.out && fs.existsSync(r.out)) continue;
-    cur = r; Object.assign(r, { state: 'running', step: 'chuẩn bị', progress: 0, error: undefined }); emit(r);
-    try {
-      const { dir, tl } = await buildRow(job, r.i, { log: s => { r.step = s; emit(r); } });
-      r.dir = dir; r.name = path.basename(dir); r.title = tl.title || r.name;
-      r.out = await renderRow(dir, tl, (p, s) => { r.progress = p; r.step = s; emit(r); });
-      Object.assign(r, { state: 'done', step: 'xong', progress: 1 });
-    } catch (e) { Object.assign(r, { state: 'error', error: e.message }); console.error(`dòng ${r.i + 1}: ${e.message}`); }
-    emit(r);
-  }
-  cur = null;
+  const live = new Set(); // rows building or rendering
+  let hold = null;
+  // Cancel (CLI Ctrl+C / SIGTERM on POSIX): stop every child tree (render.mjs + its Chrome/ffmpeg — killTree, never
+  // process.kill(-pid): a no-op on Windows), mark the live rows. On Windows the queue/route kill this whole tree with
+  // taskkill /t /f instead, and 50_batch.mjs fixes rows left "running".
+  // `stopping` first: live rows are marked cancelled before their render dies (else the dying render.mjs reports an
+  // error), no new row starts while the trees are being killed, and a second signal does nothing.
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return; stopping = true;
+    for (const r of live) Object.assign(r, { state: 'cancelled', step: 'đã dừng' });
+    save();
+    await Promise.all([...PROCS].map(p => killTree(p)));
+    hold?.release(); BROWSER?.close().catch(() => {}); process.exit(130);
+  };
+  if (deps.signals !== false) { process.on('SIGTERM', stop); process.on('SIGINT', stop); }
+  const pending = st.rows.filter(r => !(r.state === 'done' && r.out && fs.existsSync(r.out)));
+  // Lô song song (M68): a batch of several rows takes ONE machine-wide render slot (waits like render.mjs), then plans
+  // P rows × W workers from the hardware; render.mjs children run with AVS_RENDER_SLOTS=0. Plan 1 → slot released, rows
+  // render one by one exactly as before (each render.mjs takes its own slot).
+  let plan = { parallel: 1, workersEach: null, why: '' }, childEnv = null;
+  const perf = deps.perf || resolvePerf(), gate = batchGate({ n: pending.length, perf, limit: parallelLimit() });
+  if (!gate) {
+    hold = await holdBatchSlot({ perf, info: { rows: pending.length }, onWait: () => emit(null, { step: 'Đang chờ lượt render khác…' }) });
+    const [W, H] = batchPixels(job.quality);
+    plan = batchPlan({ n: pending.length, hw: deps.hw || hwSnapshot({ env: { ...process.env, AVS_ENCODER: perf.encoder } }), perf, load: { renders_running: otherRenders() }, W, H, limit: parallelLimit() });
+    if (plan.parallel > 1) { childEnv = hold.childEnv; st.parallel = { parallel: plan.parallel, workers: plan.workersEach, why: plan.why }; console.error(`[batch] ${plan.why}`); }
+    else { hold.release(); hold = null; delete st.parallel; }
+  } else delete st.parallel;
+  let paused = false;
+  try {
+    ({ stopped: paused } = await pipeline({
+      items: pending, parallel: plan.parallel, shouldStop: () => stopping || fs.existsSync(pauseFile),
+      build: async r => {
+        live.add(r); Object.assign(r, { state: 'running', step: 'chuẩn bị', progress: 0, error: undefined }); emit(r);
+        const built = await build(job, r.i, { log: s => { r.step = s; emit(r); } });
+        r.dir = built.dir; r.name = path.basename(built.dir); r.title = built.tl.title || r.name;
+        return built;
+      },
+      render: (r, { dir, tl }) => render(dir, tl, (p, s) => { r.progress = p; r.step = s; emit(r); }, { workers: plan.parallel > 1 ? plan.workersEach : null, env: childEnv }),
+      onDone: (r, out) => { if (stopping) return; live.delete(r); r.out = out; Object.assign(r, { state: 'done', step: 'xong', progress: 1 }); emit(r); },
+      onError: (r, e) => { if (stopping) return; live.delete(r); Object.assign(r, { state: 'error', error: e.message }); console.error(`dòng ${r.i + 1}: ${e.message}`); emit(r); },
+    }));
+  } finally { hold?.release(); hold = null; }
+  fs.rmSync(pauseFile, { force: true });
   await BROWSER?.close();
   const bad = st.rows.filter(r => r.state !== 'done');
-  emit(null, { step: `Xong ${st.total - bad.length}/${st.total} video` });
+  emit(null, { step: paused ? `Đã tạm dừng (${st.total - bad.length}/${st.total} xong)` : `Xong ${st.total - bad.length}/${st.total} video` });
   return st;
 }
 

@@ -81,6 +81,11 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `POST /api/engines/llm`, `POST /api/engines/llm/try` | `{text, fallback, url, model}` (url chỉ loopback) · thử một câu JSON |
 | `POST /api/engines/voice`, `…/voice/start`, `…/voice/preview` | `{url, voice, default_engine}` · bật máy chủ VieNeu · `{voice, text}` → `audio/wav` |
 | `GET /api/frames/check`, `POST /api/frames/rebuild` | chuỗi khung hình của timeline có thư mục trống `[{seq, fps, src}]` (`src`: video tạo lại được, `null` nếu không còn) · job tách lại bằng ffmpeg ở cỡ thiết kế. Mở dự án thiếu khung hình (chép thiếu `work/frames`) thì Studio hỏi tạo lại (`63_frames`, M63) |
+| `GET /api/perf` | profile hiệu năng đã lưu + `custom`, `active`/`resolved` (sau biến môi trường), danh sách profile (nhãn + mô tả), máy này (`hwSnapshot`, không đường dẫn; giữ 30 s, `?fresh=1` đo lại), kế hoạch 720p/1080p/4k, `env` (tên biến `AVS_*` đang ghi đè → có/không) |
+| `POST /api/perf` | `{profile?, custom?}` kiểm bằng `ENCODER_CHOICES`, `X264_PRESETS`, `PRIORITIES`, `WHISPER_DEVICES`, `MAX_WORKERS`, `MAX_SLOTS`; sai → 400 `{error}`, không ghi |
+| `GET /api/perf/log?n=20` | `readPerfLog` (mới nhất cuối, tối đa 500) |
+| `POST /api/perf/bench` | `{profiles?: [1–3 profile]}` (mặc định Tiết kiệm, Cân bằng, Tốc độ) → job `perf-bench`: render 10 s bản chép tạm `sample/clip-mau`, kết quả ở `job.bench` của `GET /api/job`; đang có job → 409; huỷ bằng `/api/job/cancel` |
+| `POST /api/perf/advise` | `{goal:"nhanh"\|"song-song"\|"chat-luong", job?:{W,H,fps,sec,count}, llm?:false}` → `{profile, overrides, reason, provider, pick, candidates}`: luật sinh ứng viên, LLM chỉ chọn (M68, `references/perf-profile.md`); không lưu; 400 sai kiểu, 409 đang bận |
 
 Server chỉ nghe ở `127.0.0.1` và chỉ phục vụ file trong `studio/`, `engine/`, `assets/`, thư mục mẫu và thư mục dự án. Thư mục mẫu mặc định là `<skill>/templates`, đổi bằng `--templates <dir>` hoặc biến `AVS_TEMPLATES`.
 
@@ -99,6 +104,7 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
   - `18_schedule`: Lịch đăng + Kết nối YouTube (`references/publish-schedule.md`).
   - `20_ai`: AI dựng giúp, Cắt lỗi nói, Lời thoại.
   - `28_engines`: nút **Mô hình & giọng**: nhà cung cấp LLM cho việc chỉ có chữ (Claude/Ollama, `references/llm.md`) và giọng VieNeu (`references/voice.md`).
+  - `29_perf`: panel trái **Hiệu năng** (`references/perf-profile.md`): thẻ máy, chọn profile, form Tuỳ chỉnh, dòng biến môi trường đang ghi đè, kế hoạch render, **Đo thử 10 s**, lịch sử `perf_log`, **Hỏi AI chọn profile** (`POST /api/perf/advise` của `31_perfai`, không có thì ẩn nút); hộp xuất hiện tên profile đang dùng. Route `29_perf.mjs` chỉ nhận `/api/perf`, `/api/perf/log`, `/api/perf/bench`, đường dẫn khác dưới `/api/perf/` để route sau xử lý.
   - `30_audio`: Âm thanh+.
   - `40_reframe`: Bám mặt, Lồng tiếng.
   - `50–52`: Hàng loạt, Thương hiệu, Đăng.

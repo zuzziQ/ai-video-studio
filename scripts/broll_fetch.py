@@ -23,6 +23,9 @@ import unicodedata
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
+from encoder_args import run_encode, video_args  # noqa: E402  (M65)
+
 SKILL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UA = "video-edit-ai-hype-cam/2.0 (broll fetcher)"
 
@@ -154,8 +157,9 @@ def normalise_video(src, dst, dur, w, h, start=None):
     total = float(probe.stdout.strip() or 0)
     ss = start if start is not None else max(0.0, total / 2 - dur / 2) if total > dur + 1 else 0
     vf = f"fps=30,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{ss:.2f}", "-i", src, "-t", str(dur), "-an", "-vf", vf,
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", dst], check=True)
+    x264 = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"]
+    run_encode(lambda venc: ["ffmpeg", "-v", "error", "-y", "-ss", f"{ss:.2f}", "-i", src, "-t", str(dur), "-an", "-vf", vf,
+                             *venc, "-movflags", "+faststart", dst], video_args(20, x264=x264), x264)
 
 
 def normalise_photo(src, dst, w, h):

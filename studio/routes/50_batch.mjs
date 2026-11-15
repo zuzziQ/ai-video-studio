@@ -11,6 +11,8 @@ import { killTree } from '../../scripts/platform.mjs';
 // back to "pending"), cancel = stop now and mark every unfinished row cancelled (status.cancelled; "Chạy tiếp" still
 // works, batch.mjs rewrites status.json without the flag). Both kill via killTree: on Windows taskkill /f skips
 // batch.mjs's own SIGTERM handler, so the route fixes rows left "running" after the process is gone.
+// M68: a batch rendering several rows at once (status.parallel) pauses gracefully instead: the route writes <dir>/.pause,
+// batch.mjs starts no new row and the rows already rendering finish (killing would throw away P−1 renders in progress).
 const PAGE = 50;
 export default ctx => {
   const CTRL = { dir: null, row: null, pause: null, cancel: false };
@@ -131,10 +133,10 @@ export default ctx => {
             const row = /^Dòng (\d+)\//.exec(m.step || '')?.[1];
             if (row) CTRL.row = +row;
             // pause asked while row N was being made: stop when another row starts
-            if (CTRL.pause && !CTRL.pause.hit && row && +row !== CTRL.pause.row) { CTRL.pause.hit = true; killTree(ctx.job.proc); }
+            if (CTRL.pause && !CTRL.pause.hit && !CTRL.pause.graceful && row && +row !== CTRL.pause.row) { CTRL.pause.hit = true; killTree(ctx.job.proc); }
           } catch {}
         }).then(() => null, e => e);
-        if ((CTRL.cancel && err) || CTRL.pause?.hit) { // cancel that came after the batch had finished: nothing to cancel
+        if ((CTRL.cancel && err) || CTRL.pause?.hit || (CTRL.pause?.graceful && /^Đã tạm dừng/.test(ctx.job.step || ''))) { // cancel that came after the batch had finished: nothing to cancel
           const st = settle(dir, CTRL.cancel ? 'cancel' : 'pause'), done = st ? st.rows.filter(r => r.state === 'done').length : 0;
           throw Object.assign(new Error(CTRL.cancel ? `Đã huỷ lô — giữ ${done}/${st?.total || 0} video đã xong` : `Đã tạm dừng (${done}/${st?.total || 0} xong) — bấm “Chạy tiếp” để làm nốt`), { stopped: CTRL.cancel ? 'cancelled' : 'paused' });
         }
@@ -162,6 +164,7 @@ export default ctx => {
       if (p === '/api/batch/pause') {
         if (!runningHere(d)) return ctx.json(res, { error: 'Lô này không chạy' }, 409), true;
         CTRL.pause = { row: CTRL.row, hit: false };
+        if (CTRL.row != null && status(d)?.parallel) { CTRL.pause.graceful = true; fs.writeFileSync(path.join(d, '.pause'), ''); return ctx.json(res, { ok: true, after: CTRL.row, graceful: true }), true; }
         if (CTRL.row == null) { CTRL.pause.hit = true; killTree(ctx.job.proc); } // no row started yet: stop now
         return ctx.json(res, { ok: true, after: CTRL.row }), true;
       }
