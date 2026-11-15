@@ -71,6 +71,11 @@ mục 4) là sai khác bình thường giữa các cách chia đoạn NVENC (ran
 (*) 1080p `2×2`: 6/18 bản ra md5 khác (SSIM 0,9922 thay vì 0,9968), chỉ ở lượt 1 và 2 — hai lượt có tải nền từ phiên khác; lượt 3
 và mọi lượt `3×2`/`4×2` (cũng 2 worker mỗi bản) ra một md5. Có thể là khung phụ thuộc thời điểm khi máy bận; chưa tìm khung nào lệch
 (file đã xoá sau khi đo). Không thấy ở 720p.
+Kiểm lại 2026-11-15 (`M69`): 4 bản `2×2` chạy cùng một render 4 worker chồng lên (8 Chrome) đều ra md5 tốt `6d338ae…`, không tái hiện.
+Bản lạ luôn cùng **một** md5 (`b459e55…`, SSIM 0,992244 ở cả hai lượt) và đi theo cặp khởi động cùng lúc, nên là một cấu hình khác
+tất định, không phải khung chụp ngẫu nhiên. Đã loại: lùi x264 (`2×2` x264 ra `8a711a5…`), hạ worker theo RAM (`--workers` gõ tay không
+bị hạ), Chrome SwiftShader (`perf_log` chỉ có `gpu`). Lúc đó có phiên khác chạy thử render GPU (`perf_log` 10:05). Chưa rõ nguyên nhân.
+Nếu gặp lại: giữ file ra và chạy `framemd5` để tìm khung đầu tiên khác.
 
 ### 2.3 Đọc bảng
 
@@ -102,7 +107,7 @@ Render đó một mình mất 15,3 s.
 - 10 Chrome: VRAM 5,8/6 GB, NVENC 97–99 %, CPU 94–95 % — sát mọi trần cùng lúc. Chưa vỡ (0 lỗi), nhưng không còn dư cho GPU whisper
   (`M53`) hay preview.
 
-## 4. Phát hiện: `--workers 3` lệch pts sau ranh giới đoạn (NVENC)
+## 4. Phát hiện: `--workers 3` lệch pts sau ranh giới đoạn (NVENC) — đã sửa ở `M69`
 
 SSIM 0,960 của `2×3` không phải lỗi hình. Với 947 khung và 3 worker, `render.mjs` chia đoạn `per = ceil(947/3) = 316` khung;
 316/30 s = 10,5333… s không là số micro giây chẵn. Sau `concat -c copy`, **631/947 khung** (đoạn 2 và 3) có pts lệch ~0,33 ms khỏi lưới
@@ -112,8 +117,10 @@ bằng bản 1 worker (0,9934 / 0,9885). Lệch 0,33 ms không thấy được k
 
 - Chỉ gặp với NVENC: cùng `--workers 3` bằng `AVS_ENCODER=x264` → 0 khung lệch. `--workers 2` (474 khung = 15,8 s) và `4` (237 = 7,9 s)
   không lệch trên video này vì độ dài đoạn tròn micro giây; video độ dài khác có thể gặp với mọi số worker > 1.
-- Gợi ý sửa (thuộc `render.mjs`, ngoài phạm vi đo): làm tròn `per` lên bội số khung sao cho `per / fps` chẵn micro giây (30 fps → bội 3
-  khung), hoặc đặt lại pts sau khi ghép. Đề xuất thành mục riêng.
+- Nguyên nhân: concat demuxer tính độ dài đoạn theo micro giây; ở đoạn 2 một gói có duration 507 thay vì 512 tick (lệch 5/15360 s).
+- **Đã sửa (`M69`):** `segmentRanges` trong `render_hw.mjs` làm tròn độ dài đoạn lên bội số khung để `độ dài / fps` chẵn micro giây
+  (30 fps → bội 3 khung; 947/3 → 318 + 318 + 311). Render lại `--workers 3` NVENC: 0/947 khung lệch lưới, mọi gói 512 tick, không còn
+  cảnh báo dts, SSIM theo thời gian so bản 1 worker **0,9945** (trước 0,960). Hai lượt render ra cùng md5.
 
 ## 5. Giới hạn thực tế trên máy này
 
@@ -152,7 +159,7 @@ Không đo: máy không GPU (Chrome SwiftShader — chụp khung bằng CPU, `M5
    - VRAM hoặc RAM trống dưới cổng ở mục 3–4 (đo lại trước mỗi đợt, không chỉ lúc bắt đầu lô).
 7. **`toc-do` cho một bản** không đổi vì số liệu này (đo một bản không thuộc `M66`; `M67` đo 5 worker nhanh hơn 4 khoảng 12 % trên đoạn
    10 s). Song song chỉ có lợi khi có nhiều bản.
-8. Sửa lệch pts ở mục 4 (mục riêng cho `render.mjs`).
+8. ~~Sửa lệch pts ở mục 4~~: xong ở `M69`.
 
 ## 7. Đo lại
 

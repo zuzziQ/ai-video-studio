@@ -238,3 +238,16 @@ test('M57: bộ cài chọn bản headless-shell theo Chrome máy này', async (
   assert.deepEqual(buildTags('', ''), ['stable']);
   assert.deepEqual(buildTags('', '', '156'), ['156']);
 });
+
+test('M69: đoạn của mỗi worker dài số micro giây chẵn, phủ đủ khung, không chồng', async () => {
+  const { segmentRanges } = await import('../render_hw.mjs');
+  for (const [n, w, fps] of [[947, 3, 30], [947, 2, 30], [947, 4, 30], [10, 4, 30], [100, 3, 24], [100, 3, 25], [900, 6, 60], [5, 8, 30], [301, 3, 29.97]]) {
+    const r = segmentRanges(n, w, fps);
+    assert.ok(r.length >= 1 && r.length <= w, `${n}/${w}: ${r.length} đoạn`);
+    assert.equal(r[0][0], 0); assert.equal(r.at(-1)[1], n);
+    for (let i = 1; i < r.length; i++) assert.equal(r[i][0], r[i - 1][1]);
+    if (Number.isInteger(fps)) for (const [a, b] of r.slice(0, -1)) assert.equal(((b - a) * 1e6) % fps, 0, `${n}/${w}@${fps}: ${b - a} khung`);
+  }
+  assert.deepEqual(segmentRanges(947, 3, 30), [[0, 318], [318, 636], [636, 947]]); // trước M69: 316 khung → lệch pts
+  assert.deepEqual(segmentRanges(947, 4, 30).map(([a, b]) => b - a), [237, 237, 237, 236]); // 237 đã chẵn: không đổi
+});
