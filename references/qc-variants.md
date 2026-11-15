@@ -4,7 +4,7 @@ Code: `scripts/ai_qc.mjs`, `scripts/variants.mjs`, `studio/routes/16_qc.mjs`, `s
 
 ## 1. AI tự kiểm tra — `scripts/ai_qc.mjs`
 ```bash
-node scripts/ai_qc.mjs <dự án> [--fix] [--model sonnet] [--no-claude] [--no-audio] [--fresh]
+node scripts/ai_qc.mjs <dự án> [--fix [--only keys.json]] [--model sonnet] [--no-claude] [--no-audio] [--fresh]
 ```
 Kết quả: `<dự án>/.studio/qc.json` + ảnh `.studio/qc/sheet.jpg` (tổng quan) và `.studio/qc/compare.jpg` (trước/sau, khi `--fix`). Tiến độ in dạng `@@ <0..1> <bước>`, lỗi in tiếng Việt ra stderr, mã thoát ≠ 0.
 
@@ -35,6 +35,10 @@ Mở **một** Chrome headless, nạp engine, render ảnh tại: đầu/giữa/
 Lệnh sai/thiếu đích bị bỏ (`proposed` giữ lại để xem). Kết quả được cache theo hash timeline (`.studio/qc/claude.json`): bấm “Áp dụng sửa” ngay sau “Kiểm tra” không gọi Claude lần nữa. Prompt/trả lời thô: `.studio/qc/claude_prompt.txt`, `claude_raw.txt`.
 
 ### Bước 3 — `--fix`
+Studio dùng dạng **gợi ý**: “Kiểm tra” (hoặc “Kiểm tra & gợi ý sửa”) chỉ liệt kê vấn đề kèm gợi ý sửa (máy: theo loại lỗi; Claude: theo lệnh sửa đã kiểm), mỗi gợi ý một ô tick (mặc định tick lỗi nặng + vừa). “Áp dụng N gợi ý đã chọn” gửi `POST /api/qc/run {fix:true, only:[id…]}`; id là `qcKey` = `nguồn|loại|đối tượng|thời điểm`, ổn định giữa lượt kiểm tra và lượt sửa vì timeline chưa đổi (Claude lấy từ cache). Route ghi id ra `.studio/qc_only.json` rồi chạy `--fix --only`: chỉ những vấn đề đó được sửa (vòng xếp chỗ lần 2 cũng chỉ đụng đối tượng đã chọn). Không có `--only` (CLI, ô “AI kiểm tra & sửa trước khi xuất”) thì sửa mọi thứ sửa được như cũ. Sau một lượt sửa, hộp kết quả không cho chọn tiếp (id cũ không còn khớp timeline mới): bấm “Kiểm tra lại”. `--only` chỉ chạy khi `qc.json` là một lượt kiểm tra (không phải lượt sửa) có cùng hash timeline, khác thì báo “Timeline đã đổi…”; `--only` không phải mảng chuỗi → thoát mã 2 (không bao giờ thành “sửa tất cả”). Lượt sửa chỉ gọi Claude nếu lượt kiểm tra đã dùng Claude. File chọn là `.studio/qc_only_<thời điểm>.json`, chỉ ghi khi job đã bắt đầu, xoá khi xong.
+
+“Phát sinh sau khi sửa” (`new: true`, đếm ở `counts.new`): vấn đề lần kiểm tra lại mới thấy, do chính lần sửa tạo ra (dời chữ thì đè lên thứ khác). Tóm tắt ghi “Ban đầu N vấn đề · đã sửa X · Y phát sinh”, không cộng dồn thành tổng tăng lên. Vấn đề có khoảng (`empty` t…t1) chồng khoảng với vấn đề cũ là cùng một vấn đề (thêm hook ở 0 s chỉ dời điểm bắt đầu đoạn trống).
+
 1. Sao lưu `.studio/qc_backup.json` (+ bản có giờ trong `.studio/qc/`). Hoàn tác: `POST /api/qc/undo` hoặc nút **Hoàn tác sửa**.
 2. Áp lệnh Claude (trừ `move/resize` lên cảnh mà máy cũng phải xếp chỗ — bộ xếp chỗ đo thật nên được ưu tiên).
 3. Sửa tự động:
@@ -47,7 +51,7 @@ Lệnh sai/thiếu đích bị bỏ (`proposed` giữ lại để xem). Kết qu
 
 ### `qc.json`
 ```json
-{"score": 93, "before": 32, "after": 93, "counts": {"total": 17, "fixed": 16, "high": 0},
+{"score": 93, "before": 32, "after": 93, "counts": {"total": 17, "initial": 17, "fixed": 16, "new": 0, "high": 0}, "selected": 16,
  "claude": {"used": true, "scores": {"hook": 4, "spelling": 3, …}, "summary": "…"},
  "audio": {"lufs": -14.3, "true_peak": -4, "music_vs_voice_db": -41.5, "masked_pct": 0},
  "issues": [{"t": 0.5, "kind": "spelling", "kind_vi": "Chính tả", "severity": "high", "msg": "…", "fixed": true, "src": "claude", "fix": {"op": "text", …}}],
@@ -75,8 +79,8 @@ node scripts/variants.mjs <dự án> --n 3 [--kind hook|style|both] [--export] [
 - Xoá bản anh em (`rm -r`, xoá trong Studio) chỉ gỡ liên kết, bản gốc còn nguyên; xoá bản gốc cũng không làm hỏng bản anh em. Dung lượng chỉ được giải phóng khi xoá hết mọi bản dùng chung file đó.
 
 ## 3. Studio
-- Panel **AI** → tab “Dựng giúp” có thêm 2 thẻ (chèn bằng MutationObserver, không sửa `20_ai.js`): **Kiểm tra chất lượng** (Kiểm tra · Kiểm tra & tự sửa · Kết quả; bỏ tick “Nhờ Claude” để chỉ dùng máy) và **Nhiều phiên bản (A/B)** (chọn kiểu, tick xuất 720p, **Tạo 3 phiên bản**, **So sánh**).
-- Hộp kết quả: điểm trước → sau, nhận xét + điểm từng mục của Claude, danh sách lỗi (bấm = tua tới), ảnh trước/sau, **Áp dụng sửa**, **Hoàn tác sửa**, **Kiểm tra lại**.
+- Panel **AI** → tab “Dựng giúp” có thêm 2 thẻ (chèn bằng MutationObserver, không sửa `20_ai.js`): **Kiểm tra chất lượng** (Kiểm tra · Kiểm tra & gợi ý sửa · Kết quả; bỏ tick “Nhờ Claude” để chỉ dùng máy) và **Nhiều phiên bản (A/B)** (chọn kiểu, tick xuất 720p, **Tạo 3 phiên bản**, **So sánh**).
+- Hộp kết quả: điểm trước → sau, nhận xét + điểm từng mục của Claude, danh sách lỗi (bấm = tua tới) kèm gợi ý sửa có ô tick, ảnh trước/sau, **Áp dụng N gợi ý đã chọn**, **Hoàn tác sửa**, **Kiểm tra lại**.
 - Hộp **Xuất**: ô “AI kiểm tra & sửa trước khi xuất” → chạy `--fix` (có Claude), tải lại dự án rồi xuất với đúng lựa chọn cũ; hộp “Xuất xong” có thẻ điểm QC.
 - Hộp **So sánh phiên bản**: các cột Gốc + v1…vN, video (hoặc ảnh hook), hook, mô tả, **Mở** (đổi dự án đang mở), **Phát cùng lúc**.
 

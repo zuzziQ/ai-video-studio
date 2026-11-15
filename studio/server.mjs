@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
 import { shortErr } from '../scripts/err_text.mjs';
-import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson } from './security.mjs';
+import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson, cookieOk, sessionCookie, launchKeyOk, launchUrl } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
@@ -330,7 +330,13 @@ function startJob(kind, fn, payload) {
   if (job?.state === 'running') return false;
   job = { kind, state: 'running', progress: 0, step: 'Bắt đầu', log: '', out: null, started: Date.now() };
   fn(payload).then(() => { job.state = 'done'; job.progress = 1; job.step = 'Xong'; })
-    .catch(e => { job.state = 'error'; job.step = job.cancelled && /lỗi \(mã/.test(e.message) ? 'Đã huỷ theo yêu cầu' : e.message; console.error(e); });
+    .catch(e => {
+      // A stop the user asked for is not a failure: 'cancelled' / 'paused' (e.stopped from a route) so the UI shows it in amber, not red.
+      const stopped = e?.stopped || (job.cancelled ? 'cancelled' : null);
+      job.state = stopped || 'error';
+      job.step = stopped && !e?.stopped ? 'Đã huỷ theo yêu cầu' : e.message;
+      if (!stopped) console.error(e);
+    });
   return true;
 }
 // Server stopped (app quit, Ctrl+C) while a job runs: stop it (render.mjs then closes its Chromes) and drop this run's temp timelines.
@@ -357,10 +363,23 @@ const FEATURES = () => fs.readdirSync(path.join(HERE, 'features')).filter(f => f
 // Session token: new each run, handed to the editor inside the main page (<meta name="avs-token">, read by studio/auth.js) and to
 // local CLI clients through ~/.ai-video-studio/studio-<port>.token (mode 600). Every /api request must carry it.
 const TOKEN = newToken();
+// Browser session secret (cookie avs_s_<port>), separate from the API token: a cookie the browser also sends to other localhost
+// ports (cookies are per host) does not work as X-AVS-Token. See references/studio.md for what it does and does not stop.
+const SESSION = newToken();
 function sendIndex(res) {
   const html = fs.readFileSync(path.join(HERE, 'index.html'), 'utf8').replace('<meta charset="utf-8">', `<meta charset="utf-8">\n<meta name="avs-token" content="${TOKEN}">`);
   res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
   res.end(html);
+}
+// No session cookie (opened as a bare http://localhost:<port>, or the server restarted): explain how to get in, never the token.
+function sendLocked(res) {
+  res.writeHead(401, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+  res.end(`<!doctype html><meta charset="utf-8"><title>AI Video Studio</title><body style="font:15px/1.6 system-ui;background:#0e0f13;color:#e6e7ea;max-width:620px;margin:12vh auto;padding:0 16px">
+<h2>Mở AI Video Studio bằng lối tắt</h2><p>Trang này cần mã phiên để bảo vệ dự án của bạn khỏi chương trình khác trên máy.</p>
+<ul><li>Bấm đúp <b>AI Video Studio</b> ngoài Desktop (hoặc <code>studio.cmd</code> / <code>./studio.sh</code>). Studio đang chạy thì lối tắt chỉ mở lại trình duyệt đúng trang.</li>
+<li>Hoặc mở link “Mở lại trong trình duyệt” in trong cửa sổ server.</li></ul>
+<p style="color:#8b8f98;font-size:13px">Mã phiên nằm ở ~/.ai-video-studio/studio-${PORT}.token (chỉ tài khoản của bạn đọc được), đổi mỗi lần bật Studio.</p>
+<p style="color:#8b8f98;font-size:13px">Tác giả: Nguyễn Tất Kiểm · <a style="color:#a78bfa" href="https://nguyentatkiem.com.vn/aiplusntk/">Tặng khoá học AI miễn phí</a></p></body>`);
 }
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
@@ -371,7 +390,11 @@ const server = http.createServer(async (req, res) => {
   const bs = bodyStatus(req, p);
   if (bs) { res.setHeader('Connection', 'close'); return json(res, { error: bs === 413 ? 'Dữ liệu gửi lên quá lớn' : 'Cần Content-Length' }, bs); }
   try {
-    if (p === '/' || p === '/index.html') return sendIndex(res);
+    if (p === '/' || p === '/index.html') {
+      // launch link ?k=<token> → session cookie, then drop the key from the address bar (history, screenshots)
+      if (launchKeyOk(u, TOKEN)) { res.writeHead(302, { 'Set-Cookie': sessionCookie(PORT, SESSION), Location: '/', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); return res.end(); }
+      return cookieOk(req, PORT, SESSION) ? sendIndex(res) : sendLocked(res);
+    }
     if (p.startsWith('/studio/')) { const f = under(HERE, p.slice(8)); return f ? sendFile(req, res, f) : json(res, {}, 403); }
     if (p.startsWith('/engine/')) { const f = under(path.join(SKILL, 'engine'), p.slice(8)); return f ? sendFile(req, res, f) : json(res, {}, 403); }
     if (p.startsWith('/assets/')) { const f = under(path.join(SKILL, 'assets'), p.slice(8)); return f ? sendFile(req, res, f) : json(res, {}, 403); }
@@ -402,6 +425,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/templates/save' && req.method === 'POST') return json(res, await saveTemplate(await body(req)));
     if (p.startsWith('/project/')) {
+      // project files: the editor's cookie (img/video/iframe/links send it) or the API token (CLI clients)
+      if (!cookieOk(req, PORT, SESSION) && !tokenOk(req, u, TOKEN)) return json(res, { error: 'Thiếu phiên Studio — mở lại bằng lối tắt' }, 401);
       if (!project) return json(res, { error: 'no project' }, 404);
       const f = under(project.dir, p.slice(9));
       return f && fileAllowed(f) ? sendFile(req, res, f) : json(res, {}, 403);
@@ -471,7 +496,9 @@ if (args[0] === '--new') {
 server.on('error', e => {
   if (e.code !== 'EADDRINUSE') throw e;
   console.log(`Cổng ${PORT} đang chạy AI Video Studio → mở trình duyệt`);
-  if (args.includes('--open')) openPath(`http://localhost:${PORT}`);
+  // the running Studio's token file → the launch link (sets its session cookie); no file → plain address (shows how to get in)
+  let tok = ''; try { tok = fs.readFileSync(tokenFile(PORT), 'utf8').trim(); } catch {}
+  if (args.includes('--open')) openPath(tok ? launchUrl(PORT, tok) : `http://localhost:${PORT}`);
   setTimeout(() => process.exit(0), 1500);
 });
 let tokFile = null;
@@ -481,6 +508,7 @@ server.listen(PORT, '127.0.0.1', () => {
   try { tokFile = writeTokenFile(PORT, TOKEN); } catch (e) { console.error('token file', tokenFile(PORT), e.message); }
   const link = `http://localhost:${PORT}`;
   console.log(`AI Video Studio ${VERSION} → ${link}`);
+  console.log(`Mở lại trong trình duyệt: ${launchUrl(PORT, TOKEN)}`);
   console.log('Tác giả: Nguyễn Tất Kiểm · Tặng khoá học AI miễn phí: https://nguyentatkiem.com.vn/aiplusntk/');
-  if (args.includes('--open')) openPath(link);
+  if (args.includes('--open')) openPath(launchUrl(PORT, TOKEN));
 });

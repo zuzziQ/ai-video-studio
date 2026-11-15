@@ -84,6 +84,8 @@
     const r = await Studio.api('/api/batch/' + what, { dir: S.run });
     if (r.error) return Studio.toast(r.error);
     Studio.toast(what === 'pause' ? (r.after ? `Sẽ dừng khi xong dòng ${r.after}` : 'Đang dừng…') : 'Đã huỷ lô');
+    // a lô that is not running is settled at once: reload "Lần chạy trước" too, or it still shows the lô as not cancelled (QA L10)
+    if (what === 'cancel' && !r.running) { const h = await Studio.api('/api/batch/list').catch(() => null); if (Array.isArray(h)) S.history = h; }
     refreshStatus();
   }
   let timer = null;

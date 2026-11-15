@@ -27,7 +27,7 @@
   .ap-it .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .ap-it .st { color: var(--tx3); font-size: 10.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap-it .st.err { color: var(--bad); }
   .ap-it .b { display: flex; gap: 1px; } .ap-it .b button { width: 24px; height: 24px; padding: 0; justify-content: center; }
-  .ap-ok { color: var(--ok); } .ap-bad { color: var(--bad); } .ap-run { color: var(--acc); } .ap-warn { color: var(--warn); }
+  .ap-ok { color: var(--ok); } .ap-bad { color: var(--bad); } .ap-run { color: var(--acc); } .ap-warn { color: var(--warn); } .ap-it .st.stop { color: var(--warn); }
   .ap-tog { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 6px 0; cursor: pointer; } .ap-tog input { width: auto; margin: 0; }
   .ap-tog small { display: block; color: var(--tx3); font-size: 10.5px; }
   .ap-fold { display: grid; grid-template-columns: minmax(0,1fr) 28px; gap: 4px; align-items: center; margin-bottom: 4px; } .ap-fold input { font-size: 11px; height: 28px; }
@@ -43,7 +43,7 @@
   document.head.appendChild(css);
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'autopilot';
   const api = (u, b) => Studio.api(u, b);
-  const ICON = { done: 'ti-circle-check ap-ok', error: 'ti-alert-triangle ap-bad', running: 'ti-loader-2 spin ap-run', cancelled: 'ti-player-stop muted', queued: 'ti-clock muted', warn: 'ti-alert-circle ap-warn', skipped: 'ti-minus muted' };
+  const ICON = { done: 'ti-circle-check ap-ok', error: 'ti-alert-triangle ap-bad', running: 'ti-loader-2 spin ap-run', cancelled: 'ti-player-stop ap-warn', paused: 'ti-player-pause ap-warn', queued: 'ti-clock muted', warn: 'ti-alert-circle ap-warn', skipped: 'ti-minus muted' };
   const KNAME = { autopilot: 'Tự lái', highlights: 'Video dài → shorts', topic: 'Chủ đề → video', variants: 'Biến thể', publish: 'Đăng' };
   const SRC = { watch: 'thư mục tự động', upload: 'kéo thả', ui: 'Studio', cli: 'dòng lệnh', app: 'thả vào app' };
   const profiles = () => S.st?.profiles?.list || [];
@@ -93,8 +93,17 @@
       return `<div class="ap-step ${state}"><i class="ti ${ICON[state] || ICON.queued}"></i><div style="min-width:0">${esc(s.label)}${x.msg || x.detail ? `<small title="${esc(x.msg || x.detail)}">${esc(x.msg || x.detail)}</small>` : ''}</div><span class="s">${x.sec != null ? (x.sec < 10 ? x.sec.toFixed(1) : Math.round(x.sec)) + 's' : ''}</span></div>`;
     }).join('')}</div>`;
   }
+  // Live list is rebuilt (innerHTML) on every change, ~1.5 s while a job runs. A rebuild between mouse-down and mouse-up loses
+  // the click (QA L9: "Huỷ" right after "Thử lại" did nothing), so hold rebuilds while a button inside is pressed.
+  let hold = false, held = false;
+  let holdT = null;
+  const release = () => { clearTimeout(holdT); if (!hold) return; hold = false; if (held) { held = false; setTimeout(renderLive, 0); } };
+  // released outside the window sends no pointerup: a press elsewhere or 1.5 s later lets the list update again
+  document.addEventListener('pointerdown', e => { release(); hold = !!e.target.closest?.('#ap-live button'); if (hold) holdT = setTimeout(release, 1500); });
+  document.addEventListener('pointerup', release, true); document.addEventListener('pointercancel', release, true);
   function renderLive() {
     const box = $('#ap-live'); if (!box) return;
+    if (hold) { held = true; return; }
     const st = S.st, items = st.items, run = items.find(i => i.state === 'running');
     const r = st.runner;
     const runnerNote = r.disabled ? 'Studio không chạy hàng đợi (AVS_NO_QUEUE) — dùng lệnh node scripts/queue.mjs run'
@@ -109,7 +118,7 @@
       ${runnerNote ? `<div class="help" style="margin:0 0 4px">${esc(runnerNote)}</div>` : ''}
       ${!items.length ? '<div class="help" style="margin:0">Chưa có việc nào. Thả video ở trên hoặc vào thư mục tự động.</div>' : items.map((it, k) => `<div class="ap-it"><i class="ti ${ICON[it.state] || ''}"></i>
         <div style="min-width:0"><span class="nm" title="${esc(it.input)}">${esc(it.title)}</span>
-          <span class="st ${it.state === 'error' ? 'err' : ''}" title="${esc(it.error || it.step || '')}">${esc(KNAME[it.kind] || it.kind)} · ${esc(SRC[it.source] || '')}${it.state === 'error' ? ' — ' + esc(it.error || '') : it.state === 'running' ? ` · ${Math.round((it.progress || 0) * 100)}%` : it.state === 'done' && it.result?.seconds ? ` · xong trong ${it.result.seconds}s` : it.state === 'queued' && it.attempt ? ' · ' + esc(it.step) : ''}</span></div>
+          <span class="st ${it.state === 'error' ? 'err' : ['cancelled', 'paused'].includes(it.state) ? 'stop' : ''}" title="${esc(it.error || it.step || '')}">${esc(KNAME[it.kind] || it.kind)} · ${esc(SRC[it.source] || '')}${it.state === 'error' ? ' — ' + esc(it.error || '') : it.state === 'running' ? ` · ${Math.round((it.progress || 0) * 100)}%` : it.state === 'done' && it.result?.seconds ? ` · xong trong ${it.result.seconds}s` : (it.state === 'queued' && it.attempt) || ['cancelled', 'paused'].includes(it.state) ? ' · ' + esc(it.step || (it.state === 'paused' ? 'Tạm dừng' : 'Đã huỷ')) : ''}</span></div>
         <div class="b">
           ${it.state === 'queued' ? `<button class="icon" title="Lên" data-act="up" data-id="${it.id}" ${k === 0 ? 'disabled' : ''}><i class="ti ti-arrow-up"></i></button><button class="icon" title="Xuống" data-act="down" data-id="${it.id}"><i class="ti ti-arrow-down"></i></button>` : ''}
           ${it.state === 'done' && it.project ? `<button class="icon" title="Mở dự án trong Studio để chỉnh" data-act="open" data-id="${it.id}"><i class="ti ti-edit"></i></button>` : ''}
@@ -118,10 +127,11 @@
           ${['error', 'cancelled'].includes(it.state) ? `<button class="icon" title="Thử lại (chạy tiếp từ bước dừng)" data-act="retry" data-id="${it.id}"><i class="ti ti-reload"></i></button>` : ''}
           ${['queued', 'running'].includes(it.state) ? `<button class="icon" title="Huỷ" data-act="cancel" data-id="${it.id}"><i class="ti ti-x"></i></button>` : `<button class="icon" title="Xoá khỏi danh sách" data-act="remove" data-id="${it.id}"><i class="ti ti-trash"></i></button>`}
         </div></div>`).join('')}
-      ${items.some(i => ['done', 'cancelled'].includes(i.state)) ? `<div class="acts"><button id="ap-clear"><i class="ti ti-clear-all"></i> Xoá việc đã xong</button></div>` : ''}</div>`;
+      ${items.some(i => ['done', 'cancelled', 'error'].includes(i.state)) ? `<div class="acts">${items.some(i => ['done', 'cancelled'].includes(i.state)) ? '<button id="ap-clear"><i class="ti ti-clear-all"></i> Xoá việc đã xong</button>' : ''}${items.some(i => i.state === 'error') ? `<button class="danger" id="ap-clear-err"><i class="ti ti-trash-x"></i> Xoá mục lỗi (${items.filter(i => i.state === 'error').length})</button>` : ''}</div>` : ''}</div>`;
     box.querySelectorAll('[data-act]').forEach(b => (b.onclick = () => itemAct(b.dataset.id, b.dataset.act)));
     box.querySelectorAll('[data-play]').forEach(b => (b.onclick = () => b.dataset.play && api('/api/autopilot/reveal', { path: b.dataset.play })));
     if ($('#ap-clear')) $('#ap-clear').onclick = async () => { await api('/api/autopilot/clear', {}); refresh(true); };
+    if ($('#ap-clear-err')) $('#ap-clear-err').onclick = async () => { if (!confirm('Xoá mọi mục lỗi khỏi hàng đợi? (không xoá file đã tạo)')) return; await api('/api/autopilot/clear-failed', {}); refresh(true); };
   }
   function renderWatch() {
     const st = S.st, w = st.settings.watch, ag = st.runner.agent || {};

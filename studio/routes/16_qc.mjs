@@ -29,10 +29,17 @@ export default ctx => {
     const st = ctx.P('.studio'); fs.mkdirSync(st, { recursive: true });
     if (p === '/api/qc/run' && req.method === 'POST') {
       const b = await ctx.body(req);
-      const argv = [S('ai_qc.mjs'), ctx.project.dir, ...(b.fix ? ['--fix'] : []), ...(b.claude === false ? ['--no-claude'] : []), ...(b.fresh ? ['--fresh'] : []), '--model', String(b.model || 'sonnet').replace(/[^\w.-]/g, '')];
+      // only: qcKey ids of the suggestions the user accepted (fix just those); absent = fix everything fixable
+      const keys = b.fix && Array.isArray(b.only) ? b.only.filter(k => typeof k === 'string' && k.length <= 200).slice(0, 300) : null;
+      if (keys && !keys.length) return ctx.json(res, { ok: false, error: 'Chưa chọn gợi ý sửa nào' }, 400), true;
+      const onlyFile = path.join(st, `qc_only_${Date.now()}.json`);
+      const argv = [S('ai_qc.mjs'), ctx.project.dir, ...(b.fix ? ['--fix'] : []), ...(keys ? ['--only', onlyFile] : []), ...(b.claude === false ? ['--no-claude'] : []), ...(b.fresh ? ['--fresh'] : []), '--model', String(b.model || 'sonnet').replace(/[^\w.-]/g, '')];
       const ok = ctx.startJob('qc', async () => {
         ctx.job.step = 'Chuẩn bị kiểm tra';
-        await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); });
+        // written only once this job really starts (a refused run must not touch a running one's selection)
+        if (keys) fs.writeFileSync(onlyFile, JSON.stringify(keys));
+        try { await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); }); }
+        finally { if (keys) fs.rmSync(onlyFile, { force: true }); }
         ctx.job.out = '.studio/qc.json';
       });
       return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;

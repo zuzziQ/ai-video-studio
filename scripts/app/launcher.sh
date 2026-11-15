@@ -25,7 +25,8 @@ TOKF="${AVS_HOME:-$HOME/.ai-video-studio}/studio-$PORT.token"
 tok() { cat "$TOKF" 2>/dev/null; }
 serving() { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -H "X-AVS-Token: $(tok)" "http://127.0.0.1:$PORT/api/features")" = 200 ]; }
 api() { curl -s --max-time 5 -H "X-AVS-Token: $(tok)" "http://127.0.0.1:$PORT$1" "${@:2}"; }
-browse() { [ -f "$RES/avs_no_browser" ] && { log "(test) bỏ qua mở trình duyệt $URL"; return; }; open "$URL"; }
+# The main page needs the browser session (M60): open the launch link ?k=<token>, the server turns it into a cookie.
+browse() { [ -f "$RES/avs_no_browser" ] && { log "(test) bỏ qua mở trình duyệt $URL"; return; }; local t; t=$(tok); open "$URL${t:+/?k=$t}"; }
 remember() { local d; d=$(api /api/app/info | sed -n 's/.*"dir":"\([^"]*\)".*/\1/p'); [ -n "$d" ] && printf '%s' "$d" > "$STATE/last_project"; }
 
 check() {

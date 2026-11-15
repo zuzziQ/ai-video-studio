@@ -1004,8 +1004,15 @@ function pollJob(onDone) {
     const bar = $('#modal .bar i'); if (bar) bar.style.width = Math.round(j.progress * 100) + '%';
     const st = $('#jobstep'); if (st) st.textContent = j.step + (j.state === 'running' ? ` · ${Math.round(j.progress * 100)}%` : '');
     const lg = $('#joblog'); if (lg) lg.textContent = j.log.split(/[\r\n]+/).slice(-8).join('\n');
-    if (j.state !== 'running') { clearInterval(pollTimer); pollTimer = null; onDone(j); }
+    if (j.state !== 'running') { clearInterval(pollTimer); pollTimer = null; new Promise(ok => ok(onDone(j))).catch(e => console.error(e)).finally(() => stoppedNotice(j)); }
   }, 700);
+}
+// A job the user cancelled or paused is not an error: replace whatever "Lỗi…" modal/toast the caller showed with a neutral (amber) notice.
+const STOPPED = { cancelled: ['ti-player-stop', 'Đã huỷ'], paused: ['ti-player-pause', 'Đã tạm dừng'] };
+function stoppedNotice(j) {
+  const s = STOPPED[j.state]; if (!s) return;
+  for (const o of document.querySelectorAll('.toast')) o.remove();
+  modal(`<h3><i class="ti ${s[0]}" style="color:var(--warn)"></i> ${s[1]}</h3><p>${esc(j.step || s[1])}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
 }
 $('#export').addEventListener('click', () => {
   const v = DH > DW, q = (a, b) => (v ? `${a}×${b}` : `${b}×${a}`);

@@ -45,7 +45,7 @@ export const DOMAINS = {
     guardrails: [
       "Tính năng mới = một studio/routes/NN_x.mjs + một studio/features/NN_x.js theo hợp đồng ctx/Studio; không thêm framework hay cơ sở dữ liệu.",
       "Server chỉ nghe 127.0.0.1 và chỉ phục vụ file trong studio/, engine/, assets/, thư mục mẫu và thư mục dự án.",
-      "Mọi /api/* cần token phiên (header X-AVS-Token, GET nhận ?avs_token=; editor gọi qua fetch đã vá trong studio/auth.js, URL media dùng avsUrl()); không bao giờ mở $AVS_HOME (~/.ai-video-studio) làm dự án; GET không được ghi file. Kiểm ở studio/security.mjs.",
+      "Mọi /api/* cần token phiên (header X-AVS-Token, GET nhận ?avs_token=; editor gọi qua fetch đã vá trong studio/auth.js, URL media dùng avsUrl()); trang chính / và /project/* cần cookie phiên avs_s_<port> (bí mật riêng, không phải token) lấy qua link khởi chạy /?k=<token> (CLI đọc /project/ bằng header token); không bao giờ mở $AVS_HOME (~/.ai-video-studio) làm dự án; GET không được ghi file. Kiểm ở studio/security.mjs.",
     ],
     leaf_chunks: [
       {

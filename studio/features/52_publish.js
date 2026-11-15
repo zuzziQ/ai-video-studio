@@ -45,7 +45,7 @@
       const j = await Studio.api('/api/job'); if (!j || j.kind !== 'publish') return;
       if (j.state === 'running') { S.busy = j.step; const el = $('#pub-busy'); if (el) el.textContent = j.step; return; }
       clearInterval(t); S.busy = false;
-      if (j.state === 'error') Studio.toast('Lỗi: ' + j.step);
+      if (j.state !== 'done') Studio.toast((j.state === 'error' ? 'Lỗi: ' : '') + j.step); // cancelled → not "written"
       else { S.data = await Studio.api('/api/publish/data'); const tt = S.data?.platforms?.[S.tab]?.thumb_time; if (tt != null) S.coverT = tt; Studio.toast('Đã viết xong · lưu ở publish/<nền tảng>.txt'); }
       if ($('.pub')) render();
     }, 1200);

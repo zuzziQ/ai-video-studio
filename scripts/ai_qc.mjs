@@ -1,5 +1,5 @@
 // "AI tự kiểm tra" — quality check (and optional safe auto-fix) of a project before export. Spec: references/qc-variants.md.
-// usage: node scripts/ai_qc.mjs <project_dir | timeline.json> [--fix] [--model sonnet] [--no-claude] [--no-audio] [--fresh]
+// usage: node scripts/ai_qc.mjs <project_dir | timeline.json> [--fix [--only keys.json]] [--model sonnet] [--no-claude] [--no-audio] [--fresh]
 //   1. deterministic checks: stills rendered through the real engine in ONE headless Chrome (scene entry/mid/exit + every 3 s),
 //      element boxes read from the engine DOM (text off canvas, graphic over the speaker's face, caption under a big graphic),
 //      face boxes found by YuNet on "base layer" stills, timeline checks (same-layer overlap, > 6 s without a visual event,
@@ -685,7 +685,10 @@ function score(list) {
   for (const i of open.filter(i => i.src === 'claude')) if (!auto.some(a => Math.abs(a.t - i.t) < 1)) c += { high: 8, med: 4, low: 1.5 }[i.severity] || 1.5;
   return Math.round(clamp(100 - pen - Math.min(30, c), 0, 100));
 }
-const same = (a, b) => a.kind === b.kind && (a.target || '') === (b.target || '') && Math.abs((a.t || 0) - (b.t || 0)) < 1.5;
+// same issue before/after a fix: same kind + target, and the same moment (±1.5 s) or, for ranged issues (empty stretch t…t1),
+// overlapping ranges: a fix elsewhere (hook added at 0 s) shifts where the gap starts without it being a new problem
+const overlaps = (a, b) => a.t1 != null && b.t1 != null && a.t < b.t1 && b.t < a.t1;
+export const same = (a, b) => a.kind === b.kind && (a.target || '') === (b.target || '') && (Math.abs((a.t || 0) - (b.t || 0)) < 1.5 || overlaps(a, b));
 async function sheet(files, out, vert) {
   if (!files.length) return null;
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'qcsheet_'));
@@ -697,12 +700,21 @@ async function sheet(files, out, vert) {
 }
 
 // ---------- main ----------
+// Stable id of an issue between a check run and the fix run that follows on the same timeline (same hash → same passes,
+// Claude result from cache): Studio sends back the ids the user accepted as suggestions (o.only), only those get fixed.
+export const qcKey = i => [i.src || 'auto', i.kind, i.target || '', (+i.t || 0).toFixed(2)].join('|');
+
 export async function runQC(src, o = {}) {
   const proj = loadProject(src), { dir } = proj;
   let { tl, caps } = proj;
   const qcDir = path.join(dir, '.studio/qc'), stillDir = path.join(qcDir, 'stills');
   fs.rmSync(stillDir, { recursive: true, force: true }); fs.mkdirSync(stillDir, { recursive: true });
   const hash = qcHash(tl, caps);
+  // accepted suggestions are ids from the last check: only valid on the same timeline
+  if (Array.isArray(o.only)) {
+    let prev = null; try { prev = JSON.parse(fs.readFileSync(path.join(dir, '.studio/qc.json'), 'utf8')); } catch { /* no check yet */ }
+    if (!prev || prev.fix || prev.hash !== hash) throw new Error('Timeline đã đổi sau lần kiểm tra (hoặc chưa kiểm tra): bấm “Kiểm tra lại” để có gợi ý mới');
+  }
   say(.02, 'Kiểm tra timeline (chồng lớp, khoảng trống, phụ đề, file thiếu)');
   const stat = staticIssues(tl, caps, dir);
   say(.06, 'Render ảnh kiểm tra bằng engine (1 Chrome)');
@@ -757,13 +769,16 @@ export async function runQC(src, o = {}) {
       fs.copyFileSync(backup, path.join(qcDir, `backup_${Date.now()}.json`));
       tl = deep(tl); caps = deep(caps);
       // Claude's move/resize on a scene the measured solver will place anyway (face/caption/canvas aware) is superseded by the solver
-      const autoPlaced = new Set(det.filter(i => ['text_offcanvas', 'face_cover', 'caption_overlap'].includes(i.kind)).map(i => i.target));
-      const superseded = cIssues.filter(i => i.fix && ['move', 'resize'].includes(i.fix.op) && autoPlaced.has(i.fix.target));
-      patches = cIssues.filter(i => i.fix && !superseded.includes(i)).map(i => i.fix);
+      // o.only: the suggestions the user ticked (qcKey ids); null = fix everything fixable (export pre-check, CLI --fix)
+      const only = Array.isArray(o.only) ? new Set(o.only) : null, pick = i => !only || only.has(qcKey(i));
+      const detSel = det.filter(pick), selTargets = new Set([...detSel, ...cIssues.filter(pick)].map(i => i.target || i.fix?.target).filter(Boolean));
+      const autoPlaced = new Set(detSel.filter(i => ['text_offcanvas', 'face_cover', 'caption_overlap'].includes(i.kind)).map(i => i.target));
+      const superseded = cIssues.filter(i => i.fix && pick(i) && ['move', 'resize'].includes(i.fix.op) && autoPlaced.has(i.fix.target));
+      patches = cIssues.filter(i => i.fix && pick(i) && !superseded.includes(i)).map(i => i.fix);
       applied = applyClaude(tl, caps, patches, P);
       for (const i of cIssues) if (i.fix && applied.includes(i.fix)) i.fixed = true;
       const touched = new Set(applied.map(p => (p.op === 'hook' ? 'hook' : p.op === 'gain' ? 'gain' : ['move', 'resize', 'delete', 'retime', 'text'].includes(p.op) ? p.target : null)).filter(Boolean));
-      const fixedDet = applyDeterministic(tl, caps, det, P, touched);
+      const fixedDet = applyDeterministic(tl, caps, detSel, P, touched);
       for (const i of det) if (fixedDet.has(i)) i.fixed = true;
       // re-check on the patched timeline (stills at the same times + every issue time); a 2nd placement round uses the new boxes
       const issueTimes = before.flatMap(i => [i.t, (i.fix?.t ?? i.fix?.t0) != null ? (i.fix.t ?? i.fix.t0) + .6 : null]).filter(x => x != null);
@@ -773,7 +788,7 @@ export async function runQC(src, o = {}) {
         say(.8 + round * .05, round ? 'Sửa vị trí lần 2 rồi kiểm tra lại' : 'Kiểm tra lại sau khi sửa');
         P2 = await domPass(E, tl, caps, sampleTimes(tl, caps, issueTimes), stillDir, 'b', k => say(.8 + round * .05 + k * .04, `Kiểm tra lại… ${Math.round(k * 100)}%`));
         recheck = [...staticIssues(tl, caps, dir), ...domIssues(tl, caps, P2)].map(i => ({ ...i, src: 'auto' }));
-        const again = recheck.filter(r => PLACE.has(r.kind));
+        const again = recheck.filter(r => PLACE.has(r.kind) && (!only || selTargets.has(r.target)));
         if (round === 2 || !again.length) break;
         const keep = new Set(applied.filter(p => p.op === 'delete').map(p => p.target));
         for (const r of again) r.recheck = true;
@@ -812,11 +827,13 @@ export async function runQC(src, o = {}) {
     const aStills = fs.readdirSync(stillDir).filter(f => f.startsWith('a_')).sort().map(f => path.join(stillDir, f));
     await sheet(aStills.filter((f, i) => i % Math.max(1, Math.ceil(aStills.length / 24)) === 0), path.join(qcDir, 'sheet.jpg'), isVert(proj.tl));
     const issues = [...det, ...cIssues].sort((a, b) => a.t - b.t).map(i => ({ t: i.t, kind: i.kind, kind_vi: KIND_VI[i.kind] || i.kind, severity: i.severity, msg: i.msg, fixed: !!i.fixed,
-      src: i.src, code: i.code || undefined, target: i.target || undefined, fix: i.fix || undefined, note: i.note || undefined, new: i.new || undefined }));
+      src: i.src, key: qcKey(i), code: i.code || undefined, target: i.target || undefined, fix: i.fix || undefined, note: i.note || undefined, new: i.new || undefined }));
     result = {
       version: 1, project: dir, created: new Date().toISOString(), hash, hash_now: hashNow, fix: !!o.fix,
       score: after ?? scoreBefore, before: scoreBefore, after,
-      counts: { total: issues.length, fixed: issues.filter(i => i.fixed).length, high: issues.filter(i => i.severity === 'high' && !i.fixed).length },
+      // initial = found before any fix; new = found only by the re-check after fixing (side effects of a fix), so the total can grow
+      counts: { total: issues.length, initial: before.length, fixed: issues.filter(i => i.fixed).length, new: issues.filter(i => i.new).length, high: issues.filter(i => i.severity === 'high' && !i.fixed).length },
+      selected: o.fix && Array.isArray(o.only) ? o.only.length : undefined,
       claude: { used: !!claude.used, model: claude.model, scores: claude.scores, summary: claude.summary, error: claude.error },
       ads: ads.enabled || ads.error ? { enabled: !!ads.enabled, industry: ads.industry, industry_vi: ads.industry_vi, platforms: ads.platforms, claims: ads.claims, blocked: !!ads.blocked, originality: ads.originality || null, rechecked: ads.rechecked || undefined, error: ads.error } : undefined,
       audio: audio.stats, issues, applied, backup: backup ? path.relative(dir, backup) : undefined,
@@ -832,9 +849,11 @@ export async function runQC(src, o = {}) {
 
 async function main() {
   const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-  const src = args.find((a, i) => !a.startsWith('--') && !(i > 0 && ['--model'].includes(args[i - 1])));
-  if (!src) { console.error('usage: node scripts/ai_qc.mjs <project_dir> [--fix] [--model sonnet] [--no-claude] [--no-audio] [--fresh]'); process.exit(2); }
-  const r = await runQC(src, { fix: args.includes('--fix'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude'), noAudio: args.includes('--no-audio'), fresh: args.includes('--fresh') });
+  const src = args.find((a, i) => !a.startsWith('--') && !(i > 0 && ['--model', '--only'].includes(args[i - 1])));
+  if (!src) { console.error('usage: node scripts/ai_qc.mjs <project_dir> [--fix [--only keys.json]] [--model sonnet] [--no-claude] [--no-audio] [--fresh]'); process.exit(2); }
+  const onlyFile = opt('--only', null), only = onlyFile ? JSON.parse(fs.readFileSync(onlyFile, 'utf8')) : null;
+  if (onlyFile && (!Array.isArray(only) || !only.every(k => typeof k === 'string'))) { console.error('LỖI: --only cần một mảng id gợi ý (chuỗi)'); process.exit(2); }
+  const r = await runQC(src, { only, fix: args.includes('--fix'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude'), noAudio: args.includes('--no-audio'), fresh: args.includes('--fresh') });
   for (const i of r.issues) console.log(`${i.fixed ? '✔' : '•'} ${i.t.toFixed(2).padStart(6)}s [${i.severity}] ${i.kind_vi}: ${i.msg}${i.fixed ? ' → đã sửa' : ''}${i.note ? ` (${i.note})` : ''}`);
   if (r.claude.summary) console.log(`Claude: ${r.claude.summary}`);
   console.log(`điểm: ${r.before}${r.after != null ? ` → ${r.after}` : ''}/100 · ${r.counts.total} vấn đề, đã sửa ${r.counts.fixed} · ${path.join(r.project, '.studio/qc.json')}`);
