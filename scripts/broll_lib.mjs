@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { askJSON } from './llm.mjs';
+import { videoArgs } from './encoder_cli.mjs';
 
 export const LIB = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'broll_lib');
 const IDX = path.join(LIB, 'index.json');
@@ -40,8 +41,11 @@ export function add(file, { tags = [], title } = {}) {
   } else {
     it.file = id + '.mp4';
     const total = +run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).trim() || 0, dur = Math.min(8, total || 8);
-    run('ffmpeg', ['-v', 'error', '-y', '-i', file, '-t', String(dur), '-an', '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-c:v', 'libx264', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', path.join(LIB, it.file)]);
+    // M65: NVENC/QSV khi dùng được (encoder_cli.mjs), lỗi lúc chạy thì làm lại bằng libx264 như cũ.
+    const v = videoArgs({ crf: 20, x264: ['-c:v', 'libx264', '-crf', '20', '-pix_fmt', 'yuv420p'] });
+    const enc = venc => run('ffmpeg', ['-v', 'error', '-y', '-i', file, '-t', String(dur), '-an', '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      ...venc, '-movflags', '+faststart', path.join(LIB, it.file)]);
+    try { enc(v.args); } catch (e) { if (!v.hw) throw e; enc(v.fallback); }
     const fr = path.join(LIB, id + '_frames'); fs.mkdirSync(fr, { recursive: true });
     run('ffmpeg', ['-v', 'error', '-y', '-i', path.join(LIB, it.file), '-q:v', '3', path.join(fr, '%05d.jpg')]);
     it.frames = fs.readdirSync(fr).filter(f => f.endsWith('.jpg')).length; it.dur = +(it.frames / 30).toFixed(2);

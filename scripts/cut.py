@@ -8,6 +8,10 @@ import argparse
 import json
 import os
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
+from encoder_args import run_encode, video_args  # noqa: E402  (M65: NVENC/QSV when usable, else libx264)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("src")
@@ -66,7 +70,9 @@ os.makedirs(a.out_dir, exist_ok=True)
 script = os.path.join(a.out_dir, "cut_filter.txt")
 open(script, "w").write(f"[0:v]{vf}[v];[{0 if has_audio else 1}:a]{af}[a]")
 silence = [] if has_audio else ["-f", "lavfi", "-t", f"{float(probe('format=duration') or acc):.3f}", "-i", "anullsrc=r=48000:cl=stereo"]
-subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", a.src, *silence, "-/filter_complex", script, "-map", "[v]", "-map", "[a]",
-                "-c:v", "libx264", "-crf", "16", "-preset", "fast", "-c:a", "aac", "-b:a", "192k", os.path.join(a.out_dir, "aroll.mp4")], check=True)
+X264 = ["-c:v", "libx264", "-crf", "16", "-preset", "fast"]
+run_encode(lambda venc: ["ffmpeg", "-v", "error", "-y", "-i", a.src, *silence, "-/filter_complex", script, "-map", "[v]", "-map", "[a]",
+                         *venc, "-c:a", "aac", "-b:a", "192k", os.path.join(a.out_dir, "aroll.mp4")],
+           video_args(16, x264=X264, preset="fast"), X264)
 json.dump(out_words, open(os.path.join(a.out_dir, "words.json"), "w"), ensure_ascii=False, indent=1)
 print(f"{len(spans)} spans, {acc:.2f}s kept, {len(drop)} words dropped")

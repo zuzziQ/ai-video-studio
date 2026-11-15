@@ -17,6 +17,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { callClaude, parseJson } from './ai_edit.mjs';
 import { pyBin } from './platform.mjs';
+import { videoArgs } from './encoder_cli.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const SKILL = path.resolve(HERE, '..');
@@ -232,7 +233,10 @@ export async function buildProject(src, h, dir, o, info, words, onStep = () => {
   fs.mkdirSync(path.join(dir, 'work/frames'), { recursive: true }); fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
   const W = f => path.join(dir, 'work', f);
   onStep('cắt đoạn nguồn');
-  await sh('ffmpeg', ['-v', 'error', '-y', '-ss', String(h.t0), '-i', src, '-t', String(r3(h.t1 - h.t0)), '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '192k', W('source.mp4')]);
+  // M65: NVENC/QSV khi dùng được (encoder_cli.mjs), lỗi lúc chạy thì làm lại bằng libx264 veryfast như cũ.
+  const v = videoArgs({ crf: 18, preset: 'veryfast', x264: ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p'] });
+  const trim = venc => sh('ffmpeg', ['-v', 'error', '-y', '-ss', String(h.t0), '-i', src, '-t', String(r3(h.t1 - h.t0)), '-map', '0:v:0', '-map', '0:a:0', ...venc, '-r', '30', '-c:a', 'aac', '-b:a', '192k', W('source.mp4')]);
+  try { await trim(v.args); } catch (e) { if (!v.hw) throw e; await trim(v.fallback); }
   // words of the trimmed span (no second whisper pass)
   const ws = words.slice(h.w0, h.w1 + 1).map(w => ({ w: w.w, s: r3(Math.max(0, w.s - h.t0)), e: r3(Math.min(h.t1 - h.t0, w.e - h.t0)) }));
   fs.writeFileSync(W('words_raw.json'), JSON.stringify(ws, null, 1));
