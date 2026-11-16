@@ -9,6 +9,8 @@ import path from 'node:path';
 
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-runjob-'));
 process.env.AVS_HOME = HOME;
+// S12 M100: runJob giao từng dòng vào Thanh pham/ của Kho Chung mặc định (~/Videos/…): giữ trong thư mục tạm
+process.env.USERPROFILE = HOME; process.env.HOME = HOME;
 for (const k of ['AVS_PERF_PROFILE', 'AVS_ENCODER', 'AVS_RENDER_SLOTS', 'AVS_RENDER_PRIORITY', 'AVS_BATCH_PARALLEL']) delete process.env[k];
 const { runJob } = await import('../batch.mjs');
 const P = await import('../perf_profile.mjs');

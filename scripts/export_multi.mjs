@@ -66,6 +66,7 @@ export async function deriveAspects(src, aspects, opts = {}) {
   for (const [n, a] of todo.entries()) {
     const out = path.join(outDir, `${base}_${a.replace(':', 'x')}.mp4`);
     step(`Tạo bản ${a} (${n + 1}/${todo.length})`);
+    fs.rmSync(out, { force: true }); // có thể đã liên kết cứng sang Thanh pham/ (S12 M100): ffmpeg -y sẽ ghi đè tại chỗ
     let vf, ow, oh;
     if (vert && a === '16:9') {
       oh = even(W); ow = even(oh * 16 / 9); // keep the short side (1080x1920 -> 1920x1080)

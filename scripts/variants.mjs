@@ -1,7 +1,7 @@
 // "Nhiều phiên bản" — A/B variants of a project: sibling full projects <project>_v1.._vN with a different opening hook
 // (Claude writes N hook texts with different angles; optionally a cold-open teaser = the strongest sentence copied to the front
 // when the transcript gives a clean cut) and/or a different style pack (the pack's own recipe). Spec: references/qc-variants.md.
-// usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both] [--export] [--quality 720|1080] [--model sonnet] [--no-claude]
+// usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both] [--export [--no-deliver]] [--quality 720|1080] [--model sonnet] [--no-claude]
 // Writes <project>/variants.json {base, kind, variants:[{dir, name, hook, pack, desc, still, video}]}. Progress: "@@ <0..1> <step>".
 // Ma trận (M21): --kind matrix --n 40 [--audiences a,b] [--angles faq,tips] [--narratives …] [--durations 0,15,30] [--formats full,split]
 //   [--seed 42] [--allow-low-source] [--estimate]: tổ hợp khán giả × góc × kết cấu × thời lượng × bố cục (scripts/variant_matrix.mjs),
@@ -18,6 +18,8 @@ import { cloneProject } from './project_clone.mjs';
 import { resolvePerf, hwSnapshot } from './perf_profile.mjs';
 import { killTree } from './platform.mjs';
 import { batchGate, batchPlan, batchPixels, holdBatchSlot, otherRenders, parallelLimit, runPool } from './batch_parallel.mjs';
+import { workspaceOfProject } from './workspace.mjs';
+import { deliverProject, fileName } from './kho_deliver.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -162,6 +164,7 @@ async function exportProject(dir, quality, onP, { workers = null, env = null } =
   }
   fs.mkdirSync(path.join(dir, 'out'), { recursive: true });
   const out = `out/${path.basename(dir)}.mp4`, tmp = path.join(dir, `.export_${process.pid}.json`);
+  fs.rmSync(path.join(dir, out), { force: true }); // bản cũ có thể đã liên kết cứng sang Thanh pham/ (M100): ffmpeg -y sẽ ghi đè tại chỗ
   fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? W : H, height: vert ? H : W }));
   try { await run('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, path.join(dir, out), ...(mix ? ['--audio', mix] : []), ...(workers ? ['--workers', String(workers)] : [])], dir, l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onP(+m[1] / +m[2]); }, env); }
   finally { fs.rmSync(tmp, { force: true }); }
@@ -196,6 +199,23 @@ async function exportAll(out, quality, label) {
     });
   } finally { hold?.release(); process.off('SIGTERM', stop); process.off('SIGINT', stop); }
   if (errs.length) throw errs[0];
+}
+
+// S12 M100: mỗi phiên bản đã xuất → <Kho>/Thanh pham/<YYYY-MM>/<tên dự án gốc>/<dự án gốc> v<i> - <tên bản>.mp4 (liên kết cứng).
+// Kho theo dự án gốc (biến thể nằm cạnh nó trong Du an/). Lỗi giao ghi vào v.deliver_error, không làm hỏng lượt xuất.
+export function deliverVariants(dir, tl, list, o = {}) {
+  if (o.deliver === false) return list;
+  let ws; try { ws = workspaceOfProject(dir, tl, o.home ? { home: o.home } : {}); } catch (e) { console.error(`[variants] không giao được vào Thanh pham: ${e.message}`); return list; }
+  const base = path.basename(dir);
+  list.forEach((v, i) => {
+    if (!v.video) return;
+    const vd = path.resolve(dir, v.dir);
+    try {
+      const d = deliverProject(vd, [{ src: path.resolve(vd, v.video), name: fileName(`${base} v${i + 1}${v.name ? ' - ' + v.name : ''}`, '.mp4') }], { ws, folder: base, date: o.date }).items[0];
+      if (d?.dst) v.delivered = d.dst; else if (d?.error) v.deliver_error = d.error;
+    } catch (e) { v.deliver_error = e.message; }
+  });
+  return list;
 }
 
 // ---------- sibling project <base>_v<i+1> (a full copy; a stale copy of this same base is replaced) ----------
@@ -305,7 +325,8 @@ export async function makeMatrix(src, o = {}) {
   } finally { await E.browser.close().catch(() => {}); saveLib(lib); }
   const g2 = o.export ? readGate(dir) : null;
   if (g2?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(g2)})`);
-  if (o.export && !g2?.blocked) await exportAll(out, o.quality, 'Xuất bản');
+  // giao cả khi một bản lỗi: những bản đã xuất xong (có v.video) vẫn vào Thanh pham/, như hàng loạt giao theo từng dòng
+  if (o.export && !g2?.blocked) { try { await exportAll(out, o.quality, 'Xuất bản'); } finally { deliverVariants(dir, base.tl, out, o); } }
   const oldHook = (base.tl.scenes || []).filter(s => !s.hidden && !isBase(s, base.tl) && s.t0 < 1.5).map(s => s.text || s.lines?.map(L => L.text).join(' ') || s.value || '').filter(Boolean)[0] || '';
   const res = { base: dir, created: new Date().toISOString(), kind: 'matrix', kind_vi: 'ma trận khán giả × góc × kết cấu × thời lượng × bố cục', n: out.length,
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', size: `${DW}x${DH}`, hook_library: lib.file,
@@ -373,7 +394,7 @@ export async function makeVariants(src, o = {}) {
   // 4. optional export of every variant (not while the base project's QC blocks export: the variants share its words)
   const gate = o.export ? readGate(dir) : null;
   if (gate?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(gate)})`);
-  if (o.export && !gate?.blocked) await exportAll(out, o.quality, 'Xuất phiên bản');
+  if (o.export && !gate?.blocked) { try { await exportAll(out, o.quality, 'Xuất phiên bản'); } finally { deliverVariants(dir, base.tl, out, o); } }
   const baseVid = fs.existsSync(path.join(dir, 'out')) ? fs.readdirSync(path.join(dir, 'out')).filter(f => f.endsWith('.mp4')).map(f => `out/${f}`).sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs)[0] : null;
   const res = { base: dir, created: new Date().toISOString(), kind, kind_vi: { hook: 'khác hook mở đầu', style: 'khác gói style', both: 'khác hook + gói style' }[kind], n: out.length,
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', base_video: baseVid || undefined, size: `${DW}x${DH}`, variants: out };
@@ -385,8 +406,8 @@ async function main() {
   const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
   const VAL = ['--n', '--kind', '--model', '--quality', '--audiences', '--angles', '--narratives', '--durations', '--formats', '--seed', '--kpi', '--explore'];
   const src = args.find((a, i) => !a.startsWith('--') && !(i > 0 && VAL.includes(args[i - 1])));
-  if (!src) { console.error('usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both|matrix] [--export] [--quality 720|1080] [--no-claude]\n  matrix: [--audiences a,b] [--angles x,y] [--narratives …] [--durations 0,15,30] [--formats full,split] [--seed 42] [--allow-low-source] [--estimate] [--learn [--kpi auto|ctr|cpa|roas…] [--explore 0.2]]'); process.exit(2); }
-  const r = await makeVariants(src, { n: +opt('--n', 3), kind: opt('--kind', 'hook'), export: args.includes('--export'), quality: opt('--quality', '720'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude'),
+  if (!src) { console.error('usage: node scripts/variants.mjs <project_dir> [--n 3] [--kind hook|style|both|matrix] [--export [--no-deliver]] [--quality 720|1080] [--no-claude]\n  matrix: [--audiences a,b] [--angles x,y] [--narratives …] [--durations 0,15,30] [--formats full,split] [--seed 42] [--allow-low-source] [--estimate] [--learn [--kpi auto|ctr|cpa|roas…] [--explore 0.2]]'); process.exit(2); }
+  const r = await makeVariants(src, { n: +opt('--n', 3), kind: opt('--kind', 'hook'), export: args.includes('--export'), deliver: !args.includes('--no-deliver'), quality: opt('--quality', '720'), model: opt('--model', 'sonnet'), noClaude: args.includes('--no-claude'),
     audiences: opt('--audiences'), angles: opt('--angles'), narratives: opt('--narratives'), durations: opt('--durations'), formats: opt('--formats'), seed: opt('--seed') != null ? +opt('--seed') : undefined,
     allowLowSource: args.includes('--allow-low-source'), estimateOnly: args.includes('--estimate'),
     learn: args.includes('--learn') ? { kpi: opt('--kpi', 'auto'), explore: opt('--explore') != null ? +opt('--explore') : 0.2 } : undefined });
