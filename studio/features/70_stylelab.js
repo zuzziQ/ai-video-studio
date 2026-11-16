@@ -5,32 +5,38 @@
   const S = Studio;
   const css = document.createElement('style');
   css.textContent = `
-  .sl-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; margin: 8px 0; }
-  .sl-card h4 { margin: 0 0 6px; font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
-  .sl-card p { margin: 4px 0; color: var(--tx2); line-height: 1.5; }
-  .sl-kv { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
-  .sl-kv span { background: var(--bg3); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 8px; font-size: 11px; color: var(--tx2); }
-  .sl-sw { display: flex; gap: 3px; margin: 6px 0; } .sl-sw i { flex: 1; height: 22px; border-radius: 4px; border: 1px solid rgba(255,255,255,.08); }
-  .sl-sheet { width: 100%; border-radius: 6px; border: 1px solid var(--line2); cursor: zoom-in; background: #000; display: block; }
-  .sl-nav { display: flex; gap: 4px; justify-content: center; margin-top: 4px; } .sl-nav button { padding: 2px 8px; font-size: 11px; }
-  .sl-nav button.on { border-color: var(--acc-line); color: var(--tx); }
-  .sl-drop { border: 1px dashed var(--line3); border-radius: var(--r); padding: 14px 10px; text-align: center; color: var(--tx3); cursor: pointer; }
-  .sl-drop:hover, .sl-drop.over { border-color: var(--acc-line); color: var(--tx2); background: var(--acc-soft); }
-  .sl-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; } .sl-row > * { flex: 1; min-width: 0; }
-  .sl-prog .bar { height: 5px; background: var(--bg4); border-radius: 3px; overflow: hidden; margin: 8px 0 4px; } .sl-prog .bar i { display: block; height: 100%; background: var(--acc); transition: width .4s; }
-  .sl-steps { margin: 6px 0 0; padding: 0; list-style: none; font-size: 11.5px; color: var(--tx3); } .sl-steps li { padding: 2px 0; } .sl-steps li.on { color: var(--tx); } .sl-steps li.ok { color: var(--ok); }
-  .sl-err { color: var(--bad); white-space: pre-wrap; font-size: 12px; }
-  .sl-vid { width: 100%; max-height: 340px; border-radius: 6px; background: #000; display: block; border: 1px solid var(--line2); }
-  .sl-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 6px 0; } .sl-thumbs img { width: 100%; border-radius: 4px; border: 1px solid var(--line2); cursor: zoom-in; }
-  .sl-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; } .sl-acts button { flex: 1 1 auto; }
-  .sl-spec { max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: 11px; color: var(--tx2); background: var(--bg1); border-radius: 6px; padding: 8px; margin: 6px 0 0; }
-  .sl-mine { display: flex; gap: 8px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: var(--rs); margin: 4px 0; background: var(--bg1); }
-  .sl-mine img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; background: #000; flex: none; }
-  .sl-mine .tx { flex: 1; min-width: 0; } .sl-mine .tx b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sl-mine .tx small { color: var(--tx3); font-size: 10.5px; } .sl-mine button.icon { width: 26px; height: 26px; flex: none; }
-  .sl-warn { border-color: var(--bad); } .sl-warn h4 { color: var(--bad); } .sl-warn p { font-size: 11.5px; }
-  .sl-imgs { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; } .sl-imgs img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; }`;
+  .sl-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .sl-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-sm); display: flex; gap: var(--space-2); align-items: center; }
+  .sl-card p { margin: var(--space-1) 0; color: rgb(var(--color-fg-muted)); line-height: 1.5; }
+  .sl-card p.sl-sm { font-size: var(--text-xs); } .sl-card p.sl-xs { font-size: var(--text-2xs); margin-top: var(--space-2); }
+  .sl-kv { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-2) 0; }
+  .sl-sw { display: flex; gap: var(--space-050); margin: var(--space-2) 0; } .sl-sw i { flex: 1; height: 24px; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-white) / .08); background: var(--sw); } .sl-sw i.acc { flex: .6; }
+  .sl-sheet { width: 100%; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); cursor: zoom-in; background: rgb(var(--color-black)); display: block; }
+  .sl-zoom { max-width: 100%; max-height: 80vh; display: block; margin: auto; }
+  .sl-nav { display: flex; gap: var(--space-1); justify-content: center; margin-top: var(--space-1); }
+  .sl-drop { border: 1px dashed rgb(var(--color-line-hover)); border-radius: var(--radius-control); padding: var(--space-4) var(--space-3); text-align: center; color: rgb(var(--color-fg-subtle)); cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+  .sl-drop:hover, .sl-drop.over { border-color: rgb(var(--color-accent-text) / .5); color: rgb(var(--color-fg-muted)); background: rgb(var(--color-accent-soft) / .24); }
+  .sl-row { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; } .sl-row > * { flex: 1; min-width: 0; } .sl-row > .sl-nf { flex: none; }
+  .sl-wrap { margin-top: var(--space-2); } .seg.sl-mt { margin-top: var(--space-2); } .sl-full { width: 100%; justify-content: center; }
+  .sl-prog .bar { height: var(--space-1); background: rgb(var(--color-surface-hover)); border-radius: var(--radius-pill); overflow: hidden; margin: var(--space-2) 0 var(--space-1); } .sl-prog .bar i { display: block; height: 100%; width: var(--w, 0%); background: rgb(var(--color-accent-text)); transition: width var(--duration-slow) var(--ease-standard); }
+  .sl-step { font-size: var(--text-xs); } .sl-push { margin-left: auto; } .sl-push.sl-n { font-weight: 400; }
+  .sl-steps { margin: var(--space-2) 0 0; padding: 0; list-style: none; font-size: var(--text-xs); color: rgb(var(--color-fg-subtle)); } .sl-steps li { padding: var(--space-050) 0; } .sl-steps li.on { color: rgb(var(--color-fg)); } .sl-steps li.ok { color: rgb(var(--color-success)); }
+  .sl-err { color: rgb(var(--color-danger-text)); white-space: pre-wrap; font-size: var(--text-xs); }
+  .sl-c-bad { color: rgb(var(--color-danger)); } .sl-c-ok { color: rgb(var(--color-success)); }
+  details > summary.sl-sum { font-size: var(--text-2xs); cursor: pointer; }
+  .sl-vid { width: 100%; max-height: 340px; border-radius: var(--radius-control); background: rgb(var(--color-black)); display: block; border: 1px solid rgb(var(--color-line-strong)); }
+  .sl-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); margin: var(--space-2) 0; } .sl-thumbs img { width: 100%; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-line-strong)); cursor: zoom-in; }
+  .sl-acts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); } .sl-acts button { flex: 1 1 auto; }
+  .sl-spec { max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); background: rgb(var(--color-surface)); border-radius: var(--radius-control); padding: var(--space-2); margin: var(--space-2) 0 0; }
+  .sl-mine { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); margin: var(--space-1) 0; background: rgb(var(--color-surface)); }
+  .sl-mine img { width: 40px; height: 56px; object-fit: cover; border-radius: var(--radius-xs); background: rgb(var(--color-black)); flex: none; }
+  .sl-mine .tx { flex: 1; min-width: 0; } .sl-mine .tx b { display: block; font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sl-mine .tx small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .sl-warn { border-color: rgb(var(--color-danger)); } .sl-warn h4 { color: rgb(var(--color-danger-text)); } .sl-warn p { font-size: var(--text-xs); }
+  .sl-imgs { display: flex; gap: var(--space-1); flex-wrap: wrap; margin: var(--space-1) 0; } .sl-imgs img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--radius-xs); }`;
   document.head.appendChild(css);
+  // Data-driven values (progress width, swatches of the analysed video's palette) arrive as data-v="--w:40%" and are set with style.setProperty after insert.
+  const applyVars = root => (root || document).querySelectorAll('[data-v]').forEach(el => el.dataset.v.split(';').forEach(p => { const i = p.indexOf(':'); if (i > 0) el.style.setProperty(p.slice(0, i).trim(), p.slice(i + 1).trim()); }));
 
   const FONTS = ['', 'Be Vietnam Pro', 'Montserrat', 'Inter', 'Playfair Display', 'DM Serif Display', 'Bungee', 'Lexend', 'Oswald', 'Nunito', 'Pacifico'];
   const STEPS = { clone: ['Phân tích video (cắt cảnh, màu, chữ, lời, nhạc)', 'Claude xem contact sheet + viết gói', 'Kiểm tra gói trong engine (sửa tối đa 2 vòng)', 'Cài gói, template, skill, video xem trước'],
@@ -50,7 +56,7 @@
       Mã JS của gói chạy với toàn quyền trong Studio (gọi được API của Studio) và khi xuất video. Chỉ giữ gói bạn tin nguồn.</p>
       ${foreign().map(x => `<div class="sl-mine"><div class="tx"><b>${S.esc(x.name)}</b><small>${S.esc(x.file)}</small></div>
         <button data-trust="${S.esc(x.id)}" title="Tôi tin nguồn gói này">Tin gói này</button>
-        ${/^u_[a-z0-9_]+$/.test(x.id) ? `<button class="icon" data-del="${S.esc(x.id)}" title="Xoá gói"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('')}</div>`;
+        ${/^u_[a-z0-9_]+$/.test(x.id) ? `<button class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" data-del="${S.esc(x.id)}" title="Xoá gói"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('')}</div>`;
   async function trustPack(id) {
     const x = (st.packs || []).find(p => p.id === id);
     if (!confirm(`Tin gói “${x?.name || id}” (${x?.file || id})? Mã của gói sẽ chạy trong Studio và khi xuất video mà không cảnh báo nữa (đến khi nội dung gói đổi).`)) return;
@@ -76,68 +82,69 @@
       ${st.tab === 'clone' ? cloneTab(running) : descTab(running)}
       <div class="sl-card"><h4><i class="ti ti-dna-2"></i> Style của tôi ${st.styles ? `<span class="muted">(${st.styles.length})</span>` : ''}</h4>
         ${!st.styles ? '<p class="muted">Đang tải…</p>' : !st.styles.length ? '<p class="muted">Chưa có style nào. Clone từ một video bạn thích, hoặc mô tả style bạn muốn.</p>' : st.styles.map(mineRow).join('')}</div>`;
-    bind();
+    applyVars(b); bind();
   }
   const opts = running => `<div class="sl-row"><input id="slname" placeholder="Tên style (tuỳ chọn)" value="${S.esc(st.name)}" ${running ? 'disabled' : ''}>
       <select id="slmodel" title="Model Claude" ${running ? 'disabled' : ''}>${[['default', 'Model mặc định của CLI'], ['sonnet', 'Sonnet (nhanh)'], ['opus', 'Opus (kỹ hơn)']].map(([v, l]) => `<option value="${v}" ${st.model === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
   function cloneTab(running) {
     const an = st.an;
     return `<div class="sl-card"><h4><i class="ti ti-movie"></i> Video mẫu đã edit (TikTok / Reels / YouTube)</h4>
-      <p class="muted" style="font-size:11.5px">Đưa vào video bất kỳ có style bạn thích. Máy phân tích cắt cảnh, màu, vị trí chữ, lời nói, nhạc; Claude xem contact sheet rồi viết một gói style mới tái tạo phong cách đó (không chép logo/nội dung).</p>
+      <p class="muted sl-sm">Đưa vào video bất kỳ có style bạn thích. Máy phân tích cắt cảnh, màu, vị trí chữ, lời nói, nhạc; Claude xem contact sheet rồi viết một gói style mới tái tạo phong cách đó (không chép logo/nội dung).</p>
       <div class="sl-drop" id="sldrop"><i class="ti ti-upload"></i> Kéo thả hoặc bấm để chọn video<input type="file" id="slfile" accept="video/*" hidden></div>
-      <div class="sl-row"><input id="slpath" placeholder="…hoặc đường dẫn: ~/Downloads/video.mp4" value="${S.esc(st.src)}" ${running ? 'disabled' : ''}><button id="slan" style="flex:none" ${running ? 'disabled' : ''}><i class="ti ti-scan"></i> Phân tích</button></div>
-      ${an ? anCard(an) + opts(running) + `<button class="primary" id="slgo" style="width:100%" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
-        <p class="muted" style="font-size:11px;margin-top:6px">Mất khoảng 2–8 phút (Claude CLI trên máy bạn, dùng gói Claude của bạn). Gói chỉ được cài khi qua kiểm tra trong engine.</p>` : ''}</div>`;
+      <div class="sl-row"><input id="slpath" placeholder="…hoặc đường dẫn: ~/Downloads/video.mp4" value="${S.esc(st.src)}" ${running ? 'disabled' : ''}><button id="slan" class="sl-nf" ${running ? 'disabled' : ''}><i class="ti ti-scan"></i> Phân tích</button></div>
+      ${an ? anCard(an) + opts(running) + `<button class="primary sl-full" id="slgo" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
+        <p class="muted sl-xs">Mất khoảng 2–8 phút (Claude CLI trên máy bạn, dùng gói Claude của bạn). Gói chỉ được cài khi qua kiểm tra trong engine.</p>` : ''}</div>`;
   }
   function anCard(an) {
     const sh = an.sheets || [], cur = sh[st.sheet] || sh[0];
     const tz = (an.text_zones || [])[0];
-    return `<div style="margin-top:8px">${cur ? `<img class="sl-sheet" id="slsheet" src="${fileUrl(st.w, cur.file)}" title="Contact sheet ${cur.from}s–${cur.to}s (bấm để phóng to)">
-        <div class="sl-nav">${sh.map((s, i) => `<button data-sh="${i}" class="${i === st.sheet ? 'on' : ''}">${Math.round(s.from)}–${Math.round(s.to)}s</button>`).join('')}</div>` : ''}
-      <div class="sl-sw" title="Bảng màu chủ đạo">${(an.palette || []).slice(0, 6).map(p => `<i style="background:${p.hex}" title="${p.hex} · ${Math.round(p.share * 100)}%"></i>`).join('')}${(an.accents || []).slice(0, 3).map(p => `<i style="background:${p.hex};flex:.6" title="nhấn ${p.hex}"></i>`).join('')}</div>
-      <div class="sl-kv"><span>${S.fmt(an.duration)} · ${an.aspect}</span><span>${an.n_cuts} cắt cảnh · ${an.cut_rate_per_min}/phút</span><span>cảnh TB ${an.avg_shot_s}s</span>
-        <span>${an.audio?.music_likely ? `có nhạc${an.audio.bpm ? ' ~' + Math.round(an.audio.bpm) + ' BPM' : ''}` : 'ít/không nhạc'}</span><span>lời nói ${Math.round(an.speech_ratio * 100)}%</span>
-        ${tz ? `<span>chữ ở ${Math.round(tz.y0 * 100)}–${Math.round(tz.y1 * 100)}% chiều cao</span>` : ''}${an.audio?.transients?.length ? `<span>${an.audio.transients.length} tiếng động mạnh</span>` : ''}</div>
-      ${an.text_zones_image ? `<details><summary class="muted" style="font-size:11px;cursor:pointer">Vùng chữ / phụ đề</summary><img class="sl-sheet" src="${fileUrl(st.w, an.text_zones_image)}"></details>` : ''}</div>`;
+    return `<div class="sl-wrap">${cur ? `<img class="sl-sheet" id="slsheet" src="${fileUrl(st.w, cur.file)}" title="Contact sheet ${cur.from}s–${cur.to}s (bấm để phóng to)">
+        <div class="sl-nav">${sh.map((s, i) => `<button data-sh="${i}" class="ui-chip ${i === st.sheet ? 'is-active' : ''}" aria-pressed="${i === st.sheet}">${Math.round(s.from)}–${Math.round(s.to)}s</button>`).join('')}</div>` : ''}
+      <div class="sl-sw" title="Bảng màu chủ đạo">${(an.palette || []).slice(0, 6).map(p => `<i data-v="--sw:${S.esc(p.hex)}" title="${p.hex} · ${Math.round(p.share * 100)}%"></i>`).join('')}${(an.accents || []).slice(0, 3).map(p => `<i class="acc" data-v="--sw:${S.esc(p.hex)}" title="nhấn ${p.hex}"></i>`).join('')}</div>
+      <div class="sl-kv"><span class="ui-chip">${S.fmt(an.duration)} · ${an.aspect}</span><span class="ui-chip">${an.n_cuts} cắt cảnh · ${an.cut_rate_per_min}/phút</span><span class="ui-chip">cảnh TB ${an.avg_shot_s}s</span>
+        <span class="ui-chip">${an.audio?.music_likely ? `có nhạc${an.audio.bpm ? ' ~' + Math.round(an.audio.bpm) + ' BPM' : ''}` : 'ít/không nhạc'}</span><span class="ui-chip">lời nói ${Math.round(an.speech_ratio * 100)}%</span>
+        ${tz ? `<span class="ui-chip">chữ ở ${Math.round(tz.y0 * 100)}–${Math.round(tz.y1 * 100)}% chiều cao</span>` : ''}${an.audio?.transients?.length ? `<span class="ui-chip">${an.audio.transients.length} tiếng động mạnh</span>` : ''}</div>
+      ${an.text_zones_image ? `<details><summary class="muted sl-sum">Vùng chữ / phụ đề</summary><img class="sl-sheet" src="${fileUrl(st.w, an.text_zones_image)}"></details>` : ''}</div>`;
   }
   function descTab(running) {
     const d = st.d;
     return `<div class="sl-card"><h4><i class="ti ti-writing"></i> Mô tả style bạn muốn</h4>
       <textarea id="sldesc" rows="5" placeholder="VD: Video bất động sản sang trọng tông đen – vàng gold, chữ serif, intro tên dự án, thẻ giá, bản đồ vị trí, CTA gọi điện" ${running ? 'disabled' : ''}>${S.esc(d.desc)}</textarea>
-      <div class="seg" id="slor" style="margin-top:6px">${[['vertical', 'Dọc 9:16'], ['horizontal', 'Ngang 16:9']].map(([k, l]) => `<button data-o="${k}" class="${d.orient === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <div class="sl-row"><input id="slind" placeholder="Ngành (BĐS, mỹ phẩm…)" value="${S.esc(d.industry)}"><input id="slcol" placeholder="Màu thương hiệu: #111111, #C9A44C" value="${S.esc(d.colors)}"></div>
+      <div class="seg sl-mt" id="slor">${[['vertical', 'Dọc 9:16'], ['horizontal', 'Ngang 16:9']].map(([k, l]) => `<button data-o="${k}" class="${d.orient === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="sl-row"><input id="slind" placeholder="Ngành (BĐS, mỹ phẩm…)" value="${S.esc(d.industry)}"><input id="slcol" placeholder="Màu thương hiệu: #111111, #C9A44C" value="${S.esc(d.colors)}"></div><!-- design-token-ok: placeholder shows the hex format the user types -->
+
       <div class="sl-row"><select id="slfont">${FONTS.map(f => `<option value="${f}" ${d.font === f ? 'selected' : ''}>${f || 'Font: để Claude chọn'}</option>`).join('')}</select>
-        <button id="slimg" style="flex:none"><i class="ti ti-photo-plus"></i> Ảnh tham khảo</button><input type="file" id="slimgf" accept="image/*" multiple hidden></div>
+        <button id="slimg" class="sl-nf"><i class="ti ti-photo-plus"></i> Ảnh tham khảo</button><input type="file" id="slimgf" accept="image/*" multiple hidden></div>
       ${d.images.length ? `<div class="sl-imgs">${d.images.map((f, i) => `<img src="${f.url}" title="Bấm để bỏ" data-rmimg="${i}">`).join('')}</div>` : ''}
-      ${opts(running)}<button class="primary" id="slgo" style="width:100%" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
-      <p class="muted" style="font-size:11px;margin-top:6px">Claude viết gói style + template + skill; mất khoảng 2–8 phút (Sonnet nhanh hơn).</p></div>`;
+      ${opts(running)}<button class="primary sl-full" id="slgo" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
+      <p class="muted sl-xs">Claude viết gói style + template + skill; mất khoảng 2–8 phút (Sonnet nhanh hơn).</p></div>`;
   }
   function progCard() {
     const j = st.job, steps = STEPS[st.kind] || [], p = j.progress || 0;
     const si = st.kind === 'analyze' ? -1 : st.kind === 'clone' ? (p < .23 ? 0 : p < .61 ? 1 : p < .87 ? 2 : 3) : (p < .61 ? 0 : p < .87 ? 1 : 2);
     const el = (Date.now() - (j.started || Date.now())) / 1000;
-    return `<div class="sl-card sl-prog"><h4>${j.state === 'error' ? '<i class="ti ti-alert-triangle" style="color:var(--bad)"></i> Chưa tạo được' : '<i class="ti ti-loader-2 spin"></i> ' + (st.kind === 'analyze' ? 'Đang phân tích video' : 'Đang tạo style')}<span class="muted" style="margin-left:auto">${mmss(el)}</span></h4>
-      ${j.state === 'error' ? `<p class="sl-err">${S.esc(j.step)}</p>` : `<div class="bar"><i style="width:${Math.round(p * 100)}%"></i></div><div class="muted" id="slstep" style="font-size:11.5px">${S.esc(j.step || '')}</div>
+    return `<div class="sl-card sl-prog"><h4>${j.state === 'error' ? '<i class="ti ti-alert-triangle sl-c-bad"></i> Chưa tạo được' : '<i class="ti ti-loader-2 spin"></i> ' + (st.kind === 'analyze' ? 'Đang phân tích video' : 'Đang tạo style')}<span class="muted sl-push">${mmss(el)}</span></h4>
+      ${j.state === 'error' ? `<p class="sl-err">${S.esc(j.step)}</p>` : `<div class="bar"><i data-v="--w:${Math.round(p * 100)}%"></i></div><div class="muted sl-step" id="slstep">${S.esc(j.step || '')}</div>
       ${si >= 0 ? `<ul class="sl-steps">${steps.map((s, i) => `<li class="${i < si ? 'ok' : i === si ? 'on' : ''}"><i class="ti ${i < si ? 'ti-check' : i === si ? 'ti-point-filled' : 'ti-point'}"></i> ${s}</li>`).join('')}</ul>` : ''}
       <div class="sl-acts"><button id="slcancel"><i class="ti ti-player-stop"></i> Dừng</button></div>`}</div>`;
   }
   function resultCard(r) {
-    if (!r.ok) return `<div class="sl-card"><h4><i class="ti ti-alert-triangle" style="color:var(--bad)"></i> Chưa tạo được style</h4><p class="sl-err">${S.esc(r.error || 'Lỗi không rõ')}</p>
+    if (!r.ok) return `<div class="sl-card"><h4><i class="ti ti-alert-triangle sl-c-bad"></i> Chưa tạo được style</h4><p class="sl-err">${S.esc(r.error || 'Lỗi không rõ')}</p>
       ${r.validation?.problems?.length ? `<ul class="sl-steps">${r.validation.problems.slice(0, 8).map(p => `<li>• ${S.esc(p)}</li>`).join('')}</ul>` : ''}
       ${r.stills?.length ? `<div class="sl-thumbs">${r.stills.slice(0, 8).map(s => `<img src="${fileUrl(st.w, s)}">`).join('')}</div>` : ''}</div>`;
     const v = r.files?.preview?.ok ? `/templates/previews/${encodeURIComponent(r.id)}.mp4?${Date.now()}` : null;
-    return `<div class="sl-card"><h4><i class="ti ti-circle-check" style="color:var(--ok)"></i> ${S.esc(r.name)} <span class="muted" style="margin-left:auto;font-weight:400">${mmss(r.sec || 0)}</span></h4>
+    return `<div class="sl-card"><h4><i class="ti ti-circle-check sl-c-ok"></i> ${S.esc(r.name)} <span class="muted sl-push sl-n">${mmss(r.sec || 0)}</span></h4>
       ${v ? `<video class="sl-vid" src="${v}" autoplay loop muted playsinline></video>` : ''}
       ${r.meta?.summary ? `<p>${S.esc(r.meta.summary)}</p>` : ''}
-      <div class="sl-kv"><span>gói ${S.esc(r.id)}</span><span>${r.validation?.meta?.items?.length || 0} graphic</span><span>${r.validation?.recipe?.scenes || 0} cảnh tự dựng</span><span>${r.turns?.length > 1 ? `${r.turns.length - 1} vòng sửa` : 'qua kiểm tra ngay'}</span></div>
-      ${r.seen ? `<p class="muted" style="font-size:11.5px"><i class="ti ti-eye"></i> Claude thấy: ${S.esc(r.seen)}</p>` : ''}
-      ${r.compare ? `<details><summary class="muted" style="font-size:11px;cursor:pointer">So sánh: video mẫu (trên) · style mới (dưới)</summary><img class="sl-sheet" src="${fileUrl(st.w, r.compare)}"></details>` : ''}
-      <details><summary class="muted" style="font-size:11px;cursor:pointer">Style spec</summary><div class="sl-spec">${S.esc(r.spec || '')}</div></details>
+      <div class="sl-kv"><span class="ui-chip">gói ${S.esc(r.id)}</span><span class="ui-chip">${r.validation?.meta?.items?.length || 0} graphic</span><span class="ui-chip">${r.validation?.recipe?.scenes || 0} cảnh tự dựng</span><span class="ui-chip">${r.turns?.length > 1 ? `${r.turns.length - 1} vòng sửa` : 'qua kiểm tra ngay'}</span></div>
+      ${r.seen ? `<p class="muted sl-sm"><i class="ti ti-eye"></i> Claude thấy: ${S.esc(r.seen)}</p>` : ''}
+      ${r.compare ? `<details><summary class="muted sl-sum">So sánh: video mẫu (trên) · style mới (dưới)</summary><img class="sl-sheet" src="${fileUrl(st.w, r.compare)}"></details>` : ''}
+      <details><summary class="muted sl-sum">Style spec</summary><div class="sl-spec">${S.esc(r.spec || '')}</div></details>
       <div class="sl-acts"><button class="primary" data-apply="${S.esc(r.id)}"><i class="ti ti-wand"></i> Áp dụng cho dự án</button><button data-lib="${S.esc(r.id)}"><i class="ti ti-layout-grid"></i> Mở trong thư viện mẫu</button><button data-del="${S.esc(r.id)}" title="Xoá style"><i class="ti ti-trash"></i></button></div>
-      ${r.files?.skill ? `<p class="muted" style="font-size:10.5px;margin-top:6px">Skill Claude Code: ${S.esc(r.files.skill.replace(/^\/Users\/[^/]+/, '~'))}</p>` : ''}</div>`;
+      ${r.files?.skill ? `<p class="muted sl-xs">Skill Claude Code: ${S.esc(r.files.skill.replace(/^\/Users\/[^/]+/, '~'))}</p>` : ''}</div>`;
   }
   const mineRow = s => `<div class="sl-mine">${s.thumb ? `<img src="${s.thumb}">` : '<img>'}<div class="tx"><b>${S.esc(s.name)}</b><small>${s.kind === 'clone' ? 'clone từ video' : 'từ mô tả'} · ${S.esc(s.aspect)} · ${S.esc(String(s.created || '').slice(0, 10))}</small></div>
-    <button class="icon" data-apply="${S.esc(s.id)}" title="Áp dụng cho dự án"><i class="ti ti-wand"></i></button><button class="icon" data-lib="${S.esc(s.id)}" title="Mở trong thư viện mẫu"><i class="ti ti-layout-grid"></i></button><button class="icon" data-del="${S.esc(s.id)}" title="Xoá style"><i class="ti ti-trash"></i></button></div>`;
+    <button class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" data-apply="${S.esc(s.id)}" title="Áp dụng cho dự án"><i class="ti ti-wand"></i></button><button class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" data-lib="${S.esc(s.id)}" title="Mở trong thư viện mẫu"><i class="ti ti-layout-grid"></i></button><button class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" data-del="${S.esc(s.id)}" title="Xoá style"><i class="ti ti-trash"></i></button></div>`;
 
   function bind() {
     const b = $b(), q = s => b.querySelector(s);
@@ -150,7 +157,7 @@
       if ((x = e.target.closest('[data-trust]'))) return trustPack(x.dataset.trust);
       if ((x = e.target.closest('[data-sh]'))) { st.sheet = +x.dataset.sh; return render(); }
       if ((x = e.target.closest('[data-rmimg]'))) { save(); st.d.images.splice(+x.dataset.rmimg, 1); return render(); }
-      if (e.target.matches('.sl-sheet, .sl-thumbs img')) return S.modal(`<img src="${e.target.src}" style="max-width:100%;max-height:80vh;display:block;margin:auto"><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      if (e.target.matches('.sl-sheet, .sl-thumbs img')) return S.modal(`<img class="sl-zoom" src="${e.target.src}"><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
     };
     q('#slcancel') && (q('#slcancel').onclick = () => S.api('/api/job/cancel', {}).then(() => S.toast('Đã dừng')));
     if (st.tab === 'clone') {
@@ -214,7 +221,7 @@
       const j = await S.api('/api/job').catch(() => null); if (!j || j.kind !== 'stylelab') return;
       st.job = j;
       if (j.state !== 'running') { clearInterval(st.timer); st.timer = null; return onDone(j); }
-      if (st.visible && $b()?.querySelector('.sl-prog')) { const c = $b().querySelector('.sl-prog'); const tmp = document.createElement('div'); tmp.innerHTML = progCard(); c.replaceWith(tmp.firstElementChild); $b().querySelector('#slcancel') && ($b().querySelector('#slcancel').onclick = () => S.api('/api/job/cancel', {}).then(() => S.toast('Đã dừng'))); }
+      if (st.visible && $b()?.querySelector('.sl-prog')) { const c = $b().querySelector('.sl-prog'); const tmp = document.createElement('div'); tmp.innerHTML = progCard(); applyVars(tmp); c.replaceWith(tmp.firstElementChild); $b().querySelector('#slcancel') && ($b().querySelector('#slcancel').onclick = () => S.api('/api/job/cancel', {}).then(() => S.toast('Đã dừng'))); }
     }, 1000);
   }
   // A newly installed pack is injected into the preview iframe (no reload needed); after a reload it comes from packs/user/_all.js.

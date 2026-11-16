@@ -12,7 +12,7 @@
     const a = `data-hv="${esc(v.id)}" data-vt="${v.type}"`, cur = val ?? vi ?? v.def ?? '';
     const opts = v.options?.map(o => (typeof o === 'object' ? [o.value, o.label || o.value] : [o, o]));
     if (opts) return `<select ${a}>${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(k) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-    if (v.type === 'color') return `<input type="color" ${a} value="${esc(/^#[0-9a-f]{6}$/i.test(cur) ? cur : '#ffffff')}">`;
+    if (v.type === 'color') return `<input type="color" ${a} value="${esc(/^#[0-9a-f]{6}$/i.test(cur) ? cur : '#ffffff')}">`; // design-token-ok: default value of a block's colour variable (video data, not UI)
     if (v.type === 'boolean') return `<select ${a}><option value="true" ${cur === true || cur === 'true' ? 'selected' : ''}>Bật</option><option value="false" ${cur === true || cur === 'true' ? '' : 'selected'}>Tắt</option></select>`;
     if (v.type === 'number') return `<input type="number" step="any" ${a} value="${esc(cur)}">`;
     if (typeof cur === 'object') return `<input ${a} value="${esc(cur.url || cur.src || '')}" placeholder="đường dẫn ảnh trong dự án">`;

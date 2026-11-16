@@ -6,36 +6,40 @@
   const S = Studio;
   const css = document.createElement('style');
   css.textContent = `
-  .ai-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; margin: 8px 0; }
-  .ai-card h4 { margin: 0 0 4px; font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
-  .ai-card p { margin: 4px 0; color: var(--tx2); line-height: 1.5; }
-  .ai-kv { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
-  .ai-kv span { background: var(--bg3); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 8px; font-size: 11px; color: var(--tx2); }
-  .ai-drop { color: var(--warn); font-size: 11px; margin: 4px 0 0; padding-left: 16px; }
-  .ai-opts label.o { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--line2); border-radius: var(--rs); margin: 4px 0; cursor: pointer; background: var(--bg1); }
-  .ai-opts label.o:has(input:checked) { border-color: var(--acc-line); background: var(--acc-soft); }
-  .ai-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; } .ai-row > * { flex: 1; min-width: 0; }
-  .fl-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
-  .fl-it { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--rs); background: var(--bg1); }
+  .ai-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .ai-card h4 { margin: 0 0 var(--space-1); font-size: var(--text-sm); display: flex; gap: var(--space-2); align-items: center; }
+  .ai-card p { margin: var(--space-1) 0; color: rgb(var(--color-fg-muted)); line-height: 1.5; }
+  .ai-kv { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-2) 0; }
+  .ai-kv span { display: inline-flex; align-items: center; height: 24px; background: rgb(var(--color-surface-muted)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-pill); padding: 0 var(--space-2); font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-fg-muted)); white-space: nowrap; } /* = .ui-chip; other features print bare <span> here */
+  .ai-drop { color: rgb(var(--color-warning)); font-size: var(--text-2xs); margin: var(--space-1) 0 0; padding-left: var(--space-4); }
+  .ai-opts label.o { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); margin: var(--space-1) 0; cursor: pointer; background: rgb(var(--color-surface)); transition: border-color var(--duration-fast) var(--ease-standard); }
+  .ai-opts label.o:has(input:checked) { border-color: rgb(var(--color-accent-text) / .5); background: rgb(var(--color-accent-soft) / .24); }
+  .ai-opts select.ai-grow { width: auto; flex: 1; }
+  .ai-row { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; } .ai-row > * { flex: 1; min-width: 0; }
+  .ai-row.ai-click { cursor: pointer; } .ai-row > .ai-nf { flex: none; } .ai-row > .ai-end { text-align: right; }
+  p.ai-intro { margin: var(--space-050) 0 var(--space-2); } p.ai-note { font-size: var(--text-2xs); }
+  .lbl.ai-lbl { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+  .ai-c-acc { color: rgb(var(--color-accent-text)); } .ai-c-ok { color: rgb(var(--color-success)); } .ai-c-bad { color: rgb(var(--color-danger)); } .help.ai-c-warn { color: rgb(var(--color-warning)); }
+  .fl-list { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-2) 0; }
+  .fl-it { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); background: rgb(var(--color-surface)); }
   .fl-it.off { opacity: .55; }
-  .fl-it .fl-k { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--bg4); color: var(--tx2); flex: none; }
-  .fl-it .fl-k.filler { background: rgba(251,191,36,.15); color: var(--warn); } .fl-it .fl-k.repeat { background: var(--acc-soft); color: #CFC8FF; }
-  .fl-it .fl-k.pause { background: rgba(45,212,191,.13); color: var(--wave); } .fl-it .fl-k.false_start { background: rgba(248,113,113,.13); color: var(--bad); }
+  .fl-it .fl-k { font-size: var(--text-2xs); font-weight: 700; text-transform: uppercase; padding: var(--space-050) var(--space-2); border-radius: var(--radius-xs); background: rgb(var(--color-surface-hover)); color: rgb(var(--color-fg-muted)); flex: none; }
+  .fl-it .fl-k.filler { background: rgb(var(--color-warning) / .15); color: rgb(var(--color-warning)); } .fl-it .fl-k.repeat { background: rgb(var(--color-accent-soft) / .24); color: rgb(var(--color-accent-text-strong)); }
+  .fl-it .fl-k.pause { background: rgb(var(--color-audio) / .13); color: rgb(var(--color-audio)); } .fl-it .fl-k.false_start { background: rgb(var(--color-danger) / .13); color: rgb(var(--color-danger)); }
   .fl-it .fl-tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fl-it .fl-tx small { display: block; color: var(--tx3); font-size: 10.5px; }
-  .fl-it button.icon { width: 26px; height: 26px; flex: none; }
-  .tw-wrap { line-height: 2.05; font-size: 13.5px; user-select: none; padding: 4px 0 20px; }
-  .tw-wrap .tm { font-size: 10px; color: var(--tx3); margin: 0 4px 0 2px; font-variant-numeric: tabular-nums; cursor: pointer; background: var(--bg2); border-radius: 4px; padding: 1px 4px; }
-  .tw-wrap .tm:hover { color: var(--tx); }
-  .tw { padding: 2px 2px; border-radius: 4px; cursor: text; transition: background .1s; }
-  .tw:hover { background: var(--bg3); }
-  .tw.cur { color: #fff; box-shadow: inset 0 -2px 0 var(--acc); }
-  .tw.sel { background: rgba(248,113,113,.28); color: #fff; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.5); }
-  .tw.hl { color: var(--warn); font-weight: 600; }
-  .tw.flag { box-shadow: inset 0 -2px 0 var(--warn); }
-  .ai-qc { display: flex; gap: 8px; margin-top: 10px; } .ai-qc figure { margin: 0; flex: 1; text-align: center; font-size: 11px; color: var(--tx3); }
-  .ai-qc img { width: 100%; border-radius: 6px; border: 1px solid var(--line2); background: #000; }
-  .ai-qc .ph { aspect-ratio: 9/16; border-radius: 6px; border: 1px dashed var(--line3); display: flex; align-items: center; justify-content: center; }
+  .fl-it .fl-tx small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .tw-wrap { line-height: 2.05; font-size: var(--text-sm); user-select: none; padding: var(--space-1) 0 var(--space-5); }
+  .tw-wrap .tm { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: 0 var(--space-1) 0 var(--space-050); font-variant-numeric: tabular-nums; cursor: pointer; background: rgb(var(--color-surface-raised)); border-radius: var(--radius-xs); padding: 1px var(--space-1); }
+  .tw-wrap .tm:hover { color: rgb(var(--color-fg)); }
+  .tw { padding: var(--space-050); border-radius: var(--radius-xs); cursor: text; transition: background-color var(--duration-fast) var(--ease-standard); }
+  .tw:hover { background: rgb(var(--color-surface-muted)); }
+  .tw.cur { color: rgb(var(--color-white)); box-shadow: inset 0 -2px 0 rgb(var(--color-accent-text)); }
+  .tw.sel { background: rgb(var(--color-danger) / .28); color: rgb(var(--color-white)); text-decoration: line-through; text-decoration-color: rgb(var(--color-white) / .5); }
+  .tw.hl { color: rgb(var(--color-highlight)); font-weight: 600; }
+  .tw.flag { box-shadow: inset 0 -2px 0 rgb(var(--color-warning)); }
+  .ai-qc { display: flex; gap: var(--space-2); margin-top: var(--space-3); } .ai-qc figure { margin: 0; flex: 1; text-align: center; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+  .ai-qc img { width: 100%; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); background: rgb(var(--color-black)); }
+  .ai-qc .ph { aspect-ratio: 9/16; border-radius: var(--radius-control); border: 1px dashed rgb(var(--color-line-hover)); display: flex; align-items: center; justify-content: center; }
   body.landscape .ai-qc .ph { aspect-ratio: 16/9; }`;
   document.head.appendChild(css);
 
@@ -101,17 +105,17 @@
     if (!CAP.length && S.needCaptions) return S.needCaptions(openAiModal, 'AI dựng giúp');
     const cur = TL.pack || 'slate';
     S.modal(`<h3><i class="ti ti-wand"></i> AI dựng giúp</h3>
-      <p class="muted" style="margin:2px 0 8px">Claude đọc lời thoại (${CAP.length} dòng phụ đề, ${fmt(TL.duration)}) rồi chọn gói style, sửa phụ đề, viết hook, đặt graphic đúng lúc nói từ khoá, chọn nhạc và SFX. Mất khoảng 20–90 giây. Áp dụng xong vẫn hoàn tác được (⌘Z).</p>
+      <p class="muted ai-intro">Claude đọc lời thoại (${CAP.length} dòng phụ đề, ${fmt(TL.duration)}) rồi chọn gói style, sửa phụ đề, viết hook, đặt graphic đúng lúc nói từ khoá, chọn nhạc và SFX. Mất khoảng 20–90 giây. Áp dụng xong vẫn hoàn tác được (⌘Z).</p>
       <div class="row2"><div><label class="lbl">Mục tiêu video</label><select id="aig">${GOALS.map(g => `<option>${g}</option>`).join('')}</select></div>
       <div><label class="lbl">Giọng điệu</label><select id="ait">${TONES.map(g => `<option>${g}</option>`).join('')}</select></div></div>
       <label class="lbl">Gói style</label><div class="ai-opts">
         <label class="o"><input type="radio" name="aip" value="keep" checked> Giữ gói hiện tại <b>${esc(packName(cur))}</b></label>
         <label class="o"><input type="radio" name="aip" value="auto"> Để AI chọn gói hợp nội dung nhất</label>
-        <label class="o"><input type="radio" name="aip" value="pick"> Gói khác: <select id="aipk" style="width:auto;flex:1">${packs().filter(p => p.recipe).map(p => `<option value="${p.id}">${p.icon || ''} ${esc(p.name)}</option>`).join('')}</select></label></div>
+        <label class="o"><input type="radio" name="aip" value="pick"> Gói khác: <select id="aipk" class="ai-grow">${packs().filter(p => p.recipe).map(p => `<option value="${p.id}">${p.icon || ''} ${esc(p.name)}</option>`).join('')}</select></label></div>
       <label class="lbl">Mật độ graphic</label><div class="seg" id="aid">${DENS.map(([k, l, s]) => `<button data-d="${k}" class="${k === 'vua' ? 'on' : ''}" title="${s}">${l} <span class="muted">${s}</span></button>`).join('')}</div>
       <label class="lbl">Yêu cầu thêm (tuỳ chọn)</label><textarea id="aix" placeholder="VD: nhấn mạnh con số, CTA là “nhắn tin để nhận tài liệu”, không dùng emoji…"></textarea>
-      ${S.autofill ? `<label class="ai-row" style="cursor:pointer"><input type="checkbox" id="aiaf" style="flex:none" ${S.autofill.opts.after_ai !== false ? 'checked' : ''}><span>Tự thêm b-roll + âm thanh sau khi dựng <span class="muted">· panel Tự động</span></span></label>` : ''}
-      <p class="muted" style="font-size:11px">Cảnh do AI tạo được đánh dấu; chạy lại sẽ chỉ thay các cảnh AI chưa bị bạn chỉnh. Cảnh bạn đã sửa hoặc tự thêm được giữ nguyên.</p>
+      ${S.autofill ? `<label class="ai-row ai-click"><input type="checkbox" id="aiaf" class="ai-nf" ${S.autofill.opts.after_ai !== false ? 'checked' : ''}><span>Tự thêm b-roll + âm thanh sau khi dựng <span class="muted">· panel Tự động</span></span></label>` : ''}
+      <p class="muted ai-note">Cảnh do AI tạo được đánh dấu; chạy lại sẽ chỉ thay các cảnh AI chưa bị bạn chỉnh. Cảnh bạn đã sửa hoặc tự thêm được giữ nguyên.</p>
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="aigo"><i class="ti ti-sparkles"></i> Dựng</button></div>`);
     $('#aig').value = { course: 'Khoá học', realestate: 'Bất động sản', review: 'Review', share: 'Chia sẻ' }[cur] || 'Khác';
     $('#aid').onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; for (const x of $('#aid').children) x.classList.toggle('on', x === b); };
@@ -161,7 +165,7 @@
   }
   function planCard(plan, full) {
     const kinds = {}; for (const s of plan.scenes.filter(s => !s._base)) kinds[S.typeName(s.type)] = (kinds[S.typeName(s.type)] || 0) + 1;
-    return `<div class="ai-card"><h4><i class="ti ti-sparkles" style="color:var(--acc)"></i> ${esc(plan.hook || 'Bản dựng AI')}</h4>
+    return `<div class="ai-card"><h4><i class="ti ti-sparkles ai-c-acc"></i> ${esc(plan.hook || 'Bản dựng AI')}</h4>
       <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(plan.music?.mood || '—')}</span><span>${plan.sfx.length} SFX</span></div>
       ${plan.summary ? `<p>${esc(plan.summary)}</p>` : ''}
       ${full ? `<div class="ai-kv">${Object.entries(kinds).map(([k, v]) => `<span>${esc(k)}${v > 1 ? ' ×' + v : ''}</span>`).join('')}</div>` : ''}
@@ -174,7 +178,7 @@
   }
   function showResult(plan) {
     const ts = qcTimes();
-    S.modal(`<h3><i class="ti ti-circle-check" style="color:var(--ok)"></i> Đã dựng xong</h3>${planCard(plan, true)}
+    S.modal(`<h3><i class="ti ti-circle-check ai-c-ok"></i> Đã dựng xong</h3>${planCard(plan, true)}
       <div class="ai-qc" id="aiqc">${ts.map(t => `<figure><div class="ph"><i class="ti ti-photo"></i></div><figcaption>${fmt(t)}</figcaption></figure>`).join('')}</div>
       <div class="actions"><button id="aiundo"><i class="ti ti-arrow-back-up"></i> Hoàn tác</button><button id="aiqcgo"><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="primary" onclick="closeModal()">Xem trên timeline</button></div>`);
     $('#aiundo').onclick = () => { undo(); S.closeModal(); S.toast('Đã hoàn tác bản dựng AI'); };
@@ -188,7 +192,7 @@
     for (const [k, t] of ts.entries()) {
       figs[k].querySelector('.ph, img').outerHTML = '<div class="ph"><i class="ti ti-loader-2 spin"></i></div>';
       const r = await S.api('/api/still', { t });
-      figs[k].querySelector('.ph').outerHTML = r.out ? `<img src="/project/${esc(r.out)}?${Date.now()}" title="Bấm để tới ${fmt(t)}">` : `<div class="ph" title="${esc(r.error || '')}"><i class="ti ti-alert-triangle" style="color:var(--bad)"></i></div>`;
+      figs[k].querySelector('.ph').outerHTML = r.out ? `<img src="/project/${esc(r.out)}?${Date.now()}" title="Bấm để tới ${fmt(t)}">` : `<div class="ph" title="${esc(r.error || '')}"><i class="ti ti-alert-triangle ai-c-bad"></i></div>`;
       const img = figs[k].querySelector('img'); if (img) img.onclick = () => { S.closeModal(); S.setTime(t); };
     }
     $('#aiqcgo').disabled = false;
@@ -238,18 +242,18 @@
     }
     const list = fl ? fl.cuts.map((c, i) => `<div class="fl-it ${flSel.has(i) ? '' : 'off'}"><input type="checkbox" data-fl="${i}" ${flSel.has(i) ? 'checked' : ''}>
         <span class="fl-k ${c.kind}">${KIND_VI[c.kind] || c.kind}</span><span class="fl-tx">${esc(c.text || c.reason)}<small>${fmt(c.a)} · ${(c.b - c.a).toFixed(2)}s · ${esc(c.reason)}</small></span>
-        <button class="icon" data-flplay="${i}" title="Nghe thử đoạn này"><i class="ti ti-player-play"></i></button></div>`).join('') : '';
+        <button class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" data-flplay="${i}" title="Nghe thử đoạn này" aria-label="Nghe thử đoạn này"><i class="ti ti-player-play"></i></button></div>`).join('') : '';
     const tot = fl ? fl.cuts.filter((c, i) => flSel.has(i)).reduce((a, c) => a + c.b - c.a, 0) : 0;
     $('#libbody').innerHTML = seg + `<div class="help">Dò tiếng đệm (ờ, à, ừm, thì là, kiểu như…), từ/cụm nói lặp liền nhau, chỗ ngắt quá lâu. Cắt sẽ dồn cả video, phụ đề, graphic, SFX như cắt clip trên timeline.</div>
-      <div class="ai-row"><div><label class="lbl" style="font-size:11px;color:var(--tx3)">Ngắt quãng dài hơn (giây)</label><input id="flpause" type="number" step=".1" min=".3" value="${$('#flpause')?.value || .7}"></div></div>
-      <label class="lbl" style="font-size:11px;color:var(--tx3)">Từ đệm (phẩy ngăn cách, để trống = mặc định)</label><input id="fllist" placeholder="ờ, à, ừ, ừm, ơ, ờm, thì là, kiểu như, nói chung là" value="${esc($('#fllist')?.value || '')}">
-      <label class="ai-row" style="cursor:pointer"><input type="checkbox" id="flclaude" style="flex:none" ${$('#flclaude')?.checked ? 'checked' : ''}><span>Nhờ Claude tìm câu nói hỏng (bắt đầu rồi nói lại) <span class="muted">· chậm hơn</span></span></label>
+      <div class="ai-row"><div><label class="lbl ai-lbl">Ngắt quãng dài hơn (giây)</label><input id="flpause" type="number" step=".1" min=".3" value="${$('#flpause')?.value || .7}"></div></div>
+      <label class="lbl ai-lbl">Từ đệm (phẩy ngăn cách, để trống = mặc định)</label><input id="fllist" placeholder="ờ, à, ừ, ừm, ơ, ờm, thì là, kiểu như, nói chung là" value="${esc($('#fllist')?.value || '')}">
+      <label class="ai-row ai-click"><input type="checkbox" id="flclaude" class="ai-nf" ${$('#flclaude')?.checked ? 'checked' : ''}><span>Nhờ Claude tìm câu nói hỏng (bắt đầu rồi nói lại) <span class="muted">· chậm hơn</span></span></label>
       <button class="wide" data-ai="detect" ${flBusy ? 'disabled' : ''}>${flBusy ? '<i class="ti ti-loader-2 spin"></i> Đang dò…' : '<i class="ti ti-search"></i> Dò lỗi nói'}</button>
-      ${fl ? (fl.cuts.length ? `<div class="ai-row"><b>${fl.cuts.length} chỗ</b><span class="muted" style="text-align:right">đã chọn ${flSel.size} · ${tot.toFixed(1)}s</span></div>
+      ${fl ? (fl.cuts.length ? `<div class="ai-row"><b>${fl.cuts.length} chỗ</b><span class="muted ai-end">đã chọn ${flSel.size} · ${tot.toFixed(1)}s</span></div>
         <div class="acts"><button class="mini" data-ai="all">Chọn hết</button><button class="mini" data-ai="none">Bỏ chọn</button></div>
         <div class="fl-list">${list}</div><button class="wide primary" data-ai="cut" ${flSel.size ? '' : 'disabled'}><i class="ti ti-scissors"></i> Cắt tất cả đã chọn</button>`
         : `<div class="empty"><i class="ti ti-mood-check"></i><b>Không thấy lỗi nói</b><span>Lời thoại đã gọn. Có thể bật “Nhờ Claude” để tìm câu nói hỏng.</span></div>`) : ''}
-      ${fl?.note ? `<div class="help" style="color:var(--warn)">${esc(fl.note)}</div>` : ''}`;
+      ${fl?.note ? `<div class="help ai-c-warn">${esc(fl.note)}</div>` : ''}`;
   }
   S.addPanel('ai', 'ti-sparkles', 'AI', renderAi);
   $('#libbody').addEventListener('click', e => {

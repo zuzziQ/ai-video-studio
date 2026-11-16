@@ -1,41 +1,13 @@
 {
   "_note": "Mốc của scripts/check_studio_tokens.mjs (M81): chỉ được giảm.",
   "total": {
-    "color": 282,
-    "style": 250
+    "color": 238,
+    "style": 113
   },
   "files": {
     "studio/features/00_author.js": {
       "color": 0,
       "style": 1
-    },
-    "studio/features/15_autopilot.js": {
-      "color": 0,
-      "style": 16
-    },
-    "studio/features/16_qc.js": {
-      "color": 1,
-      "style": 41
-    },
-    "studio/features/17_longform.js": {
-      "color": 2,
-      "style": 8
-    },
-    "studio/features/18_schedule.js": {
-      "color": 23,
-      "style": 28
-    },
-    "studio/features/20_ai.js": {
-      "color": 9,
-      "style": 14
-    },
-    "studio/features/25_transcribe.js": {
-      "color": 2,
-      "style": 4
-    },
-    "studio/features/27_tplfit.js": {
-      "color": 0,
-      "style": 2
     },
     "studio/features/28_engines.js": {
       "color": 4,
@@ -48,10 +20,6 @@
     "studio/features/30_audio.js": {
       "color": 10,
       "style": 7
-    },
-    "studio/features/35_hf.js": {
-      "color": 1,
-      "style": 0
     },
     "studio/features/40_reframe.js": {
       "color": 0,
@@ -92,10 +60,6 @@
     "studio/features/63_frames.js": {
       "color": 0,
       "style": 1
-    },
-    "studio/features/70_stylelab.js": {
-      "color": 6,
-      "style": 24
     },
     "studio/features/80_autofill.js": {
       "color": 3,

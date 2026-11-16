@@ -8,28 +8,33 @@
   const S = { tab: LS('tab') || 'long', video: LS('video') || '', dir: LS('dir') || '', list: null, runs: [], queue: false, topicOut: null, uploading: 0 };
   const css = document.createElement('style');
   css.textContent = `
-  .lf-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
-  .lf-card h4 { margin: 0 0 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; color: var(--tx); }
-  .lf-card h4 .r { margin-left: auto; font-weight: 500; color: var(--tx3); font-size: 11px; }
-  .lf-lbl { font-size: 10.5px; color: var(--tx3); display: block; margin: 8px 0 3px; }
-  .lf-drop { border: 1.5px dashed var(--line3); border-radius: 10px; padding: 14px 10px; text-align: center; color: var(--tx2); cursor: pointer; font-size: 12px; }
-  .lf-drop i { font-size: 26px; color: var(--acc); display: block; margin-bottom: 4px; }
-  .lf-drop.over, .lf-drop:hover { border-color: var(--acc); background: var(--acc-soft); }
-  .lf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+  .lf-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .lf-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); display: flex; align-items: center; gap: var(--space-2); color: rgb(var(--color-fg)); }
+  .lf-card h4 .r { margin-left: auto; font-weight: 500; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .lf-lbl { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin: var(--space-2) 0 var(--space-1); }
+  .lf-drop { border: 1.5px dashed rgb(var(--color-line-hover)); border-radius: var(--radius-card); padding: var(--space-4) var(--space-3); text-align: center; color: rgb(var(--color-fg-muted)); cursor: pointer; font-size: var(--text-xs); transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+  .lf-drop i { font-size: 24px; color: rgb(var(--color-accent-text)); display: block; margin-bottom: var(--space-1); }
+  .lf-drop small { font-size: var(--text-2xs); }
+  .lf-drop.over, .lf-drop:hover { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .24); }
+  .lf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-2); }
   .lf-grid .full { grid-column: 1 / 3; }
-  .lf-go { width: 100%; justify-content: center; margin-top: 10px; }
-  .lf-help { font-size: 10.5px; color: var(--tx3); line-height: 1.5; margin-top: 6px; }
-  .lf-it { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
-  .lf-it img, .lf-it .ph { width: 64px; height: 100px; object-fit: cover; border-radius: 6px; background: var(--bg4); display: block; }
+  .lf-go { width: 100%; justify-content: center; margin-top: var(--space-3); }
+  .lf-help { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); line-height: 1.5; margin-top: var(--space-2); }
+  .lf-el { font-size: var(--text-2xs); margin-top: var(--space-1); }
+  .lf-vid { width: 100%; max-height: 70vh; border-radius: var(--radius-control); background: rgb(var(--color-black)); }
+  .ap-tog.lf-tog { display: flex; gap: var(--space-2); align-items: center; font-size: var(--text-xs); margin-top: var(--space-2); } .lf-tog input { width: auto; }
+  .lf-c-ok { color: rgb(var(--color-success)); } .lf-strong { font-weight: 600; } .lf-bulk.lf-mt { margin-top: var(--space-2); }
+  .lf-it { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); }
+  .lf-it img, .lf-it .ph { width: 64px; height: 100px; object-fit: cover; border-radius: var(--radius-control); background: rgb(var(--color-surface-hover)); display: block; }
   .lf-it.h img, .lf-it.h .ph { height: 36px; }
-  .lf-it .tt { font-weight: 600; font-size: 12px; line-height: 1.35; }
-  .lf-it .hk { font-size: 11px; color: var(--acc); margin: 3px 0; }
-  .lf-it .mt { font-size: 10.5px; color: var(--tx3); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
-  .lf-it .sc { font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--acc-soft); color: #CFC8FF; }
-  .lf-it .rs { font-size: 10.5px; color: var(--tx3); margin-top: 3px; line-height: 1.4; }
-  .lf-it .b { display: flex; gap: 4px; margin-top: 5px; } .lf-it .b button { font-size: 11px; padding: 3px 8px; }
-  .lf-bulk { display: flex; gap: 6px; } .lf-bulk button { flex: 1; justify-content: center; font-size: 11.5px; }
-  .lf-runs { width: 100%; font-size: 11px; }`;
+  .lf-it .tt { font-weight: 600; font-size: var(--text-xs); line-height: 1.35; }
+  .lf-it .hk { font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); margin: var(--space-1) 0; }
+  .lf-it .mt { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; }
+  .lf-it .sc { font-weight: 700; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: rgb(var(--color-accent-soft) / .24); color: rgb(var(--color-accent-text-strong)); }
+  .lf-it .rs { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin-top: var(--space-1); line-height: 1.4; }
+  .lf-it .b { display: flex; gap: var(--space-1); margin-top: var(--space-1); }
+  .lf-bulk { display: flex; gap: var(--space-2); } .lf-bulk button { flex: 1; justify-content: center; font-size: var(--text-xs); }
+  .lf-runs { width: 100%; font-size: var(--text-2xs); }`;
   document.head.appendChild(css);
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'longform';
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -56,7 +61,7 @@
     const hl = S.runs.filter(r => r.kind === 'highlights');
     return `<div class="lf-card"><h4><i class="ti ti-scissors"></i> Video dài → nhiều clip ngắn</h4>
       <div class="lf-drop" id="lf-drop"><i class="ti ti-movie"></i><b>${S.uploading ? `Đang tải lên ${S.uploading}%…` : 'Thả video dài vào đây'}</b><br><small>hoặc bấm để chọn · 30–90 phút vẫn được</small></div>
-      <input type="file" id="lf-file" accept="video/*" style="display:none">
+      <input type="file" id="lf-file" accept="video/*" hidden>
       <label class="lf-lbl">Hoặc đường dẫn video trên máy</label><input id="lf-video" placeholder="/Users/…/livestream.mp4" value="${esc(S.video)}">
       <div class="lf-grid">
         <div><label class="lf-lbl">Số clip</label><select id="lf-n">${[3, 4, 5, 6, 8, 10].map(n => `<option ${n === +(LS('n') || 6) ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
@@ -81,7 +86,7 @@
         <div><div class="tt">${esc(it.title)}</div>${it.hook ? `<div class="hk">“${esc(it.hook)}”</div>` : ''}
         <div class="mt"><span class="sc" title="Điểm Claude chấm">${it.score}</span><span><i class="ti ti-clock"></i> ${mmss(it.t0)}–${mmss(it.t1)}</span><span>${Math.round(it.dur)} s</span>${it.mode === 'reframe' ? '<span title="Video ngang → khung dọc, bám mặt"><i class="ti ti-focus-centered"></i> bám mặt</span>' : ''}</div>
         ${it.reason ? `<div class="rs">${esc(it.reason)}</div>` : ''}
-        <div class="b"><button data-open="${it.i}" ${it.exists ? '' : 'disabled'}><i class="ti ti-edit"></i> Mở</button>${it.mp4Url ? `<button data-play="${it.i}"><i class="ti ti-player-play"></i> Xem</button>` : ''}</div></div></div>`).join('')}</div>`;
+        <div class="b"><button class="ui-btn ui-btn--sm" data-open="${it.i}" ${it.exists ? '' : 'disabled'}><i class="ti ti-edit"></i> Mở</button>${it.mp4Url ? `<button class="ui-btn ui-btn--sm" data-play="${it.i}"><i class="ti ti-player-play"></i> Xem</button>` : ''}</div></div></div>`).join('')}</div>`;
   }
   function bindLong() {
     const drop = $('#lf-drop'), file = $('#lf-file');
@@ -110,7 +115,7 @@
   function progress(title, onDone) {
     const t0 = Date.now();
     Studio.modal(`<h3><i class="ti ti-loader-2 spin"></i> ${esc(title)}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>
-      <div class="muted" id="lf-el" style="font-size:11px;margin-top:4px"></div><div class="actions"><button id="lf-cancel">Dừng</button></div>`);
+      <div class="muted lf-el" id="lf-el"></div><div class="actions"><button id="lf-cancel">Dừng</button></div>`);
     const tick = setInterval(() => { const el = $('#lf-el'); if (el) el.textContent = `Đã chạy ${mmss((Date.now() - t0) / 1000)}`; else clearInterval(tick); }, 1000);
     $('#lf-cancel').onclick = () => api('/api/job/cancel', {});
     Studio.pollJob(j => {
@@ -150,7 +155,7 @@
     location.reload();
   }
   function play(it) {
-    Studio.modal(`<h3><i class="ti ti-player-play"></i> ${esc(it.title || 'Video')}</h3><video src="${avsUrl(it.mp4Url)}" controls autoplay style="width:100%;max-height:70vh;border-radius:8px;background:#000"></video>
+    Studio.modal(`<h3><i class="ti ti-player-play"></i> ${esc(it.title || 'Video')}</h3><video src="${avsUrl(it.mp4Url)}" controls autoplay class="lf-vid"></video>
       <div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
   }
 
@@ -168,16 +173,16 @@
           <option value="vieneu" ${LS('voice') === 'vieneu' ? 'selected' : ''}>VieNeu — trên máy (giọng chọn ở Mô hình & giọng)</option></select></div>
         <div class="full"><label class="lf-lbl">Tên kênh trên nút Follow (tuỳ chọn)</label><input id="lf-handle" placeholder="@kenh.cua.ban" value="${esc(LS('handle') || '')}"></div>
       </div>
-      <label class="ap-tog" style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:8px"><input type="checkbox" id="lf-texp" style="width:auto" ${LS('texp') === '0' ? '' : 'checked'}> Xuất MP4 luôn</label>
+      <label class="ap-tog lf-tog"><input type="checkbox" id="lf-texp" ${LS('texp') === '0' ? '' : 'checked'}> Xuất MP4 luôn</label>
       <button class="primary lf-go" id="lf-tgo"><i class="ti ti-wand"></i> Tạo video</button>
       <div class="lf-help">Claude viết kịch bản (hook, 3–5 ý, CTA) → giọng đọc → căn thời gian từng chữ → b-roll động + chữ kinetic + nhạc/SFX. Ra một dự án mở được trong Studio để chỉnh tiếp.</div></div>
       ${S.topicOut ? topicResult(S.topicOut) : ''}
       ${tp.length ? `<div class="lf-card"><h4><i class="ti ti-history"></i> Đã tạo gần đây</h4>${tp.map((r, i) => `<div class="lf-it"><${r.thumbUrl ? `img src="${avsUrl(r.thumbUrl)}" alt=""` : 'div class="ph"'}>${r.thumbUrl ? '' : '</div>'}
         <div><div class="tt">${esc(r.name)}</div><div class="mt">${new Date(r.at).toLocaleString('vi-VN')}</div>
-        <div class="b"><button data-topen="${i}"><i class="ti ti-edit"></i> Mở</button>${r.mp4Url ? `<button data-tplay="${i}"><i class="ti ti-player-play"></i> Xem</button>` : ''}</div></div></div>`).join('')}</div>` : ''}`;
+        <div class="b"><button class="ui-btn ui-btn--sm" data-topen="${i}"><i class="ti ti-edit"></i> Mở</button>${r.mp4Url ? `<button class="ui-btn ui-btn--sm" data-tplay="${i}"><i class="ti ti-player-play"></i> Xem</button>` : ''}</div></div></div>`).join('')}</div>` : ''}`;
   }
-  const topicResult = o => `<div class="lf-card"><h4><i class="ti ti-circle-check" style="color:var(--ok)"></i> Đã tạo xong</h4><div class="tt" style="font-weight:600">${esc(o.title || '')}</div>
-    <div class="lf-bulk" style="margin-top:8px"><button id="lf-topen"><i class="ti ti-edit"></i> Mở dự án</button>${o.mp4 ? '<button id="lf-tplay"><i class="ti ti-player-play"></i> Xem video</button>' : ''}</div></div>`;
+  const topicResult = o => `<div class="lf-card"><h4><i class="ti ti-circle-check lf-c-ok"></i> Đã tạo xong</h4><div class="tt lf-strong">${esc(o.title || '')}</div>
+    <div class="lf-bulk lf-mt"><button id="lf-topen"><i class="ti ti-edit"></i> Mở dự án</button>${o.mp4 ? '<button id="lf-tplay"><i class="ti ti-player-play"></i> Xem video</button>' : ''}</div></div>`;
   function bindTopic() {
     $('#lf-tgo').onclick = startTopic;
     const tp = S.runs.filter(r => r.kind === 'topic').slice(0, 6);

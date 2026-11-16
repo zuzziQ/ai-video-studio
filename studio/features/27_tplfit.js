@@ -6,6 +6,9 @@
 'use strict';
 (() => {
   const S = Studio, esc = S.esc;
+  const css = document.createElement('style');
+  css.textContent = `.tf-p { margin: 0 0 var(--space-2); } .tf-el { font-size: var(--text-2xs); margin-top: var(--space-1); }`;
+  document.head.appendChild(css);
   let busy = false;
   S.fitTemplate = async (tpl, o = {}) => {
     if (busy) return;
@@ -15,8 +18,8 @@
     if (!r.ok) { busy = false; return S.toast(r.error || 'Đang có tác vụ khác chạy'); }
     const t0 = Date.now();
     S.modal(`<h3><i class="ti ti-wand"></i> Đang làm mẫu ${tpl?.name ? '“' + esc(tpl.name) + '” ' : ''}khớp lời thoại…</h3>
-      <div class="muted" style="margin:0 0 6px">Canh từng graphic đúng lúc nói · viết lại chữ theo nội dung clip · thay ảnh mẫu bằng ảnh theo lời nói · nhấn từ khoá phụ đề.</div>
-      <div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><div class="muted" id="tfel" style="font-size:11px;margin-top:4px"></div>`);
+      <div class="muted tf-p">Canh từng graphic đúng lúc nói · viết lại chữ theo nội dung clip · thay ảnh mẫu bằng ảnh theo lời nói · nhấn từ khoá phụ đề.</div>
+      <div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><div class="muted tf-el" id="tfel"></div>`);
     const tick = setInterval(() => { const el = document.getElementById('tfel'); if (el) el.textContent = `Đã chạy ${Math.round((Date.now() - t0) / 1000)} giây`; else clearInterval(tick); }, 1000);
     S.pollJob(async j => {
       clearInterval(tick); busy = false;

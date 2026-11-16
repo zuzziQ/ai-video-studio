@@ -7,13 +7,14 @@
   const S = Studio, $ = S.$;
   const css = document.createElement('style');
   css.textContent = `
-  .tr-cta { background: linear-gradient(135deg, rgba(139,123,255,.16), rgba(45,212,191,.08)); border: 1px solid var(--acc-line); border-radius: var(--r); padding: 12px; margin: 8px 0 10px; }
-  .tr-cta b { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-  .tr-cta p { margin: 6px 0 10px; color: var(--tx2); line-height: 1.5; font-size: 12px; }
+  .tr-cta { background: linear-gradient(135deg, rgb(var(--color-accent-soft) / .24), rgb(var(--color-audio) / .08)); border: 1px solid rgb(var(--color-accent-text) / .5); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
+  .tr-cta b { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+  .tr-cta p { margin: var(--space-2) 0 var(--space-3); color: rgb(var(--color-fg-muted)); line-height: 1.5; font-size: var(--text-xs); }
   .tr-cta button { width: 100%; justify-content: center; }
-  .tr-models label { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line2); border-radius: var(--rs); margin: 5px 0; cursor: pointer; background: var(--bg1); }
-  .tr-models label:has(input:checked) { border-color: var(--acc-line); background: var(--acc-soft); }
-  .tr-models small { display: block; color: var(--tx3); margin-top: 2px; }`;
+  .tr-models label { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); margin: var(--space-1) 0; cursor: pointer; background: rgb(var(--color-surface)); transition: border-color var(--duration-fast) var(--ease-standard); }
+  .tr-models label:has(input:checked) { border-color: rgb(var(--color-accent-text) / .5); background: rgb(var(--color-accent-soft) / .24); }
+  .tr-models small { display: block; color: rgb(var(--color-fg-subtle)); margin-top: var(--space-050); }
+  p.tr-p { margin: 0 0 var(--space-2); } .help.tr-warn { color: rgb(var(--color-warning)); } .tr-el { font-size: var(--text-2xs); margin-top: var(--space-1); }`;
   document.head.appendChild(css);
 
   // Measured on the sample clip (Vietnamese, 29 s, hand-corrected reference): word error small 13.5 %, medium 11 %,
@@ -29,12 +30,12 @@
   S.openTranscribe = (next, what) => {
     const n = (S.CAP || []).length;
     S.modal(`<h3><i class="ti ti-microphone"></i> Tạo lời thoại tự động</h3>
-      ${what ? `<p class="muted" style="margin:0 0 6px">${S.esc(what)} cần lời thoại. Tạo xong sẽ tự chạy tiếp.</p>` : ''}
-      <p class="muted" style="margin:0 0 8px">Máy nghe tiếng nói trên timeline (đã tính các đoạn cắt, tốc độ, clip tắt tiếng) bằng Whisper, rồi tạo phụ đề có thời gian từng chữ. Chạy ngay trên máy, không cần mạng (trừ lần đầu tải model lớn).</p>
+      ${what ? `<p class="muted tr-p">${S.esc(what)} cần lời thoại. Tạo xong sẽ tự chạy tiếp.</p>` : ''}
+      <p class="muted tr-p">Máy nghe tiếng nói trên timeline (đã tính các đoạn cắt, tốc độ, clip tắt tiếng) bằng Whisper, rồi tạo phụ đề có thời gian từng chữ. Chạy ngay trên máy, không cần mạng (trừ lần đầu tải model lớn).</p>
       <label class="lbl">Độ chính xác</label><div class="tr-models">${MODELS.map(([v, l, d], i) => `<label><input type="radio" name="trm" value="${v}" ${i ? '' : 'checked'}><div><b>${l}</b><small>${d}</small></div></label>`).join('')}</div>
       <div class="row2"><div><label class="lbl">Ngôn ngữ</label><select id="trl"><option value="vi">Tiếng Việt</option><option value="auto">Tự nhận ngôn ngữ</option></select></div>
       <div><label class="lbl">Số chữ mỗi dòng</label><select id="trx"><option value="3">3 (dồn dập)</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6 (dài)</option></select></div></div>
-      ${n ? `<div class="help" style="color:var(--warn)"><i class="ti ti-alert-triangle"></i> Dự án đang có ${n} dòng phụ đề — sẽ được thay bằng bản mới (bản cũ sao lưu trong .studio/, hoàn tác bằng Lịch sử).</div>` : ''}
+      ${n ? `<div class="help tr-warn"><i class="ti ti-alert-triangle"></i> Dự án đang có ${n} dòng phụ đề — sẽ được thay bằng bản mới (bản cũ sao lưu trong .studio/, hoàn tác bằng Lịch sử).</div>` : ''}
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="trgo"><i class="ti ti-wand"></i> Tạo lời thoại</button></div>`);
     $('#trgo').onclick = () => run(next);
   };
@@ -47,7 +48,7 @@
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
     const t0 = Date.now();
     S.modal(`<h3><i class="ti ti-microphone"></i> Đang tạo lời thoại…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>
-      <div class="muted" id="trel" style="font-size:11px;margin-top:4px"></div><pre id="joblog"></pre><div class="actions"><button id="trcancel">Dừng</button></div>`);
+      <div class="muted tr-el" id="trel"></div><pre id="joblog"></pre><div class="actions"><button id="trcancel">Dừng</button></div>`);
     const tick = setInterval(() => { const el = $('#trel'); if (el) el.textContent = `Đã chạy ${Math.round((Date.now() - t0) / 1000)} giây`; else clearInterval(tick); }, 1000);
     $('#trcancel').onclick = () => S.api('/api/job/cancel', {});
     S.pollJob(async j => {
