@@ -10,10 +10,34 @@ let T = 0, playing = false, sel = null, comps = [], dirty = false, undoStack = [
 let query = '', K = .5, win = null, needInit = true, busy = false, pending = false, SNAP = true;
 const ITAB = {};
 
+// ---------- dynamic geometry (M85) ----------
+// Markup carries no inline style attribute: values that come from data (position and size on the timeline / preview, a clip's
+// thumbnail and colour filter, a swatch colour, a text-preset preview) ride on data-d* attributes and are put on
+// el.style here, right after the HTML is inserted. A MutationObserver covers every insertion (library panels,
+// features); hot paths that measure right after inserting call applyDyn() themselves.
+const DYN_SEL = '[data-dl],[data-dt],[data-dw],[data-dh],[data-dbg],[data-dfx],[data-dbc],[data-dfill],[data-dcss]';
+function applyDyn(root = document) {
+  const list = root.matches?.(DYN_SEL) ? [root, ...root.querySelectorAll(DYN_SEL)] : root.querySelectorAll(DYN_SEL);
+  for (const el of list) {
+    const d = el.dataset, s = el.style;
+    if (d.dcss != null) s.cssText = d.dcss; // text-preset preview: the preset's own CSS (video data)
+    if (d.dl != null) s.left = d.dl + 'px';
+    if (d.dt != null) s.top = d.dt + 'px';
+    if (d.dw != null) s.width = d.dw + 'px';
+    if (d.dh != null) s.height = d.dh + 'px';
+    if (d.dbg) s.backgroundImage = `url("${d.dbg.replace(/["\\]/g, '\\$&')}")`;
+    if (d.dfx) s.filter = d.dfx;
+    if (d.dbc) s.setProperty('--bc', d.dbc);
+    if (d.dfill) s.background = d.dfill;
+  }
+}
+new MutationObserver(recs => { for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1) applyDyn(n); })
+  .observe(document.documentElement, { childList: true, subtree: true });
+
 // ---------- vocabulary ----------
 const TRACKS = [['cap', 'Phụ đề', 'ti-badge-cc'], ['add', 'Chữ thêm', 'ti-letter-t'], ['gline', 'Chữ graphic', 'ti-text-size'], ['gfx', 'Graphic', 'ti-sparkles'],
   ['broll', 'B-roll', 'ti-photo'], ['scene', 'Cảnh', 'ti-layout-board'], ['video', 'Video chính', 'ti-movie'], ['audio', 'Âm thanh', 'ti-music'], ['wave', 'Giọng', 'ti-wave-sine']];
-const TCOL = { scene: 'var(--t-scene)', cap: 'var(--t-cap)', add: 'var(--t-add)', gline: 'var(--t-gline)', gfx: 'var(--t-gfx)', broll: 'var(--t-broll)', audio: 'var(--t-audio)', video: 'var(--t-video)' };
+const TCOL = { scene: 'rgb(var(--track-2))', cap: 'rgb(var(--track-3))', add: 'rgb(var(--track-4))', gline: 'rgb(var(--track-5))', gfx: 'rgb(var(--track-6))', broll: 'rgb(var(--track-7))', audio: 'rgb(var(--track-8))', video: 'rgb(var(--track-1))' };
 const TRK = Object.fromEntries(TRACKS.map(([k]) => [k, { lock: false, hide: false }]));
 const LAYOUT = new Set(['frame_grid', 'title_card', 'spotlight', 'bubble_screen', 'hook_card', 'grid_bg', 'end_card', 'slam_bg', 'split', 'mega']);
 const BROLL = new Set(['broll', 'media_card', 'mosaic', 'mosaic_wall', 'photo', 're_gallery']);
@@ -25,7 +49,7 @@ const TYPE_VI = {
 const FONTS = [['', 'Mặc định'], ['var(--sans)', 'Be Vietnam Pro'], ['var(--disp)', 'Montserrat'], ["'Inter'", 'Inter'], ["'Playfair Display',serif", 'Playfair Display'],
   ["'DM Serif Display',serif", 'DM Serif Display'], ["'Lexend'", 'Lexend'], ["'Oswald'", 'Oswald'], ["'Nunito'", 'Nunito'], ["'Bungee'", 'Bungee'], ["'Pacifico'", 'Pacifico']];
 const STYLES = [['white', 'Trắng'], ['yellow', 'Vàng'], ['clean', 'Sạch'], ['muted', 'Dịu'], ['ink', 'Mực'], ['fire', 'Lửa'], ['glow', 'Phát sáng'], ['neon', 'Neon'], ['dark', 'Tối'], ['hl', 'Nhấn'], ['grad_blue', 'Gradient xanh'], ['grad_teal', 'Gradient ngọc']];
-const SWATCH = ['#FFFFFF', '#FCDB36', '#F3E35A', '#151515', '#FF8A1E', '#E8432A', '#FF3348', '#5EE6C8', '#8CCBFF', '#A78BFA'];
+const SWATCH = ['#FFFFFF', '#FCDB36', '#F3E35A', '#151515', '#FF8A1E', '#E8432A', '#FF3348', '#5EE6C8', '#8CCBFF', '#A78BFA']; // design-token-ok: text colours of the video, not UI
 const NODE_SIZE = { person: 64, chip: 22, pill: 30, pill_outline: 32, big: 120, label: 26 };
 
 // ---------- component model ----------
@@ -142,13 +166,14 @@ function rectOf(obj) {
 let SAFE = { x: 40, y: 130, w: 600, h: 870 };
 function drawOverlay() {
   const ov = $('#overlay'); let h = '';
-  if ($('#safe').checked) h += `<div class="safe" style="left:${SAFE.x * K}px;top:${SAFE.y * K}px;width:${SAFE.w * K}px;height:${SAFE.h * K}px"><span>vùng an toàn</span></div>`;
-  if ($('#face').checked) { const f = TL?.face || { x: 360, y: 520 }; const r = 120 * K; h += `<div class="facezone" style="left:${f.x * K - r}px;top:${f.y * K - r * 1.2}px;width:${r * 2}px;height:${r * 2.4}px"></div>`; }
+  const box = (x, y, w, hh) => `data-dl="${x}" data-dt="${y}" data-dw="${w}" data-dh="${hh}"`;
+  if ($('#safe').checked) h += `<div class="safe" ${box(SAFE.x * K, SAFE.y * K, SAFE.w * K, SAFE.h * K)}><span>vùng an toàn</span></div>`;
+  if ($('[id=face]').checked) { const f = TL?.face || { x: 360, y: 520 }; const r = 120 * K; h += `<div class="facezone" ${box(f.x * K - r, f.y * K - r * 1.2, r * 2, r * 2.4)}></div>`; }
   if (sel && sel.kind !== 'clip') {
     const r = rectOf(sel.obj);
-    if (r) h += `<div class="selbox" style="left:${r.x * K - 3}px;top:${r.y * K - 3}px;width:${r.w * K + 6}px;height:${r.h * K + 6}px"><i class="nw"></i><i class="ne"></i><i class="sw"></i><i class="se"></i></div>`;
+    if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}><i class="nw"></i><i class="ne"></i><i class="sw"></i><i class="se"></i></div>`;
   }
-  ov.innerHTML = h;
+  ov.innerHTML = h; applyDyn(ov);
 }
 function pick(px, py) {
   if (!win) return null;
@@ -252,8 +277,8 @@ function posBlock(c) {
 }
 function colorBlock(cur) {
   return `<span class="lbl">Màu</span><div class="sw"><button class="orig ${cur ? '' : 'on'}" data-color="">Gốc</button>
-    ${SWATCH.map(c => `<button style="background:${c}" class="${cur === c ? 'on' : ''}" data-color="${c}"></button>`).join('')}
-    <input type="color" data-f="color" value="${cur || '#ffffff'}"></div>`;
+    ${SWATCH.map(c => `<button data-dfill="${c}" class="${cur === c ? 'on' : ''}" data-color="${c}" title="${c}"></button>`).join('')}
+    <input type="color" data-f="color" value="${cur || '#ffffff'}"></div>`; // design-token-ok: default text colour of the video
 }
 function timeBlock(c) {
   return sect('Thời gian (giây)', `<div class="row"><div><span class="lbl">Bắt đầu</span>${num('t0', r2(c.t0), .01)}</div>
@@ -285,7 +310,7 @@ function clipTabs(c) {
   const rng = (fld, v, a, b, st, lab, unit = '', show = x => x) => `<div class="slrow"><span>${lab}</span><input type="range" data-cf="${fld}" min="${a}" max="${b}" step="${st}" value="${v}"><b data-v="${fld}">${show(v)}${unit}</b></div>`;
   const thumb = clipFrameUrl(o, srcAt(k, k.t0 + Math.min(.5, (k.t1 - k.t0) / 2)));
   return [
-    ['basic', 'Cơ bản', `<div class="clipcard"><span class="cth" style="background-image:url('${thumb}');filter:${clipFilterCss(o)}"></span><div><b>Clip ${c.idx + 1} / ${TL.clips.length}</b>
+    ['basic', 'Cơ bản', `<div class="clipcard"><span class="cth" data-dbg="${esc(thumb)}" data-dfx="${esc(clipFilterCss(o))}"></span><div><b>Clip ${c.idx + 1} / ${TL.clips.length}</b>
         <small>${still ? 'Ảnh tĩnh' : 'Video'} · nguồn ${r2(o.in || 0)}–${r2(o.out ?? 3)}s</small><small>Trên timeline ${fmt(k.t0)} – ${fmt(k.t1)}</small></div></div>` +
       sect('Khung hình', `<div class="seg3">${[['cover', 'Lấp đầy', 'ti-arrows-maximize'], ['contain', 'Vừa khung', 'ti-box-padding'], ['blurfill', 'Nền mờ', 'ti-blur']].map(([v, l, ic]) => `<button class="${(o.fit || 'cover') === v ? 'on' : ''}" data-cfit="${v}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div>
         ${rng('zoom', o.zoom || 1, 1, 3, .05, 'Phóng to', '×')}${rng('ox', o.ox ?? 50, 0, 100, 1, 'Tâm X', '%')}${rng('oy', o.oy ?? 45, 0, 100, 1, 'Tâm Y', '%')}
@@ -299,7 +324,7 @@ function clipTabs(c) {
         <div class="help">Phụ đề và graphic nằm trong clip giãn/co theo; phía sau tự dồn. Tiếng đổi theo (giữ cao độ).</div>`, 'ti-brand-speedtest')],
     ['audio', 'Âm thanh', sect('Âm lượng clip', still || !o.audio ? '<div class="help">Clip này không có tiếng.</div>'
       : `${rng('volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, 'Âm lượng', '%')}<div class="acts"><button data-cact="mute" class="${o.mute ? 'on' : ''}"><i class="ti ${o.mute ? 'ti-volume-off' : 'ti-volume'}"></i> ${o.mute ? 'Đang tắt tiếng' : 'Tắt tiếng'}</button></div>`, 'ti-volume')],
-    ['color', 'Màu', sect('Bộ lọc', `<div class="flmini">${FILTERS.map(([v, l]) => `<button class="${(f.preset || '') === v ? 'on' : ''}" data-cpreset="${v}"><span style="background-image:url('${thumb}');filter:${v ? LUT_CSS[v] : 'none'}"></span><small>${l}</small></button>`).join('')}</div>`, 'ti-color-filter') +
+    ['color', 'Màu', sect('Bộ lọc', `<div class="flmini">${FILTERS.map(([v, l]) => `<button class="${(f.preset || '') === v ? 'on' : ''}" data-cpreset="${v}"><span data-dbg="${esc(thumb)}" data-dfx="${esc(v ? LUT_CSS[v] : 'none')}"></span><small>${l}</small></button>`).join('')}</div>`, 'ti-color-filter') +
       sect('Điều chỉnh', `${rng('brightness', f.brightness ?? 1, .5, 1.5, .01, 'Độ sáng')}${rng('contrast', f.contrast ?? 1, .5, 1.5, .01, 'Tương phản')}${rng('saturate', f.saturate ?? 1, 0, 2, .01, 'Bão hoà')}
         ${rng('temp', f.temp ?? 0, -1, 1, .01, 'Nhiệt độ')}${rng('hue', f.hue ?? 0, -180, 180, 1, 'Sắc độ', '°')}${rng('blur', f.blur ?? 0, 0, 20, .5, 'Làm mờ', 'px')}
         <div class="acts"><button data-cact="resetcolor"><i class="ti ti-restore"></i> Đặt lại màu</button></div>`, 'ti-adjustments')],
@@ -326,7 +351,7 @@ function inspTabs(c) {
       <span class="lbl">Nội dung</span><input data-f="text" value="${esc(o.text || '')}">
       ${o.keys ? `<div class="help">Nút này di chuyển theo ${o.keys.length} mốc; kéo trên khung hình sẽ sửa mốc đang hiệu lực (${fmt(activeKey(o).t)}).</div>` : ''}`, 'ti-hierarchy')],
     ['pos', 'Vị trí', posBlock(c) + timeBlock(c)]];
-  if (c.kind === 'badge') return [['basic', 'Cơ bản', sect('Huy hiệu', `<span class="lbl">Icon (si:slug, emoji, ảnh)</span><input data-f="icon" value="${esc(o.icon || 'si:claude')}"><span class="lbl">Màu nền</span><input type="color" data-f="bg" value="${o.bg || '#D97757'}">`) + posBlock(c)]];
+  if (c.kind === 'badge') return [['basic', 'Cơ bản', sect('Huy hiệu', `<span class="lbl">Icon (si:slug, emoji, ảnh)</span><input data-f="icon" value="${esc(o.icon || 'si:claude')}"><span class="lbl">Màu nền</span><input type="color" data-f="bg" value="${o.bg || '#D97757'}">`) + posBlock(c)]]; // design-token-ok: default badge colour of the video
   if (c.kind === 'sfx') return [['basic', 'Cơ bản', sect('Hiệu ứng âm thanh', `<span class="lbl">Tiếng</span><div class="row"><select data-f="sfxname">${opt(LIB.sfx.map(f => [f.replace(/\.\w+$/, ''), f.replace(/\.\w+$/, '')]), o.name)}</select><button data-act="audition" class="fixed"><i class="ti ti-player-play-filled"></i></button></div>
     <span class="lbl">Âm lượng (dB)</span>${num('gain', o.gain ?? -12, 1)}`, 'ti-bell') + timeBlock(c)]];
   if (c.kind === 'music') return [['basic', 'Cơ bản', sect('Nhạc nền', `<span class="lbl">Nhạc</span><select data-f="mood">${opt([...(o.file ? [['', o.file]] : []), ...LIB.music.map(f => [f.replace('.mp3', ''), f.replace('.mp3', '')])], o.mood || '')}</select>
@@ -364,10 +389,10 @@ function renderInspector() {
 function projectPanel() {
   const capStyles = [...new Set(['slate', 'tiktok', ...Object.keys((win && win.CAPTION_STYLES) || {})])];
   const B = TL.brand || {};
-  const bf = (k, label, type = 'text', ph = '') => `<div><span class="lbl">${label}</span><input ${type === 'color' ? 'type="color"' : ''} data-brand="${k}" value="${esc(B[k] ?? (type === 'color' ? (k === 'primary' ? '#FF5A36' : '#FFD84A') : ''))}" placeholder="${ph}"></div>`;
+  const bf = (k, label, type = 'text', ph = '') => `<div><span class="lbl">${label}</span><input ${type === 'color' ? 'type="color"' : ''} data-brand="${k}" value="${esc(B[k] ?? (type === 'color' ? (k === 'primary' ? '#FF5A36' : '#FFD84A') : ''))}" placeholder="${ph}"></div>`; // design-token-ok: brand-kit defaults are video colours
   const tabs = [['proj', 'Dự án'], ['brand', 'Thương hiệu']];
   const cur = ITAB.project || 'proj';
-  const body = cur === 'brand' ? sect('Bộ nhận diện thương hiệu', `<div class="help" style="margin-top:0">Mọi gói style và mẫu dùng chung.</div>
+  const body = cur === 'brand' ? sect('Bộ nhận diện thương hiệu', `<div class="help help--flush">Mọi gói style và mẫu dùng chung.</div>
       <div class="row">${bf('primary', 'Màu chính', 'color')}${bf('accent', 'Màu nhấn', 'color')}</div>
       <div class="row">${bf('name', 'Tên / thương hiệu', 'text', 'Kiệm AI')}${bf('handle', 'Kênh', 'text', '@kiem.ai')}</div>
       <div class="row">${bf('phone', 'Điện thoại', 'text', '09xx…')}${bf('website', 'Website', 'text', 'nguyentatkiem.com')}</div>
@@ -655,7 +680,8 @@ function rulerStep() { for (const s of [.25, .5, 1, 2, 5, 10, 15, 30, 60, 120]) 
 function clipStrip(k, w) {
   const tw = Math.max(18, Math.round((VIDEO_H - 2) * DW / DH)), n = Math.min(400, Math.ceil(w / tw)), sp = k.c.speed || 1, f = clipFilterCss(k.c);
   let h = '';
-  for (let j = 0; j < n; j++) h += `<i style="width:${tw}px;background-image:url('${clipFrameUrl(k.c, (k.c.in || 0) + ((j + .5) * tw / PPS) * sp)}');filter:${f}"></i>`;
+  const fx = esc(f);
+  for (let j = 0; j < n; j++) h += `<i data-dw="${tw}" data-dbg="${esc(clipFrameUrl(k.c, (k.c.in || 0) + ((j + .5) * tw / PPS) * sp))}" data-dfx="${fx}"></i>`;
   return h;
 }
 function renderTimeline() {
@@ -666,38 +692,39 @@ function renderTimeline() {
   let rh = '';
   for (let s = 0; s <= dur + step; s += minor) {
     const major = Math.abs(s / step - Math.round(s / step)) < 1e-6;
-    rh += `<i class="${major ? 'mj' : ''}" style="left:${s * PPS}px"></i>`;
-    if (major) rh += `<span style="left:${s * PPS}px">${step < 1 ? fmt(s).replace(/0$/, '') : fmt(s).replace(/\.\d+$/, '')}</span>`;
+    rh += `<i class="${major ? 'mj' : ''}" data-dl="${s * PPS}"></i>`;
+    if (major) rh += `<span data-dl="${s * PPS}">${step < 1 ? fmt(s).replace(/0$/, '') : fmt(s).replace(/\.\d+$/, '')}</span>`;
   }
-  rh += `<div class="endmark" style="left:${dur * PPS}px"></div>`;
-  $('#ruler').innerHTML = rh;
+  rh += `<div class="endmark" data-dl="${dur * PPS}"></div>`;
+  $('#ruler').innerHTML = rh; applyDyn($('#ruler'));
   let th = '', lh = '';
-  const label = (key, name, ic, h, tools = true) => `<div class="lrow ${key === 'video' ? 'main' : ''}" style="height:${h}px"><i class="ti ${ic}"></i><span>${name}</span>
+  const label = (key, name, ic, h, tools = true) => `<div class="lrow ${key === 'video' ? 'main' : ''}" data-dh="${h}"><i class="ti ${ic}"></i><span>${name}</span>
     ${tools ? `<button class="lt ${TRK[key].hide ? 'on' : ''}" data-thide="${key}" title="Ẩn trên preview"><i class="ti ${TRK[key].hide ? 'ti-eye-off' : 'ti-eye'}"></i></button><button class="lt ${TRK[key].lock ? 'on' : ''}" data-tlock="${key}" title="Khoá track"><i class="ti ${TRK[key].lock ? 'ti-lock' : 'ti-lock-open'}"></i></button>` : ''}</div>`;
   for (const [key, name, ic] of TRACKS) {
     const lk = TRK[key]?.lock ? ' locked' : '', hd = TRK[key]?.hide ? ' hid' : '';
-    if (key === 'wave') { th += `<div class="track wave" style="height:${WAVE_H}px"><canvas class="wave" id="wave" width="${Math.min(32000, Math.ceil(W))}" height="${WAVE_H}"></canvas></div>`; lh += label(key, name, ic, WAVE_H, false); continue; }
+    if (key === 'wave') { th += `<div class="track wave" data-dh="${WAVE_H}"><canvas class="wave" id="wave" width="${Math.min(32000, Math.ceil(W))}" height="${WAVE_H}"></canvas></div>`; lh += label(key, name, ic, WAVE_H, false); continue; }
     if (key === 'video') {
       const L = clipLayout();
-      th += `<div class="track video${lk}${hd}" data-track="video" style="height:${VIDEO_H + 8}px">` + L.map(k => {
+      th += `<div class="track video${lk}${hd}" data-track="video" data-dh="${VIDEO_H + 8}">` + L.map(k => {
         const w = Math.max(6, (k.t1 - k.t0) * PPS - 1), c = k.c, on = sel?.obj === c;
-        return `<div class="clip ${on ? 'sel' : ''}" data-ci="${k.i}" style="left:${k.t0 * PPS}px;width:${w}px">
+        return `<div class="clip ${on ? 'sel' : ''}" data-ci="${k.i}" data-dl="${k.t0 * PPS}" data-dw="${w}">
           <div class="strip">${clipStrip(k, w)}</div>
           <div class="ctop"><span class="cn">${k.i + 1}</span>${c.speed && c.speed !== 1 ? `<span class="cb"><i class="ti ti-brand-speedtest"></i>${c.speed}×</span>` : ''}${c.mute ? '<span class="cb"><i class="ti ti-volume-off"></i></span>' : ''}${c.filter ? '<span class="cb"><i class="ti ti-color-filter"></i></span>' : ''}${c.flip ? '<span class="cb"><i class="ti ti-flip-vertical"></i></span>' : ''}<span class="cd">${r2(k.t1 - k.t0)}s</span></div>
           <span class="h l"></span><span class="h r"></span></div>`;
-      }).join('') + L.slice(1).map(k => `<button class="tb ${k.c.transition ? 'on' : ''}" data-tbi="${k.i}" style="left:${k.t0 * PPS}px" title="${k.c.transition ? 'Chuyển cảnh: ' + (TRANS_TYPES.find(x => x[0] === k.c.transition.type)?.[1] || k.c.transition.type) : 'Thêm chuyển cảnh'}"><i class="ti ${k.c.transition ? 'ti-transition-right' : 'ti-plus'}"></i></button>`).join('') + '</div>';
+      }).join('') + L.slice(1).map(k => `<button class="tb ${k.c.transition ? 'on' : ''}" data-tbi="${k.i}" data-dl="${k.t0 * PPS}" title="${k.c.transition ? 'Chuyển cảnh: ' + (TRANS_TYPES.find(x => x[0] === k.c.transition.type)?.[1] || k.c.transition.type) : 'Thêm chuyển cảnh'}"><i class="ti ${k.c.transition ? 'ti-transition-right' : 'ti-plus'}"></i></button>`).join('') + '</div>';
       lh += label(key, name, ic, VIDEO_H + 8);
       continue;
     }
     const list = comps.filter(c => c.track === key).sort((a, b) => a.t0 - b.t0);
     if (!list.length && !['cap', 'audio'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
     const n = lanes(list), h = Math.max(28, n * 24 + 5);
-    th += `<div class="track${lk}${hd}" data-track="${key}" style="height:${h}px">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
-      style="left:${c.t0 * PPS}px;width:${Math.max(8, (c.t1 - c.t0) * PPS - 2)}px;top:${3 + c.lane * 24}px;--bc:${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}">
+    th += `<div class="track${lk}${hd}" data-track="${key}" data-dh="${h}">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
+      data-dl="${c.t0 * PPS}" data-dw="${Math.max(8, (c.t1 - c.t0) * PPS - 2)}" data-dt="${3 + c.lane * 24}" data-dbc="${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}">
       <span class="h l"></span>${c.obj.note ? '<span class="note"></span>' : ''}${c.kind === 'sfx' ? '<i class="ti ti-bell"></i>' : c.kind === 'music' ? '<i class="ti ti-music"></i>' : c.icon ? `<i class="ti ${c.icon}"></i>` : ''}${esc(c.label)}${Studio._blk.map(f => f(c, PPS)).join('')}<span class="h r"></span></div>`).join('') + '</div>';
     lh += label(key, name, ic, h);
   }
-  $('#tracks').innerHTML = th; $('#tllabels').innerHTML = `<div class="lhead" style="height:${RULER_H}px"></div><div class="lrows" id="lrows">${lh}</div>`;
+  $('#tracks').innerHTML = th; $('#tllabels').innerHTML = `<div class="lhead" data-dh="${RULER_H}"></div><div class="lrows" id="lrows">${lh}</div>`;
+  applyDyn($('#tracks')); applyDyn($('#tllabels')); // before measuring track offsets below
   // When the set of tracks changes, keep the main video track (and voice) in view.
   const sig = [...document.querySelectorAll('#tracks .track')].map(t => t.dataset.track || 'w').join();
   if (sig !== lastTrackSig) {
@@ -714,11 +741,12 @@ function drawWave() {
   const cv = $('#wave'); if (!cv || !WAVE.length) return;
   const g = cv.getContext('2d'), H = cv.height, mid = H / 2;
   const src = TL.audio?.voice || META.audio;
-  const col = getComputedStyle(document.body).getPropertyValue('--wave').trim() || '#2dd4bf';
+  const cs = getComputedStyle(document.body), ch = n => cs.getPropertyValue(n).trim();
+  const col = `rgb(${ch('--color-audio')})`, mutedCol = `rgb(${ch('--color-fg-subtle')} / .35)`; // canvas: read the tokens
   if (!TL.clips?.length) { g.fillStyle = col; for (let x = 0; x < cv.width; x += 3) { const v = WAVE[Math.floor(x / PPS * 50)] || 0, h = Math.max(1, v * (H - 6)); g.fillRect(x, mid - h / 2, 2, h); } return; }
   for (const k of clipLayout()) {
     if (k.c.audio !== src) continue;
-    g.fillStyle = k.c.mute ? 'rgba(160,160,170,.35)' : col;
+    g.fillStyle = k.c.mute ? mutedCol : col;
     const vol = k.c.mute ? .6 : clamp(k.c.volume ?? 1, .2, 1.6);
     for (let x = Math.ceil(k.t0 * PPS); x < k.t1 * PPS && x < cv.width; x += 3) {
       const v = WAVE[Math.floor(srcAt(k, x / PPS) * 50)] || 0, h = Math.max(1, Math.min(H - 4, v * (H - 6) * vol));
@@ -930,9 +958,9 @@ $('#stepb').addEventListener('click', () => setTime(T - 1 / FPS));
 $('#stepf').addEventListener('click', () => setTime(T + 1 / FPS));
 const toggleOv = (id, btn) => { $(id).checked = !$(id).checked; $(btn).classList.toggle('on', $(id).checked); drawOverlay(); };
 $('#safebtn').addEventListener('click', () => toggleOv('#safe', '#safebtn'));
-$('#facebtn').addEventListener('click', () => toggleOv('#face', '#facebtn'));
+$('#facebtn').addEventListener('click', () => toggleOv('[id=face]', '#facebtn'));
 $('#safe').addEventListener('change', drawOverlay);
-$('#face').addEventListener('change', drawOverlay);
+$('[id=face]').addEventListener('change', drawOverlay);
 function toggleExpand() {
   document.body.classList.toggle('expanded');
   $('#expand').innerHTML = `<i class="ti ${document.body.classList.contains('expanded') ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}"></i>`;
@@ -1012,7 +1040,7 @@ const STOPPED = { cancelled: ['ti-player-stop', 'Đã huỷ'], paused: ['ti-play
 function stoppedNotice(j) {
   const s = STOPPED[j.state]; if (!s) return;
   for (const o of document.querySelectorAll('.toast')) o.remove();
-  modal(`<h3><i class="ti ${s[0]}" style="color:var(--warn)"></i> ${s[1]}</h3><p>${esc(j.step || s[1])}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+  modal(`<h3><i class="ti ${s[0]} ui-text-warn"></i> ${s[1]}</h3><p>${esc(j.step || s[1])}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
 }
 $('#export').addEventListener('click', () => {
   const v = DH > DW, q = (a, b) => (v ? `${a}×${b}` : `${b}×${a}`);
@@ -1023,7 +1051,7 @@ $('#export').addEventListener('click', () => {
       <label><input type="radio" name="xq" value="4k"><b>4K</b><small>${q(2160, 3840)}</small></label></div>
     <div class="row2"><div><label class="lbl">Từ (giây)</label><input id="xfrom" type="number" placeholder="0"></div><div><label class="lbl">Đến (giây)</label><input id="xto" type="number" placeholder="${TL.duration}"></div></div>
     <label class="lbl">Xuất thêm khổ khác (cùng lúc)</label><div class="xasp">${(v ? [['1:1', 'Vuông 1:1', 'cắt bám mặt'], ['16:9', 'Ngang 16:9', 'video giữa, nền mờ']] : [['9:16', 'Dọc 9:16', 'cắt bám mặt'], ['1:1', 'Vuông 1:1', 'cắt bám mặt']]).map(([k, l, d]) => `<label><input type="checkbox" name="xasp" value="${k}"> <b>${l}</b> <small>${d}</small></label>`).join('')}</div>
-    <div class="acts" style="margin-top:12px"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
+    <div class="acts acts--spaced"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
     <p class="muted">Âm thanh được trộn lại (giọng + nhạc + SFX, chuẩn −14 LUFS) rồi render từng khung bằng đúng engine của preview.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="xgo"><i class="ti ti-upload"></i> Xuất</button></div>`);
   $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); } else toast('Lỗi: ' + r.error); };
@@ -1036,13 +1064,13 @@ $('#export').addEventListener('click', () => {
     modal(`<h3>Đang xuất video…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="xcancel">Dừng</button></div>`);
     $('#xcancel').onclick = () => api('/api/job/cancel', {});
     pollJob(j => {
-      if (j.state === 'done') modal(`<h3><i class="ti ti-circle-check" style="color:var(--ok)"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> Hiện trong Finder</button><a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
+      if (j.state === 'done') modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> Hiện trong Finder</button><a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
       else modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
     });
   };
 });
 $('#newproj').addEventListener('click', () => {
-  modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3><label class="lbl">Video</label><div class="row" style="gap:6px"><button id="npick" class="primary" style="flex:none"><i class="ti ti-folder-open"></i> Chọn video từ máy…</button><input type="file" id="nfile" accept="video/*,.mov,.mkv,.m4v" hidden>
+  modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3><label class="lbl">Video</label><div class="row pickrow"><button id="npick" class="primary"><i class="ti ti-folder-open"></i> Chọn video từ máy…</button><input type="file" id="nfile" accept="video/*,.mov,.mkv,.m4v" hidden>
     <input id="npath" placeholder="${/Win/.test(navigator.platform) ? 'hoặc dán đường dẫn: C:\\Users\\ban\\Videos\\clip.mp4' : 'hoặc dán đường dẫn: /Users/ban/Movies/clip.mp4'}"></div>
     <label class="lbl">Thư mục dự án (để trống = cạnh video)</label><input id="ndir" placeholder="">
     <label class="lbl">Gói style</label><div class="packs">${packs().filter(p => p.recipe).map((p, i) => `<label><input type="radio" name="npack" value="${p.id}" ${i === 0 ? 'checked' : ''}><b>${p.icon} ${esc(p.name)}</b><span class="muted">${esc(p.desc || '')}</span></label>`).join('')}</div>

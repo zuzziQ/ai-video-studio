@@ -11,20 +11,20 @@ const STICKERS = '🔥 💯 🚀 ✨ ⭐ 🌟 💡 ❤️ 🧡 💙 💚 💜 �
 // Text presets: line props + a CSS approximation of engine TEXT_STYLE for the tile.
 const SH = c => `2px 2px 0 ${c},-2px 2px 0 ${c},2px -2px 0 ${c},-2px -2px 0 ${c}`;
 const TEXT_PRESETS = [
-  { name: 'Tiêu đề vàng', text: 'SIÊU HAY', p: { style: 'yellow', size: 72, anim: 'pop' }, css: 'color:#FCDB36;font:italic 900 22px Montserrat,var(--ui);text-shadow:2px 3px 0 #000' },
-  { name: 'Trắng nổi', text: 'Chữ trắng', p: { style: 'white', size: 60, anim: 'pop' }, css: 'color:#fff;font:italic 900 20px Montserrat,var(--ui);text-shadow:2px 3px 0 #000' },
-  { name: 'Mực vàng', text: 'CHÚ Ý', p: { style: 'ink', size: 64, anim: 'drop' }, css: `color:#FFE53B;font:italic 900 19px Montserrat,var(--ui);text-shadow:${SH('#000')},3px 4px 0 #000` },
-  { name: 'Lửa', text: 'NÓNG!', p: { style: 'fire', size: 76, anim: 'blur_zoom' }, css: `color:#E8432A;font:italic 900 24px Montserrat,var(--ui);text-shadow:${SH('#fff')}` },
-  { name: 'Phát sáng', text: 'GLOW', p: { style: 'glow', size: 78, anim: 'blur_zoom' }, css: 'color:#FFFF22;font:italic 900 24px Montserrat,var(--ui);text-shadow:0 0 6px #ff7a00,0 0 14px #ff5a00' },
-  { name: 'Neon', text: 'neon', p: { style: 'neon', size: 80, anim: 'fade', upper: false }, css: 'color:#fff;font:italic 900 24px Montserrat,var(--ui);text-shadow:0 0 4px #9CFF4A,0 0 10px #7dff2a,0 0 18px #5cff10' },
-  { name: 'Tối giản', text: 'Tối giản', p: { style: 'white', size: 52, anim: 'fade', italic: false, weight: 600, font: "'Inter'", upper: false }, css: 'color:#fff;font:600 19px Inter,var(--ui);text-shadow:0 1px 6px rgba(0,0,0,.5)' },
-  { name: 'Sang trọng', text: 'Luxury', p: { style: 'white', size: 64, anim: 'fade', italic: true, weight: 600, font: "'Playfair Display',serif", upper: false }, css: "color:#F3E7C9;font:italic 600 23px 'Playfair Display',serif" },
-  { name: 'Đánh máy', text: 'đang gõ…', p: { style: 'white', size: 50, anim: 'type', italic: false, font: "'Inter'", weight: 700, upper: false }, css: 'color:#fff;font:700 18px Inter,var(--ui);text-shadow:2px 2px 0 #000;border-right:2px solid #fff;padding-right:2px' },
-  { name: 'Lật chữ', text: 'TUMBLE', p: { style: 'yellow', size: 70, anim: 'tumble' }, css: 'color:#FCDB36;font:italic 900 22px Montserrat,var(--ui);text-shadow:2px 3px 0 #000;letter-spacing:.04em' },
-  { name: 'Bungee', text: 'BOOM', p: { style: 'white', size: 70, anim: 'pop', font: "'Bungee'", italic: false }, css: 'color:#fff;font:400 22px Bungee,var(--ui);text-shadow:2px 3px 0 #E8432A' },
-  { name: 'Viết tay', text: 'Cảm ơn', p: { style: 'white', size: 66, anim: 'fade', font: "'Pacifico'", italic: false, weight: 400, upper: false }, css: "color:#fff;font:400 22px Pacifico,cursive;text-shadow:2px 2px 0 rgba(0,0,0,.6)" },
-  { name: 'Chữ tối', text: 'Ghi chú', p: { style: 'dark', size: 52, anim: 'slide_l', italic: false, weight: 800, upper: false }, css: 'color:#111;font:800 19px Montserrat,var(--ui);background:#fff;padding:2px 8px;border-radius:4px' },
-  { name: 'Oswald', text: 'TIN NÓNG', p: { style: 'white', size: 70, anim: 'slide_r', font: "'Oswald'", italic: false, weight: 700 }, css: 'color:#fff;font:700 22px Oswald,var(--ui);text-shadow:2px 2px 0 #000;letter-spacing:.02em' },
+  { name: 'Tiêu đề vàng', text: 'SIÊU HAY', p: { style: 'yellow', size: 72, anim: 'pop' }, css: 'color:#FCDB36;font:italic 900 22px Montserrat,var(--font-sans);text-shadow:2px 3px 0 #000' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Trắng nổi', text: 'Chữ trắng', p: { style: 'white', size: 60, anim: 'pop' }, css: 'color:#fff;font:italic 900 20px Montserrat,var(--font-sans);text-shadow:2px 3px 0 #000' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Mực vàng', text: 'CHÚ Ý', p: { style: 'ink', size: 64, anim: 'drop' }, css: `color:#FFE53B;font:italic 900 19px Montserrat,var(--font-sans);text-shadow:${SH('#000')},3px 4px 0 #000` }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Lửa', text: 'NÓNG!', p: { style: 'fire', size: 76, anim: 'blur_zoom' }, css: `color:#E8432A;font:italic 900 24px Montserrat,var(--font-sans);text-shadow:${SH('#fff')}` }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Phát sáng', text: 'GLOW', p: { style: 'glow', size: 78, anim: 'blur_zoom' }, css: 'color:#FFFF22;font:italic 900 24px Montserrat,var(--font-sans);text-shadow:0 0 6px #ff7a00,0 0 14px #ff5a00' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Neon', text: 'neon', p: { style: 'neon', size: 80, anim: 'fade', upper: false }, css: 'color:#fff;font:italic 900 24px Montserrat,var(--font-sans);text-shadow:0 0 4px #9CFF4A,0 0 10px #7dff2a,0 0 18px #5cff10' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Tối giản', text: 'Tối giản', p: { style: 'white', size: 52, anim: 'fade', italic: false, weight: 600, font: "'Inter'", upper: false }, css: 'color:#fff;font:600 19px Inter,var(--font-sans);text-shadow:0 1px 6px rgba(0,0,0,.5)' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Sang trọng', text: 'Luxury', p: { style: 'white', size: 64, anim: 'fade', italic: true, weight: 600, font: "'Playfair Display',serif", upper: false }, css: "color:#F3E7C9;font:italic 600 23px 'Playfair Display',serif" }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Đánh máy', text: 'đang gõ…', p: { style: 'white', size: 50, anim: 'type', italic: false, font: "'Inter'", weight: 700, upper: false }, css: 'color:#fff;font:700 18px Inter,var(--font-sans);text-shadow:2px 2px 0 #000;border-right:2px solid #fff;padding-right:2px' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Lật chữ', text: 'TUMBLE', p: { style: 'yellow', size: 70, anim: 'tumble' }, css: 'color:#FCDB36;font:italic 900 22px Montserrat,var(--font-sans);text-shadow:2px 3px 0 #000;letter-spacing:.04em' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Bungee', text: 'BOOM', p: { style: 'white', size: 70, anim: 'pop', font: "'Bungee'", italic: false }, css: 'color:#fff;font:400 22px Bungee,var(--font-sans);text-shadow:2px 3px 0 #E8432A' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Viết tay', text: 'Cảm ơn', p: { style: 'white', size: 66, anim: 'fade', font: "'Pacifico'", italic: false, weight: 400, upper: false }, css: "color:#fff;font:400 22px Pacifico,cursive;text-shadow:2px 2px 0 rgba(0,0,0,.6)" }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Chữ tối', text: 'Ghi chú', p: { style: 'dark', size: 52, anim: 'slide_l', italic: false, weight: 800, upper: false }, css: 'color:#111;font:800 19px Montserrat,var(--font-sans);background:#fff;padding:2px 8px;border-radius:4px' }, // design-token-ok: preset preview = text colours of the video
+  { name: 'Oswald', text: 'TIN NÓNG', p: { style: 'white', size: 70, anim: 'slide_r', font: "'Oswald'", italic: false, weight: 700 }, css: 'color:#fff;font:700 22px Oswald,var(--font-sans);text-shadow:2px 2px 0 #000;letter-spacing:.02em' }, // design-token-ok: preset preview = text colours of the video
 ];
 const ANIM_LIST = [['pop', 'Bật'], ['fade', 'Mờ dần'], ['slide_l', 'Trượt trái'], ['slide_r', 'Trượt phải'], ['drop', 'Rơi'], ['blur_zoom', 'Nhoè'], ['fly', 'Bay'], ['tumble', 'Lật'], ['type', 'Đánh máy']];
 
@@ -68,7 +68,7 @@ function renderComps() {
     <div id="list">${items.map(c => `<div class="item ${sel?.obj === c.obj ? 'sel' : ''}" data-cid="${c.obj.cid}">
       ${c.kind === 'clip' ? '<i class="ti ti-movie ck"></i>' : `<input type="checkbox" ${c.obj.hidden ? '' : 'checked'} title="Hiện / ẩn">`}
       <div class="mid"><div class="t1">${c.obj._orig ? '<span class="ed">●</span> ' : ''}${esc(c.label)}</div><div class="t2">${name(c)} · ${fmt(c.t0)}${c.obj.note ? ' · <i class="ti ti-note"></i>' : ''}</div></div>
-      <span class="dot" style="background:${TCOL[c.track] || '#555'}"></span></div>`).join('') || empty('ti-stack-2', 'Không có thành phần nào', tab === 'here' ? 'Tại playhead không có gì. Thử tab Tất cả.' : '')}</div>`;
+      <span class="dot" data-dfill="${TCOL[c.track] || 'rgb(var(--color-line-hover))'}"></span></div>`).join('') || empty('ti-stack-2', 'Không có thành phần nào', tab === 'here' ? 'Tại playhead không có gì. Thử tab Tất cả.' : '')}</div>`;
 }
 
 // ---------- Mẫu (templates) ----------
@@ -86,7 +86,7 @@ function panelTemplates() {
       : !all.length ? empty('ti-layout-grid-add', 'Chưa có mẫu nào', 'Mẫu sẽ xuất hiện ở đây khi có trong thư mục templates/. Bạn có thể bấm “Lưu thành mẫu” để biến dự án này thành mẫu đầu tiên.')
         : !list.length ? empty('ti-filter-off', 'Không có mẫu trong mục này', 'Chọn mục khác hoặc xoá ô tìm.')
           : `<div class="tgrid">${list.map(t => `<div class="tpl" data-tpl="${esc(t.id)}">
-        <div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" style="${t.preview?.jpg ? `background-image:url('${t.preview.jpg}')` : ''}">
+        <div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" data-dbg="${esc(t.preview?.jpg || '')}">
           ${t.preview?.jpg ? '' : `<span class="ph">${esc(pk(t.pack)?.icon || '🎬')}</span>`}
           ${t.preview?.mp4 ? `<video muted loop playsinline preload="none" data-src="${t.preview.mp4}"></video>` : ''}
           <span class="badge">${esc(t.aspect || '9:16')}</span>${t.user ? '<span class="badge l">Của tôi</span>' : ''}
@@ -108,7 +108,7 @@ function tplPop(html, wide) {
 }
 function closeTplPop() { const el = $('#tplpop'); if (el) { el.querySelectorAll('video').forEach(v => v.pause()); el.hidden = true; el.innerHTML = ''; } }
 function tplCardHtml(t) {
-  return `<div class="tpc" data-open="${esc(t.id)}"><div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" style="${t.preview?.jpg ? `background-image:url('${t.preview.jpg}')` : ''}">
+  return `<div class="tpc" data-open="${esc(t.id)}"><div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" data-dbg="${esc(t.preview?.jpg || '')}">
     ${t.preview?.mp4 ? `<video muted loop playsinline preload="none" data-src="${t.preview.mp4}"></video>` : `<span class="ph">${esc(pk(t.pack)?.icon || '🎬')}</span>`}
     <span class="badge">${esc(t.aspect || '9:16')}</span>${t.user ? '<span class="badge l">Của tôi</span>' : ''}</div>
     <div class="tn">${esc(t.name || t.id)}</div><div class="tc2">${esc(catName(t))} · ${esc(pk(t.pack)?.name || t.pack || '')}</div></div>`;
@@ -139,7 +139,7 @@ function openTplDetail(id, list) {
   TP.back = fromGallery;
   tplPop(`<div class="tdet ${h ? 'h' : ''}">
     <div class="tdv">${t.preview?.mp4 ? `<video src="${t.preview.mp4}" poster="${t.preview.jpg || ''}" autoplay muted loop playsinline controls></video>`
-      : `<div class="ph" style="${t.preview?.jpg ? `background-image:url('${t.preview.jpg}')` : ''}">${t.preview?.jpg ? '' : esc(p?.icon || '🎬')}</div>`}</div>
+      : `<div class="ph" data-dbg="${esc(t.preview?.jpg || '')}">${t.preview?.jpg ? '' : esc(p?.icon || '🎬')}</div>`}</div>
     <div class="tdi">
       <div class="tdtop">${TP.back ? '<button class="ghost" data-tpback><i class="ti ti-arrow-left"></i> Thư viện</button>' : ''}<div class="grow"></div>
         ${n > 1 ? `<button class="icon" data-tpnav="-1" title="Mẫu trước (←)"><i class="ti ti-chevron-left"></i></button><span class="muted">${i + 1}/${n}</span><button class="icon" data-tpnav="1" title="Mẫu sau (→)"><i class="ti ti-chevron-right"></i></button>` : ''}
@@ -250,7 +250,7 @@ async function saveAsTemplate() {
       desc: $('#tdesc').value.trim(), tags: $('#ttags').value.split(',').map(s => s.trim()).filter(Boolean),
       caption_style: TL.caption_style ?? '', music: TL.audio?.music?.[0]?.mood || '', brand: TL.brand || undefined,
       fx: (TL.fx || []).filter(f => !f._recipe).map(clean), scenes: (TL.scenes || []).filter(s => !s._recipe).map(clean), base_dur: TL.duration };
-    modal(`<h3>Đang lưu mẫu…</h3><div class="muted">Render ảnh bìa</div><div class="bar"><i style="width:60%"></i></div>`);
+    modal(`<h3>Đang lưu mẫu…</h3><div class="muted">Render ảnh bìa</div><div class="bar bar--busy"><i></i></div>`);
     const r = await api('/api/templates/save', { tpl, t: +$('#tt')?.value || T });
     closeModal();
     if (r.ok) { toast('Đã lưu mẫu ' + r.id); TEMPLATES = null; tplCat = 'Tất cả'; openPanel('tpl'); } else toast('Lỗi: ' + (r.error || ''));
@@ -270,7 +270,7 @@ function panelMedia() {
   const q = query.toLowerCase();
   $('#libbody').innerHTML = seg + `<label class="upl"><i class="ti ti-cloud-upload"></i><span><b>Nhập media</b><small>Ảnh, video, nhạc · hoặc kéo thả vào cửa sổ</small></span><input type="file" id="upl" multiple hidden accept="image/*,video/*,audio/*"></label>
     <div class="mgrid">${MEDIA.filter(m => !q || m.name.toLowerCase().includes(q)).map((m, i) => `<div class="mcell" data-m="${MEDIA.indexOf(m)}" title="${esc(m.name)}">
-      <div class="th" style="${m.thumb ? `background-image:url('/project/${encodeURI(m.thumb)}')` : ''}">${m.thumb ? '' : `<i class="ti ${m.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
+      <div class="th" data-dbg="${m.thumb ? esc('/project/' + encodeURI(m.thumb)) : ''}">${m.thumb ? '' : `<i class="ti ${m.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
         ${m.dur ? `<span class="du">${fmt(m.dur).replace(/\.\d+$/, '')}</span>` : ''}${m.kind === 'image' ? '<span class="du"><i class="ti ti-photo"></i></span>' : ''}
         <div class="hov">${m.kind === 'audio' ? '<button data-madd="music"><i class="ti ti-plus"></i> Nhạc nền</button>'
           : '<button data-madd="clip" title="Thêm vào track chính tại playhead"><i class="ti ti-plus"></i> Track chính</button><button data-madd="overlay" class="sub" title="Chèn làm lớp phủ (ảnh phủ lên video)"><i class="ti ti-stack-push"></i> Lớp phủ</button>'}</div></div>
@@ -343,7 +343,7 @@ function panelText() {
   const capStyles = [...new Set(['slate', 'tiktok', ...Object.keys((win && win.CAPTION_STYLES) || {})])];
   const owner = cs => packs().find(p => p.caption === cs || p.id === cs);
   $('#libbody').innerHTML = `<button class="wide primary" id="addtext"><i class="ti ti-plus"></i> Thêm chữ</button>
-    <div class="sect">Mẫu chữ</div><div class="txgrid">${TEXT_PRESETS.map((p, i) => `<button class="tx" data-tp="${i}"><span style="${p.css}">${esc(p.text)}</span><small>${esc(p.name)}</small></button>`).join('')}</div>
+    <div class="sect">Mẫu chữ</div><div class="txgrid">${TEXT_PRESETS.map((p, i) => `<button class="tx" data-tp="${i}"><span data-dcss="${esc(p.css)}">${esc(p.text)}</span><small>${esc(p.name)}</small></button>`).join('')}</div>
     <div class="sect">Kiểu phụ đề <span class="muted">· cả video</span></div>
     <div class="cslist">${[...capStyles.map(c => [c, (owner(c)?.icon || '💬') + ' ' + ((win && win.CAPTION_LABELS || {})[c] || c)]), ['', '✦ Karaoke cơ bản'], ['none', '⊘ Tắt phụ đề']].map(([v, l]) => `<button class="${(TL.caption_style ?? '') === v ? 'on' : ''}" data-cs="${esc(v)}">${esc(l)}</button>`).join('')}</div>`;
 }
@@ -424,7 +424,7 @@ function panelFilter() {
   const img = k ? clipFrameUrl(k.c, srcAt(k, Math.max(k.t0, Math.min(T, k.t1 - .05)))) : '';
   const cur = k?.c.filter?.preset || '';
   $('#libbody').innerHTML = `<div class="help">${k ? `Áp dụng cho <b>clip ${k.i + 1}</b>${sel?.kind === 'clip' ? '' : ' (tại playhead)'}. Tinh chỉnh thêm ở tab Màu bên phải.` : 'Chưa có clip.'}</div>
-    <div class="flgrid">${FILTERS.map(([v, l]) => `<button class="fl ${cur === v ? 'on' : ''}" data-flt="${v}"><span style="background-image:url('${img}');filter:${v ? LUT_CSS[v] : 'none'}"></span><small>${l}</small></button>`).join('')}</div>
+    <div class="flgrid">${FILTERS.map(([v, l]) => `<button class="fl ${cur === v ? 'on' : ''}" data-flt="${v}"><span data-dbg="${esc(img)}" data-dfx="${esc(v ? LUT_CSS[v] : 'none')}"></span><small>${l}</small></button>`).join('')}</div>
     <button class="wide" data-flall><i class="ti ti-copy"></i> Áp dụng bộ lọc này cho mọi clip</button>`;
 }
 function setFilter(i, preset, all) {

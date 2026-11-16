@@ -81,11 +81,13 @@ Chữ trắng trên nút chính navy-600 11,1:1, trên hover navy-500 8,4:1. `--
 
 1. **Màu chỉ lấy từ token.** Không viết hex, `rgb(số)`, `hsl(số)` ngoài `studio/theme/tokens.css`; không thêm `style="..."`. `scripts/check_studio_tokens.mjs` (job `gate` của CI) đếm từng file so với `scripts/studio_tokens_baseline.json`: tăng là đỏ; file mới được 0. Khi chuyển CSS cũ sang token, hạ mốc trong cùng PR (`node scripts/check_studio_tokens.mjs --write`). Một ngoại lệ hợp lý (vd ô xem trước màu người dùng chọn): thêm chú thích `design-token-ok` trên dòng đó.
 2. **Màu nhấn trên nền tối:** nền đặc dùng `--color-accent` + chữ `--color-accent-fg`; chữ, icon, viền đang chọn, focus dùng `--color-accent-text` / `--color-focus`. Không đặt chữ navy-600 trên nền tối.
-3. **Không tím.** Bảng màu tím cũ (`#8B7BFF`, `#6C5CF0`) đã bỏ khỏi `studio.css` và `00_author.js`; CSS riêng của các tính năng còn vài chỗ, `M85` chuyển hết.
+3. **Không tím.** Bảng màu tím cũ (`#8B7BFF`, `#6C5CF0`) đã bỏ khỏi `studio.css` và `00_author.js`; CSS riêng của các tính năng còn vài chỗ, `M86`/`M87` chuyển hết. Từ `M85` khung (`studio.css`, `studio.js`, `library.js`, trang khoá của `server.mjs`, `00_author.js`) dùng thẳng tên token, không dùng bí danh cũ; bí danh còn đến khi `M86`/`M87` xong.
 4. **Đỏ thương hiệu không phải lỗi.** Lỗi, xoá, cảnh báo dùng `--color-danger*`.
 5. **Khung preview giữ xám trung tính** (`--stage-*`): không tô xanh, không gradient màu quanh video.
 6. **Lớp tầng 3** tên `ui-…` (BEM nhẹ: `ui-btn--primary`, `ui-panel__head`), trạng thái bằng thuộc tính ARIA (`aria-selected`, `aria-checked`, `aria-pressed`, `aria-current`) hoặc `.is-active`. Lớp đơn (độ ưu tiên 0,1,0) để thắng luật phần tử cũ (`button`, `input`); luật style phần tử con bọc lớp trong `:where()` (`:where(.ui-table) td`).
 7. **Nút:** 4 kiểu `ui-btn` (`--primary`, `--secondary`, `--ghost`, `--danger`) × 3 cỡ (`--sm` 28, `--md` 32, `--lg` 40), thêm `--icon`, `--block`. Mỗi màn chỉ một nút chính.
 8. **5 trạng thái** (hub mục 6): `ui-state--loading`, `ui-state--empty`, `ui-state--error`, `ui-banner--partial`, `ui-toast--ok|err` (người gọi đặt `aria-live`).
-9. **Chữ nhỏ nhất 11px**, trừ nhãn dưới icon thanh trái (10px, `letter-spacing -.03em` để "Chuyển cảnh", "Thương hiệu" vừa nút 58px với Plus Jakarta Sans).
+9. **Chữ nhỏ nhất 11px**, kể cả nhãn dưới icon thanh trái (`M85`: 11px, nút 60px, nhãn dài như "Chuyển cảnh", "Thương hiệu" xuống 2 dòng thay vì thu chữ).
 10. Timecode, số đo dùng `--font-mono` (`.ui-mono`), số trong bảng căn phải.
+11. **Không `style="..."` trong markup.** Giá trị theo dữ liệu (vị trí, cỡ, ảnh nền, bộ lọc, màu swatch) đặt bằng thuộc tính `data-d*` và `applyDyn()` của `studio.js` (xem `references/studio.md`); màu là dữ liệu video (mẫu chữ, swatch, mặc định brand kit) giữ nguyên với ghi chú `design-token-ok`.
+12. **Cỡ chữ** chỉ theo thang `--text-*`; cỡ px còn lại trong CSS là cỡ icon (`.ti`) hoặc emoji, không phải chữ. Khoảng cách theo `--space-*` (lưới 4, thêm 2/6 cho điều khiển dày), bo góc `--radius-*`, chuyển động `--duration-*` + `--ease-*` (riêng đồng hồ 3 giây của thẻ tác giả là thời gian, không phải chuyển động).

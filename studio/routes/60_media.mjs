@@ -37,7 +37,7 @@ export default ctx => {
     finally { clearInterval(tick); }
     job.out = { cutouts: relp(outDir) + '/%05d.png', n: count() };
   }
-  async function sticker({ frame, emojis = '', disc = '#F7BE48' }) {
+  async function sticker({ frame, emojis = '', disc = '#F7BE48' }) { // design-token-ok: default disc colour drawn into the video
     const f = ctx.under(ctx.project.dir, frame || ''); if (!f || !fs.existsSync(f)) throw new Error('Không thấy khung ' + frame);
     fs.mkdirSync(ctx.P('media'), { recursive: true });
     const dst = ctx.P(`media/sticker_${ctx.stamp()}.png`);
