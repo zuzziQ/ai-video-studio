@@ -1086,10 +1086,12 @@ const Studio = window.Studio = {
   select, sect, typeName, compOf: obj => compOf(obj),
   _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
-  // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … })
-  addPanel(id, icon, name, fn) { RAIL.push([id, icon, name]); PANEL_TITLE[id] = name; SEARCH_PH[id] = ''; EXTRA_PANELS[id] = fn; renderRail(); },
-  // top bar button inserted before "Xuất"
-  addTopButton(html, onClick) { const b = document.createElement('span'); b.innerHTML = html; const el = b.firstElementChild; $('#export').before(el); el.addEventListener('click', onClick); return el; },
+  // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … }, { step: 'build', level: 'basic' })
+  // opts (optional, M82): step 'prep'|'source'|'build'|'check'|'ship'|'settings', level 'basic'|'pro' — read by features/01_workflow.js
+  _popts: {}, _top: [], _rail: [], // _top: fn(el, opts) after addTopButton; _rail: fn(railEl) after renderRail
+  addPanel(id, icon, name, fn, opts) { RAIL.push([id, icon, name]); PANEL_TITLE[id] = name; SEARCH_PH[id] = ''; EXTRA_PANELS[id] = fn; if (opts) Studio._popts[id] = opts; renderRail(); },
+  // top bar button inserted before "Xuất" (01_workflow.js may move it into the ⋯ menu or a step)
+  addTopButton(html, onClick, opts) { const b = document.createElement('span'); b.innerHTML = html; const el = b.firstElementChild; $('#export').before(el); el.addEventListener('click', onClick); for (const h of Studio._top) h(el, opts || {}); return el; },
   // inspector tab(s) for the selected component: fn(c) -> [key, label, html] | [[…], …] | null
   addInspectorTab(fn) { Studio._insp.push(fn); },
   onReady(fn) { if (Studio._isReady) fn(); else Studio._ready.push(fn); },
