@@ -30,6 +30,14 @@
     ['Xem lại hướng dẫn', 'ti-school', 'onboarding huong dan bat dau', () => S.openOnboarding?.(), () => !!S.openOnboarding],
   ];
 
+  // Words a new user types for a tool whose name differs (gõ không dấu, so khớp theo norm()).
+  const ALIAS = {
+    text: 'phu de caption kieu phu de chu tieu de font', tpl: 'template mau video', media: 'anh video tai len upload file',
+    audio: 'nhac nen sfx am nhac', audioplus: 'giong tron am luong ha nhac', brands: 'logo mau thuong hieu brand kit',
+    trans: 'chuyen canh transition', filter: 'loc mau lut', fx: 'hieu ung graphic', words: 'loi thoai sua chu transcript',
+    longform: 'video dai cat clip ngan highlight', dub: 'long tieng dich', batch: 'hang loat excel csv', schedule: 'lich dang hen gio',
+  };
+
   function items() {
     const out = [];
     const steps = W()?.STEPS || [];
@@ -40,7 +48,7 @@
       if (m && m.level === 'pro' && W().level === 'basic') continue;
       const tab = g?.tabs.find(t => t[0] === id)?.[1];
       const label = g ? `${g.name} › ${tab || name}` : name;
-      out.push({ label, ic: g ? g.icon : ic, kind: m ? `Công cụ · ${STEP_N[m.step] || ''}` : 'Công cụ', kw: `${id} ${name} ${g ? g.name : ''} cong cu panel`, run: () => openPanel(id) });
+      out.push({ label, ic: g ? g.icon : ic, kind: m ? `Công cụ · ${STEP_N[m.step] || ''}` : 'Công cụ', kw: `${id} ${name} ${g ? g.name : ''} ${ALIAS[id] || ''} cong cu panel`, run: () => openPanel(id) });
     }
     for (const [label, ic, kw, run, show] of COMMANDS) if (show()) out.push({ label, ic, kind: 'Lệnh', kw, run });
     for (const it of out) { it.n = norm(it.label); it.k = norm(it.label + ' ' + it.kw); it.c = it.k.replace(/ /g, ''); }
