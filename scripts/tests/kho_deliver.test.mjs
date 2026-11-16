@@ -81,7 +81,16 @@ test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file t�
   try {
     const r3 = K.deliverExports(d, [{ src: a, w: 1080, h: 1920 }], { date: DATE });
     assert.equal(r3.items[0].how, 'copy'); assert.equal(path.basename(r3.items[0].dst), 'Chep Khac O 9x16 (3).mp4');
+    assert.equal(fs.readFileSync(r3.items[0].dst, 'utf8'), 'mot');
     assert.ok(!fs.readdirSync(r3.dir).some(f => f.includes('.part.')));
+    // tên thật bị một lần giao khác lấy mất đúng lúc (giữ chỗ 'wx' báo EEXIST) → sang tên kế, không ghi đè
+    const open0 = fs.openSync; let raced = false;
+    const m3 = mock.method(fs, 'openSync', (p, fl, ...x) => { if (fl === 'wx' && !raced) { raced = true; open0(p, 'w'); fs.writeFileSync(p, 'cua nguoi khac'); throw Object.assign(new Error('exists'), { code: 'EEXIST' }); } return open0(p, fl, ...x); });
+    try {
+      const r4 = K.deliverExports(d, [{ src: b, w: 1080, h: 1920 }], { date: DATE });
+      assert.equal(path.basename(r4.items[0].dst), 'Chep Khac O 9x16 (5).mp4');
+      assert.equal(fs.readFileSync(path.join(r4.dir, 'Chep Khac O 9x16 (4).mp4'), 'utf8'), 'cua nguoi khac');
+    } finally { m3.mock.restore(); }
   } finally { m2.mock.restore(); }
 });
 
@@ -267,4 +276,11 @@ test('Lịch đăng: thấy video trong Thanh pham của mọi Kho đã đăng k
   assert.ok(files.includes(a), 'Kho Chung');
   assert.ok(files.includes(b), 'Kho của thương hiệu');
   assert.match(r.data.find(v => v.file === b).src, /Thành phẩm · Nhà Đẹp/);
+  // caption AI của dự án theo bản giao trong Thành phẩm (chỉ mục .giao.json)
+  W(path.join(d, 'publish', 'publish.json'), { video: 'out/l.mp4', platforms: { tiktok: { caption: 'Caption của Lịch', hashtags: ['#lich'] } } });
+  assert.deepEqual(K.originOf(a), { project: path.resolve(d), src: path.join(path.resolve(d), 'out', 'l.mp4') });
+  const r2 = await call(route, '/api/schedule/videos');
+  assert.equal(r2.data.find(v => v.file === a).hasCaptions, true);
+  const cap = await call(route, '/api/schedule/captions?platform=tiktok&file=' + encodeURIComponent(a));
+  assert.equal(cap.data.caption, 'Caption của Lịch');
 });

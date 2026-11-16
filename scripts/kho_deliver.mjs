@@ -48,8 +48,8 @@ export function deliverFolder(ws, { folder = '', date = new Date() } = {}) {
 
 // ---------- đặt một file vào thư mục giao ----------
 // Tên không trùng: freeName rồi linkSync (EEXIST nếu hai bản song song lấy cùng tên → thử tên kế). Chép: vào tên tạm
-// ".part" rồi linkSync sang tên thật (nguyên tử, không ghi đè); ổ không có liên kết cứng (FAT/exFAT) thì rename khi tên
-// thật còn trống.
+// ".part" rồi linkSync sang tên thật (nguyên tử, không ghi đè); ổ không có liên kết cứng (FAT/exFAT) thì giữ chỗ tên thật
+// bằng open 'wx' (EEXIST nếu lần giao khác vừa lấy) rồi mới rename đè lên chỗ mình đã giữ.
 const nameIn = (d, name) => path.join(d, freeName(d, name));
 // tên tạm riêng cho từng lần chép: hai lần giao song song trong cùng tiến trình (ảnh bìa + xuất) không dùng chung file tạm
 const partOf = dst => `${dst}.part.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
@@ -60,8 +60,9 @@ function claim(tmp, d, name) {
     catch (e) {
       if (e.code === 'EEXIST' && i < 20) continue;
       if (e.code === 'EEXIST') throw e;
-      if (fs.existsSync(dst)) { if (i < 20) continue; throw e; }
-      retryBusy(() => fs.renameSync(tmp, dst)); return dst;
+      try { fs.closeSync(fs.openSync(dst, 'wx')); } catch (e2) { if (e2.code === 'EEXIST' && i < 20) continue; throw e2; }
+      try { retryBusy(() => fs.renameSync(tmp, dst)); } catch (e3) { fs.rmSync(dst, { force: true }); throw e3; }
+      return dst;
     }
   }
 }
@@ -128,7 +129,26 @@ function finish(dir, w, d, done) {
   const at = new Date().toISOString();
   const recs = done.filter(r => r.dst).map(r => ({ src: relOf(dir, r.src), dst: r.dst, how: r.how, at, from: r.from, to: stamp(r.dst) }));
   if (recs.length) try { appendLedger(dir, recs); } catch (e) { console.error('[kho] không ghi được delivered.json:', e.message); }
+  if (recs.length) try { indexOrigins(d, dir, recs); } catch (e) { console.error('[kho] không ghi được .giao.json:', e.message); }
   return { ws: w.root, dir: d, items: done.map(({ from, ...r }) => r) };
+}
+// Chỉ mục ngược trong thư mục giao: <tên bản giao> → dự án + file nguồn, để Lịch đăng tìm caption AI của dự án
+// (publish.mjs projectOf chỉ đi ngược lên từ file, không tới được dự án từ Thanh pham/).
+const originFile = d => path.join(d, '.giao.json');
+function indexOrigins(d, dir, recs) {
+  const f = originFile(d);
+  withFileLock(f + '.lock', () => {
+    const j = readJson(f) || { version: 1, items: {} };
+    for (const r of recs) if (path.dirname(r.dst) === d) j.items[path.basename(r.dst)] = { project: path.resolve(dir), src: r.src, to: r.to };
+    const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(j, null, 1)); retryBusy(() => fs.renameSync(t, f));
+  });
+}
+/** Dự án và file nguồn của một bản giao (theo .giao.json cạnh nó; file đã bị thay thì null). → { project, src: tuyệt đối } | null */
+export function originOf(f) {
+  const e = readJson(originFile(path.dirname(path.resolve(f))))?.items?.[path.basename(f)];
+  if (!e?.project || typeof e.src !== 'string' || !fs.existsSync(path.join(e.project, 'timeline.json'))) return null;
+  const s = stamp(f); if (e.to && (!s || s.key !== e.to.key || s.size !== e.to.size)) return null;
+  return { project: e.project, src: path.resolve(e.project, e.src) };
 }
 /**
  * Giao các file của một dự án. items: [{ src: tuyệt đối, name: tên hiển thị kèm đuôi }].

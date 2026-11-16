@@ -10,7 +10,7 @@ import * as PUB from '../../scripts/publish.mjs';
 import { isDue } from '../../scripts/schedule_due.mjs';
 import { revealPath } from '../../scripts/platform.mjs';
 import { workspaceOfProject } from '../../scripts/workspace.mjs';
-import { fileKey, knownWorkspaces, listDelivered } from '../../scripts/kho_deliver.mjs';
+import { fileKey, knownWorkspaces, listDelivered, originOf } from '../../scripts/kho_deliver.mjs';
 
 const VID = /\.(mp4|mov|m4v|webm)$/i;
 export default ctx => {
@@ -45,7 +45,7 @@ export default ctx => {
     const seen = new Map(), keys = new Set(), add = (f, src) => {
       f = path.resolve(f); if (!VID.test(f) || /\.part\./.test(f) || !fs.existsSync(f) || seen.has(f)) return;
       const k = fileKey(f); if (keys.has(k)) return; keys.add(k);
-      seen.set(f, { file: f, src, name: path.basename(f), project: PUB.projectOf(f), mtime: fs.statSync(f).mtimeMs });
+      seen.set(f, { file: f, src, name: path.basename(f), project: PUB.projectOf(f) || originOf(f)?.project || null, mtime: fs.statSync(f).mtimeMs });
     };
     const outDir = d => { const o = path.join(d, 'out'); if (fs.existsSync(o)) for (const x of fs.readdirSync(o)) add(path.join(o, x), path.basename(d)); };
     if (ctx.project) outDir(ctx.project.dir);
@@ -63,6 +63,8 @@ export default ctx => {
     for (const v of list) { v.info = await probe(v.file); v.scheduled = [...new Set(PUB.loadSchedule().items.filter(x => x.file === v.file && x.state !== 'error').map(x => x.platform))]; v.hasCaptions = !!(v.project && fs.existsSync(path.join(v.project, 'publish/publish.json'))); }
     return list;
   }
+  // Caption AI of a delivered copy in Thanh pham/: look it up through the project's own file (S12 M100, .giao.json index).
+  const captions = (f, k) => { const o = originOf(f); return PUB.captionsFor(o ? o.src : f, k); };
   // Only a video file (absolute paths are allowed: the schedule lists exports of any project).
   const resolveFile = f => {
     if (typeof f !== 'string' || !VID.test(f)) return null; // older items with other extensions (CLI) are not served here
@@ -82,7 +84,7 @@ export default ctx => {
       if (req.method === 'GET') {
         if (p === '/api/schedule') return J(view());
         if (p === '/api/schedule/videos') return J(await videos());
-        if (p === '/api/schedule/captions') { const f = resolveFile(u.searchParams.get('file')); return J(f ? PUB.captionsFor(f, u.searchParams.get('platform') || 'tiktok') : {}); }
+        if (p === '/api/schedule/captions') { const f = resolveFile(u.searchParams.get('file')); return J(f ? captions(f, u.searchParams.get('platform') || 'tiktok') : {}); }
         if (p === '/api/youtube/status') return J({ ...PUB.ytStatus(), authError: RUN.auth?.error || null });
         if (p === '/api/schedule/poster') {
           // small poster frame for the calendar cards
@@ -100,7 +102,7 @@ export default ctx => {
       if (p === '/api/schedule/add') {
         const file = resolveFile(b.file || b.video); if (!file || !fs.existsSync(file)) return J({ error: 'Không thấy file video' }, 400);
         const plats = [].concat(b.platforms || b.platform || []); if (!plats.length) return J({ error: 'Chọn nền tảng' }, 400);
-        const items = plats.map(k => { const per = b.perPlatform?.[k] || {}, cap = PUB.captionsFor(file, k); return PUB.addItem({ ...cap, ...pick(b), ...pick(per), file, platform: k, when: b.when }); });
+        const items = plats.map(k => { const per = b.perPlatform?.[k] || {}, cap = captions(file, k); return PUB.addItem({ ...cap, ...pick(b), ...pick(per), file, platform: k, when: b.when }); });
         return J({ ok: true, items });
       }
       if (p === '/api/schedule/update') return J({ ok: true, item: PUB.updateItem(b.id, pick(b, true)) });
