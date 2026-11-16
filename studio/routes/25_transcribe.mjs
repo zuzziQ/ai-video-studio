@@ -3,6 +3,7 @@
 // POST /api/transcribe {model: small|medium|large-v3-turbo|large-v3, lang: vi|auto, max: 4}  → job; GET /api/transcribe/status
 import fs from 'node:fs';
 import path from 'node:path';
+import { projectFix, fixArgs } from '../../scripts/dict.mjs';
 
 export default ctx => async (req, res, p) => {
   if (p === '/api/transcribe/status') {
@@ -49,7 +50,8 @@ export async function transcribe(ctx, { model = 'large-v3-turbo', lang = 'vi', m
   // 3. Karaoke chunks.
   job.step = 'Chia dòng phụ đề'; job.progress = .9;
   const capF = P('.studio/captions_auto.json');
-  await ctx.run(ctx.PY, ['-I', '-X', 'utf8', S('captions.py'), words, capF, '--max', String(max)]);
+  // M89: the project's dictionary (brand + product names, brand kit `dict`, .studio/dict.json) fixes whisper mistakes.
+  await ctx.run(ctx.PY, ['-I', '-X', 'utf8', S('captions.py'), words, capF, '--max', String(max), ...fixArgs(projectFix({ dir: ctx.project.dir, timeline: tl }))]);
   const caps = JSON.parse(fs.readFileSync(capF, 'utf8')).filter(c => c.t0 < (tl.duration || 1e9));
   if (old.length) fs.writeFileSync(P(`.studio/captions_backup_${ctx.stamp()}.json`), JSON.stringify(old));
   fs.mkdirSync(P('work'), { recursive: true });

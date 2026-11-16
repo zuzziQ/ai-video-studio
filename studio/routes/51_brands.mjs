@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { AVS_HOME, brandFields } from '../../scripts/batch.mjs';
+import { dictString, parseDict, LIMITS } from '../../scripts/dict.mjs';
 
 const FILE = path.join(AVS_HOME, 'brands.json'), DIR = path.join(AVS_HOME, 'brands');
 const KEYS = ['title', 'name', 'primary', 'accent', 'dark', 'light', 'font', 'disp', 'logo', 'handle', 'phone', 'website', 'pack', 'outro'];
@@ -40,6 +41,8 @@ export default ctx => async (req, res, p, u) => {
     let b = src.id && list.find(x => x.id === src.id);
     if (!b) { b = { id: newId(src.title || src.name), created: new Date().toISOString() }; list.push(b); }
     for (const k of KEYS) if (k in src && k !== 'logo') { if (src[k] === '' || src[k] == null) delete b[k]; else b[k] = String(src[k]).slice(0, 300); }
+    // M89: từ điển lời thoại "sai=đúng;…" của thương hiệu (chỉ thêm khoá; file cũ không có khoá này vẫn đọc được)
+    if ('dict' in src) { const d = dictString(parseDict(String(src.dict ?? ''))).slice(0, LIMITS.arg); if (d) b.dict = d; else delete b.dict; }
     if (!b.title) b.title = b.name || 'Thương hiệu';
     b.updated = new Date().toISOString(); store(list);
     return J(pub(b));

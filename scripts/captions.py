@@ -2,10 +2,12 @@
 
 usage: python captions.py <words.json> <out_captions.json> [--fix "chơi biết=chưa biết;rưu rương=du dương"]
 Output: [{"t0", "t1", "words": [{"w","s","e"}]}]
---fix replaces word sequences (whisper mistakes) before chunking; keeps the original timings.
+--fix replaces word sequences (whisper mistakes) before chunking: case and tone-mark placement do not matter;
+same word count keeps each timing, otherwise the old span is split by text length (scripts/dict.mjs builds it).
 """
 import argparse
 import json
+import unicodedata
 
 ap = argparse.ArgumentParser()
 ap.add_argument("words")
@@ -16,16 +18,44 @@ ap.add_argument("--min", type=int, default=3)
 ap.add_argument("--max-dur", type=float, default=1.6)
 a = ap.parse_args()
 
-words = json.load(open(a.words))
+words = json.load(open(a.words, encoding="utf-8"))
 
+TONES = "̣̀́̃̉"  # huyền, sắc, ngã, hỏi, nặng
+
+
+def fold(w):
+    """Match key: lower case, no edge punctuation, tone mark moved to the end ("hóa" == "hoá", "tiền" != "tiến")."""
+    d = unicodedata.normalize("NFD", w.lower().strip(",.?!:;\"'“”"))
+    return unicodedata.normalize("NFC", "".join(c for c in d if c not in TONES)) + "".join(sorted(c for c in d if c in TONES))
+
+
+def retime(old, dst):
+    """Same word count: keep each word's timing. Otherwise split [first s, last e] by text length (like the Studio)."""
+    if len(old) == len(dst):
+        return [{**o, "w": d} for o, d in zip(old, dst)]
+    s, e = old[0]["s"], old[-1]["e"]
+    weights = [max(1, len(d)) for d in dst]
+    out, acc = [], 0
+    for d, wt in zip(dst, weights):
+        a = s + (e - s) * acc / sum(weights)
+        acc += wt
+        out.append({"w": d, "s": round(a, 3), "e": round(s + (e - s) * acc / sum(weights), 3)})
+    return out
+
+
+# --fix "sai=đúng;…" (Studio passes one argument "--fix=…" built by scripts/dict.mjs). A broken pair is skipped.
 for pair in filter(None, a.fix.split(";")):
-    src, dst = (x.strip().split() for x in pair.split("="))
+    parts = pair.split("=")
+    if len(parts) != 2:
+        continue
+    src, dst = parts[0].split(), parts[1].split()
+    if not src or not dst:
+        continue
+    key = [fold(x) for x in src]
     i = 0
     while i <= len(words) - len(src):
-        if [w["w"].lower().strip(",.?!") for w in words[i:i + len(src)]] == [x.lower() for x in src]:
-            s, e = words[i]["s"], words[i + len(src) - 1]["e"]
-            step = (e - s) / len(dst)
-            words[i:i + len(src)] = [{"w": d, "s": round(s + k * step, 3), "e": round(s + (k + 1) * step, 3)} for k, d in enumerate(dst)]
+        if [fold(w["w"]) for w in words[i:i + len(src)]] == key:
+            words[i:i + len(src)] = retime(words[i:i + len(src)], dst)
             i += len(dst)
         else:
             i += 1
@@ -119,5 +149,5 @@ for i, c in enumerate(chunks):
     t1 = chunks[i + 1][0]["s"] if i + 1 < len(chunks) else c[-1]["e"] + 0.3
     out.append({"t0": round(c[0]["s"], 3), "t1": round(t1, 3),
                 "words": [{"w": w["w"].strip(",.!"), "s": w["s"], "e": w["e"]} for w in c]})
-json.dump(out, open(a.out, "w"), ensure_ascii=False, indent=1)
+json.dump(out, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print(f"{len(out)} chunks, avg {sum(len(c['words']) for c in out) / max(1, len(out)):.1f} words")

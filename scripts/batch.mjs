@@ -23,6 +23,7 @@ import { findChrome, linkPath, pyBin, killTree } from './platform.mjs';
 import { resolvePerf, hwSnapshot } from './perf_profile.mjs';
 import { batchGate, batchPlan, batchPixels, holdBatchSlot, otherRenders, parallelLimit, pipeline } from './batch_parallel.mjs';
 import { retryBusy } from './file_lock.mjs';
+import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { defaultEngine } from './tts_config.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -335,9 +336,10 @@ export async function buildRow(job, i, { preview = false, dirOverride, log = () 
         fs.mkdirSync(path.join(dir, 'work/frames'), { recursive: true });
         const [FW, FH] = vert ? [720, 1280] : [1280, 720];
         log('trích khung hình'); await sh('ffmpeg', ['-v', 'error', '-y', '-i', path.join(dir, 'work/aroll.mp4'), '-vf', `scale=${FW}:${FH}:force_original_aspect_ratio=increase,crop=${FW}:${FH}`, '-q:v', '3', path.join(dir, 'work/frames/%05d.jpg')]);
-        log('tạo phụ đề'); await sh(PY, ['-I', '-X', 'utf8', S('captions.py'), path.join(dir, 'work/words.json'), path.join(dir, 'work/captions.json'), '--max', '4']);
+        const fix = projectFix({ dir, kit: kit || undefined }), keep = fixWords(fix); // M89: brand kit dictionary + names
+        log('tạo phụ đề'); await sh(PY, ['-I', '-X', 'utf8', S('captions.py'), path.join(dir, 'work/words.json'), path.join(dir, 'work/captions.json'), '--max', '4', ...fixArgs(fix)]);
         caps = JSON.parse(fs.readFileSync(path.join(dir, 'work/captions.json'), 'utf8'));
-        for (const c of caps) for (const w of c.words) w.w = w.w.replace(/[.,!?]+$/, '').toLowerCase();
+        for (const c of caps) for (const w of c.words) { w.w = w.w.replace(/[.,!?]+$/, ''); if (!keep.has(w.w)) w.w = w.w.toLowerCase(); }
         dur = +(fs.readdirSync(path.join(dir, 'work/frames')).length / 30 + 2.5).toFixed(2);
         tl = { ...base, duration: dur, aroll: { frames: 'work/frames/%05d.jpg' }, audio: { ...base.audio, voice: 'work/aroll.mp4' } };
       } else if (mode === 'tts') {

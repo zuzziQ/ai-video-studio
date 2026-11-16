@@ -49,6 +49,27 @@ Code: `studio/index.html`, `studio.css` (khung editor, mọi màu/cỡ chữ/bo 
   - Khối khác: kéo để dời, kéo mép để cắt, hít vào playhead / mép khối / chỗ nối clip. Bấm thước hoặc khoảng trống để tua, bấm đúp để nhảy tới khối. Kéo mép trên của timeline để đổi chiều cao.
 - **Phím tắt**: Space phát/dừng · ← → 1 khung (Shift: 1 giây) · Alt+mũi tên dịch 1 px (Shift: 10 px) · Delete xoá · ⌘D nhân bản · ⌘B tách clip · ⌘Z / ⇧⌘Z · + / − zoom timeline · ⇧Z vừa khung · Esc bỏ chọn / thu preview.
 
+## Lời thoại (M89, `features/21_transcript.js`)
+Panel trái **Lời thoại** (bước ②) sửa phụ đề bằng chữ, không cần LLM. `CAP` (khối phụ đề, mỗi khối `words[{w, s, e, hl, br, ed}]`) là nguồn chung của panel, track Phụ đề và preview: mỗi thao tác là một bước ⌘Z (`S.pushUndo`) rồi `S.changed()`.
+- **Hai chế độ cho Delete** (công tắc đầu panel, nhớ ở `localStorage` `avs.twMode`): **Sửa chữ** (mặc định) xoá chữ khỏi phụ đề, video giữ nguyên; **Cắt video** cắt đoạn khỏi video có ripple (`Studio.ai.cutRanges`).
+- **Sửa tại chỗ**: bấm đúp một từ, hoặc chọn rồi Enter / F2 / gõ chữ → ô sửa; Enter lưu, Esc huỷ, bấm ra ngoài là lưu. Cùng số từ: giữ `s/e` (và `hl/br`) từng từ; khác số từ: chia lại trong `[s đầu, e cuối]` theo độ dài chữ; đoạn trải nhiều khối thì chia từ mới cho từng khối theo thời lượng, không từ nào ra ngoài khối của nó; khối hết chữ bị bỏ. Từ đổi chữ có `ed: true` (gạch chân chấm, lưu vào `captions.json`).
+- **Chọn**: kéo, Shift-bấm, ← → (Shift mở rộng). **Menu đoạn** (chuột phải, phím Menu / Shift F10, thanh nổi cuối panel; `role="menu"`, ↑↓ Home End Enter Esc): Sửa chữ, Nhấn mạnh (`hl`), Xuống dòng sau đoạn (`br` của từ cuối), Ẩn khỏi phụ đề, Cắt khỏi video, Phát lại đoạn (lặp tới khi Esc hoặc dừng).
+- **Tìm và thay** (Ctrl H khi panel mở, hoặc nút): không phân biệt hoa thường, dấu thanh đặt khác chỗ vẫn khớp ("hóa" = "hoá"), tuỳ chọn **Không phân biệt dấu**; khớp được cụm nhiều từ; danh sách chỗ khớp có mốc thời gian (bấm để tua và chọn); Thay (Enter ở ô Thay bằng) / Thay tất cả (một bước ⌘Z); **Nhớ cho lần sau** ghi các chữ đã khớp vào từ điển dự án hoặc thương hiệu.
+- **Từ điển** (nút sách): hai ô "sai = đúng" (dự án, thương hiệu của dự án) + chip **Tự có** (tên thương hiệu, sản phẩm). **Lưu từ điển**; **Áp vào lời thoại này** áp ngay cho phụ đề đang mở. Sau mỗi lần tạo lời thoại (`25_transcribe`, `new_project.mjs`, `batch.mjs`, `highlights.mjs`) `scripts/dict.mjs` gộp các nguồn thành một tham số `--fix=…` cho `captions.py` (giữ thời gian; ba luồng hạ chữ thường vẫn giữ hoa cho từ đích của từ điển).
+- **Đề xuất** (cho M90; dữ liệu tạm trong trình duyệt, không lưu vào timeline): gạch sóng trên từ, chuột phải có Nhận / Bỏ.
+
+`Studio.transcript` (script, M90, Claude trong trình duyệt):
+| Hàm | Việc |
+|---|---|
+| `mode`, `setMode('text'\|'cut')` | chế độ Delete |
+| `words()` | `[{i, w, s, e, hl, br, ed}]` theo thứ tự thời gian (bỏ khối ẩn) |
+| `find(q, {noAccent})` | `[{i, n, s, e, text}]` |
+| `applyEdit(i, n, text)` | thay `n` từ từ vị trí `i` bằng `text` (`''` = xoá khỏi phụ đề); một bước ⌘Z; `false` khi vị trí sai |
+| `suggest([{s, e, to, from?, reason?}])` | thay danh sách đề xuất (neo theo thời gian `s..e`), trả bản có `id` |
+| `suggestions()`, `acceptSuggestion(id)`, `rejectSuggestion(id)`, `clearSuggestions()` | đọc / nhận (áp như `applyEdit`) / bỏ |
+| `dict.load()`, `dict.saveProject(entries)` | đọc `GET /api/dict` / ghi từ điển dự án |
+| `openFind()`, `openDict()` | mở hộp Tìm và thay / Từ điển |
+
 ## Track chính trong Studio (`TL.clips`, xem clips.md)
 - Mở dự án chưa có `clips` → tự chuyển: một clip `{src:{seq: aroll.frames, fps, count}, audio: audio.voice, in:0, out: min(count/fps, duration)}` (giữ `aroll` để tương thích; chỉ ghi vào file khi bấm Lưu).
 - Ripple (`clips.js` → `remapAll`): xoá / cắt mép / đổi tốc độ / chèn / nhân bản clip sẽ dời phụ đề + từ (`words[].s/e`, bỏ từ nằm trong đoạn xoá), scenes (kể cả thời gian lồng bên trong), sfx, nhạc, fx, grade/zoom. `TL.duration` = tổng clip + đuôi của cảnh kết thúc sau đó.
@@ -89,6 +110,8 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/onboarding` | trạng thái hướng dẫn lần đầu `{done, skipped, step, purpose, aspect, platforms, brand, updated, isNew, project, recent:[{i, name, parent, t, current}]}` từ `$AVS_HOME/onboarding.json` (chưa có/hỏng → mặc định); có dự án đang mở thì ghi nó lên đầu `recent` (tối đa 8). Không trả đường dẫn đầy đủ (`02_onboarding`, M83) |
 | `POST /api/onboarding` | gộp khoá `done`, `skipped` (bool), `step` (0–3), `purpose` (`bds\|khoahoc\|banhang\|review\|chiase\|tintuc\|doanhnghiep\|khac`), `aspect` (`9:16\|16:9\|1:1`), `platforms` (`tiktok, youtube, facebook, instagram, zalo`), `brand` (id kit); khoá lạ/sai kiểu → 400, body > 8 KB → 413; ghi file tạm rồi đổi tên. Không chứa token |
 | `POST /api/onboarding/open` | `{i}` → mở dự án thứ `i` của `recent` (đường dẫn lấy từ file, cùng luật `/api/open`); không còn trên máy → 404 và bỏ khỏi danh sách |
+| `GET /api/dict[?kit=<id>]` | từ điển lời thoại của dự án `{project, brand, auto, kit:{id,title}\|null}`: `project` từ `<dự án>/.studio/dict.json`, `brand` từ khoá `dict` của brand kit (mặc định `TL.brand.kit`, sau đó kit của hướng dẫn lần đầu), `auto` = tên thương hiệu và tên sản phẩm (`TL.ads.product`) thành cặp "chữ thường=Tên" (`21_dict`, `scripts/dict.mjs`) |
+| `POST /api/dict` | `{entries:[{from, to}]}` (≤ 500 cặp, mỗi vế ≤ 80 ký tự, không `=`/`;`/ký tự điều khiển, không bắt đầu bằng `-`; cặp hỏng bị bỏ) → ghi `.studio/dict.json` qua file tạm rồi đổi tên; sai kiểu → 400. Từ điển thương hiệu ghi bằng `POST /api/brands/save {brand:{id, dict:"sai=đúng;…"}}` |
 | `POST /api/still` | `{t}` → ảnh bìa `out/cover_*.jpg` |
 | `POST /api/srt` | phụ đề → `out/<tên>.srt` |
 | `GET /api/templates` | danh sách mẫu: `templates/*.json` + `templates/user/*.json`, kèm `preview:{mp4,jpg}` và `user` |
@@ -125,7 +148,8 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
   - `03_nextstep`: thẻ Bước tiếp theo + Sẵn sàng x/6 ở inspector khi không chọn gì. `Studio.nextStep.refresh()`, `.state()`.
   - `04_cmdk`: tìm công cụ ⌘K / Ctrl K. Dùng `Studio.workflow` (`goStep, meta, groupOf, setLevel, openMore, closeMore, STEPS, step, level`) do `01_workflow` cung cấp.
   - `18_schedule`: Lịch đăng + Kết nối YouTube (`references/publish-schedule.md`).
-  - `20_ai`: AI dựng giúp, Cắt lỗi nói, Lời thoại.
+  - `20_ai`: AI dựng giúp, Cắt lỗi nói (`Studio.ai`: `cutRanges`, `wordSpan`, `allWords`, `previewRange`, `fillers`).
+  - `21_transcript` (+ lõi thuần `21_transcript.core.js` = `window.TranscriptCore`, test ở `scripts/tests/transcript_edit.test.mjs`): panel **Lời thoại** (M89), xem mục "Lời thoại" bên dưới.
   - `28_engines`: nút **Mô hình & giọng**: nhà cung cấp LLM cho việc chỉ có chữ (Claude/Ollama, `references/llm.md`) và giọng VieNeu (`references/voice.md`).
   - `29_perf`: panel trái **Hiệu năng** (`references/perf-profile.md`): thẻ máy, chọn profile, form Tuỳ chỉnh, dòng biến môi trường đang ghi đè, kế hoạch render, **Đo thử 10 s**, lịch sử `perf_log`, **Hỏi AI chọn profile** (`POST /api/perf/advise` của `31_perfai`, không có thì ẩn nút); hộp xuất hiện tên profile đang dùng. Route `29_perf.mjs` chỉ nhận `/api/perf`, `/api/perf/log`, `/api/perf/bench`, đường dẫn khác dưới `/api/perf/` để route sau xử lý.
   - `30_audio`: Âm thanh+.
