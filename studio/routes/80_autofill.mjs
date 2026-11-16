@@ -45,7 +45,7 @@ export default ctx => {
           if (/^level \d/.test(l)) sum.sfx = l;
         });
         // S12 · M99: đoạn nhạc nào có bài hợp mood trong Nhac/ của Kho thì dùng bài đó (media/kho_*)
-        if (b.music) { try { const { khoMusicBeds } = await import(pathToFileURL(S('kho_media.mjs')).href); const n = await khoMusicBeds(ctx.project.dir); if (n) sum.kho_music = n; } catch (e) { console.error('kho music:', e.message); } }
+        if (b.music) { try { const { khoMusicBeds } = await import(pathToFileURL(S('kho_media.mjs')).href); const n = await khoMusicBeds(path.dirname(tlf)); if (n) sum.kho_music = n; } catch (e) { console.error('kho music:', e.message); } }
       }
       ctx.job.out = sum;
     });

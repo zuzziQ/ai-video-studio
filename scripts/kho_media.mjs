@@ -61,8 +61,8 @@ export function resolveRel(ws, rel) {
   if (path.isAbsolute(rel) || /^[\\/]/.test(rel) || /^[a-z]:/i.test(rel)) throw bad('Cần đường dẫn tương đối trong Kho');
   const parts = rel.split(/[\\/]+/).filter(Boolean);
   if (parts.some(p => p === '..' || p.startsWith('.'))) throw bad('Đường dẫn ra ngoài Kho');
-  // Windows bỏ dấu chấm/khoảng trắng cuối tên và hiểu tên ngắn 8.3 (DUAN~1), dấu ":" là luồng dữ liệu phụ: chặn để không vòng qua Du an/
-  if (parts.some(p => /[. ]$/.test(p) || p.includes('~') || p.includes(':'))) throw bad('Tên thư mục/file không hợp lệ');
+  // dấu ":" là luồng dữ liệu phụ (NTFS); Windows bỏ dấu chấm/khoảng trắng cuối tên và hiểu tên ngắn 8.3 (DUAN~1) ở thư mục cấp 1
+  if (parts.some(p => p.includes(':')) || /[. ]$/.test(parts[0]) || parts[0].includes('~')) throw bad('Tên thư mục/file không hợp lệ');
   // macOS (APFS) cũng không phân biệt hoa thường; tên có thể ở dạng NFD: so sau khi chuẩn hoá
   const top = s => s.normalize('NFC').toLowerCase();
   if ([KHO_DIRS.projects, KHO_DIRS.delivered].some(d => top(d) === top(parts[0]))) throw bad('Không lấy file từ Du an/ hay Thanh pham/');
@@ -71,6 +71,10 @@ export function resolveRel(ws, rel) {
   if (!USE_KINDS.has(kindOf(abs))) throw bad('Chỉ chèn được ảnh, video hoặc âm thanh');
   let st; try { st = fs.statSync(abs); } catch { throw bad('Không thấy file trong Kho', 404); }
   if (!st.isFile()) throw bad('Không phải file', 400);
+  // đường dẫn thật (symlink/junction trong Kho trỏ vào Du an/, Thanh pham/ hay file ẩn): kiểm lại trên đích thật
+  const realRel = path.relative(fs.realpathSync.native(ws.root), fs.realpathSync.native(abs)).split(path.sep);
+  if (realRel[0] === '..' || path.isAbsolute(realRel.join('/')) || realRel.some(p => p.startsWith('.')) || [KHO_DIRS.projects, KHO_DIRS.delivered].some(d => top(d) === top(realRel[0])))
+    throw bad('Không lấy file từ Du an/ hay Thanh pham/');
   return abs;
 }
 
