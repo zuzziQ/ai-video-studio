@@ -1,12 +1,14 @@
 // Product Brain (ROADMAP M18, references/products.md): hồ sơ sản phẩm dùng chung nhiều dự án ($AVS_HOME/products/<id>.json).
 // Panel "Sản phẩm": danh sách hồ sơ, sửa claim kèm bằng chứng + trạng thái duyệt, cụm từ cấm, FAQ; "Dùng cho dự án" đặt
 // TL.ads.product để scripts/ad_gates.py đối chiếu claim của hồ sơ khi Kiểm tra chất lượng.
+// "Điền bằng AI" (M91, trợ lý product của 05_assist.js): từ ảnh và/hoặc link đề xuất tên, giá, ngành, điểm mạnh/claim (luôn Chờ duyệt,
+// kèm cờ rủi ro của ad_gates.py), FAQ; Nhận mới thêm vào form, Lưu mới ghi hồ sơ.
 'use strict';
 (() => {
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc;
   const IND = { '': '— chưa chọn —', general: 'Chung', cosmetics: 'Mỹ phẩm / chăm sóc da', supplements: 'Thực phẩm chức năng', food: 'Thực phẩm & đồ uống', finance: 'Tài chính', health_device: 'Thiết bị sức khoẻ' };
   const ST = { approved: 'Đã duyệt', pending: 'Chờ duyệt', prohibited: 'Cấm nói', expired: 'Hết hạn' };
-  let LIST = null, EDIT = null;
+  let LIST = null, EDIT = null, AI = null, AI_FOR = null, PIMG = null; // AI: ô Điền bằng AI của bản đang sửa; PIMG: ảnh chọn cho AI (không lưu)
   const css = document.createElement('style');
   css.textContent = `
   .pb-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
@@ -29,7 +31,10 @@
   .pb-cl[data-st="approved"] { border-left: 4px solid rgb(var(--color-success)); } .pb-cl[data-st="prohibited"], .pb-cl[data-st="expired"] { border-left: 4px solid rgb(var(--color-danger)); }
   .pb-cl[data-st="pending"] { border-left: 4px solid rgb(var(--color-warning)); }
   .pb-faq { display: grid; grid-template-columns: minmax(0, 1fr) var(--h-sm); gap: var(--space-1); margin: var(--space-1) 0; }
-  .pb-faq-qa { display: grid; gap: var(--space-1); }`;
+  .pb-faq-qa { display: grid; gap: var(--space-1); }
+  .pb-ai { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid rgb(var(--color-line)); }
+  .pb-aisrc { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1); align-items: center; }
+  .pb-imgname { display: block; margin-top: var(--space-1); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); overflow-wrap: anywhere; }`;
   document.head.appendChild(css);
 
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'products';
@@ -68,6 +73,7 @@
     const p = EDIT;
     return `<div class="pb-card pb-form"><b class="pb-title">${p.id ? 'Sửa hồ sơ sản phẩm' : 'Hồ sơ sản phẩm mới'}</b>
       <label>Tên sản phẩm</label><input id="pb-name" value="${esc(p.name || '')}" placeholder="VD: Serum B5 đầu nhỏ giọt">
+      <label>Giá <span class="muted">· ghi như muốn hiện, ví dụ 350.000đ</span></label><input id="pb-price" value="${esc(p.price || '')}" placeholder="350.000đ">
       <div class="pb-g2"><div><label>Thương hiệu</label><input id="pb-brand" value="${esc(p.brand || '')}"></div>
         <div><label>Ngành</label><select id="pb-ind">${Object.entries(IND).map(([k, v]) => `<option value="${k}" ${(p.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
       <label>Claim <span class="muted">· claim “Đã duyệt” phải có bằng chứng; quá ngày hết hạn thì tính là hết hạn</span></label>
@@ -77,13 +83,16 @@
       <label>FAQ <span class="muted">· câu trả lời chuẩn để viết kịch bản</span></label>
       <div id="pb-faqs">${(p.faq || []).map(faqRow).join('')}</div><button class="mini" id="pb-addf"><i class="ti ti-plus"></i> Thêm câu hỏi</button>
       <label>Ghi chú</label><textarea id="pb-notes" rows="2">${esc(p.notes || '')}</textarea>
+      ${S.assistPanel ? `<div class="pb-ai" id="pb-aiwrap"><label>Điền bằng AI <span class="muted">· từ ảnh sản phẩm và/hoặc link trang bán</span></label>
+        <div class="pb-aisrc"><input id="pb-url" placeholder="https://… (không bắt buộc)" aria-label="Link sản phẩm"><button class="mini" id="pb-imgbtn"><i class="ti ti-photo"></i> ${PIMG ? 'Đổi ảnh' : 'Chọn ảnh'}</button></div>
+        <input type="file" id="pb-img" accept="image/*" hidden><small class="pb-imgname" id="pb-imgname">${PIMG ? esc(PIMG.name) : ''}</small><div id="pb-ai"></div></div>` : ''}
       <div class="pb-act"><button class="primary" id="pb-save"><i class="ti ti-device-floppy"></i> Lưu</button><button id="pb-cancel">Huỷ</button></div></div>`;
   }
   function collect() {
     const v = el => el.value.trim();
     const claims = [...document.querySelectorAll('#pb-claims .pb-cl')].map(r => ({ id: r.dataset.cid || undefined, ...Object.fromEntries([...r.querySelectorAll('[data-f]')].map(i => [i.dataset.f, v(i)])) })).filter(c => c.text);
     const faq = [...document.querySelectorAll('#pb-faqs .pb-faq')].map(r => ({ q: v(r.querySelector('[data-f=q]')), a: v(r.querySelector('[data-f=a]')) })).filter(f => f.q);
-    return { id: EDIT.id, created: EDIT.created, name: v($('#pb-name')), brand: v($('#pb-brand')), industry: $('#pb-ind').value, claims,
+    return { id: EDIT.id, created: EDIT.created, name: v($('#pb-name')), price: v($('#pb-price')), brand: v($('#pb-brand')), industry: $('#pb-ind').value, claims,
       blocked: $('#pb-blocked').value.split('\n').map(s => s.trim()).filter(Boolean), faq, notes: $('#pb-notes').value };
   }
   function render() {
@@ -94,12 +103,13 @@
     $('#libbody').innerHTML = `<div class="help pb-intro">Hồ sơ sản phẩm dùng chung cho mọi dự án: claim kèm bằng chứng và trạng thái duyệt, cụm từ cấm, FAQ. Dự án trỏ tới một hồ sơ thì “Kiểm tra quảng cáo” đối chiếu theo hồ sơ, không cần nhập claim lại. Lưu ở <code>~/.ai-video-studio/products/</code>.</div>
       ${EDIT ? form() : ''}
       ${LIST.map(card).join('') || (EDIT ? '' : '<div class="help">Chưa có hồ sơ nào.</div>')}
-      <div class="pb-act"><button id="pb-new2"><i class="ti ti-plus"></i> Hồ sơ mới</button>${legacy ? '<button id="pb-fromproj" title="Lấy claim và cụm từ cấm đang nhập tay trong dự án này"><i class="ti ti-download"></i> Tạo từ claim của dự án</button>' : ''}</div>`;
+      <div class="pb-act"><button id="pb-new2"><i class="ti ti-plus"></i> Hồ sơ mới</button>${S.assistPanel ? '<button id="pb-ainew" title="Tạo hồ sơ mới từ ảnh hoặc link sản phẩm"><i class="ti ti-sparkles"></i> Điền bằng AI</button>' : ''}${legacy ? '<button id="pb-fromproj" title="Lấy claim và cụm từ cấm đang nhập tay trong dự án này"><i class="ti ti-download"></i> Tạo từ claim của dự án</button>' : ''}</div>`;
     bind();
   }
   function bind() {
     const B = $('#libbody');
     $('#pb-new2').onclick = () => { EDIT = { claims: [{ status: 'approved' }] }; render(); };
+    $('#pb-ainew') && ($('#pb-ainew').onclick = () => { EDIT = { claims: [] }; PIMG = null; render(); B.scrollTop = 0; $('#pb-url')?.focus(); });
     $('#pb-fromproj') && ($('#pb-fromproj').onclick = () => {
       const a = S.TL.ads || {};
       // claim nhập tay chưa có bằng chứng: để "Chờ duyệt", người dùng điền bằng chứng rồi chuyển "Đã duyệt"
@@ -119,6 +129,7 @@
       await load();
     }));
     if (!EDIT) return;
+    mountAi();
     $('#pb-addc').onclick = () => $('#pb-claims').insertAdjacentHTML('beforeend', claimRow({ status: 'approved' }));
     $('#pb-addf').onclick = () => $('#pb-faqs').insertAdjacentHTML('beforeend', faqRow({}));
     $('#pb-cancel').onclick = () => { EDIT = null; render(); };
@@ -127,6 +138,33 @@
       if (r.error) return S.toast(r.error);
       EDIT = null; await load(); S.toast(`Đã lưu hồ sơ “${r.name}”`);
     };
+  }
+  // ---- Điền bằng AI (M91): Nhận thì sửa thẳng ô của form (không vẽ lại form, giữ chữ đang gõ) ----
+  function mountAi() {
+    const host = $('#pb-ai'); if (!host) return;
+    if (AI_FOR !== EDIT) { AI_FOR = EDIT; PIMG = null; AI = null; }
+    const pick = $('#pb-img');
+    $('#pb-imgbtn').onclick = () => pick.click();
+    pick.onchange = () => { const f = pick.files[0]; if (!f || !/^image\//.test(f.type)) return; PIMG = f; $('#pb-imgname').textContent = f.name; $('#pb-imgbtn').innerHTML = '<i class="ti ti-photo"></i> Đổi ảnh'; };
+    AI ||= S.assistPanel({
+      name: 'product', label: 'Điền bằng AI', hint: 'Tên, giá (giữ nguyên như nguồn), ngành, điểm mạnh, FAQ. Claim luôn ở Chờ duyệt kèm cờ rủi ro.',
+      async input() {
+        const inp = { url: $('#pb-url')?.value.trim() || '', name: $('#pb-name')?.value.trim() || '', brand: $('#pb-brand')?.value.trim() || '', industry: $('#pb-ind')?.value || '' };
+        if (PIMG) inp.image = await S.imagePayload(PIMG, { max: 1024, type: 'image/jpeg', quality: 0.88 });
+        if (!inp.image && !inp.url) throw new Error('Chọn ảnh sản phẩm hoặc dán link trước khi hỏi AI.');
+        return inp;
+      },
+      current: f => ({ name: () => $('#pb-name')?.value, price: () => $('#pb-price')?.value, industry: () => IND[$('#pb-ind')?.value || ''] }[f.key]?.() || '').trim().replace(/^—.*—$/, ''),
+      onAccept: f => {
+        if (!$('#pb-name')) throw new Error('Form đã đóng');
+        if (f.key === 'name') $('#pb-name').value = f.value;
+        else if (f.key === 'price') $('#pb-price').value = f.value;
+        else if (f.key === 'industry') $('#pb-ind').value = f.value;
+        else if (f.kind === 'claim') $('#pb-claims').insertAdjacentHTML('beforeend', claimRow({ text: f.value.text, status: 'pending' }));
+        else if (f.kind === 'faq') $('#pb-faqs').insertAdjacentHTML('beforeend', faqRow(f.value));
+      },
+    });
+    AI.mount(host);
   }
   // gắn một lần (không gắn lại mỗi lần render): xoá dòng claim/FAQ, tô viền theo trạng thái
   document.addEventListener('click', e => { const d = e.target.closest?.('.pb-form [data-pbdel]'); if (d) d.closest('.pb-cl, .pb-faq').remove(); });

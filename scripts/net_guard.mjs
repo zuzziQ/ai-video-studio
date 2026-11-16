@@ -61,14 +61,19 @@ function pinnedRequest(u, init, lookup) {
   return new Promise((ok, bad) => {
     const req = mod.request(u, { method: init.method || 'GET', headers: init.headers || {}, signal: init.signal, lookup: guardLookup }, res => {
       if (res.statusCode >= 300 && res.statusCode < 400) { res.resume(); return ok(new Response(null, { status: res.statusCode, headers: { location: res.headers.location || '' } })); }
-      const parts = [];
-      res.on('data', c => parts.push(c)); res.on('error', bad);
-      res.on('end', () => {
+      // init.maxBytes: stop reading after that many bytes and hand back what arrived (a page's head is enough to read it)
+      const parts = [], max = init.maxBytes > 0 ? init.maxBytes : Infinity;
+      let size = 0, done = false;
+      const finish = () => {
+        if (done) return; done = true;
         const nobody = res.statusCode === 204 || res.statusCode === 304;
-        ok(new Response(nobody ? null : Buffer.concat(parts), { status: res.statusCode, headers: { 'content-type': res.headers['content-type'] || '' } }));
-      });
+        ok(new Response(nobody ? null : Buffer.concat(parts).subarray(0, max), { status: res.statusCode, headers: { 'content-type': res.headers['content-type'] || '' } }));
+      };
+      res.on('data', c => { parts.push(c); size += c.length; if (size >= max) { finish(); req.destroy(); } });
+      res.on('error', bad);
+      res.on('end', finish);
     });
-    req.on('error', bad); req.end();
+    req.on('error', bad); req.end(); // an error after finish() is ignored: the promise is already settled
   });
 }
 

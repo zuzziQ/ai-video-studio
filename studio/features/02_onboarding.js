@@ -2,6 +2,7 @@
 // - Hướng dẫn mở SAU màn tác giả (00_author.js, overlay #author) khi $AVS_HOME/onboarding.json chưa done/skipped.
 //   (a) Thương hiệu → /api/brands/save + /api/brands/logo (51_brands); (b) Tài nguyên → /api/upload (Media "Của tôi")
 //   + /api/products/save (53_products); (c) Mục đích → /api/onboarding (02_onboarding.mjs).
+//   Bước (a) có "Gợi ý bằng AI" (trợ lý brand), bước (b) có "Điền bằng AI" (trợ lý product): 05_assist.js, M91. Chỉ ghi khi bấm Nhận.
 // - Trang chủ (#onb-home): 4 cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Tự lái, Video mới + Mẫu, Video dài, Hàng loạt)
 //   + dự án gần đây. Tự hiện khi chưa mở dự án; nút nhà trên thanh trên mở lại. Studio.openOnboarding() / Studio.openHome().
 'use strict';
@@ -121,7 +122,7 @@
     const kit = (Array.isArray(brands) ? brands : []).find(b => b.id === ST?.brand) || null;
     W = { step: Math.min(step ?? ST?.step ?? 0, 2), kit, logoFile: null, logoUrl: kit?.logoUrl ? avsUrl(kit.logoUrl) : '', colors: [kit?.primary || '', kit?.accent || ''],
       name: kit?.title || kit?.name || '', phone: kit?.phone || '', website: kit?.website || '', handle: kit?.handle || '',
-      files: [], uploading: 0, product: { name: '', price: '', strengths: '' },
+      files: [], uploading: 0, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: {}, pImage: null, pUrl: '', bAi: null, pAi: null,
       purpose: ST?.purpose || '', aspect: ST?.aspect || '9:16', platforms: [...(ST?.platforms || [])], busy: false };
     const ov = document.createElement('div');
     ov.className = 'onb-ov'; ov.id = 'onb-wiz';
@@ -160,6 +161,7 @@
     `<div class="onb-f"><label>Màu chủ đạo</label><div class="onb-sw">${W.colors[0] ? `<input type="color" id="onb-c1" value="${esc(W.colors[0])}" aria-label="Màu chính">
       <input type="color" id="onb-c2" value="${esc(W.colors[1] || W.colors[0])}" aria-label="Màu nhấn">` : '<span class="onb-nosw"></span><span class="onb-nosw"></span>'}</div>
       <p class="onb-hint">${W.colors[0] ? 'Lấy từ logo. Bấm vào ô màu để đổi.' : 'Tự lấy sau khi có logo.'}</p></div>` +
+    (Studio.assistPanel ? '<div id="onb-ai-brand"></div>' : '') +
     `<div class="onb-g3">${field('onb-phone', 'Số điện thoại <em>(không bắt buộc)</em>', 'Hiện ở lời kêu gọi cuối video.', text('onb-phone', W.phone, '0901 234 567', 'tel'))}
       ${field('onb-web', 'Website <em>(không bắt buộc)</em>', 'Ví dụ: nhadep.vn', text('onb-web', W.website, 'nhadep.vn'))}
       ${field('onb-handle', 'Tên kênh <em>(không bắt buộc)</em>', 'Ví dụ: @nhadep', text('onb-handle', W.handle, '@nhadep'))}</div>`;
@@ -167,6 +169,7 @@
     const sync = () => { W.name = box.querySelector('#onb-name').value; W.phone = box.querySelector('#onb-phone').value; W.website = box.querySelector('#onb-web').value; W.handle = box.querySelector('#onb-handle').value;
       const c1 = box.querySelector('#onb-c1'), c2 = box.querySelector('#onb-c2'); if (c1) W.colors[0] = c1.value; if (c2) W.colors[1] = c2.value; };
     box.addEventListener('input', sync);
+    mountBrandAi(box, sync);
     const dz = box.querySelector('#onb-logo-drop');
     dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dz.querySelector('input').click(); } });
     dropzone(dz, async files => {
@@ -177,12 +180,38 @@
       render();
     });
   }
+  // M91: trợ lý Thương hiệu. Màu chính/nhấn vào hai ô màu; nền tối, chữ sáng, font, giọng văn, slogan, CTA, chữ màn kết lưu cùng bộ nhận diện.
+  const AI_COLOR = { primary: 0, accent: 1 };
+  const fontLabel = v => String(v || '').split(',')[0].replace(/"/g, '');
+  function mountBrandAi(box, sync) {
+    const host = box.querySelector('#onb-ai-brand'); if (!host) return;
+    W.bAi ||= Studio.assistPanel({
+      name: 'brand', label: 'Gợi ý bằng AI', hint: 'AI xem logo (và website nếu có) rồi đề xuất vai trò màu, font tiếng Việt, giọng văn, slogan, CTA, chữ màn kết.',
+      async input() {
+        sync();
+        const inp = { name: W.name.trim(), website: W.website.trim(), colors: W.colors.filter(Boolean) };
+        const src = W.logoFile || (W.kit?.logoUrl ? await fetch(avsUrl(W.kit.logoUrl)).then(r => r.blob()) : null);
+        if (src) inp.image = await Studio.imagePayload(src);
+        inp.industry = purpose(ST?.purpose)?.[2] || '';
+        if (!inp.image && !inp.website && !inp.name) throw new Error('Thêm logo, tên hoặc website trước khi hỏi AI.');
+        return inp;
+      },
+      current: f => (f.key in AI_COLOR ? W.colors[AI_COLOR[f.key]] : f.kind === 'font' ? fontLabel(W.extra[f.key]) : W.extra[f.key]) || '',
+      onAccept: f => {
+        if (f.key in AI_COLOR) { const i = AI_COLOR[f.key]; W.colors[i] = f.value; if (!W.colors[1 - i]) W.colors[1 - i] = f.value; }
+        else W.extra[f.key] = f.value;
+        render();
+      },
+    });
+    W.bAi.mount(host);
+  }
   async function saveBrand() {
     if (!W.name.trim()) throw new Error('Nhập tên thương hiệu.');
     if (!W.logoFile && !W.kit?.logoUrl) throw new Error('Thêm logo để tiếp tục.');
     const brand = { title: W.name.trim(), name: W.name.trim(), phone: W.phone.trim(), website: W.website.trim(), handle: W.handle.trim() };
     if (W.kit) brand.id = W.kit.id;
     if (W.colors[0]) { brand.primary = W.colors[0]; brand.accent = W.colors[1] || W.colors[0]; }
+    Object.assign(brand, W.extra); // đề xuất AI đã Nhận (dark, light, font, disp, voice, slogan, cta, outro)
     let b = await api('/api/brands/save', { brand });
     if (b.error) throw new Error(b.error);
     if (W.logoFile) {
@@ -211,10 +240,16 @@
       <div class="onb-f"><label>Một sản phẩm <em>(không bắt buộc)</em></label><p class="onb-hint onb-lead">AI dùng hồ sơ này khi viết lời và soát quảng cáo. Thêm sản phẩm khác ở mục Sản phẩm.</p></div>
       <div class="onb-g2">${field('onb-pname', 'Tên sản phẩm', 'Ví dụ: Căn hộ 2 phòng ngủ Quận 7', text('onb-pname', W.product.name, 'Tên sản phẩm'))}
       ${field('onb-price', 'Giá', 'Ghi như bạn muốn hiện, ví dụ 2,9 tỷ', text('onb-price', W.product.price, '2,9 tỷ'))}</div>
-      ${field('onb-strong', 'Điểm mạnh', 'Mỗi dòng một ý. Studio lưu ở trạng thái chờ duyệt, chưa dùng trong quảng cáo cho tới khi bạn duyệt.', `<textarea id="onb-strong" placeholder="View sông&#10;Sổ hồng riêng">${esc(W.product.strengths)}</textarea>`)}`;
+      ${field('onb-strong', 'Điểm mạnh', 'Mỗi dòng một ý. Studio lưu ở trạng thái chờ duyệt, chưa dùng trong quảng cáo cho tới khi bạn duyệt.', `<textarea id="onb-strong" placeholder="View sông&#10;Sổ hồng riêng">${esc(W.product.strengths)}</textarea>`)}
+      ${W.product.faq.length ? `<p class="onb-hint">Kèm ${W.product.faq.length} câu hỏi thường gặp do AI đề xuất (lưu cùng sản phẩm).</p>` : ''}
+      ${Studio.assistPanel ? `<div class="onb-g2">${field('onb-purl', 'Link sản phẩm <em>(không bắt buộc)</em>', 'Trang bán hàng công khai: AI đọc tên, giá, điểm mạnh.', text('onb-purl', W.pUrl, 'https://…'))}
+        <div class="onb-f"><label>Ảnh sản phẩm <em>(cho AI)</em></label><button id="onb-pimg-btn" type="button"><i class="ti ti-photo"></i> ${W.pImage ? 'Đổi ảnh' : 'Chọn ảnh'}</button><input type="file" id="onb-pimg" accept="image/*" hidden>
+        <p class="onb-hint">${W.pImage ? esc(W.pImage.name) : 'Ảnh chụp sản phẩm hoặc bao bì.'}</p></div></div><div id="onb-ai-prod"></div>` : ''}`;
   };
   function wireAssets(box) {
-    box.addEventListener('input', () => { W.product = { name: box.querySelector('#onb-pname').value, price: box.querySelector('#onb-price').value, strengths: box.querySelector('#onb-strong').value }; });
+    const psync = () => { W.product = { ...W.product, name: box.querySelector('#onb-pname').value, price: box.querySelector('#onb-price').value, strengths: box.querySelector('#onb-strong').value }; const u = box.querySelector('#onb-purl'); if (u) W.pUrl = u.value; };
+    box.addEventListener('input', psync);
+    mountProductAi(box, psync);
     if (!ST?.project) return;
     const up = async files => {
       for (const f of files) {
@@ -227,14 +262,40 @@
     dropzone(box.querySelector('#onb-media'), fs => up(fs.filter(f => /^(image|video)\//.test(f.type))));
     dropzone(box.querySelector('#onb-music'), fs => up(fs.filter(f => /^audio\//.test(f.type))));
   }
+  // M91: trợ lý Sản phẩm (ảnh và/hoặc link). Claim AI đề xuất vào ô Điểm mạnh, lưu ở trạng thái chờ duyệt như mọi điểm mạnh.
+  function mountProductAi(box, psync) {
+    const host = box.querySelector('#onb-ai-prod'); if (!host) return;
+    const pick = box.querySelector('#onb-pimg');
+    box.querySelector('#onb-pimg-btn').onclick = () => pick.click();
+    pick.onchange = () => { const f = pick.files[0]; if (f && /^image\//.test(f.type)) { psync(); W.pImage = f; render(); } };
+    W.pAi ||= Studio.assistPanel({
+      name: 'product', label: 'Điền bằng AI', hint: 'Từ ảnh và/hoặc link: tên, giá (giữ nguyên như nguồn), điểm mạnh, FAQ. Claim luôn ở trạng thái chờ duyệt.',
+      async input() {
+        psync();
+        const inp = { url: W.pUrl.trim(), name: W.product.name.trim(), brand: W.kit?.title || W.name || '' };
+        if (W.pImage) inp.image = await Studio.imagePayload(W.pImage, { max: 1024, type: 'image/jpeg', quality: 0.88 });
+        if (!inp.image && !inp.url) throw new Error('Chọn ảnh sản phẩm hoặc dán link trước khi hỏi AI.');
+        return inp;
+      },
+      current: f => ({ name: W.product.name, price: W.product.price }[f.key] || ''),
+      onAccept: f => {
+        const p = W.product;
+        if (f.key === 'name' || f.key === 'price' || f.key === 'industry') p[f.key] = f.value;
+        else if (f.kind === 'claim') p.strengths = [p.strengths.trim(), f.value.text].filter(Boolean).join('\n');
+        else if (f.kind === 'faq') p.faq.push(f.value);
+        render();
+      },
+    });
+    W.pAi.mount(host);
+  }
   async function saveAssets() {
     if (W.uploading) throw new Error('Đợi tải lên xong rồi bấm Tiếp.');
     const p = W.product;
     if (p.name.trim()) {
       const claims = p.strengths.split('\n').map(t => t.trim()).filter(Boolean).map(t => ({ text: t, status: 'pending' }));
-      const r = await api('/api/products/save', { product: { name: p.name.trim(), brand: W.kit?.title || '', claims, notes: p.price.trim() ? `Giá: ${p.price.trim()}` : '' } });
+      const r = await api('/api/products/save', { product: { name: p.name.trim(), brand: W.kit?.title || '', claims, price: p.price.trim(), faq: p.faq, industry: p.industry, notes: p.price.trim() ? `Giá: ${p.price.trim()}` : '' } });
       if (r.error) throw new Error(r.error);
-      W.product = { name: '', price: '', strengths: '' };
+      W.product = { name: '', price: '', strengths: '', faq: [], industry: '' }; W.pImage = null; W.pUrl = ''; W.pAi = null;
       toast(`Đã lưu sản phẩm “${r.name}”`);
     } else if (p.price.trim() || p.strengths.trim()) throw new Error('Nhập tên sản phẩm, hoặc xoá giá và điểm mạnh để bỏ qua.');
     await saveState({ step: 2 });
@@ -338,6 +399,8 @@
 
   // ---------- start ----------
   Studio.openOnboarding = () => openWizard(0);
+  Studio.logoColors = logoColors; // M91: ô Gợi ý bằng AI của panel Thương hiệu đo màu logo cùng một cách
+  Studio.onboardingPurpose = async () => purpose((await loadState())?.purpose)?.[2] || '';
   Studio.openHome = openHome;
   // Home button right after the logo (not addTopButton: 01_workflow moves step-less header buttons into the ⋯ menu).
   { const b = document.createElement('button'); b.id = 'onb-btn'; b.className = 'icon'; b.title = 'Trang chủ: cách bắt đầu nhanh, dự án gần đây, hướng dẫn';
