@@ -73,7 +73,10 @@ export default ctx => async (req, res, p, u) => {
       const at = path.isAbsolute(video) ? (inDelivered(ws, video) && ownVideo(video) ? video : null) : deliveredOf(ctx.project.dir, video);
       const doc = JSON.parse(fs.readFileSync(path.join(PUB, 'publish.json'), 'utf8'));
       const txt = Object.keys(doc.platforms || {}).filter(k => PLATFORMS[k]).map(k => asText(PLATFORMS[k], doc.platforms[k])).join('\n\n');
-      return at && txt ? writeBeside(ws, at, ' - nội dung đăng.txt', txt.replace(/\r?\n/g, '\r\n')) : null;
+      if (!at || !txt) return null;
+      // Kho của chính bản giao (thư mục cha có .kho.json): brand kit đổi sau khi giao, hay lô giao theo Kho của thư mục lô
+      const own = workspaceOfProject(path.dirname(at)), home = own.found === 'kho' && inDelivered(own, at) ? own : ws;
+      return writeBeside(home, at, ' - nội dung đăng.txt', txt.replace(/\r?\n/g, '\r\n'));
     } catch (e) { console.error('publish → Thanh pham:', e.message); return null; }
   }
   if (p === '/api/publish/platforms') return J(Object.fromEntries(Object.entries(PLATFORMS).map(([k, v]) => [k, { name: v.name, note: v.note, maxDur: v.maxDur }])));

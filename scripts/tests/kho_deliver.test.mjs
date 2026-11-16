@@ -243,6 +243,12 @@ test('Đăng: nội dung đăng giao kèm cạnh video trong Thanh pham ("<tên>
   assert.equal(r.data.delivered, txt);
   assert.match(fs.readFileSync(txt, 'utf8'), /Xin chào bạn/);
   assert.ok(fs.existsSync(path.join(d, 'publish', 'tiktok.txt')));
+  // brand kit của timeline đổi sau khi giao (Kho hiện tại khác Kho của bản giao): nội dung vẫn vào cạnh bản giao
+  const tl = JSON.parse(fs.readFileSync(path.join(d, 'timeline.json'), 'utf8')); tl.brand = { kit: 'nha-dep' };
+  fs.writeFileSync(path.join(d, 'timeline.json'), JSON.stringify(tl)); fs.rmSync(txt);
+  const r2 = await call(route, '/api/publish/save', { method: 'POST', body: { platform: 'tiktok', data: { caption: 'Lần hai' } } });
+  assert.equal(r2.data.delivered, txt);
+  assert.match(fs.readFileSync(txt, 'utf8'), /Lần hai/);
 });
 
 test('Đăng: video Thành phẩm của dự án khác không viết nội dung bằng AI; route Thành phẩm không mở đường dẫn lạ', async () => {
