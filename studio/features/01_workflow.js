@@ -46,7 +46,7 @@
   #wf-steps button.on b { background: var(--acc); border-color: var(--acc); color: var(--bg0); }
   #wf-steps .ln { width: 12px; height: 1px; background: var(--line3); flex: none; }
   #wf-morebtn.on { background: var(--bg3); color: var(--tx); }
-  #wf-more { position: fixed; z-index: 60; min-width: 240px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: 0 12px 32px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 4px; }
+  #wf-more { position: fixed; z-index: 60; min-width: 240px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-raised); display: flex; flex-direction: column; gap: 4px; }
   #wf-more[hidden] { display: none; }
   #wf-more > button, #wf-more .selwrap select { width: 100%; justify-content: flex-start; height: 32px; padding: 0 8px; font-size: 13px; background: transparent; border-color: transparent; color: var(--tx); gap: 8px; }
   #wf-more > button:hover, #wf-more .selwrap select:hover { background: var(--bg3); }
@@ -61,7 +61,7 @@
   #rail button[hidden], #wf-park { display: none; }
   #rail button { height: 48px; } /* 7 công cụ + "Thêm…" vừa khung ở màn cao 800 */
   #rail button[data-wf="more"] .ti { color: var(--tx3); }
-  #wf-pop { position: fixed; z-index: 60; min-width: 200px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: 0 12px 32px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 4px; }
+  #wf-pop { position: fixed; z-index: 60; min-width: 200px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-raised); display: flex; flex-direction: column; gap: 4px; }
   #wf-pop button { justify-content: flex-start; height: 32px; padding: 0 8px; font-size: 13px; background: transparent; border-color: transparent; gap: 8px; }
   #wf-pop button:hover, #wf-pop button.on { background: var(--bg3); }
   .wf-card { border: 1px solid var(--line); background: var(--bg2); border-radius: var(--r); padding: 12px; margin: 4px 0 12px; display: flex; flex-direction: column; gap: 8px; }
