@@ -23,7 +23,8 @@ import { AVS_HOME, getProfile, effectiveProfile } from './profile.mjs';
 import { notify } from './notify.mjs';
 import { findChrome } from './platform.mjs';
 import { readGate, recordOverride, gateText } from './export_gate.mjs';
-import { workspaceFor, ensureWorkspace, workspaceOfProject, sub, deliver as deliverToKho, safeName } from './workspace.mjs';
+import { workspaceFor, ensureWorkspace, workspaceOfProject, sub, safeName } from './workspace.mjs';
+import { deliverProject } from './kho_deliver.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const S = f => path.join(SKILL, 'scripts', f);
@@ -378,10 +379,13 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
       };
       // Thành phẩm vào <Kho>/Thanh pham/<YYYY-MM>/ (Kho chứa dự án, không thì theo brand kit của dự án)
       const ws = workspaceOfProject(dir, rd(P('timeline.json')));
-      const give = (src, base) => { if (!src || !fs.existsSync(src)) return; try { files.push(deliverToKho(ws, src, { name: base })); } catch (e) { console.log(`! không đưa được ${base} vào Thanh pham: ${e.message}`); } };
+      // deliverProject (M100) ghi sổ .studio/delivered.json + .giao.json: Đăng / Lịch đăng nhận bản giao là của dự án này
+      const items = [], give = (src, base) => { if (src && fs.existsSync(src)) items.push({ src, name: base }); };
       for (const v of summary.videos) give(v.out, `${name} ${v.aspect.replace(':', 'x')}.mp4`);
       give(summary.cover, `${name} - ảnh bìa.jpg`); give(summary.srt, `${name}.srt`);
       if (summary.publish.length) { fs.writeFileSync(P('out/noi-dung-dang.txt'), summary.publish.filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n\n-----\n\n')); give(P('out/noi-dung-dang.txt'), `${name} - nội dung đăng.txt`); }
+      try { for (const r of deliverProject(dir, items, { ws }).items) r.dst ? files.push(r.dst) : console.log(`! không đưa được ${path.basename(r.src)} vào Thanh pham: ${r.error}`); }
+      catch (e) { console.log(`! không đưa được thành phẩm vào Thanh pham: ${e.message}`); }
       const copies = []; // --out / thư mục "Đã xong" cũ: chép thêm, chỉ là kết quả chính khi Thanh pham không nhận được gì
       if (st.out) {
         fs.mkdirSync(st.out, { recursive: true });

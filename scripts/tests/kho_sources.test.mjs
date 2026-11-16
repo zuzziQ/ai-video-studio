@@ -139,8 +139,12 @@ test('autopilot deliver: thành phẩm vào <Kho>/Thanh pham/<YYYY-MM>/, --out v
   const extra = path.join(TMP, 'da-xong');
   const r = await A.autopilot(dir, { profile: 'kenh-nha', out: extra });
   const month = new Date().toISOString().slice(0, 7);
-  const got = fs.readdirSync(path.join(ws.root, 'Thanh pham', month)).sort();
+  const got = fs.readdirSync(path.join(ws.root, 'Thanh pham', month)).filter(f => !f.startsWith('.')).sort();
   assert.deepEqual(got, ['clip goc - ảnh bìa.jpg', 'clip goc 9x16.mp4']);
+  // sổ giao của M100: Đăng / Lịch đăng nhận bản giao của Tự lái là của dự án này
+  const K = await import(R('scripts/kho_deliver.mjs'));
+  assert.ok(K.deliveredOf(dir, 'out/giao.mp4'), 'delivered.json có bản giao');
+  assert.equal(K.originOf(path.join(ws.root, 'Thanh pham', month, 'clip goc 9x16.mp4'))?.project, path.resolve(dir));
   assert.ok(r.outputs.every(f => f.startsWith(path.join(ws.root, 'Thanh pham'))), 'kết quả chính là Thanh pham');
   assert.ok(fs.existsSync(path.join(extra, 'clip goc 9x16.mp4')), '--out vẫn được chép');
 });
