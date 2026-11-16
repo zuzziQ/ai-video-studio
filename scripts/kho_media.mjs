@@ -113,9 +113,9 @@ export async function expandVideo(src, fr, { run } = {}) {
     if (fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, path.join(work, 'audio.m4a')); else fs.rmSync(tmp, { force: true });
     // tiến trình khác (route / job auto_broll) tách xong trước: giữ bản của nó, bỏ bản này
     const done = () => { try { return fs.readdirSync(fr).some(f => f.endsWith('.jpg')); } catch { return false; } };
-    if (done()) { fs.rmSync(work, { recursive: true, force: true }); return; }
-    fs.rmSync(fr, { recursive: true, force: true });
-    try { retryBusy(() => fs.renameSync(work, fr)); } catch (e) { if (!done()) throw e; fs.rmSync(work, { recursive: true, force: true }); }
+    // đổi tên trước; chỉ xoá <tên>_frames khi nó không có khung nào (không bao giờ xoá bản đầy đủ của tiến trình khác)
+    const put = () => { try { fs.renameSync(work, fr); return true; } catch (e) { if (done()) return false; if (!fs.existsSync(fr)) throw e; fs.rmSync(fr, { recursive: true, force: true }); retryBusy(() => fs.renameSync(work, fr)); return true; } };
+    if (done() || !put()) fs.rmSync(work, { recursive: true, force: true });
   } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw e; }
 }
 
@@ -134,7 +134,7 @@ export function useFromKho(projectDir, ws, rel, o = {}) {
 }
 const probeDur = f => new Promise(ok => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], (e, o) => ok(e ? NaN : +String(o).trim())));
 async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b-roll tự động' } = {}) {
-  const src = resolveRel(ws, rel), relN = rel.split(/[\\/]+/).filter(Boolean).join('/');
+  const src = fs.realpathSync.native(resolveRel(ws, rel)), relN = rel.split(/[\\/]+/).filter(Boolean).join('/'); // symlink trong Kho: liên kết/chép file thật
   // b-roll tự động chỉ dùng ~2 s đầu: video Kho dài (footage thô) không tách cả nghìn khung trong job (o.maxDur giây)
   if (maxDur > 0 && kindOf(src) === 'video' && !usedName(dir, relN)) {
     const d = await probeDur(src);
@@ -151,8 +151,11 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
     if (had) return;
     const map = readMap(dir), old = map[relN];
     // đang chép khác ổ ở tiến trình khác (sổ đã giữ tên, file đích chưa đổi tên xong): không cấp lại tên đó
-    if (typeof old === 'string' && fs.readdirSync(md).some(f => f.startsWith(old + '.') && f.endsWith('.tmp')))
-      throw bad('File này đang được đưa vào dự án, thử lại sau ít giây', 409);
+    // tmp cũ hơn 10 phút = tiến trình chép đã chết (tắt Studio, huỷ job): dọn đi rồi cấp tên như thường
+    const tmps = typeof old === 'string' ? fs.readdirSync(md).filter(f => f.startsWith(old + '.') && f.endsWith('.tmp')) : [];
+    const live = tmps.filter(f => { try { return Date.now() - fs.statSync(path.join(md, f)).mtimeMs < 600000; } catch { return false; } });
+    if (live.length) throw bad('File này đang được đưa vào dự án, thử lại sau ít giây', 409);
+    for (const f of tmps) fs.rmSync(path.join(md, f), { force: true });
     delete map[relN];
     name = mediaName(md, src, new Set(Object.values(map)));
     try { fs.linkSync(src, path.join(md, name)); linked = 'link'; } catch (e) { if (e.code === 'EEXIST') throw e; linked = 'copy'; }

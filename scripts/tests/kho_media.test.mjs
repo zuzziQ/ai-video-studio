@@ -81,6 +81,14 @@ test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, fil
   for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', 'Du an./clip 1/media/x.jpg', 'Du an /clip 1/media/x.jpg', 'DUAN~1/clip 1/media/x.jpg', 'du an/clip 1/media/x.jpg', 'THANH PHAM/2026-11/ca phe.mp4', 'Anh/logo.png:x', '.kho.json', '', null, 42])
     await assert.rejects(K.useFromKho(PROJ, ws, rel), e => e.status === 400, String(rel));
   await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/khong-co.jpg'), e => e.status === 404);
+  // tmp chép dở của tiến trình đã chết (cũ hơn 10 phút) không khoá file mãi
+  put('Anh/do.png', 'D');
+  const map = path.join(PROJ, '.studio', 'kho_media.json'), m0 = JSON.parse(fs.readFileSync(map, 'utf8'));
+  m0.items['Anh/do.png'] = 'kho_do.png'; fs.writeFileSync(map, JSON.stringify(m0));
+  const tmp = media('kho_do.png.999.tmp'); fs.writeFileSync(tmp, 'half');
+  await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/do.png'), e => e.status === 409);
+  const old = new Date(Date.now() - 3600000); fs.utimesSync(tmp, old, old);
+  assert.equal((await K.useFromKho(PROJ, ws, 'Anh/do.png')).name, 'kho_do.png'); assert.ok(!fs.existsSync(tmp));
   assert.ok(!fs.readdirSync(media()).some(f => f.includes('bi-mat')));
 });
 
@@ -115,7 +123,7 @@ test('video từ Kho: chuỗi khung + audio.m4a như upload(), mục như mediaL
   const runOne = () => new Promise(ok => { const p = spawn(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, AVS_HOME: HOME } }); let o = ''; p.stdout.on('data', d => (o += d)); p.on('close', c => ok([c, o.trim()])); });
   const res = await Promise.all([runOne(), runOne()]);
   const ok = res.filter(([c]) => c === 0).map(([, o]) => o);
-  assert.ok(ok.length >= 1, JSON.stringify(res));
+  assert.equal(ok.length, 2, JSON.stringify(res));
   for (const o of ok) assert.match(o, /^kho_hai_ben\.mp4 \d+$/);
   assert.ok(fs.existsSync(media('kho_hai_ben.mp4'))); assert.ok(!fs.existsSync(media('kho_hai_ben_2.mp4')));
   assert.ok(fs.readdirSync(media('kho_hai_ben_frames')).filter(f => f.endsWith('.jpg')).length >= 28);
