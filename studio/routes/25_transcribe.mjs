@@ -44,7 +44,8 @@ export async function transcribe(ctx, { model = 'large-v3-turbo', lang = 'vi', m
   // 2. Whisper → words with timings.
   job.step = `Nhận dạng giọng nói (whisper ${model}${model === 'small' ? '' : ' — lần đầu sẽ tải model'})`; job.progress = .2;
   const words = P('.studio/words_auto.json');
-  await ctx.run(ctx.PY, ['-I', '-X', 'utf8', S('transcribe.py'), src, words, '--model', model, '--lang', lang]);
+  let used = model; // transcribe.py lùi về small khi không tải được model lớn
+  await ctx.run(ctx.PY, ['-I', '-X', 'utf8', S('transcribe.py'), src, words, '--model', model, '--lang', lang], l => { if (/dùng tạm model small/.test(l)) used = 'small'; });
   const W = JSON.parse(fs.readFileSync(words, 'utf8'));
   if (!W.length) throw new Error('Không nghe thấy lời nói nào trong video.');
   // 3. Karaoke chunks.
@@ -57,6 +58,7 @@ export async function transcribe(ctx, { model = 'large-v3-turbo', lang = 'vi', m
   fs.mkdirSync(P('work'), { recursive: true });
   fs.writeFileSync(P('work/words.json'), JSON.stringify(W, null, 1));
   if (typeof tl.captions !== 'string') tl.captions = 'work/captions.json';
+  tl.asr = { model: used }; // M95: "Nghe lại bằng AI" dùng model lớn hơn model này
   ctx.save({ timeline: tl, captions: caps });
   job.out = { captions: caps.length, words: W.length, replaced: old.length };
   job.step = `Xong: ${W.length} từ, ${caps.length} dòng phụ đề`;
