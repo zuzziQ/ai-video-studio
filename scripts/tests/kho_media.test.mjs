@@ -81,13 +81,15 @@ test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, fil
   for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', 'Du an./clip 1/media/x.jpg', 'Du an /clip 1/media/x.jpg', 'DUAN~1/clip 1/media/x.jpg', 'du an/clip 1/media/x.jpg', 'THANH PHAM/2026-11/ca phe.mp4', 'Anh/logo.png:x', '.kho.json', '', null, 42])
     await assert.rejects(K.useFromKho(PROJ, ws, rel), e => e.status === 400, String(rel));
   await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/khong-co.jpg'), e => e.status === 404);
-  // tmp chép dở của tiến trình đã chết (cũ hơn 10 phút) không khoá file mãi
+  // tmp chép dở: tiến trình còn sống → 409 (kể cả mtime cũ); tiến trình đã chết → dọn tmp, không khoá file mãi
   put('Anh/do.png', 'D');
   const map = path.join(PROJ, '.studio', 'kho_media.json'), m0 = JSON.parse(fs.readFileSync(map, 'utf8'));
   m0.items['Anh/do.png'] = 'kho_do.png'; fs.writeFileSync(map, JSON.stringify(m0));
-  const tmp = media('kho_do.png.999.tmp'); fs.writeFileSync(tmp, 'half');
+  const liveTmp = media(`kho_do.png.${process.pid}.tmp`); fs.writeFileSync(liveTmp, 'half');
+  const old = new Date(Date.now() - 3600000); fs.utimesSync(liveTmp, old, old);
   await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/do.png'), e => e.status === 409);
-  const old = new Date(Date.now() - 3600000); fs.utimesSync(tmp, old, old);
+  fs.rmSync(liveTmp);
+  const tmp = media('kho_do.png.2147483646.tmp'); fs.writeFileSync(tmp, 'half');
   assert.equal((await K.useFromKho(PROJ, ws, 'Anh/do.png')).name, 'kho_do.png'); assert.ok(!fs.existsSync(tmp));
   assert.ok(!fs.readdirSync(media()).some(f => f.includes('bi-mat')));
 });

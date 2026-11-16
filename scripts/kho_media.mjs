@@ -151,9 +151,11 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
     if (had) return;
     const map = readMap(dir), old = map[relN];
     // đang chép khác ổ ở tiến trình khác (sổ đã giữ tên, file đích chưa đổi tên xong): không cấp lại tên đó
-    // tmp cũ hơn 10 phút = tiến trình chép đã chết (tắt Studio, huỷ job): dọn đi rồi cấp tên như thường
+    // tmp <tên>.<pid>.tmp của tiến trình đã chết (tắt Studio, huỷ job) thì dọn rồi cấp tên như thường; không dựa vào mtime
+    // (CopyFileW của Windows giữ mtime của file nguồn)
+    const alive = pid => { if (pid === process.pid) return true; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
     const tmps = typeof old === 'string' ? fs.readdirSync(md).filter(f => f.startsWith(old + '.') && f.endsWith('.tmp')) : [];
-    const live = tmps.filter(f => { try { return Date.now() - fs.statSync(path.join(md, f)).mtimeMs < 600000; } catch { return false; } });
+    const live = tmps.filter(f => { const pid = +f.slice(old.length + 1, -4); return Number.isInteger(pid) && pid > 0 && alive(pid); });
     if (live.length) throw bad('File này đang được đưa vào dự án, thử lại sau ít giây', 409);
     for (const f of tmps) fs.rmSync(path.join(md, f), { force: true });
     delete map[relN];
