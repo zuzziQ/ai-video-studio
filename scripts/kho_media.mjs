@@ -133,7 +133,7 @@ export function useFromKho(projectDir, ws, rel, o = {}) {
   pending.set(k, p); return p;
 }
 const probeDur = f => new Promise(ok => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], (e, o) => ok(e ? NaN : +String(o).trim())));
-async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b-roll tự động' } = {}) {
+async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b-roll tự động', copy = false } = {}) {
   const src = fs.realpathSync.native(resolveRel(ws, rel)), relN = rel.split(/[\\/]+/).filter(Boolean).join('/'); // symlink trong Kho: liên kết/chép file thật
   // b-roll tự động chỉ dùng ~2 s đầu: video Kho dài (footage thô) không tách cả nghìn khung trong job (o.maxDur giây)
   if (maxDur > 0 && kindOf(src) === 'video' && !usedName(dir, relN)) {
@@ -160,7 +160,8 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
     for (const f of tmps) fs.rmSync(path.join(md, f), { force: true });
     delete map[relN];
     name = mediaName(md, src, new Set(Object.values(map)));
-    try { fs.linkSync(src, path.join(md, name)); linked = 'link'; } catch (e) { if (e.code === 'EEXIST') throw e; linked = 'copy'; }
+    try { if (copy) throw Object.assign(new Error('copy'), { code: 'EXDEV' }); fs.linkSync(src, path.join(md, name)); linked = 'link'; }
+    catch (e) { if (e.code === 'EEXIST') throw e; linked = 'copy'; fs.closeSync(fs.openSync(`${path.join(md, name)}.${process.pid}.tmp`, 'wx')); } // giữ chỗ ngay trong khoá
     map[relN] = name; writeJson(mapFile(dir), { version: 1, items: map });
   });
   if (had) {
@@ -174,15 +175,22 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
     return { ...again, kho: relN, linked: 'reuse' };
   }
   const dst = path.join(md, name), fr = path.join(md, name.replace(/\.\w+$/, '') + '_frames');
-  const undo = () => { fs.rmSync(fr, { recursive: true, force: true }); withFileLock(lock, () => { const m = readMap(dir); if (m[relN] === name) { delete m[relN]; writeJson(mapFile(dir), { version: 1, items: m }); } }); };
+  const framesDone = () => { try { return fs.readdirSync(fr).some(f => f.endsWith('.jpg')); } catch { return false; } };
+  // Lỗi ở tiến trình này: chỉ dọn khi chưa tiến trình nào tách xong khung (bản đầy đủ của tiến trình khác thì giữ, kể cả dst + sổ)
+  const undo = () => {
+    if (framesDone()) return false;
+    fs.rmSync(fr, { recursive: true, force: true }); fs.rmSync(dst, { force: true });
+    withFileLock(lock, () => { const m = readMap(dir); if (m[relN] === name) { delete m[relN]; writeJson(mapFile(dir), { version: 1, items: m }); } });
+    return true;
+  };
   if (linked === 'copy') {
     const tmp = `${dst}.${process.pid}.tmp`;
-    try { await fs.promises.copyFile(src, tmp, fs.constants.COPYFILE_EXCL); retryBusy(() => fs.renameSync(tmp, dst)); }
+    try { await fs.promises.copyFile(src, tmp); retryBusy(() => fs.renameSync(tmp, dst)); } // tmp là chỗ giữ của chính tiến trình này
     catch (e) { fs.rmSync(tmp, { force: true }); undo(); throw bad('Không chép được file từ Kho: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
   }
   try {
     if (kindOf(name) === 'video') { await expandVideo(dst, fr, { run }); if (!mediaItem(dir, name).seq?.count) throw Object.assign(new Error('Video không có hình để chèn'), { status: 400 }); }
-  } catch (e) { fs.rmSync(dst, { force: true }); undo(); if (e.status === 400) throw e; throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
+  } catch (e) { if (!undo() && mediaItem(dir, name).seq?.count) return { ...mediaItem(dir, name), kho: relN, linked }; if (e.status === 400) throw e; throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
   withFileLock(lock, () => addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) }));
   return { ...mediaItem(dir, name), kho: relN, linked };
 }

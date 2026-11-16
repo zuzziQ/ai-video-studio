@@ -77,6 +77,24 @@ test('hai lần dùng cùng lúc (kể cả viết \\ và /) ra cùng một file
   assert.equal(fs.readFileSync(path.join(KHO, 'Anh', 'trung.png'), 'utf8'), 'A'); assert.equal(fs.readFileSync(path.join(KHO, 'BRoll', 'trung.png'), 'utf8'), 'B');
 });
 
+test('khác ổ (nhánh chép): ra bản chép riêng, không để lại tmp, nội dung đúng', async () => {
+  put('Anh/chep.png', 'C');
+  const it = await K.useFromKho(PROJ, ws, 'Anh/chep.png', { copy: true });
+  assert.equal(it.linked, 'copy'); assert.equal(fs.readFileSync(media(it.name), 'utf8'), 'C');
+  assert.notEqual(fs.statSync(media(it.name), { bigint: true }).ino, fs.statSync(path.join(KHO, 'Anh', 'chep.png'), { bigint: true }).ino);
+  assert.ok(!fs.readdirSync(media()).some(f => f.endsWith('.tmp')));
+  assert.equal((await K.useFromKho(PROJ, ws, 'Anh/chep.png', { copy: true })).linked, 'reuse');
+});
+
+test('credit(): ghi một dòng cho mỗi file kho_*, ghi file mới (không ghi đè inode cũ)', async () => {
+  const { credit } = await import('../ai_broll.mjs');
+  const d = path.join(TMP, 'cr'); fs.mkdirSync(d, { recursive: true });
+  const f = path.join(d, 'credits.json'); fs.writeFileSync(f, '[]'); fs.linkSync(f, path.join(d, 'goc.json'));
+  credit(d, { file: 'kho_a.png', kho: 'Anh/a.png' }); credit(d, { file: 'kho_a.png', kho: 'Anh/a.png' }); credit(d, { file: 'stock_b.jpg', provider: 'pexels' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(f, 'utf8')).map(x => x.file), ['kho_a.png', 'stock_b.jpg']);
+  assert.equal(fs.readFileSync(path.join(d, 'goc.json'), 'utf8'), '[]'); // bản liên kết cứng của dự án gốc không đổi
+});
+
 test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, file lạ → 400; không thấy → 404', async () => {
   for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', 'Du an./clip 1/media/x.jpg', 'Du an /clip 1/media/x.jpg', 'DUAN~1/clip 1/media/x.jpg', 'du an/clip 1/media/x.jpg', 'THANH PHAM/2026-11/ca phe.mp4', 'Anh/logo.png:x', '.kho.json', '', null, 42])
     await assert.rejects(K.useFromKho(PROJ, ws, rel), e => e.status === 400, String(rel));
@@ -186,6 +204,15 @@ test('b-roll tự động: câu nhắc "cà phê" lấy ảnh Anh/ của Kho tr�
   assert.equal(first._src, 'kho');
   // không tham chiếu đường dẫn ngoài dự án
   assert.ok(!JSON.stringify(tl.scenes).includes(KHO.replace(/\\/g, '\\\\')));
+});
+
+test('b-roll tự động --src kho (không bật media): chỉ Kho, không lấy ảnh của dự án', () => {
+  const r = spawnSync(process.execPath, [path.join(SKILL, 'scripts/auto_broll.mjs'), path.join(PROJ, 'timeline.json'), '--src', 'kho', '--density', 'ratday', '--seed', '2'],
+    { encoding: 'utf8', env: { ...process.env, AVS_HOME: HOME } });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const tl = JSON.parse(fs.readFileSync(path.join(PROJ, 'timeline.json'), 'utf8'));
+  const auto = tl.scenes.filter(s => s._auto);
+  assert.ok(auto.some(s => s._src === 'kho')); assert.ok(!auto.some(s => s._src === 'media'));
 });
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
