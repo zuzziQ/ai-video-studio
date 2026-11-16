@@ -11,6 +11,7 @@ Khung thiết kế **720×1280** (render ra `width`×`height`, ví dụ 1080×19
 ```
 - `aroll.frames` phải đúng **tỉ lệ 9:16**. Nếu quay ngang, trích frame bằng `-vf "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280"`.
 - `face` là tâm mặt (giữa mắt và mũi) theo toạ độ 720×1280. Lấy tự động bằng `scripts/find_face.py work/frames`. Bubble, PIP và người ở hook đều căn theo điểm này.
+- `face_track` (`{seq, keys:[{t,ox,oy,fs}]}`, % khung hình, `t` = thời gian trong chuỗi khung `seq`) cho bubble/PIP bám mặt theo thời gian và tự chọn zoom để cả đầu (≈1,2 × khung mặt) chiếm `fill` = 66 % vòng tròn, có chừa đỉnh đầu. `new_project.mjs` tự tạo; dự án cũ: `node scripts/face_track_project.mjs <dự án>`. Không có thì dùng `face` cố định.
 - `cutouts` là ảnh người đã tách nền (`segment.py`). Bubble và hook dùng cutout; frame nào thiếu cutout thì tự lấy frame gốc.
 - Style gốc **không có phụ đề**. Muốn có phụ đề thì thêm `captions` và `caption_style: "tiktok"` (chữ trắng viền đen, từ đang nói chuyển vàng, đặt ở y≈1010). Các module bố cục tự ẩn phụ đề, trừ khi khai báo `hideCaptions: false`.
 
@@ -45,11 +46,11 @@ Chữ hoa được giữ nguyên như khi gõ. Thêm `upper:true` để ép thà
 Thẻ trắng bo góc ở trên (x50 y78, 620×407, r38), người tách nền đặt thấp xuống `dy` px, và 2 dòng tiêu đề ở y≈548/602. Nền là lưới đỏ.
 
 ### `bubble_screen` (B, đoạn hướng dẫn)
-`{ type, t0, t1, enter:"drop"|"push_up"|"fade"|"zoom"|"cut", screen, card?:{x,y,w,h}, bubble?:{cx,cy,d,z,bg}, bubble_t?, lines?, sticker? }`
+`{ type, t0, t1, enter:"drop"|"push_up"|"fade"|"zoom"|"cut", screen, card?:{x,y,w,h}, bubble?:{cx,cy,d,z,fill,bg}, bubble_t?, lines?, sticker? }`
 Nền lưới, bubble vàng tâm (360,315) d=275, thẻ màn hình (8,545) 704×455 viền đen. Chữ chồng lên nên đặt ở y 730–910.
 
 ### `spotlight` (C, câu móc / nhấn mạnh)
-`{ type, t0, t1, blur=16, pip?:{cx,cy,d,z}, pip_t?, lines, sticker? }`
+`{ type, t0, t1, blur=16, pip?:{cx,cy,d,z,fill}, pip_t?, lines, sticker? }`
 Camera bị làm mờ, camera tròn sắc nét ở trên (360,330) d=310. Label ở y≈610, hero ở y≈685, sticker ở y≈960.
 
 ### `grid_bg`

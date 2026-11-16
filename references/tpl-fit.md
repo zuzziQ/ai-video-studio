@@ -19,7 +19,8 @@ Chỉ đụng cảnh của mẫu: `_tpl` / `_recipe`, chưa sửa tay (`_orig`),
   (không có Claude) đầu câu gần nhất trong ±3 s. Giữ thứ tự, không chồng nhau, thời gian bên trong cảnh (`t`, `*_t`) dời theo.
 - **Chữ**: mọi trường chữ (khối `hf`: vars kiểu string + texts, kể cả giá trị mặc định tiếng Việt của `vi.js`; cảnh thường: mọi
   chuỗi có chữ cái ngoài các khoá kỹ thuật) + emoji ở `icon/emoji/e/burst`. Claude viết lại theo lời thoại, giữ độ dài/kiểu HOA/
-  định dạng. Không có Claude: lấy lần lượt các cụm từ người nói nói từ đầu cảnh; số chỉ thay khi lời nói có số cùng loại (giá
+  định dạng. Độ dài bị chặn cứng ở `maxLen(chữ mẫu)` (≤ 12 ký tự: +4; dài hơn: ×1,15), cắt theo từ (`clampLen`): graphic chỉ
+  vừa chữ mẫu, dài hơn là bị khung cắt (kiểm bằng `node scripts/tpl_text_audit.mjs <dự án> [--stretch k]`). Không có Claude: lấy lần lượt các cụm từ người nói nói từ đầu cảnh; số chỉ thay khi lời nói có số cùng loại (giá
   cần đơn vị tiền, % cần %). Chỗ không lấy được ghi vào `missing` để báo người dùng.
 - **Ảnh**: trường ảnh (`image/media/bg/before/after/tiles/images/avatar/src`) đang trỏ ảnh mẫu `media/<file trong examples/media>`
   → tìm ảnh stock (Openverse/Commons, Pexels/Pixabay nếu có key) theo từ khoá tiếng Anh Claude đưa (prompt đòi thứ chụp được:
