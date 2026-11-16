@@ -112,7 +112,60 @@
   const dictString = entries => normalizeEntries(entries).map(e => `${e.from}=${e.to}`).join(';');
   const dictLines = entries => normalizeEntries(entries).map(e => `${e.from} = ${e.to}`).join('\n');
 
-  const T = { fold, tokenize, splitTimes, retime, distribute, planEdit, findMatches, cleanSide, normalizeEntries, parseDict, dictString, dictLines };
+  // ---------- nghe lại bằng AI (M95): chữ Whisper nghe lại một đoạn → chỗ khác với lời thoại ----------
+  // Số đọc bằng chữ và bằng số coi như nhau khi so ("một" = "1"), để khác cách viết không thành đề xuất.
+  const NUMW = {};
+  for (const [w, n] of Object.entries({ 'không': 0, 'một': 1, 'hai': 2, 'ba': 3, 'bốn': 4, 'năm': 5, 'sáu': 6, 'bảy': 7, 'bẩy': 7, 'tám': 8, 'chín': 9, 'mười': 10 })) NUMW[fold(w)] = String(n);
+  const heardKey = w => { const k = fold(w); return NUMW[k] || k; };
+  const word = (w, s, e) => ({ w, s: r3(s), e: r3(e) });
+  /** Chữ Whisper trả về → từ cùng dạng lời thoại (giống scripts/captions.py): bỏ , . ! ở hai đầu, dán "%" vào số trước,
+   *  khoảng số "15-30" / "15" "-30" đọc thành "15 đến 30" (người Việt nói "đến"), "-" khác dán vào từ trước. */
+  function heardTokens(list) {
+    const out = [];
+    for (const x of Array.isArray(list) ? list : []) {
+      const w = String(x && x.w || '').normalize('NFC').trim().replace(/^[,.!]+|[,.!]+$/g, '');
+      const s = +x.s, e = +x.e;
+      if (!w || !Number.isFinite(s) || !Number.isFinite(e)) continue;
+      const prev = out[out.length - 1], rng = /^(\d+(?:[.,]\d+)?)[-–](\d+(?:[.,]\d+)?)(\S*)$/.exec(w);
+      if (rng) { out.push(...splitTimes(s, e, [rng[1], 'đến', rng[2] + rng[3]])); continue; }
+      if (prev && /^[-–]\d/.test(w) && /\d$/.test(prev.w)) { const m = s + (e - s) * .4; out.push(word('đến', s, m), word(w.slice(1), m, e)); continue; }
+      if (prev && /^[%\-–]/.test(w)) { prev.w += w; prev.e = r3(e); continue; }
+      out.push(word(w, s, e));
+    }
+    return out;
+  }
+  /** So lời thoại `old` (mảng chữ) với chữ nghe lại `heard` (mảng chữ) theo dãy con chung dài nhất, trả những chỗ khác
+   *  chạm vào đoạn đã chọn [a, b] (chỉ số trong `old`): [{i, n, from, to}] = thay old[i..i+n-1] bằng `to`.
+   *  Whisper bỏ sót từ ở mép đoạn cắt nên chỗ "chỉ xoá" không thành đề xuất; chỗ "chỉ thêm" gộp với từ kề trong đoạn. */
+  function rehearDiff(old, heard, a, b) {
+    const A = old.map(heardKey), B = heard.map(heardKey), n = A.length, m = B.length;
+    const L = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const hunks = []; let i = 0, j = 0, h = null;
+    const close = () => { if (h) hunks.push(h); h = null; };
+    while (i < n || j < m) {
+      if (i < n && j < m && A[i] === B[j]) { close(); i++; j++; continue; }
+      h ??= { oi: i, on: 0, hi: j, hn: 0 };
+      if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) { h.hn++; j++; } else { h.on++; i++; }
+    }
+    close();
+    const out = [];
+    for (const k of hunks) {
+      if (!k.hn) continue;
+      const add = heard.slice(k.hi, k.hi + k.hn);
+      if (!add.some(t => /[\p{L}\p{N}]/u.test(t))) continue;
+      let oi = k.oi, on = k.on, to = add;
+      if (!on) { // chỉ thêm: dính vào từ kề nằm trong đoạn đã chọn
+        if (oi - 1 >= a && oi - 1 <= b) { oi--; to = [old[oi], ...add]; } else if (oi >= a && oi <= b) to = [...add, old[oi]]; else continue;
+        on = 1;
+      }
+      if (oi > b || oi + on - 1 < a) continue;
+      out.push({ i: oi, n: on, from: old.slice(oi, oi + on).join(' '), to: to.join(' ') });
+    }
+    return out;
+  }
+
+  const T = { fold, tokenize, splitTimes, retime, distribute, planEdit, findMatches, cleanSide, normalizeEntries, parseDict, dictString, dictLines, heardTokens, rehearDiff };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.TranscriptCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -10,6 +10,8 @@
 //   - AI soát lỗi (M90): trợ lý `transcript` (scripts/assist.mjs, qua Studio.assist) đọc lời thoại theo từng đoạn ~1 phút,
 //     trả đề xuất → gạch sóng; bấm một chỗ: cũ → mới + lý do, Nhận / Bỏ, Nhận tất cả (một bước ⌘Z), lọc theo loại,
 //     thêm vào từ điển khi sửa lặp lại được. Không tự ghi đè, đề xuất không lưu vào timeline.
+//   - Nghe lại bằng AI (M95): thẻ đề xuất hoặc menu đoạn → /api/rehear (routes/22_rehear.mjs) nghe lại [s-1, e+1] bằng
+//     Whisper lớn hơn; chỗ nghe khác chữ hiện có (TranscriptCore.rehearDiff) thành đề xuất "nhận dạng", vẫn Nhận / Bỏ.
 // Cắt video dùng Studio.ai (20_ai.js): cutRanges, wordSpan, allWords.
 'use strict';
 (() => {
@@ -92,6 +94,7 @@
   const find = { q: '', r: '', na: false, mem: false, scope: 'project', hits: [], cur: 0 };
   const KINDS = ['nhận dạng', 'tên riêng', 'chính tả', 'dấu câu'];
   const ai = { state: 'idle', step: '', p: 0, error: '', res: null, filter: '', cur: 0, ok: 0, no: 0, stale: 0, picks: {} }; // M90
+  const rh = { state: 'idle', step: '', p: 0, note: '', error: '', what: '' }; // M95 nghe lại
   const selRange = () => (tw.a < 0 || !W[tw.a] || !W[tw.b] ? null : [Math.min(tw.a, tw.b), Math.max(tw.a, tw.b)]);
   const textOf = (a, b) => W.slice(a, b + 1).map(x => x.w.w).join(' ');
   const short = t => (t.length > 32 ? t.slice(0, 32) + '…' : t);
@@ -103,6 +106,7 @@
     ['hide', 'ti-eye-off', 'Ẩn khỏi phụ đề', mode === 'text' ? 'Delete' : ''],
     ['cut', 'ti-scissors', 'Cắt khỏi video', mode === 'cut' ? 'Delete' : ''],
     ['loop', 'ti-repeat', 'Phát lại đoạn (lặp)', loopT ? 'Esc dừng' : ''],
+    ['rehear', 'ti-ear', rh.state === 'running' ? 'Đang nghe lại bằng AI…' : 'Nghe lại bằng AI', ''],
   ];
 
   // ---------- render ----------
@@ -313,6 +317,7 @@
     else if (k === 'hide') hideSel();
     else if (k === 'cut') cutSel();
     else if (k === 'loop') loopSel();
+    else if (k === 'rehear') { const r = selRange(); if (r) rehear(r); }
     else if (k === 'sug-ok') acceptSuggestion(sid);
     else if (k === 'sug-no') rejectSuggestion(sid);
   }
@@ -462,11 +467,18 @@
     return ks.length ? [ks[0], ks[ks.length - 1]] : null;
   }
   function sugAt(r) { return sugs.find(g => { const q = sugRange(g); return q && q[0] <= r[1] && q[1] >= r[0]; }); }
+  const cleanSugs = list => (Array.isArray(list) ? list : []).filter(x => x && Number.isFinite(+x.s) && Number.isFinite(+x.e) && typeof x.to === 'string')
+    .map(x => ({ id: ++sugId, s: +x.s, e: +x.e, to: x.to.slice(0, 200), from: String(x.from || '').slice(0, 200), reason: String(x.reason || '').slice(0, 300), kind: KINDS.includes(x.kind) ? x.kind : '' }));
   function suggest(list) {
-    sugs = (Array.isArray(list) ? list : []).filter(x => x && Number.isFinite(+x.s) && Number.isFinite(+x.e) && typeof x.to === 'string')
-      .map(x => ({ id: ++sugId, s: +x.s, e: +x.e, to: x.to.slice(0, 200), from: String(x.from || '').slice(0, 200), reason: String(x.reason || '').slice(0, 300), kind: KINDS.includes(x.kind) ? x.kind : '' }));
+    sugs = cleanSugs(list);
     if (panel === 'words') render();
     return sugs.map(g => ({ ...g }));
+  }
+  // Thêm đề xuất, giữ đề xuất đang có; trùng chỗ và chữ thì giữ bản cũ.
+  function addSuggestions(list) {
+    const add = cleanSugs(list).filter(g => !sugs.some(x => Math.abs(x.s - g.s) < .03 && Math.abs(x.e - g.e) < .03 && x.to === g.to));
+    sugs = [...sugs, ...add];
+    return add;
   }
   function acceptSuggestion(id) {
     const g = sugs.find(x => x.id === id); if (!g) return false;
@@ -485,10 +497,19 @@
   const visibleSugs = () => sugs.filter(g => !ai.filter || g.kind === ai.filter).sort((x, y) => x.s - y.s);
   const inDict = g => !!dict && [...dict.project, ...dict.brand, ...dict.auto].some(e => C().fold(e.from) === C().fold(g.from));
   // "Thêm vào từ điển" chỉ khi sửa lặp lại được: cặp hợp lệ, không phải dấu câu, chưa có trong từ điển
-  const repeatable = g => g.kind !== 'dấu câu' && !!C().cleanSide(g.from) && !!C().cleanSide(g.to) && C().fold(g.from) !== C().fold(g.to) && !inDict(g);
+  // số ("3" → "30") đúng ở chỗ này chưa chắc đúng chỗ khác: không vào từ điển
+  const repeatable = g => g.kind !== 'dấu câu' && !/^[\d\s.,%–-]+$/.test(g.from) && !!C().cleanSide(g.from) && !!C().cleanSide(g.to) && C().fold(g.from) !== C().fold(g.to) && !inDict(g);
   const pick = g => (g.id in ai.picks ? ai.picks[g.id] : g.kind === 'tên riêng');
+  function rhHtml() {
+    if (rh.state === 'running') {
+      return `<div class="tx-ai-card" aria-busy="true"><div class="tx-ai-run" role="status"><i class="ti ti-loader-2 spin"></i><span id="txrhstep">${esc(rh.step || 'Đang gửi…')}</span><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="rhstop">Huỷ</button></div>
+        <div class="tx-ai-bar"><i id="txrhbar"></i></div><p class="tx-note">Nghe lại “${esc(short(rh.what))}” bằng Whisper. Lần đầu dùng model lớn sẽ tải model (~3 GB).</p></div>`;
+    }
+    if (rh.error) return `<p class="tx-err" role="alert">${esc(rh.error)}</p>`;
+    return rh.note ? `<p class="tx-note" role="status"><i class="ti ti-ear"></i> ${esc(rh.note)}</p>` : '';
+  }
   function aiHtml() {
-    const head = `<div class="tx-boxhead"><b><i class="ti ti-sparkles"></i> AI soát lỗi</b>${ibtn('data-txai="close"', 'ti-x', 'Đóng AI soát lỗi')}</div>`;
+    const head = `<div class="tx-boxhead"><b><i class="ti ti-sparkles"></i> AI soát lỗi</b>${ibtn('data-txai="close"', 'ti-x', 'Đóng AI soát lỗi')}</div>${rhHtml()}`;
     if (ai.state === 'running') {
       return `<section class="tx-box" id="txai" aria-label="AI soát lỗi" aria-busy="true">${head}
         <div class="tx-ai-run" role="status"><i class="ti ti-loader-2 spin"></i><span id="txaistep">${esc(ai.step || 'Đang gửi…')}</span><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="stop">Huỷ</button></div>
@@ -510,7 +531,8 @@
         ${g.reason ? `<div class="tx-ai-why">${esc(g.reason)}</div>` : ''}
         ${repeatable(g) ? `<div class="tx-opts"><label><input type="checkbox" id="txaidict" ${pick(g) ? 'checked' : ''}> Thêm “${esc(short(g.from))} = ${esc(short(g.to))}” vào từ điển</label>
           ${dict?.kit ? `<select class="ui-input tx-scope" id="txaiscope" aria-label="Thêm vào từ điển của"><option value="project">của dự án</option><option value="brand" ${find.scope === 'brand' ? 'selected' : ''}>của ${esc(dict.kit.title)}</option></select>` : ''}</div>` : ''}
-        <div class="tx-acts"><button type="button" class="ui-btn ui-btn--primary ui-btn--sm" data-txai="ok"><i class="ti ti-check"></i> Nhận</button><button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-txai="no"><i class="ti ti-x"></i> Bỏ</button><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="hear" aria-pressed="${!!loopT}"><i class="ti ti-headphones"></i> ${loopT ? 'Dừng nghe' : 'Nghe đoạn này'}</button></div></div>` : '';
+        <div class="tx-acts"><button type="button" class="ui-btn ui-btn--primary ui-btn--sm" data-txai="ok"><i class="ti ti-check"></i> Nhận</button><button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-txai="no"><i class="ti ti-x"></i> Bỏ</button><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="hear" aria-pressed="${!!loopT}"><i class="ti ti-headphones"></i> ${loopT ? 'Dừng nghe' : 'Nghe đoạn này'}</button>
+          <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="rehear" ${rh.state === 'running' ? 'disabled' : ''} title="Máy nghe lại đoạn này bằng Whisper lớn hơn, kèm câu trước sau và từ điển"><i class="ti ti-ear"></i> Nghe lại bằng AI</button></div></div>` : '';
     const warns = [...(r?.warnings || []), ...(ai.stale ? [`Bỏ ${ai.stale} đề xuất vì lời thoại đã đổi trong lúc AI soát.`] : [])];
     return `<section class="tx-box" id="txai" aria-label="AI soát lỗi">${head}
       <div class="tx-ai-sum"><b>${sugs.length} đề xuất</b>${meta}<span class="grow"></span>
@@ -524,6 +546,49 @@
   function paintAiRun() {
     const st = $('#txaistep'); if (st) st.textContent = ai.step || 'Đang gửi…';
     $('#txaibar')?.style.setProperty('--tx-p', String(ai.p || 0));
+    const rs = $('#txrhstep'); if (rs) rs.textContent = rh.step || 'Đang gửi…';
+    $('#txrhbar')?.style.setProperty('--tx-p', String(rh.p || 0));
+  }
+
+  // ---------- Nghe lại bằng AI (M95): Whisper nghe lại đoạn W[a..b], chỗ khác thành đề xuất "nhận dạng" ----------
+  const sleep = ms => new Promise(ok => setTimeout(ok, ms));
+  async function rehear([a, b]) {
+    if (rh.state === 'running') return S.toast('Đang nghe lại một đoạn khác');
+    W = S.ai.allWords();
+    if (!W[a] || !W[b]) return;
+    const s = W[a].w.s, e = W[b].w.e, what = textOf(a, b);
+    Object.assign(rh, { state: 'running', step: 'Đang chuẩn bị…', p: 0, note: '', error: '', what });
+    stopLoop(); box = 'ai'; render();
+    try {
+      await S.saveNow?.(); // tiếng nói lấy theo timeline đã lưu
+      const r0 = await S.api('/api/rehear', { s, e });
+      if (!r0 || r0.error) throw new Error(r0?.error || 'Không gọi được nghe lại');
+      let r;
+      for (;;) { // hỏi mỗi 0,8 s bằng setTimeout: trang chạy nền vẫn đi tiếp
+        await sleep(800);
+        try { r = await S.api('/api/rehear'); } catch { continue; }
+        if (!r || r.run !== r0.run) continue;
+        if (r.state === 'running') { rh.step = r.step; rh.p = r.progress; paintAiRun(); continue; }
+        break;
+      }
+      if (r.state !== 'done') throw Object.assign(new Error(r.error || 'Nghe lại lỗi'), { state: r.state });
+      // so với lời thoại HIỆN TẠI trong khoảng đã nghe; chỗ đã đổi trong lúc chờ không còn khớp thì không thành đề xuất
+      W = S.ai.allWords();
+      const ks = []; for (const [k, x] of W.entries()) if (x.w.e > r.from + .05 && x.w.s < r.to - .05) ks.push(k);
+      const heard = C().heardTokens(r.words), off = ks[0] ?? 0;
+      const sa = ks.findIndex(k => W[k].w.s >= s - .03), sb = ks.findLastIndex(k => W[k].w.e <= e + .03);
+      // lý do chỉ trích chữ nghe được quanh đoạn chọn: mép đoạn cắt Whisper hay bịa câu ("Cảm ơn các bạn đã theo dõi")
+      const said = heard.filter(x => x.e > s - 1.5 && x.s < e + 1.5).map(x => x.w).join(' ');
+      const why = `nghe lại bằng Whisper ${r.model} · nghe được: “${said.length > 90 ? said.slice(0, 90) + '…' : said}”`;
+      const diffs = ks.length && sa >= 0 && sb >= sa ? C().rehearDiff(ks.map(k => W[k].w.w), heard.map(x => x.w), sa, sb) : [];
+      const added = addSuggestions(diffs.map(d => ({ s: W[off + d.i].w.s, e: W[off + d.i + d.n - 1].w.e, from: d.from, to: d.to, kind: 'nhận dạng', reason: why })));
+      const secs = Math.max(1, Math.round((r.ms || 0) / 1000));
+      Object.assign(rh, { state: 'idle', note: added.length ? `Whisper ${r.model} nghe ra ${added.length} chỗ khác (${secs} s).` : said ? `Whisper ${r.model} nghe ra giống lời thoại: “${short(said)}” (${secs} s). Không có gì cần sửa.` : `Whisper ${r.model} không nghe thấy lời nói ở đoạn này (${secs} s).` });
+      if (added.length) { ai.filter = ''; ai.cur = added[0].id; const q = sugRange(added[0]); if (q) tw = { a: q[0], b: q[1] }; }
+    } catch (err) {
+      Object.assign(rh, { state: 'idle', error: err.state === 'cancelled' ? '' : err.message, note: err.state === 'cancelled' ? 'Đã huỷ nghe lại.' : '' });
+    }
+    if (panel === 'words') render();
   }
   async function aiStart() {
     if (ai.state === 'running') return;
@@ -596,11 +661,13 @@
     if (k === 'close') return openBox('ai');
     if (k === 'go') return aiStart();
     if (k === 'stop') { S.assistCancel?.(); ai.step = 'Đang huỷ…'; return paintAiRun(); }
+    if (k === 'rhstop') { S.api('/api/rehear/cancel', {}); rh.step = 'Đang huỷ…'; return paintAiRun(); }
     if (k === 'all') return aiAll(true);
     if (k === 'none') return aiAll(false);
     const l = visibleSugs(), cur = l.find(x => x.id === ai.cur) || l[0]; if (!cur) return;
     if (k === 'ok') return aiAccept(cur.id);
     if (k === 'no') return aiReject(cur.id);
+    if (k === 'rehear') { const q = sugRange(cur); return q && rehear(q); }
     if (k === 'hear') { const q = sugRange(cur); if (!q) return; if (!loopT) { tw = { a: Math.max(0, q[0] - 2), b: Math.min(W.length - 1, q[1] + 2) }; paintSel(); } loopSel(); return renderBox(); } // nghe lặp đoạn (thêm 2 từ mỗi bên) trước khi quyết
     if (k === 'prev' || k === 'next') return showSug(l[(l.indexOf(cur) + (k === 'next' ? 1 : -1) + l.length) % l.length].id);
   }
@@ -722,7 +789,9 @@
     words: () => S.ai.allWords().map((x, i) => ({ i, w: x.w.w, s: x.w.s, e: x.w.e, hl: !!x.w.hl, br: !!x.w.br, ed: !!x.w.ed })),
     applyEdit(i, n, text) { W = S.ai.allWords(); if (!(i >= 0 && n >= 1 && i + n <= W.length)) return false; return applyEdit(i, i + n - 1, String(text ?? '')); },
     find: (q, opts) => { const w = S.ai.allWords(); return C().findMatches(w.map(x => x.w.w), q, opts).map(h => ({ ...h, s: w[h.i].w.s, e: w[h.i + h.n - 1].w.e, text: w.slice(h.i, h.i + h.n).map(x => x.w.w).join(' ') })); },
-    suggest, acceptSuggestion, rejectSuggestion,
+    suggest, addSuggestions: list => addSuggestions(list).map(g => ({ ...g })), acceptSuggestion, rejectSuggestion,
+    rehear: (i, n = 1) => { W = S.ai.allWords(); return i >= 0 && n >= 1 && i + n <= W.length ? rehear([i, i + n - 1]) : null; },
+    rehearState: () => ({ ...rh }),
     review: () => aiStart(), openReview: () => openBox('ai'), acceptAll: () => aiAll(true), rejectAll: () => aiAll(false),
     reviewState: () => ({ state: ai.state, step: ai.step, error: ai.error, ok: ai.ok, no: ai.no, stale: ai.stale, res: ai.res && { provider: ai.res.provider, windows: ai.res.windows, ms: ai.res.ms, dropped: ai.res.dropped, warnings: ai.res.warnings } }),
     suggestions: () => sugs.map(g => ({ ...g })),

@@ -58,3 +58,33 @@ Bản 10 phút là clip mẫu ghép 20 lần (614 s). Thời gian nạp model t�
 
 GPU nhanh hơn CPU ~6,5 lần (clip ngắn) và ~7 lần (10 phút). Trên Turing không tensor core (GTX 16xx), `float16` chậm hơn
 `int8_float16` ~3 lần và bỏ sót một đoạn, nên không dùng làm mặc định. Số luồng theo nhân thật không nhanh hơn rõ khi máy đang bận.
+
+## Nghe lại một đoạn ngắn (`M95`, "Nghe lại bằng AI")
+
+Panel Lời thoại có nút **Nghe lại bằng AI** (thẻ đề xuất và menu đoạn): cắt tiếng nói quanh đoạn chọn (thêm ≥ 1 s mỗi bên,
+tối thiểu 5 s), chạy Whisper lớn hơn model đã tạo lời thoại kèm `initial_prompt` (từ điển + câu trước/sau), chỗ khác
+thành đề xuất "nhận dạng" để người dùng Nhận / Bỏ (`scripts/rehear.mjs`, `scripts/rehear.py`, `references/studio.md`).
+
+Đo ngày 16/11/2026 trên `clip-mau` (29,76 s), GTX 1660 Ti, CUDA int8_float16. Chỗ thử: lời nói "15 đến 30 phút",
+turbo (model tạo lời thoại mặc định) viết "15 đến 3 phút".
+
+| Cách nghe | Chữ ở chỗ đó | Thời gian |
+|---|---|---|
+| turbo, cả clip (lặp 2 lần) | 15 đến **3** phút | nạp 8,8–10,1 s + nhận dạng 2,5–3,2 s |
+| **large-v3, cả clip** (lặp 2 lần) | 15 **-15** phút, thêm lỗi mới "hệ ứng", "mới sau một clip", "nha" | nạp 11,7–12,4 s + nhận dạng 10,2–10,4 s |
+| turbo, đoạn 4,4 s (có / không prompt) | 15 đến 3 phút | nạp 7–11 s + 1,5 s |
+| small, đoạn 4,4 s | 15-30 phút | nạp 3,5 s + 0,6 s |
+| medium, đoạn 4,4 s | 15 đến 30 phút | nạp 52 s (lần đầu tải) + 1,9 s |
+| **large-v3, đoạn 3–5 s** (4 lượt trong Studio, chọn "3" hoặc "15 đến 3 phút") + 2 lượt đoạn 4,4 s ngoài Studio | **15 đến 30 phút** (6/6) | 15–23 s cả lượt trong Studio: nạp 11–15 s, nhận dạng 2–6 s |
+| large-v3, đoạn 2,1 s (chỉ chữ "3" ± 1 s) | 15 đến **20** phút + bịa câu "Hẹn gặp lại các bạn…" | 15 s |
+
+Kết luận:
+
+- **Không đổi model mặc định sang large-v3.** Cả clip, large-v3 vẫn nghe sai đúng chỗ này (theo kiểu khác) và thêm lỗi,
+  chậm hơn turbo ~3,5 lần ở bước nhận dạng; khớp với số đo cũ (large-v3 sai 6,0 % số từ, turbo 2,3 %).
+  Với video 10 phút, turbo nhận dạng 65–89 s; large-v3 ước ~4–5 phút.
+- Nghe lại **một đoạn ngắn** bằng model lớn thì đúng: Whisper chỉ phải giải một câu, không bị cả đoạn dài kéo theo.
+  Nên làm việc này theo từng chỗ nghi ngờ, không phải cả bài.
+- Đoạn quá ngắn (≈ 2 s) làm Whisper đoán sai và bịa câu ở mép, nên Studio nới đoạn cho đủ 5 s.
+  Prompt không chứa chữ của chính đoạn nghe: đưa "15 đến 3" vào prompt làm Whisper lặp lại lỗi và bỏ mất đầu câu.
+- Lần đầu dùng large-v3 tải ~3 GB; mỗi lượt nạp lại model (11–15 s trên GTX 1660 Ti) là phần tốn nhất.
