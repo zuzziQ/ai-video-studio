@@ -60,6 +60,8 @@ export function resolveRel(ws, rel) {
   if (path.isAbsolute(rel) || /^[\\/]/.test(rel) || /^[a-z]:/i.test(rel)) throw bad('Cần đường dẫn tương đối trong Kho');
   const parts = rel.split(/[\\/]+/).filter(Boolean);
   if (parts.some(p => p === '..' || p.startsWith('.'))) throw bad('Đường dẫn ra ngoài Kho');
+  // Windows bỏ dấu chấm/khoảng trắng cuối tên và hiểu tên ngắn 8.3 (DUAN~1), dấu ":" là luồng dữ liệu phụ: chặn để không vòng qua Du an/
+  if (parts.some(p => /[. ]$/.test(p) || p.includes('~') || p.includes(':'))) throw bad('Tên thư mục/file không hợp lệ');
   if ([KHO_DIRS.projects, KHO_DIRS.delivered].some(d => key(d) === key(parts[0]))) throw bad('Không lấy file từ Du an/ hay Thanh pham/');
   const abs = path.join(ws.root, ...parts);
   if (!inWorkspace(ws, abs)) throw bad('Đường dẫn ra ngoài Kho');
@@ -131,7 +133,14 @@ export function useFromKho(projectDir, ws, rel, o = {}) {
 async function useOnce(dir, ws, rel, { run, credit = 'Kho' } = {}) {
   const src = resolveRel(ws, rel), relN = rel.split(/[\\/]+/).filter(Boolean).join('/');
   const md = path.join(dir, 'media'); fs.mkdirSync(md, { recursive: true });
-  const map = readMap(dir), had = usedName(dir, relN, map);
+  const lock = mapFile(dir) + '.lock'; fs.mkdirSync(path.dirname(lock), { recursive: true });
+  // Đọc sổ, chọn tên và tạo liên kết trong cùng một khoá (auto_broll chạy ở tiến trình khác): không hai lần lấy cùng một tên
+  let had = null, name = null, linked = null;
+  withFileLock(lock, () => {
+    had = usedName(dir, relN);
+    if (had) return;
+    name = mediaName(md, src); linked = linkOrCopy(src, path.join(md, name)); // EEXIST/COPYFILE_EXCL: không bao giờ ghi đè đích
+  });
   if (had) {
     const it = mediaItem(dir, had);
     if (it.kind !== 'video' || it.seq?.count) return { ...it, kho: relN, linked: 'reuse' };
@@ -139,12 +148,10 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho' } = {}) {
     await expandVideo(path.join(md, had), path.join(md, had.replace(/\.\w+$/, '') + '_frames'), { run });
     return { ...mediaItem(dir, had), kho: relN, linked: 'reuse' };
   }
-  const name = mediaName(md, src), dst = path.join(md, name), fr = path.join(md, name.replace(/\.\w+$/, '') + '_frames');
-  const linked = linkOrCopy(src, dst);
+  const dst = path.join(md, name), fr = path.join(md, name.replace(/\.\w+$/, '') + '_frames');
   try { if (kindOf(name) === 'video') await expandVideo(dst, fr, { run }); }
   catch (e) { fs.rmSync(dst, { force: true }); fs.rmSync(fr, { recursive: true, force: true }); throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
-  fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
-  withFileLock(mapFile(dir) + '.lock', () => {
+  withFileLock(lock, () => {
     const now = readMap(dir); now[relN] = name; writeJson(mapFile(dir), { version: 1, items: now });
     addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) });
   });

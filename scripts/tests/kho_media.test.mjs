@@ -64,10 +64,16 @@ test('hai lần dùng cùng lúc (kể cả viết \\ và /) ra cùng một file
   const [a, b] = await Promise.all([K.useFromKho(PROJ, ws, 'BRoll/song.png'), K.useFromKho(PROJ, ws, 'BRoll\\song.png')]);
   assert.equal(a.name, 'kho_song.png'); assert.equal(b.name, 'kho_song.png');
   assert.ok(!fs.existsSync(media('kho_song_2.png')));
+  // hai file Kho khác nhau cùng tên, chèn cùng lúc: hai tên khác nhau, không file nào bị ghi đè
+  put('Anh/trung.png', 'A'); put('BRoll/trung.png', 'B');
+  const [x, y] = await Promise.all([K.useFromKho(PROJ, ws, 'Anh/trung.png'), K.useFromKho(PROJ, ws, 'BRoll/trung.png')]);
+  assert.notEqual(x.name, y.name);
+  assert.equal(fs.readFileSync(media(x.name), 'utf8'), 'A'); assert.equal(fs.readFileSync(media(y.name), 'utf8'), 'B');
+  assert.equal(fs.readFileSync(path.join(KHO, 'Anh', 'trung.png'), 'utf8'), 'A'); assert.equal(fs.readFileSync(path.join(KHO, 'BRoll', 'trung.png'), 'utf8'), 'B');
 });
 
 test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, file lạ → 400; không thấy → 404', async () => {
-  for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', '.kho.json', '', null, 42])
+  for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', 'Du an./clip 1/media/x.jpg', 'Du an /clip 1/media/x.jpg', 'DUAN~1/clip 1/media/x.jpg', 'Anh/logo.png:x', '.kho.json', '', null, 42])
     await assert.rejects(K.useFromKho(PROJ, ws, rel), e => e.status === 400, String(rel));
   await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/khong-co.jpg'), e => e.status === 404);
   assert.ok(!fs.readdirSync(media()).some(f => f.includes('bi-mat')));
@@ -130,6 +136,12 @@ test('nhạc nền: bài trong Nhac/ hợp mood → media/kho_*, không hợp �
   const mu = JSON.parse(fs.readFileSync(tlf, 'utf8')).audio.music;
   assert.equal(mu[0].file, 'media/kho_hype_soi_dong.mp3'); assert.equal(mu[1].file, undefined); assert.equal(mu[2].file, undefined);
   delete tl.audio; fs.writeFileSync(tlf, JSON.stringify(tl));
+  // áp bản dựng AI: nhạc Kho đi vào timeline bằng "file" (mix_audio.py dùng "file" trước "mood")
+  const { applyPlan } = await import('../ai_edit.mjs');
+  const t2 = { duration: 12, scenes: [], audio: {} };
+  applyPlan(t2, [], { pack: 'slate', scenes: [], captions: [], sfx: [], music: { t0: 0, t1: 12, mood: 'hype', gain: -20, _ai: true, ...m } });
+  assert.equal(t2.audio.music[0].file, 'media/kho_hype_soi_dong.mp3');
+  assert.match(fs.readFileSync(path.join(SKILL, 'scripts/mix_audio.py'), 'utf8'), /P\(m\["file"\]\) if "file" in m else/);
 });
 
 test('b-roll tự động: câu nhắc "cà phê" lấy ảnh Anh/ của Kho trước ảnh của dự án, qua media/kho_*', () => {
