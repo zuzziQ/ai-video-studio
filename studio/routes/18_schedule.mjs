@@ -9,6 +9,8 @@ import { spawn, execFile } from 'node:child_process';
 import * as PUB from '../../scripts/publish.mjs';
 import { isDue } from '../../scripts/schedule_due.mjs';
 import { revealPath } from '../../scripts/platform.mjs';
+import { workspaceOfProject } from '../../scripts/workspace.mjs';
+import { fileKey, knownWorkspaces, listDelivered } from '../../scripts/kho_deliver.mjs';
 
 const VID = /\.(mp4|mov|m4v|webm)$/i;
 export default ctx => {
@@ -36,15 +38,26 @@ export default ctx => {
       durCache.set(k, r); ok(r);
     });
   });
-  // finished videos: current project's out/ + outputs of the Autopilot queue (A1, if present) + files already in the schedule
+  // finished videos: current project's out/ + outputs of the Autopilot queue (A1, if present) + Thanh pham/ of every registered Kho
+  // (S12 M100: brands in brands.json + Kho Chung + this project's Kho) + files already in the schedule.
+  // A delivered copy is a hard link of an out/ file: same inode → listed once (the first one seen).
   async function videos() {
-    const seen = new Map(), add = (f, src) => { f = path.resolve(f); if (VID.test(f) && !/\.part\./.test(f) && fs.existsSync(f) && !seen.has(f)) seen.set(f, { file: f, src, name: path.basename(f), project: PUB.projectOf(f), mtime: fs.statSync(f).mtimeMs }); };
+    const seen = new Map(), keys = new Set(), add = (f, src) => {
+      f = path.resolve(f); if (!VID.test(f) || /\.part\./.test(f) || !fs.existsSync(f) || seen.has(f)) return;
+      const k = fileKey(f); if (keys.has(k)) return; keys.add(k);
+      seen.set(f, { file: f, src, name: path.basename(f), project: PUB.projectOf(f), mtime: fs.statSync(f).mtimeMs });
+    };
     const outDir = d => { const o = path.join(d, 'out'); if (fs.existsSync(o)) for (const x of fs.readdirSync(o)) add(path.join(o, x), path.basename(d)); };
     if (ctx.project) outDir(ctx.project.dir);
     try {
       const q = JSON.parse(fs.readFileSync(path.join(PUB.HOME(), 'queue.json'), 'utf8')); const items = Array.isArray(q) ? q : q.items || [];
       for (const it of items.filter(x => x.state === 'done')) for (const o of it.outputs || []) { if (VID.test(o)) add(o, 'Tự lái'); else if (fs.existsSync(path.join(o, 'out'))) outDir(o); }
     } catch {}
+    try {
+      const kho = [...(ctx.project ? [workspaceOfProject(ctx.project.dir, ctx.readProject().timeline)] : []), ...knownWorkspaces()];
+      const roots = new Set();
+      for (const ws of kho) { if (roots.has(ws.root)) continue; roots.add(ws.root); for (const v of listDelivered(ws, { max: 80 })) add(v.file, `Thành phẩm · ${ws.title}`); }
+    } catch (e) { console.error('schedule: Thanh pham:', e.message); }
     for (const it of PUB.loadSchedule().items) add(it.file, 'Lịch');
     const list = [...seen.values()].sort((a, b) => b.mtime - a.mtime).slice(0, 80);
     for (const v of list) { v.info = await probe(v.file); v.scheduled = [...new Set(PUB.loadSchedule().items.filter(x => x.file === v.file && x.state !== 'error').map(x => x.platform))]; v.hasCaptions = !!(v.project && fs.existsSync(path.join(v.project, 'publish/publish.json'))); }

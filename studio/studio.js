@@ -1048,6 +1048,11 @@ function stoppedNotice(j) {
   for (const o of document.querySelectorAll('.toast')) o.remove();
   modal(`<h3><i class="ti ${s[0]} ui-text-warn"></i> ${s[1]}</h3><p>${esc(j.step || s[1])}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
 }
+// S12 M100: "Giao vào Thành phẩm" (bản xong vào <Kho>/Thanh pham/<YYYY-MM>/), nhớ theo máy; localStorage có thể bị chặn → mặc định bật.
+const GIVE_KEY = 'avs.export.deliver';
+const giveOn = () => { try { return localStorage.getItem(GIVE_KEY) !== '0'; } catch { return true; } };
+const giveSet = on => { try { localStorage.setItem(GIVE_KEY, on ? '1' : '0'); } catch { /* chỉ là tiện ích */ } };
+const giveNote = r => (r.delivered?.length ? ' · đã giao vào Thành phẩm' : r.deliverError ? ' · chưa giao được vào Thành phẩm: ' + r.deliverError : '');
 $('#export').addEventListener('click', () => {
   const v = DH > DW, q = (a, b) => (v ? `${a}×${b}` : `${b}×${a}`);
   modal(`<h3><i class="ti ti-upload"></i> Xuất video</h3>
@@ -1057,21 +1062,24 @@ $('#export').addEventListener('click', () => {
       <label><input type="radio" name="xq" value="4k"><b>4K</b><small>${q(2160, 3840)}</small></label></div>
     <div class="row2"><div><label class="lbl">Từ (giây)</label><input id="xfrom" type="number" placeholder="0"></div><div><label class="lbl">Đến (giây)</label><input id="xto" type="number" placeholder="${TL.duration}"></div></div>
     <label class="lbl">Xuất thêm khổ khác (cùng lúc)</label><div class="xasp">${(v ? [['1:1', 'Vuông 1:1', 'cắt bám mặt'], ['16:9', 'Ngang 16:9', 'video giữa, nền mờ']] : [['9:16', 'Dọc 9:16', 'cắt bám mặt'], ['1:1', 'Vuông 1:1', 'cắt bám mặt']]).map(([k, l, d]) => `<label><input type="checkbox" name="xasp" value="${k}"> <b>${l}</b> <small>${d}</small></label>`).join('')}</div>
+    <div class="xasp"><label title="Bản xuất xong (kèm ảnh bìa, .srt khi bấm) được liên kết sang Thanh pham/<tháng> của Kho thương hiệu, không tốn thêm dung lượng"><input type="checkbox" id="xgive" ${giveOn() ? 'checked' : ''}> <b>Giao vào Thành phẩm</b> <small>Thanh pham/&lt;tháng&gt; của Kho</small></label></div>
     <div class="acts acts--spaced"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
     <p class="muted">Âm thanh được trộn lại (giọng + nhạc + SFX, chuẩn −14 LUFS) rồi render từng khung bằng đúng engine của preview.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="xgo"><i class="ti ti-upload"></i> Xuất</button></div>`);
-  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); } else toast('Lỗi: ' + r.error); };
-  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', {}); toast('Đã lưu ' + r.out); api('/api/reveal', { path: r.out }); };
+  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T, deliver: $('#xgive').checked }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); if (giveNote(r)) toast('Ảnh bìa' + giveNote(r)); } else toast('Lỗi: ' + r.error); };
+  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', { deliver: $('#xgive').checked }); toast('Đã lưu ' + r.out + giveNote(r)); api('/api/reveal', { path: r.out }); };
+  $('#xgive').onchange = e => giveSet(e.target.checked);
   $('#xgo').onclick = async () => {
     if (dirty) await saveNow();
     const from = $('#xfrom').value, to = $('#xto').value;
-    const r = await api('/api/export', { quality: document.querySelector('[name=xq]:checked').value, from: from === '' ? undefined : +from, to: to === '' ? undefined : +to, aspects: [...document.querySelectorAll('[name=xasp]:checked')].map(i => i.value) });
+    const r = await api('/api/export', { quality: document.querySelector('[name=xq]:checked').value, from: from === '' ? undefined : +from, to: to === '' ? undefined : +to, aspects: [...document.querySelectorAll('[name=xasp]:checked')].map(i => i.value), deliver: $('#xgive').checked });
     if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
     modal(`<h3>Đang xuất video…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="xcancel">Dừng</button></div>`);
     $('#xcancel').onclick = () => api('/api/job/cancel', {});
     pollJob(j => {
-      if (j.state === 'done') modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> Hiện trong Finder</button><a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
-      else modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      if (j.state === 'done') modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}${j.delivered?.length ? `<p class="muted"><i class="ti ti-package"></i> Đã giao ${j.delivered.length} file vào Thành phẩm: ${j.delivered.map(f => esc(f.split(/[\\/]/).pop())).join(', ')}</p>` : j.deliverError ? `<p class="ui-text-warn"><i class="ti ti-alert-triangle"></i> Chưa giao được vào Thành phẩm: ${esc(j.deliverError)}</p>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> Hiện trong Finder</button>${j.delivered?.length ? `<button id="xkho"><i class="ti ti-package"></i> Mở Thành phẩm</button>` : ''}<a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
+      if (j.state === 'done' && $('#xkho')) $('#xkho').onclick = () => api('/api/thanhpham/open', { path: j.delivered[0] }).then(r => r.ok || toast(r.error || 'Không mở được Thành phẩm'));
+      else if (j.state !== 'done') modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
     });
   };
 });
