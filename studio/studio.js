@@ -14,11 +14,16 @@ const ITAB = {};
 // Markup carries no inline style attribute: values that come from data (position and size on the timeline / preview, a clip's
 // thumbnail and colour filter, a swatch colour, a text-preset preview) ride on data-d* attributes and are put on
 // el.style here, right after the HTML is inserted. A MutationObserver covers every insertion (library panels,
-// features); hot paths that measure right after inserting call applyDyn() themselves.
+// features); hot paths that measure right after inserting call applyDyn() themselves. The observer skips elements already
+// done, so a node that is only moved in the DOM keeps any style code set on it later (e.g. while dragging).
+// data-dcss replaces the whole inline style (cssText): do not combine it with the other data-d* on one element.
 const DYN_SEL = '[data-dl],[data-dt],[data-dw],[data-dh],[data-dbg],[data-dfx],[data-dbc],[data-dfill],[data-dcss]';
-function applyDyn(root = document) {
+const DYN_DONE = new WeakSet();
+function applyDyn(root = document, again = true) {
   const list = root.matches?.(DYN_SEL) ? [root, ...root.querySelectorAll(DYN_SEL)] : root.querySelectorAll(DYN_SEL);
   for (const el of list) {
+    if (!again && DYN_DONE.has(el)) continue;
+    DYN_DONE.add(el);
     const d = el.dataset, s = el.style;
     if (d.dcss != null) s.cssText = d.dcss; // text-preset preview: the preset's own CSS (video data)
     if (d.dl != null) s.left = d.dl + 'px';
@@ -31,7 +36,7 @@ function applyDyn(root = document) {
     if (d.dfill) s.background = d.dfill;
   }
 }
-new MutationObserver(recs => { for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1) applyDyn(n); })
+new MutationObserver(recs => { for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1) applyDyn(n, false); })
   .observe(document.documentElement, { childList: true, subtree: true });
 
 // ---------- vocabulary ----------
@@ -958,6 +963,7 @@ $('#stepb').addEventListener('click', () => setTime(T - 1 / FPS));
 $('#stepf').addEventListener('click', () => setTime(T + 1 / FPS));
 const toggleOv = (id, btn) => { $(id).checked = !$(id).checked; $(btn).classList.toggle('on', $(id).checked); drawOverlay(); };
 $('#safebtn').addEventListener('click', () => toggleOv('#safe', '#safebtn'));
+// '[id=face]' rather than the id selector: check_studio_tokens.mjs would read "hash + face" as a 4-digit hex colour.
 $('#facebtn').addEventListener('click', () => toggleOv('[id=face]', '#facebtn'));
 $('#safe').addEventListener('change', drawOverlay);
 $('[id=face]').addEventListener('change', drawOverlay);

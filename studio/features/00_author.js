@@ -38,7 +38,8 @@
 
   function show(auto = true) {
     const old = document.getElementById('author');
-    if (old) { if (!auto) { old.stay?.(); old.querySelector('.bar')?.remove(); } return; } // chip while the card is up: keep it open
+    if (old?.classList.contains('out')) old.remove(); // chip pressed while the card fades out: open a fresh one
+    else if (old) { if (!auto) { old.stay?.(); old.querySelector('.bar')?.remove(); } return; } // chip while the card is up: keep it open
     const el = document.createElement('aside');
     el.id = 'author';
     el.setAttribute('aria-label', 'Giới thiệu tác giả');
@@ -56,10 +57,13 @@
     if (auto) {
       let left = SHOW_MS, since = 0, timer = 0;
       el.stay = () => { el.dataset.stay = '1'; pause(); };
-      const run = () => { if (timer || el.dataset.stay || el.matches(':hover, :focus-within')) return; since = performance.now(); timer = setTimeout(close, left); };
+      // Counting starts only while the page is visible (the browser may open the Studio in a background tab).
+      const run = () => { if (timer || el.dataset.stay || document.hidden || el.matches(':hover, :focus-within')) return; since = performance.now(); timer = setTimeout(close, left); };
       const pause = () => { if (!timer) return; clearTimeout(timer); timer = 0; left = Math.max(0, left - (performance.now() - since)); };
       el.addEventListener('mouseenter', pause); el.addEventListener('focusin', pause);
       el.addEventListener('mouseleave', () => setTimeout(run)); el.addEventListener('focusout', () => setTimeout(run));
+      const vis = () => { if (!el.isConnected) return document.removeEventListener('visibilitychange', vis); if (document.hidden) pause(); else run(); };
+      document.addEventListener('visibilitychange', vis);
       run();
     }
     document.body.appendChild(el);

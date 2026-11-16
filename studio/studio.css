@@ -96,7 +96,7 @@ main { position: absolute; top: 50px; left: 0; right: 0; bottom: var(--tlh); dis
 body.expanded main { grid-template-columns: 68px minmax(0, 1fr); }
 body.expanded #lib, body.expanded #right { display: none; }
 
-/* rail: label on the 11px scale; a long label ("Chuyển cảnh", "Thương hiệu") wraps to two lines inside the 58px button */
+/* rail: label on the 11px scale; a long label ("Chuyển cảnh", "Thương hiệu") wraps to two lines inside the 60px button */
 #rail { background: rgb(var(--color-surface)); border-right: 1px solid rgb(var(--color-line)); display: flex; flex-direction: column; align-items: center; padding: var(--space-2) 0; gap: var(--space-050); overflow-y: auto; overflow-x: hidden; }
 #rail button { width: 60px; height: 54px; flex-direction: column; gap: var(--space-050); justify-content: center; padding: 0 var(--space-050); background: transparent; border: 0; color: rgb(var(--color-fg-subtle)); border-radius: var(--radius-control);
   font-size: var(--text-2xs); line-height: 1.1; letter-spacing: -.02em; font-weight: 500; position: relative; white-space: normal; text-align: center; }
@@ -492,7 +492,7 @@ canvas.wave { position: absolute; left: 0; top: 0; }
 #modal p { line-height: 1.5; }
 #modal .path { font: var(--text-xs) var(--font-mono); background: rgb(var(--color-canvas)); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); word-break: break-all; }
 #modal .qual { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
-#modal .qual label { border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); padding: var(--space-3); cursor: pointer; background: rgb(var(--color-surface)); transition: border-color var(--duration-fast) var(--ease-standard); }
+#modal .qual label { position: relative; border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); padding: var(--space-3); cursor: pointer; background: rgb(var(--color-surface)); transition: border-color var(--duration-fast) var(--ease-standard); }
 #modal .qual label:has(input:checked) { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .24); }
 #modal .qual label:has(input:focus-visible) { outline: 2px solid rgb(var(--color-focus)); outline-offset: 2px; }
 #modal .qual input { position: absolute; opacity: 0; pointer-events: none; }
