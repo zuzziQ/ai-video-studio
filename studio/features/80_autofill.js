@@ -7,30 +7,31 @@
   const S = Studio, { $, esc } = S;
   const css = document.createElement('style');
   css.textContent = `
-  .af section { border-bottom: 1px solid var(--line); padding: 4px 0 12px; margin-bottom: 10px; }
-  .af .sh { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12px; color: var(--tx2); margin: 4px 0 8px; }
-  .af .sh .badge { margin-left: auto; font-weight: 600; font-size: 10.5px; color: var(--tx3); background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
-  .af .seg button { flex-direction: column; gap: 1px; padding: 5px 2px; font-size: 11.5px; }
-  .af .seg button small { display: block; font-weight: 500; font-size: 9.5px; color: var(--tx3); white-space: nowrap; }
-  .af .big { width: 100%; justify-content: center; padding: 12px; font-size: 13.5px; font-weight: 700; margin: 2px 0 8px; gap: 8px; }
-  .af .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-  .af .row3 button { justify-content: center; padding: 7px 4px; font-size: 11.5px; min-width: 0; white-space: normal; line-height: 1.25; }
-  .af .stat { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 0; }
-  .af .stat span { background: var(--bg2); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 8px; font-size: 11px; color: var(--tx2); }
-  .af .last { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--rs); padding: 8px 10px; font-size: 11.5px; color: var(--tx2); line-height: 1.5; margin-top: 8px; }
-  .af label.sw { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; }
-  .af .goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 8px; }
-  .af .goals button { justify-content: flex-start; gap: 6px; padding: 7px 8px; font-size: 11.5px; text-align: left; min-width: 0; white-space: normal; line-height: 1.25; }
-  .af .goals button.on { border-color: var(--acc-line); background: var(--acc-soft); color: var(--tx); }
-  .af .chips .chip small { color: var(--warn); font-size: 9.5px; margin-left: 3px; }
-  .af .vr { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 11.5px; color: var(--tx2); }
+  .af section { border-bottom: 1px solid rgb(var(--color-line)); padding: var(--space-1) 0 var(--space-3); margin-bottom: var(--space-3); }
+  .af .sh { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); margin: var(--space-1) 0 var(--space-2); }
+  .af .sh .badge { margin-left: auto; font-weight: 600; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-pill); padding: var(--space-050) var(--space-2); }
+  .af .seg button { flex-direction: column; gap: var(--space-050); padding: var(--space-1) var(--space-050); font-size: var(--text-xs); }
+  .af .seg button small { display: block; font-weight: 500; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); white-space: nowrap; }
+  .af .big { width: 100%; justify-content: center; min-height: var(--h-lg); padding: var(--space-3); font-size: var(--text-sm); font-weight: 700; margin: var(--space-050) 0 var(--space-2); gap: var(--space-2); }
+  .af .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
+  .af .row3 button { justify-content: center; padding: var(--space-2) var(--space-1); font-size: var(--text-xs); min-width: 0; white-space: normal; line-height: 1.25; }
+  .af .stat { display: flex; gap: var(--space-1); flex-wrap: wrap; margin: var(--space-2) 0 0; }
+  .af .stat span { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-pill); padding: var(--space-050) var(--space-2); font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
+  .af .last { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); line-height: 1.5; margin-top: var(--space-2); }
+  .af label.sw { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; cursor: pointer; }
+  .af .goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); margin-bottom: var(--space-2); }
+  .af .goals button { justify-content: flex-start; gap: var(--space-2); padding: var(--space-2); font-size: var(--text-xs); text-align: left; min-width: 0; white-space: normal; line-height: 1.25; }
+  .af .goals button.on { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .24); color: rgb(var(--color-fg)); }
+  .af .chips .chip small { color: rgb(var(--color-warning-text)); font-size: var(--text-2xs); margin-left: var(--space-050); }
+  .af .af-warn { color: rgb(var(--color-warning-text)); }
+  .af .vr { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 var(--space-1); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
   .af .vr input { flex: 1; }
-  .af .lib { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 6px; }
-  .af .lib .it { position: relative; border: 1px solid var(--line2); border-radius: var(--rs); overflow: hidden; background: var(--bg2); }
-  .af .lib img { width: 100%; height: 62px; object-fit: cover; display: block; }
-  .af .lib input { width: 100%; border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 10px; padding: 3px 5px; background: var(--bg1); }
-  .af .lib .x { position: absolute; top: 2px; right: 2px; padding: 0 4px; font-size: 10px; background: rgba(0,0,0,.6); border: 0; }
-  .af .lib .k { position: absolute; left: 3px; top: 3px; font-size: 9px; background: rgba(0,0,0,.6); color: #fff; border-radius: 4px; padding: 0 4px; }`;
+  .af .lib { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-1); margin-top: var(--space-2); }
+  .af .lib .it { position: relative; border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); overflow: hidden; background: rgb(var(--color-surface-raised)); }
+  .af .lib img { width: 100%; height: 64px; object-fit: cover; display: block; }
+  .af .lib input { width: 100%; border: 0; border-top: 1px solid rgb(var(--color-line)); border-radius: 0; font-size: var(--text-2xs); padding: var(--space-050) var(--space-1); background: rgb(var(--color-surface)); }
+  .af .lib .x { position: absolute; top: var(--space-050); right: var(--space-050); padding: 0 var(--space-1); font-size: var(--text-2xs); background: rgb(var(--color-black) / .6); border: 0; }
+  .af .lib .k { position: absolute; left: var(--space-050); top: var(--space-050); font-size: var(--text-2xs); background: rgb(var(--color-black) / .6); color: rgb(var(--color-fg-on-media)); border-radius: var(--radius-xs); padding: 0 var(--space-1); }`;
   document.head.appendChild(css);
   // labels for the v4 music beds in the "Âm thanh" library panel (library.js)
   try {
@@ -66,8 +67,8 @@
     O.src.includes('logo') && '<b>Logo</b>: khi người nói nhắc tên công cụ / thương hiệu (ChatGPT, Canva, Shopee, Grab…).',
     O.src.includes('aroll') && '<b>Hiệu ứng trên người nói</b>: đẩy cận chậm, nhấn từ, đen trắng — không chèn hình, giữ kết nối với người xem.',
     O.src.includes('stock') && '<b>Ảnh stock</b>: Openverse + Wikimedia (CC, ghi nguồn trong media/credits.json), thêm Pexels/Pixabay nếu có key; ảnh có chuyển động.',
-    O.src.includes('stockvid') && `<b>Video stock</b>: Pexels / Pixabay (key miễn phí, dán ở panel B-roll AI)${META && !META.keys.stockvid ? ' — <span style="color:var(--warn)">chưa có key, sẽ dùng ảnh thay</span>' : ''}.`,
-    O.src.includes('aiimg') && `<b>Ảnh AI</b>: tối đa 2 ảnh / video bằng key OpenAI hoặc Gemini của bạn${META && !META.keys.aiimg ? ' — <span style="color:var(--warn)">chưa có key</span>' : ''}.`,
+    O.src.includes('stockvid') && `<b>Video stock</b>: Pexels / Pixabay (key miễn phí, dán ở panel B-roll AI)${META && !META.keys.stockvid ? ' — <span class="af-warn">chưa có key, sẽ dùng ảnh thay</span>' : ''}.`,
+    O.src.includes('aiimg') && `<b>Ảnh AI</b>: tối đa 2 ảnh / video bằng key OpenAI hoặc Gemini của bạn${META && !META.keys.aiimg ? ' — <span class="af-warn">chưa có key</span>' : ''}.`,
     O.src.includes('claude') && '<b>Claude chọn</b>: Claude xem các phương án của từng câu, chọn cái hợp nhất và viết chữ, chậm hơn 20–90 s.',
   ].filter(Boolean).join(' ');
   function render() {

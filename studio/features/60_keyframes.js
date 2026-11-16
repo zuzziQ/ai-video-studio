@@ -97,7 +97,7 @@
   }, 250);
 
   // ---- timeline diamonds ----
-  Studio._blk.push((c, pps) => (hasKf(c) ? c.obj.kf.map(k => `<i class="kfd ${Math.abs(k.t - Studio.T) < EPS ? 'on' : ''}" data-kft="${k.t}" style="left:${((k.t - c.t0) * pps).toFixed(1)}px" title="Keyframe ${fmt(k.t)}"></i>`).join('') : ''));
+  Studio._blk.push((c, pps) => (hasKf(c) ? c.obj.kf.map(k => `<i class="kfd ${Math.abs(k.t - Studio.T) < EPS ? 'on' : ''}" data-kft="${k.t}" data-kfx="${((k.t - c.t0) * pps).toFixed(1)}" title="Keyframe ${fmt(k.t)}"></i>`).join('') : ''));
   const grab = e => {
     const d = e.target.closest?.('.kfd'); if (!d) return;
     e.stopPropagation(); e.preventDefault();
@@ -105,19 +105,25 @@
     if (!c && blk) { const cp = typeof compByCid === 'function' ? compByCid(blk.dataset.cid) : null; if (cp) Studio.select(cp); }
     Studio.setTime(+d.dataset.kft + 1e-3);
   };
-  Studio.onReady(() => document.querySelector('#tlinner')?.addEventListener('mousedown', grab, true));
+  // The diamond's x is data (time × zoom): set as --kf-x after studio.js inserts the block HTML.
+  const placeKf = root => root.querySelectorAll('.kfd[data-kfx]').forEach(d => d.style.setProperty('--kf-x', d.dataset.kfx + 'px'));
+  Studio.onReady(() => {
+    const tl = document.querySelector('#tlinner'); if (!tl) return;
+    tl.addEventListener('mousedown', grab, true);
+    placeKf(tl); new MutationObserver(() => placeKf(tl)).observe(tl, { childList: true, subtree: true });
+  });
 
   const st = document.createElement('style');
   st.textContent = `
-.blk .kfd { position:absolute; top:50%; width:8px; height:8px; margin:-4px 0 0 -4px; background:#FFE17A; border:1px solid rgba(0,0,0,.6); transform:rotate(45deg); border-radius:1px; cursor:pointer; z-index:2; box-shadow:0 0 0 1px rgba(255,255,255,.25); }
-.blk .kfd:hover, .blk .kfd.on { background:var(--acc); box-shadow:0 0 0 2px var(--acc-soft); }
-#kfpanel .kfbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-#kfpanel .kfbar button.on { background:var(--acc-soft); border-color:var(--acc-line); color:var(--tx); }
-#kfpanel .kfbar .ti-diamond-filled { color:#FFE17A; }
-#kfpanel .kflist { display:flex; flex-wrap:wrap; gap:6px; }
-#kfpanel .kflist button { font-size:11px; padding:4px 8px; }
-#kfpanel .kflist button small { color:var(--tx3); margin-left:2px; }
-#kfpanel .kflist button.on { border-color:var(--acc-line); background:var(--acc-soft); }
-#kfpanel .kflist .ti { color:#FFE17A; font-size:10px; }`;
+.blk .kfd { position:absolute; top:50%; left:var(--kf-x, 0); width:8px; height:8px; margin:-4px 0 0 -4px; background:rgb(var(--color-warning-text)); border:1px solid rgb(var(--color-black) / .6); transform:rotate(45deg); border-radius:0; cursor:pointer; z-index:2; box-shadow:0 0 0 1px rgb(var(--color-white) / .25); }
+.blk .kfd:hover, .blk .kfd.on { background:rgb(var(--color-accent-text)); box-shadow:0 0 0 2px rgb(var(--color-accent-soft) / .24); }
+#kfpanel .kfbar { display:flex; gap:var(--space-2); align-items:center; flex-wrap:wrap; }
+#kfpanel .kfbar button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); color:rgb(var(--color-fg)); }
+#kfpanel .kfbar .ti-diamond-filled { color:rgb(var(--color-warning-text)); }
+#kfpanel .kflist { display:flex; flex-wrap:wrap; gap:var(--space-2); }
+#kfpanel .kflist button { font-size:var(--text-2xs); padding:var(--space-1) var(--space-2); }
+#kfpanel .kflist button small { color:rgb(var(--color-fg-subtle)); font-size:var(--text-2xs); margin-left:var(--space-050); }
+#kfpanel .kflist button.on { border-color:rgb(var(--color-accent-text) / .5); background:rgb(var(--color-accent-soft) / .24); }
+#kfpanel .kflist .ti { color:rgb(var(--color-warning-text)); font-size:var(--text-2xs); }`;
   document.head.appendChild(st);
 })();

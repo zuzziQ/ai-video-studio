@@ -22,6 +22,7 @@
     return { shape, ...m, feather: 0 };
   }
 
+  const MASK_BG0 = '#000000', CUT_BG0 = '#151515'; // design-token-ok: màu nền mặc định trong video (dữ liệu render), không phải màu giao diện
   function tab(c) {
     if (!ok(c)) return null;
     const o = c.obj, m = o.mask || {}, clip = c.kind === 'clip';
@@ -30,7 +31,7 @@
     if (m.shape) h += sect('Vị trí và cỡ (% khung)', rng('x', m.x ?? 50, 0, 100, .5, 'Tâm X', '%') + rng('y', m.y ?? 50, 0, 100, .5, 'Tâm Y', '%') + rng('w', m.w ?? 80, 5, 200, .5, 'Rộng', '%') + rng('h', m.h ?? 60, 5, 200, .5, 'Cao', '%') +
       rng('feather', m.feather ?? 0, 0, 20, .5, 'Viền mềm') + (m.shape === 'rounded' ? rng('r', m.r ?? 14, 0, 50, 1, 'Bo góc') : '') +
       `<label class="check"><input type="checkbox" data-mkc="invert" ${m.invert ? 'checked' : ''}> Đảo ngược (khoét lỗ)</label>
-      ${clip ? `<span class="lbl">Màu nền ngoài mặt nạ</span><div class="row"><input type="color" data-mkbg value="${m.bg || '#000000'}"><button data-mka="nobg" class="${m.bg ? '' : 'on'}">Đen (mặc định)</button></div>` : ''}`, 'ti-arrows-move');
+      ${clip ? `<span class="lbl">Màu nền ngoài mặt nạ</span><div class="row"><input type="color" data-mkbg value="${m.bg || MASK_BG0}"><button data-mka="nobg" class="${m.bg ? '' : 'on'}">Đen (mặc định)</button></div>` : ''}`, 'ti-arrows-move');
     if (clip) {
       const has = !!o.cutouts, b = o.bg || {};
       h += sect('Tách nền (thay phông)', `${has ? `<div class="ok"><i class="ti ti-circle-check"></i> Đã tách nền (${esc(String(o.cutouts).split('/').slice(-2, -1)[0] || 'ảnh')})</div>` : ''}
@@ -39,7 +40,7 @@
         <div class="help">Chạy rembg (u2net_human_seg) trên máy cho đúng đoạn nguồn ${(+o.in || 0).toFixed(2)}–${(+(o.out ?? 3)).toFixed(2)}s của clip — khoảng 0,2–0,5 s/khung. Sticker lấy khung tại playhead.</div>
         ${has ? `<span class="lbl">Nền phía sau người</span><div class="seg5">${BG.map(([k, l, ic]) => `<button data-mbg="${k}" class="${(b.type || '') === k ? 'on' : ''}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div>
           ${b.type === 'blur' ? rng('bgblur', b.blur ?? 26, 4, 60, 1, 'Độ mờ', 'px') : ''}
-          ${b.type === 'color' ? `<span class="lbl">Màu nền</span><input type="color" data-mbgc value="${b.color || '#151515'}">` : ''}
+          ${b.type === 'color' ? `<span class="lbl">Màu nền</span><input type="color" data-mbgc value="${b.color || CUT_BG0}">` : ''}
           ${b.type === 'image' ? `<span class="lbl">Ảnh nền (từ Media)</span><select data-mbgi><option value="">— chọn ảnh —</option>${images().map(i => `<option value="${esc(i.path)}" ${b.src === i.path ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>
             ${images().length ? '' : '<div class="help">Chưa có ảnh trong Media — tải ảnh lên ở thư viện Media trước.</div>'}` : ''}
           ${b.type === 'none' ? '<div class="help">Phần nền trong suốt: thấy màu nền của khung (đen) hoặc thứ nằm dưới track chính.</div>' : ''}` : ''}`, 'ti-user-scan');
@@ -111,14 +112,14 @@
 
   const st = document.createElement('style');
   st.textContent = `
-#mkpanel .mkgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
-#mkpanel .mkgrid button { flex-direction:column; gap:3px; padding:8px 2px 6px; font-size:10.5px; color:var(--tx2); }
-#mkpanel .mkgrid svg { width:26px; height:26px; fill:currentColor; opacity:.85; }
-#mkpanel .mkgrid button.on { background:var(--acc-soft); border-color:var(--acc-line); color:var(--tx); }
-#mkpanel .seg5 { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
-#mkpanel .seg5 button { flex-direction:column; gap:2px; padding:6px 2px; font-size:10.5px; }
-#mkpanel .seg5 button.on, #mkpanel .row button.on { background:var(--acc-soft); border-color:var(--acc-line); }
-#mkpanel input[type=color] { width:44px; height:30px; padding:2px; }
-#mkpanel .ok { color:var(--ok); font-size:11.5px; margin-bottom:6px; }`;
+#mkpanel .mkgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--space-2); }
+#mkpanel .mkgrid button { flex-direction:column; gap:var(--space-1); padding:var(--space-2) var(--space-050); font-size:var(--text-2xs); color:rgb(var(--color-fg-muted)); }
+#mkpanel .mkgrid svg { width:24px; height:24px; fill:currentColor; opacity:.85; }
+#mkpanel .mkgrid button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); color:rgb(var(--color-fg)); }
+#mkpanel .seg5 { display:grid; grid-template-columns:repeat(5,1fr); gap:var(--space-1); }
+#mkpanel .seg5 button { flex-direction:column; gap:var(--space-050); padding:var(--space-2) var(--space-050); font-size:var(--text-2xs); }
+#mkpanel .seg5 button.on, #mkpanel .row button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); }
+#mkpanel input[type=color] { width:44px; height:var(--h-md); padding:var(--space-050); }
+#mkpanel .ok { color:rgb(var(--color-success)); font-size:var(--text-xs); margin-bottom:var(--space-2); }`;
   document.head.appendChild(st);
 })();

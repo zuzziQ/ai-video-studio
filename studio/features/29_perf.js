@@ -11,37 +11,37 @@
   const WD = { auto: 'Tự chọn', cuda: 'GPU (CUDA)', cpu: 'CPU' };
   const css = document.createElement('style');
   css.textContent = `
-  .pf-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; min-width: 0; }
-  .pf-card h4 { margin: 0 0 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; color: var(--tx); }
-  .pf-card h4 .r { margin-left: auto; }
-  .pf-card h4 .r button { padding: 2px 7px; font-size: 11px; }
-  .pf-hw { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 4px 8px; font-size: 11.5px; }
-  .pf-hw dt { color: var(--tx3); } .pf-hw dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-  .pf-prof { display: grid; gap: 6px; }
-  .pf-prof button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 8px; background: var(--bg3); min-width: 0; white-space: normal; height: auto; }
-  .pf-prof button b { font-size: 12px; display: flex; gap: 6px; align-items: center; }
-  .pf-prof button b em { font-style: normal; margin-left: auto; font-size: 10px; font-weight: 600; color: var(--acc); }
-  .pf-prof button small { display: block; color: var(--tx3); font-size: 10.5px; line-height: 1.4; margin-top: 2px; }
-  .pf-prof button.on { border-color: var(--acc-line); background: var(--acc-soft); }
-  .pf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 8px; }
-  .pf-grid label { display: block; min-width: 0; } .pf-grid span { display: block; font-size: 10.5px; color: var(--tx3); margin: 6px 0 3px; }
+  .pf-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; min-width: 0; }
+  .pf-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); display: flex; align-items: center; gap: var(--space-2); color: rgb(var(--color-fg)); }
+  .pf-card h4 .r { margin-left: auto; } .pf-card h4 .r.pf-sub { font-weight: 500; font-size: var(--text-2xs); }
+  .pf-card h4 .r button { padding: var(--space-050) var(--space-2); font-size: var(--text-2xs); }
+  .pf-hw { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: var(--space-1) var(--space-2); font-size: var(--text-xs); }
+  .pf-hw dt { color: rgb(var(--color-fg-subtle)); } .pf-hw dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .pf-prof { display: grid; gap: var(--space-2); }
+  .pf-prof .ui-choice { align-items: stretch; width: 100%; min-width: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); white-space: normal; height: auto; }
+  .pf-prof .ui-choice__title { font-size: var(--text-xs); display: flex; gap: var(--space-2); align-items: center; }
+  .pf-prof .ui-choice__title em { font-style: normal; margin-left: auto; font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-accent-text)); }
+  .pf-prof .ui-choice__desc { color: rgb(var(--color-fg-subtle)); line-height: 1.4; }
+  .pf-mt { margin-top: var(--space-2); }
+  .pf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-1) var(--space-2); }
+  .pf-grid label { display: block; min-width: 0; } .pf-grid span { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-1); }
   .pf-grid select, .pf-grid input { width: 100%; min-width: 0; box-sizing: border-box; }
-  .pf-warn { font-size: 11px; color: var(--warn); line-height: 1.45; margin: 6px 0 0; overflow-wrap: anywhere; }
-  .pf-warn code { font-size: 10.5px; }
-  .pf-help { font-size: 10.5px; color: var(--tx3); line-height: 1.5; margin: 6px 0 0; }
-  .pf-plan { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; table-layout: fixed; }
-  .pf-plan th, .pf-plan td { text-align: left; padding: 3px 4px; border-top: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pf-plan th { color: var(--tx3); font-weight: 500; }
-  .pf-plan td.n, .pf-plan th.n { text-align: right; }
-  .pf-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; min-width: 0; }
+  .pf-warn { font-size: var(--text-2xs); color: rgb(var(--color-warning-text)); line-height: 1.45; margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
+  .pf-warn code { font-size: var(--text-2xs); }
+  .pf-help { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); line-height: 1.5; margin: var(--space-2) 0 0; } .pf-help.pf-mt0 { margin-top: 0; }
+  .pf-tshell { margin-top: var(--space-2); }
+  .pf-plan { font-size: var(--text-2xs); table-layout: fixed; }
+  .pf-plan th, .pf-plan td { padding: var(--space-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pf-plan thead th { text-transform: none; letter-spacing: 0; } /* panel ~300px: uppercase headers would be cut */
+  .pf-plan .pf-col-at { width: 64px; }
+  .pf-row { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-2); min-width: 0; }
   .pf-row > select { flex: 1; min-width: 0; } .pf-row > button { flex: none; }
-  .pf-go { width: 100%; justify-content: center; margin-top: 8px; }
-  .pf-bar { height: 4px; background: var(--bg4); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; } .pf-bar i { display: block; height: 100%; background: var(--acc); width: 0; transition: width .3s; }
-  .pf-res { font-size: 11.5px; padding: 8px 10px; border-radius: 8px; margin-top: 8px; overflow-wrap: anywhere; line-height: 1.45; background: var(--acc-soft); border: 1px solid var(--acc-line); }
-  .pf-res.bad { background: rgba(248,113,113,.08); border-color: rgba(248,113,113,.3); }
-  .pf-res.warn { background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.3); color: var(--warn); }
-  .pf-xp { font-size: 11.5px; color: var(--tx2); margin: 10px 0 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-  .pf-xp a { color: var(--acc); cursor: pointer; }`;
+  .pf-go { width: 100%; justify-content: center; margin-top: var(--space-2); }
+  .pf-bar { height: 4px; background: rgb(var(--color-surface-hover)); border-radius: var(--radius-pill); overflow: hidden; margin: var(--space-2) 0 var(--space-1); } .pf-bar i { display: block; height: 100%; background: rgb(var(--color-accent-text)); width: var(--w, 0%); transition: width var(--duration-slow) var(--ease-standard); }
+  .pf-res { font-size: var(--text-xs); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); margin-top: var(--space-2); overflow-wrap: anywhere; line-height: 1.45; background: rgb(var(--color-accent-soft) / .24); border: 1px solid rgb(var(--color-accent-text) / .5); }
+  .pf-ban { margin-top: var(--space-2); overflow-wrap: anywhere; }
+  .pf-xp { font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); margin: var(--space-3) 0 0; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+  .pf-xp a { color: rgb(var(--color-accent-text)); cursor: pointer; }`;
   document.head.appendChild(css);
 
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'perf';
@@ -78,14 +78,14 @@
   function profCard() {
     const v = S.v, act = v.active !== v.profile ? `<p class="pf-warn">Đang chạy theo <b>${esc(label(v.active))}</b> (biến <code>AVS_PERF_PROFILE</code>), không phải profile đã lưu.</p>` : '';
     return `<div class="pf-card"><h4><i class="ti ti-gauge"></i> Profile</h4>
-      <div class="pf-prof">${v.profiles.map(p => `<button data-pf="pick" data-id="${esc(p.id)}" class="${p.id === v.profile ? 'on' : ''}" ${S.saving ? 'disabled' : ''}>
-        <b>${esc(p.label)}${p.id === v.profile ? '<em>ĐANG DÙNG</em>' : ''}</b><small>${esc(p.hint)}</small></button>`).join('')}</div>
+      <div class="pf-prof" role="radiogroup">${v.profiles.map(p => `<button data-pf="pick" data-id="${esc(p.id)}" class="ui-choice" role="radio" aria-checked="${p.id === v.profile}" ${S.saving ? 'disabled' : ''}>
+        <b class="ui-choice__title">${esc(p.label)}${p.id === v.profile ? '<em>ĐANG DÙNG</em>' : ''}</b><small class="ui-choice__desc">${esc(p.hint)}</small></button>`).join('')}</div>
       ${v.profile === 'tuy-chinh' ? customForm() : ''}${act}${envLine()}${planTable()}</div>`;
   }
   const opt = (map, cur, list) => list.map(k => `<option value="${esc(String(k))}" ${String(k) === String(cur) ? 'selected' : ''}>${esc(map[k] || String(k))}</option>`).join('');
   function customForm() {
     const f = S.form, c = S.v.choices, workers = ['', ...Array.from({ length: c.maxWorkers }, (_, i) => i + 1)];
-    return `<div class="pf-grid" style="margin-top:8px">
+    return `<div class="pf-grid pf-mt">
       <label><span>Worker</span><select data-pfc="workers">${opt({ '': 'Tự động' }, f.workers ?? '', workers)}</select></label>
       <label><span>Encoder</span><select data-pfc="encoder">${opt(ENC, f.encoder, c.encoder)}</select></label>
       <label><span>Preset x264</span><select data-pfc="preset">${opt({ '': 'Mặc định' }, f.preset ?? '', ['', ...c.preset])}</select></label>
@@ -96,25 +96,25 @@
   }
   function planTable() {
     const P = S.v.plans, r = S.v.resolved;
-    return `<table class="pf-plan"><thead><tr><th>Kế hoạch 30 s</th><th class="n">Worker</th><th>Preset</th><th>Encoder</th></tr></thead><tbody>
-      ${[['720', '720p'], ['1080', '1080p'], ['4k', '4K']].map(([k, n]) => { const p = P[k]; return p ? `<tr><td>${n}${p.ramCap ? ' <span class="muted" title="Bị hạ vì RAM trống thấp">(RAM)</span>' : ''}</td><td class="n">${p.workers}</td><td>${esc(p.preset || '—')}</td><td>${esc(ENC[p.encoder] || p.encoder)}</td></tr>` : ''; }).join('')}
-      </tbody></table><p class="pf-help">Ưu tiên: ${esc(PRIO[r.priority] || r.priority)} · lượt render cùng lúc: ${r.slots || 'không điều phối'} · whisper: ${esc(WD[r.whisperDevice] || r.whisperDevice)}.</p>`;
+    return `<div class="ui-table-shell pf-tshell"><table class="ui-table pf-plan"><thead><tr><th>Kế hoạch 30 s</th><th class="is-num">Worker</th><th>Preset</th><th>Encoder</th></tr></thead><tbody>
+      ${[['720', '720p'], ['1080', '1080p'], ['4k', '4K']].map(([k, n]) => { const p = P[k]; return p ? `<tr><td>${n}${p.ramCap ? ' <span class="muted" title="Bị hạ vì RAM trống thấp">(RAM)</span>' : ''}</td><td class="is-num">${p.workers}</td><td>${esc(p.preset || '—')}</td><td>${esc(ENC[p.encoder] || p.encoder)}</td></tr>` : ''; }).join('')}
+      </tbody></table></div><p class="pf-help">Ưu tiên: ${esc(PRIO[r.priority] || r.priority)} · lượt render cùng lúc: ${r.slots || 'không điều phối'} · whisper: ${esc(WD[r.whisperDevice] || r.whisperDevice)}.</p>`;
   }
   function benchCard() {
     const j = S.benchJob, rows = j?.bench || S.bench || [], running = j?.state === 'running';
-    const tbl = rows.length ? `<table class="pf-plan"><thead><tr><th>Profile</th><th class="n">Giây</th><th class="n">fps</th><th class="n">Worker</th><th>Encoder</th></tr></thead><tbody>
-      ${rows.map(r => `<tr><td title="${esc(r.label)}">${esc(r.label)}</td>${r.state === 'xong' ? `<td class="n">${r.sec}</td><td class="n">${r.fps}</td><td class="n">${r.workers ?? '—'}</td><td title="${esc(r.encoder || '')}">${esc(r.encoder || '—')}</td>` : `<td colspan="4" class="muted">${esc(r.state)}</td>`}</tr>`).join('')}</tbody></table>` : '';
+    const tbl = rows.length ? `<div class="ui-table-shell pf-tshell"><table class="ui-table pf-plan"><thead><tr><th>Profile</th><th class="is-num">Giây</th><th class="is-num">fps</th><th class="is-num">Worker</th><th>Encoder</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td title="${esc(r.label)}">${esc(r.label)}</td>${r.state === 'xong' ? `<td class="is-num">${r.sec}</td><td class="is-num">${r.fps}</td><td class="is-num">${r.workers ?? '—'}</td><td title="${esc(r.encoder || '')}">${esc(r.encoder || '—')}</td>` : `<td colspan="4" class="muted">${esc(r.state)}</td>`}</tr>`).join('')}</tbody></table></div>` : '';
     // Huỷ theo yêu cầu không phải lỗi: màu vàng như stoppedNotice của studio.js (M60), lỗi thật màu đỏ.
-    const st = j && j.state !== 'running' && j.state !== 'done' ? `<div class="pf-res ${j.state === 'error' ? 'bad' : 'warn'}">${esc(j.step || j.state)}</div>` : '';
+    const st = j && j.state !== 'running' && j.state !== 'done' ? `<div class="ui-banner pf-ban ${j.state === 'error' ? 'ui-banner--err' : 'ui-banner--warn'}" role="status">${esc(j.step || j.state)}</div>` : '';
     return `<div class="pf-card"><h4><i class="ti ti-stopwatch"></i> Đo thử</h4>
-      <p class="pf-help" style="margin-top:0">Render 10 s của dự án mẫu với Tiết kiệm, Cân bằng và Tốc độ (bản chép tạm, xoá sau khi đo). Mất khoảng 1–3 phút.</p>
-      ${running ? `<div class="pf-bar"><i style="width:${Math.round((j.progress || 0) * 100)}%"></i></div><div class="pf-help">${esc(j.step || '')}</div><button class="pf-go" data-pf="cancel"><i class="ti ti-player-stop"></i> Dừng</button>`
+      <p class="pf-help pf-mt0">Render 10 s của dự án mẫu với Tiết kiệm, Cân bằng và Tốc độ (bản chép tạm, xoá sau khi đo). Mất khoảng 1–3 phút.</p>
+      ${running ? `<div class="pf-bar"><i data-w="${Math.round((j.progress || 0) * 100)}"></i></div><div class="pf-help">${esc(j.step || '')}</div><button class="pf-go" data-pf="cancel"><i class="ti ti-player-stop"></i> Dừng</button>`
         : `<button class="pf-go" data-pf="bench"><i class="ti ti-player-play"></i> Đo thử 10 s</button>`}${tbl}${st}</div>`;
   }
   function adviseCard() {
     if (!S.advise) return '';
     const a = S.adv;
-    const res = !a ? '' : a.error ? `<div class="pf-res bad">${esc(a.error)}</div>`
+    const res = !a ? '' : a.error ? `<div class="ui-banner ui-banner--err pf-ban" role="alert">${esc(a.error)}</div>`
       : `<div class="pf-res"><b>${esc(label(a.profile))}</b>${a.overrides && Object.keys(a.overrides).length ? ` · ${esc(Object.entries(a.overrides).map(([k, x]) => `${k}=${x ?? 'tự động'}`).join(', '))}` : ''}<br>${esc(a.reason || '')}
         <div class="pf-row"><button class="primary" data-pf="apply" ${S.saving ? 'disabled' : ''}><i class="ti ti-check"></i> Áp dụng</button></div></div>`;
     return `<div class="pf-card" id="pf-ai"><h4><i class="ti ti-sparkles"></i> Hỏi AI chọn profile</h4>
@@ -124,18 +124,19 @@
   function logCard() {
     const L = S.log.slice().reverse();
     const t = s => { const d = new Date(s); return isNaN(d) ? '' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-    return `<div class="pf-card"><h4><i class="ti ti-history"></i> Lịch sử render <span class="r muted" style="font-weight:500;font-size:10.5px">${L.length} lượt gần nhất</span></h4>
-      ${L.length ? `<table class="pf-plan"><thead><tr><th style="width:62px">Lúc</th><th>Profile</th><th class="n">Khổ</th><th class="n">Giây</th><th class="n">fps</th></tr></thead><tbody>
-      ${L.map(e => `<tr title="${esc(`${e.workers} worker · ${e.encoder || ''} · ${e.chrome || ''}${e.waited_s ? ` · chờ ${e.waited_s}s` : ''}`)}"><td>${t(e.at)}</td><td>${esc(label(e.profile))}</td><td class="n">${Math.min(e.W, e.H)}p</td><td class="n">${e.sec}</td><td class="n">${e.fps}</td></tr>`).join('')}</tbody></table>`
-        : '<p class="pf-help" style="margin-top:0">Chưa có lượt render nào. Mỗi lần xuất video hoặc đo thử sẽ ghi một dòng.</p>'}</div>`;
+    return `<div class="pf-card"><h4><i class="ti ti-history"></i> Lịch sử render <span class="r muted pf-sub">${L.length} lượt gần nhất</span></h4>
+      ${L.length ? `<div class="ui-table-shell pf-tshell"><table class="ui-table pf-plan"><thead><tr><th class="pf-col-at">Lúc</th><th>Profile</th><th class="is-num">Khổ</th><th class="is-num">Giây</th><th class="is-num">fps</th></tr></thead><tbody>
+      ${L.map(e => `<tr title="${esc(`${e.workers} worker · ${e.encoder || ''} · ${e.chrome || ''}${e.waited_s ? ` · chờ ${e.waited_s}s` : ''}`)}"><td>${t(e.at)}</td><td>${esc(label(e.profile))}</td><td class="is-num">${Math.min(e.W, e.H)}p</td><td class="is-num">${e.sec}</td><td class="is-num">${e.fps}</td></tr>`).join('')}</tbody></table></div>`
+        : '<p class="pf-help pf-mt0">Chưa có lượt render nào. Mỗi lần xuất video hoặc đo thử sẽ ghi một dòng.</p>'}</div>`;
   }
   function render() {
     if (!active()) return;
     const b = body(); if (!b) return;
-    if (S.err && !S.v) { b.innerHTML = `<div class="pf-res bad">Không đọc được cấu hình hiệu năng: ${esc(S.err)}</div>`; return; }
-    if (!S.v) { b.innerHTML = '<div class="muted" style="padding:12px 0">Đang đo máy…</div>'; return; }
+    if (S.err && !S.v) { b.innerHTML = `<div class="ui-banner ui-banner--err pf-ban" role="alert">Không đọc được cấu hình hiệu năng: ${esc(S.err)}</div>`; return; }
+    if (!S.v) { b.innerHTML = '<div class="ui-state ui-state--loading" role="status"><i class="ti ti-loader-2 ui-state__icon"></i> Đang đo máy…</div>'; return; }
     const keep = b.scrollTop;
-    b.innerHTML = `${S.err ? `<div class="pf-res bad">${esc(S.err)}</div>` : ''}${hwCard()}${profCard()}${adviseCard()}${benchCard()}${logCard()}`;
+    b.innerHTML = `${S.err ? `<div class="ui-banner ui-banner--err pf-ban" role="alert">${esc(S.err)}</div>` : ''}${hwCard()}${profCard()}${adviseCard()}${benchCard()}${logCard()}`;
+    b.querySelectorAll('.pf-bar i[data-w]').forEach(i => i.style.setProperty('--w', i.dataset.w + '%'));
     b.scrollTop = keep;
   }
 

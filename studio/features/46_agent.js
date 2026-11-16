@@ -6,21 +6,24 @@
   const active = () => (typeof panel === 'undefined' ? true : panel === 'agent'); // library.js global
   const css = document.createElement('style');
   css.textContent = `
-  .ag-tabs { display: flex; gap: 4px; margin: 2px 0 8px; } .ag-tabs button { flex: 1; justify-content: center; font-size: 11.5px; } .ag-tabs button.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
-  .ag-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; font-size: 12px; }
-  .ag-card h4 { margin: 0 0 8px; font-size: 12px; display: flex; gap: 6px; align-items: center; } .ag-card h4 .r { margin-left: auto; font-weight: 500; color: var(--tx3); font-size: 11px; }
-  .ag-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tx3); display: inline-block; } .ag-dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); } .ag-dot.err { background: var(--bad); }
-  .ag-steps { margin: 4px 0 8px 16px; padding: 0; color: var(--tx2); line-height: 1.6; font-size: 11.5px; }
-  .ag-code { font: 700 26px/1 var(--mono, monospace); letter-spacing: 4px; text-align: center; padding: 10px; background: var(--bg1); border-radius: 8px; margin: 6px 0; color: var(--acc); }
-  .ag-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
-  .ag-row small { display: block; color: var(--tx3); font-size: 10.5px; } .ag-row .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ag-stars { display: flex; gap: 2px; } .ag-stars button { width: 26px; height: 26px; padding: 0; justify-content: center; font-size: 14px; background: none; border: 0; filter: grayscale(1) opacity(.45); }
+  .ag-tabs { margin: var(--space-050) 0 var(--space-2); } .ag-tabs .ui-tab { flex: 1; }
+  .ag-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; font-size: var(--text-xs); }
+  .ag-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); display: flex; gap: var(--space-2); align-items: center; } .ag-card h4 .r { margin-left: auto; font-weight: 500; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .ag-card .help.ag-m0 { margin: 0; } .ag-card .help.ag-mt0 { margin-top: 0; } .ag-card .acts.ag-mt { margin-top: var(--space-2); }
+  .ag-dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: rgb(var(--color-fg-subtle)); display: inline-block; } .ag-dot.on { background: rgb(var(--color-success)); box-shadow: 0 0 8px rgb(var(--color-success)); } .ag-dot.err { background: rgb(var(--color-danger)); }
+  .ag-steps { margin: var(--space-1) 0 var(--space-2) var(--space-4); padding: 0; color: rgb(var(--color-fg-muted)); line-height: 1.6; font-size: var(--text-xs); }
+  .ag-code { font: 700 var(--text-xl)/1 var(--font-mono); letter-spacing: 4px; text-align: center; padding: var(--space-3); background: rgb(var(--color-surface)); border-radius: var(--radius-control); margin: var(--space-2) 0; color: rgb(var(--color-accent-text)); }
+  .ag-tog { display: flex; gap: var(--space-2); margin-top: var(--space-2); } .ag-tog input { width: auto; } .ag-tog small { display: block; font-size: var(--text-2xs); }
+  .ag-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); }
+  .ag-row--one { grid-template-columns: minmax(0,1fr); }
+  .ag-row small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); } .ag-row .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ag-stars { display: flex; gap: var(--space-050); } .ag-stars button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; font-size: var(--text-md); background: none; border: 0; filter: grayscale(1) opacity(.45); }
   .ag-stars button.on { filter: none; }
-  .ag-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; } .ag-chips span { padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line2); font-size: 10.5px; cursor: pointer; color: var(--tx2); }
-  .ag-chips span.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
-  .ag-sug { padding: 8px 0; border-top: 1px solid var(--line); } .ag-sug b { display: block; font-size: 12px; } .ag-sug p { margin: 3px 0 6px; color: var(--tx2); font-size: 11.5px; line-height: 1.45; }
-  .ag-sug .acts { display: flex; gap: 4px; } .ag-sug.done { opacity: .5; } .ag-sug .res { font-size: 10.5px; color: var(--tx3); }
-  .ag-notes { margin: 4px 0 0 14px; padding: 0; font-size: 11px; color: var(--tx2); } .ag-notes li { margin: 2px 0; }`;
+  .ag-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-2) 0; } .ag-chips .ui-chip { cursor: pointer; }
+  .ag-sug { padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); } .ag-sug b { display: block; font-size: var(--text-xs); } .ag-sug p { margin: var(--space-1) 0 var(--space-2); color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); line-height: 1.45; }
+  .ag-sug .acts { display: flex; gap: var(--space-1); } .ag-sug.done { opacity: .5; } .ag-sug .res { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+  .ag-prof { margin-top: var(--space-2); }
+  .ag-notes { margin: var(--space-1) 0 0 var(--space-4); padding: 0; font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); } .ag-notes li { margin: var(--space-050) 0; }`;
   document.head.appendChild(css);
 
   async function load() { S.st = await Studio.api('/api/agent/state'); render(); }
@@ -34,22 +37,22 @@
   function tgTab(t) {
     const st = t.running ? 'on' : t.error ? 'err' : '';
     let h = `<div class="ag-card"><h4><span class="ag-dot ${st}"></span> Cổng Telegram <span class="r">${t.running ? 'đang chờ tin nhắn' + (t.bot ? ` · @${esc(t.bot.username)}` : '') : t.on ? 'chưa chạy' : 'đang tắt'}</span></h4>`;
-    if (t.error) h += `<div class="help" style="color:var(--bad)">${esc(t.error)}</div>`;
+    if (t.error) h += `<div class="ui-banner ui-banner--err" role="alert">${esc(t.error)}</div>`;
     if (!t.hasToken) h += `<ol class="ag-steps"><li>Mở Telegram, nhắn <b>@BotFather</b> → <code>/newbot</code> → đặt tên.</li><li>Dán <b>token</b> BotFather trả về vào ô dưới.</li><li>Bấm <b>Lấy mã ghép nối</b> và gửi mã cho bot của bạn.</li></ol>`;
     h += `<span class="lbl">Token bot ${t.hasToken ? '(đã lưu — dán token mới để thay)' : ''}</span><input id="ag-token" type="password" placeholder="123456789:AA…" autocomplete="off">
-      <div class="acts" style="margin-top:6px"><button class="primary" data-ag="save"><i class="ti ti-plug-connected"></i> ${t.hasToken ? 'Lưu & chạy lại' : 'Kết nối'}</button>
+      <div class="acts ag-mt"><button class="primary" data-ag="save"><i class="ti ti-plug-connected"></i> ${t.hasToken ? 'Lưu & chạy lại' : 'Kết nối'}</button>
       ${t.hasToken ? `<button data-ag="toggle">${t.on ? '<i class="ti ti-player-pause"></i> Tắt' : '<i class="ti ti-player-play"></i> Bật'}</button>` : ''}</div></div>`;
     if (t.hasToken) {
       h += `<div class="ag-card"><h4><i class="ti ti-link"></i> Ghép nối <span class="r">${t.allowed.length} người dùng</span></h4>`;
-      if (t.pair) h += `<div class="help" style="margin:0">Gửi cho bot ${t.bot ? `<b>@${esc(t.bot.username)}</b>` : ''} trong 15 phút:</div><div class="ag-code">/start ${esc(t.pair.code)}</div>`;
+      if (t.pair) h += `<div class="help ag-m0">Gửi cho bot ${t.bot ? `<b>@${esc(t.bot.username)}</b>` : ''} trong 15 phút:</div><div class="ag-code">/start ${esc(t.pair.code)}</div>`;
       h += `<div class="acts"><button data-ag="pair"><i class="ti ti-key"></i> Lấy mã ghép nối</button>${t.allowed.length && t.running ? '<button data-ag="test"><i class="ti ti-send"></i> Gửi tin thử</button>' : ''}</div>`;
       h += t.allowed.map(a => `<div class="ag-row"><div><span class="nm">${esc(a.name)}</span><small>chat ${esc(a.id)}</small></div><button class="icon" title="Bỏ ghép nối" data-unpair="${esc(a.id)}"><i class="ti ti-unlink"></i></button></div>`).join('') + '</div>';
       const prof = S.st.profiles;
       h += `<div class="ag-card"><h4><i class="ti ti-settings"></i> Cách bot làm việc</h4>
         <span class="lbl">Hồ sơ kênh cho video gửi qua bot</span><select id="ag-prof"><option value="">Mặc định</option>${prof.map(p => `<option value="${esc(p.id)}" ${t.profile === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
         <span class="lbl">Bản tin sáng (đề xuất + tóm tắt) lúc</span><input id="ag-digest" type="time" value="${esc(t.digest || '')}">
-        <label class="ap-tog" style="display:flex;gap:8px;margin-top:8px"><input type="checkbox" id="ag-auto" ${t.autoImprove ? 'checked' : ''} style="width:auto"><span>Tự cải tiến sau mỗi 3 phản hồi<small class="muted" style="display:block;font-size:10.5px">Chỉnh hồ sơ kênh theo điểm và góp ý, báo lại qua Telegram</small></span></label>
-        <div class="acts" style="margin-top:6px"><button data-ag="opts"><i class="ti ti-device-floppy"></i> Lưu</button></div>
+        <label class="ag-tog"><input type="checkbox" id="ag-auto" ${t.autoImprove ? 'checked' : ''}><span>Tự cải tiến sau mỗi 3 phản hồi<small class="muted">Chỉnh hồ sơ kênh theo điểm và góp ý, báo lại qua Telegram</small></span></label>
+        <div class="acts ag-mt"><button data-ag="opts"><i class="ti ti-device-floppy"></i> Lưu</button></div>
         <div class="help">Trong Telegram: gửi video (≤ 20 MB) để tự dựng · <code>/chude</code> · <code>/trangthai</code> · <code>/dexuat</code> · <code>/caitien</code> · <code>/hoso</code> · hoặc nhắn tự nhiên. Bot chỉ chạy khi Studio đang mở, hoặc chạy riêng bằng <code>node scripts/telegram.mjs run</code>.</div></div>`;
     }
     return h;
@@ -57,22 +60,22 @@
   function fbTab() {
     const st = S.st;
     let h = `<div class="ag-card"><h4><i class="ti ti-movie"></i> Video vừa xuất của dự án</h4>`;
-    h += st.videos.length ? st.videos.map(v => { const r = S.rate[v.file] || {}; return `<div class="ag-row" style="grid-template-columns:minmax(0,1fr)"><div><span class="nm">${esc(v.name)}</span>${v.rated && !r.n ? '<small>đã chấm</small>' : ''}</div>
-      ${stars(v.file, r.n)}${r.n ? `<div class="ag-chips" data-tk="${esc(v.file)}">${Object.entries(st.tags).map(([k, l]) => `<span data-tag="${k}" class="${r.tags?.includes(k) ? 'on' : ''}">${esc(l)}</span>`).join('')}</div>
+    h += st.videos.length ? st.videos.map(v => { const r = S.rate[v.file] || {}; return `<div class="ag-row ag-row--one"><div><span class="nm">${esc(v.name)}</span>${v.rated && !r.n ? '<small>đã chấm</small>' : ''}</div>
+      ${stars(v.file, r.n)}${r.n ? `<div class="ag-chips" data-tk="${esc(v.file)}">${Object.entries(st.tags).map(([k, l]) => `<span data-tag="${k}" class="ui-chip ${r.tags?.includes(k) ? 'is-active' : ''}">${esc(l)}</span>`).join('')}</div>
       <textarea rows="2" data-cm="${esc(v.file)}" placeholder="Góp ý thêm (không bắt buộc)">${esc(r.comment || '')}</textarea><div class="acts"><button class="primary" data-send="${esc(v.file)}"><i class="ti ti-check"></i> Gửi phản hồi</button></div>` : ''}</div>`; }).join('')
-      : '<div class="help" style="margin:0">Xuất video (nút Xuất) rồi chấm ở đây. Video gửi qua Telegram được chấm ngay trong chat.</div>';
+      : '<div class="help ag-m0">Xuất video (nút Xuất) rồi chấm ở đây. Video gửi qua Telegram được chấm ngay trong chat.</div>';
     h += '</div>';
     const fb = st.feedback.slice(0, 15);
-    h += `<div class="ag-card"><h4><i class="ti ti-message-star"></i> Phản hồi gần đây <span class="r">${st.feedback.length}</span></h4>${fb.map(e => `<div class="ag-row" style="grid-template-columns:minmax(0,1fr)"><div><span class="nm">${e.rating ? '⭐'.repeat(e.rating) : '—'} ${esc(e.video ? e.video.split(/[\\/]/).pop() : e.project ? e.project.split(/[\\/]/).pop() : '')}</span>
-      <small>${esc(e.source)} · ${new Date(e.t).toLocaleString('vi-VN')}${e.qc != null ? ` · QC ${e.qc}` : ''}${e.tags.length ? ' · ' + e.tags.map(t => esc(st.tags[t] || t)).join(', ') : ''}</small>${e.comment ? `<small>“${esc(e.comment)}”</small>` : ''}</div></div>`).join('') || '<div class="help" style="margin:0">Chưa có phản hồi.</div>'}</div>`;
+    h += `<div class="ag-card"><h4><i class="ti ti-message-star"></i> Phản hồi gần đây <span class="r">${st.feedback.length}</span></h4>${fb.map(e => `<div class="ag-row ag-row--one"><div><span class="nm">${e.rating ? '⭐'.repeat(e.rating) : '—'} ${esc(e.video ? e.video.split(/[\\/]/).pop() : e.project ? e.project.split(/[\\/]/).pop() : '')}</span>
+      <small>${esc(e.source)} · ${new Date(e.t).toLocaleString('vi-VN')}${e.qc != null ? ` · QC ${e.qc}` : ''}${e.tags.length ? ' · ' + e.tags.map(t => esc(st.tags[t] || t)).join(', ') : ''}</small>${e.comment ? `<small>“${esc(e.comment)}”</small>` : ''}</div></div>`).join('') || '<div class="help ag-m0">Chưa có phản hồi.</div>'}</div>`;
     return h;
   }
   function sugTab() {
     const st = S.st, imp = st.improve;
     let h = `<div class="ag-card"><h4><i class="ti ti-brain"></i> Tự cải tiến <span class="r">${imp ? 'lần cuối ' + new Date(imp.at).toLocaleString('vi-VN') : 'chưa chạy'}</span></h4>
-      <div class="help" style="margin-top:0">Đọc điểm, thẻ góp ý và lỗi AI kiểm tra → chỉnh mật độ hiệu ứng, âm lượng nhạc, kiểu phụ đề, hướng dẫn cho AI dựng giúp của từng hồ sơ kênh.</div>
+      <div class="help ag-mt0">Đọc điểm, thẻ góp ý và lỗi AI kiểm tra → chỉnh mật độ hiệu ứng, âm lượng nhạc, kiểu phụ đề, hướng dẫn cho AI dựng giúp của từng hồ sơ kênh.</div>
       <div class="acts"><button class="primary" data-ag="improve"><i class="ti ti-sparkles"></i> Tự cải tiến ngay</button></div>`;
-    for (const p of st.profiles.filter(p => p.fb)) h += `<div style="margin-top:8px"><b>${esc(p.name)}</b> <span class="muted">${p.fb.n} phản hồi${p.fb.avg ? ` · TB ${p.fb.avg}★` : ''}</span><ul class="ag-notes">${(p.fb.notes || []).map(n => `<li>${esc(n)}</li>`).join('') || '<li>chưa cần chỉnh</li>'}</ul></div>`;
+    for (const p of st.profiles.filter(p => p.fb)) h += `<div class="ag-prof"><b>${esc(p.name)}</b> <span class="muted">${p.fb.n} phản hồi${p.fb.avg ? ` · TB ${p.fb.avg}★` : ''}</span><ul class="ag-notes">${(p.fb.notes || []).map(n => `<li>${esc(n)}</li>`).join('') || '<li>chưa cần chỉnh</li>'}</ul></div>`;
     if (imp?.ai?.summary) h += `<div class="help">🤖 ${esc(imp.ai.summary)}</div>`; else if (imp?.ai?.error) h += `<div class="help">AI: ${esc(imp.ai.error)}</div>`;
     h += '</div>';
     const items = st.suggestions.filter(s => s.state === 'new'), old = st.suggestions.filter(s => s.state !== 'new').slice(0, 6);
@@ -85,8 +88,8 @@
   }
   function render() {
     const el = $('#libbody'); if (!el || !active()) return;
-    if (!S.st) { el.innerHTML = '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang tải…</div>'; return; }
-    el.innerHTML = `<div class="ag-tabs">${[['tg', 'Telegram'], ['fb', 'Phản hồi'], ['sug', 'Cải tiến & đề xuất']].map(([k, l]) => `<button data-agtab="${k}" class="${S.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    if (!S.st) { el.innerHTML = '<div class="ui-state ui-state--loading" role="status"><i class="ti ti-loader-2 ui-state__icon"></i> Đang tải…</div>'; return; }
+    el.innerHTML = `<div class="ui-tabs ag-tabs" role="tablist">${[['tg', 'Telegram'], ['fb', 'Phản hồi'], ['sug', 'Cải tiến & đề xuất']].map(([k, l]) => `<button role="tab" data-agtab="${k}" class="ui-tab" aria-selected="${S.tab === k}">${l}</button>`).join('')}</div>
       ${S.busy ? `<div class="help"><i class="ti ti-loader-2 spin"></i> ${esc(S.busy)}</div>` : ''}${S.tab === 'tg' ? tgTab(S.st.tg) : S.tab === 'fb' ? fbTab() : sugTab()}`;
   }
 

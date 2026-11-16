@@ -5,25 +5,36 @@
     ['"Lexend", sans-serif', 'Lexend'], ['"Nunito", sans-serif', 'Nunito'], ['"Oswald", sans-serif', 'Oswald'], ['"Playfair Display", serif', 'Playfair Display'],
     ['"DM Serif Display", serif', 'DM Serif Display'], ['"Bungee", sans-serif', 'Bungee'], ['"Pacifico", cursive', 'Pacifico']];
   const KEYS = ['primary', 'accent', 'dark', 'light', 'font', 'disp', 'logo', 'name', 'handle', 'phone', 'website', 'outro', 'kit'];
-  const DEF = { primary: '#FF5A36', accent: '#FFD84A', dark: '#111214', light: '#FFFFFF' };
+  const DEF = { primary: '#FF5A36', accent: '#FFD84A', dark: '#111214', light: '#FFFFFF' }; // design-token-ok: màu mặc định của brand kit là dữ liệu video, không phải màu giao diện
+  // Màu brand (dữ liệu người dùng) đặt bằng biến CSS sau khi chèn HTML: data-bkc → --bk-c, data-bkbg/data-bkfg → --bk-bg/--bk-fg.
+  const paint = root => root.querySelectorAll('[data-bkc],[data-bkbg],[data-bkfg]').forEach(el => {
+    if (el.dataset.bkc) el.style.setProperty('--bk-c', el.dataset.bkc);
+    if (el.dataset.bkbg) el.style.setProperty('--bk-bg', el.dataset.bkbg);
+    if (el.dataset.bkfg) el.style.setProperty('--bk-fg', el.dataset.bkfg);
+  });
   let LIST = null, EDIT = null;
   const css = document.createElement('style');
   css.textContent = `
-  .bk-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
-  .bk-card.cur { border-color: var(--acc-line); box-shadow: 0 0 0 1px var(--acc-line) inset; }
-  .bk-top { display: flex; gap: 10px; align-items: center; }
-  .bk-logo { width: 40px; height: 40px; border-radius: 10px; background: var(--bg4); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; font-weight: 800; font-size: 15px; }
+  .bk-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; transition: border-color var(--duration-fast) var(--ease-standard); }
+  .bk-card.cur { border-color: rgb(var(--color-accent-text)); box-shadow: inset 0 0 0 1px rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .14); }
+  .bk-top { display: flex; gap: var(--space-3); align-items: center; }
+  .bk-logo { width: var(--h-lg); height: var(--h-lg); border-radius: var(--radius-control); background: var(--bk-bg, rgb(var(--color-surface-hover))); color: var(--bk-fg, rgb(var(--color-fg))); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; font-weight: 800; font-size: var(--text-md); }
   .bk-logo img { width: 100%; height: 100%; object-fit: contain; }
-  .bk-nm { min-width: 0; flex: 1; } .bk-nm b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bk-nm small { color: var(--tx3); font-size: 10.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bk-sw { display: flex; gap: 3px; margin-top: 8px; } .bk-sw i { flex: 1; height: 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,.08); }
-  .bk-act { display: flex; gap: 4px; margin-top: 8px; } .bk-act button { padding: 4px 8px; font-size: 11px; } .bk-act .grow { flex: 1; }
-  .bk-form label { display: block; font-size: 10.5px; color: var(--tx3); margin: 8px 0 3px; }
-  .bk-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; } .bk-g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 6px; }
-  .bk-up { display: flex; gap: 8px; align-items: center; }
-  #bk-menu { position: fixed; z-index: 60; background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; padding: 6px; min-width: 230px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
-  #bk-menu button { width: 100%; background: transparent; border-color: transparent; justify-content: flex-start; padding: 6px 8px; }
-  #bk-menu button:hover { background: var(--bg4); } #bk-menu .dots { display: inline-flex; gap: 2px; } #bk-menu .dots i { width: 9px; height: 9px; border-radius: 50%; }
-  #bk-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .bk-nm { min-width: 0; flex: 1; } .bk-nm b { display: block; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bk-nm small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bk-sw { display: flex; gap: var(--space-1); margin-top: var(--space-2); } .bk-sw i { flex: 1; height: 16px; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-white) / .08); background: var(--bk-c); }
+  .bk-act { display: flex; gap: var(--space-1); margin-top: var(--space-2); } .bk-act button { padding: var(--space-1) var(--space-2); font-size: var(--text-2xs); } .bk-act .grow { flex: 1; }
+  .bk-title { font-size: var(--text-sm); }
+  .bk-form label { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-1); }
+  .bk-intro { margin-top: var(--space-1); }
+  .bk-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); } .bk-g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 var(--space-2); }
+  .bk-up { display: flex; gap: var(--space-2); align-items: center; }
+  #bk-menu { position: fixed; z-index: 60; background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); padding: var(--space-2); min-width: 230px; box-shadow: var(--shadow-overlay); }
+  #bk-menu button { width: 100%; background: transparent; border-color: transparent; justify-content: flex-start; padding: var(--space-2); }
+  #bk-menu button:hover { background: rgb(var(--color-surface-hover)); } #bk-menu .dots { display: inline-flex; gap: var(--space-050); } #bk-menu .dots i { width: 10px; height: 10px; border-radius: var(--radius-pill); background: var(--bk-c); }
+  #bk-menu .bk-cur { margin-left: auto; color: rgb(var(--color-accent-text)); }
+  #bk-menu hr { border: 0; border-top: 1px solid rgb(var(--color-line)); margin: var(--space-1) 0; }
+  #bk-sw .sw { width: 12px; height: 12px; border-radius: var(--radius-xs); display: inline-block; background: rgb(var(--color-surface-hover)); }
+  #bk-sw .ti-chevron-down { font-size: var(--text-sm); }
   #bk-sw b { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }`;
   document.head.appendChild(css);
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'brands';
@@ -47,9 +58,9 @@
   }
   function card(b) {
     const ini = (b.name || b.title || '?').split(/\s+/).slice(-2).map(w => w[0]).join('').toUpperCase();
-    return `<div class="bk-card ${cur() === b.id ? 'cur' : ''}"><div class="bk-top"><div class="bk-logo" style="background:${esc(b.primary || '#333')};color:${esc(b.light || '#fff')}">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : esc(ini)}</div>
+    return `<div class="bk-card ${cur() === b.id ? 'cur' : ''}"><div class="bk-top"><div class="bk-logo" data-bkbg="${esc(b.primary || '')}" data-bkfg="${esc(b.light || '')}">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : esc(ini)}</div>
       <div class="bk-nm"><b>${esc(b.title || b.name)}</b><small>${esc([b.name, b.handle, b.phone].filter(Boolean).join(' · ') || 'chưa có thông tin')}</small></div>${cur() === b.id ? '<span class="pill">đang dùng</span>' : ''}</div>
-      <div class="bk-sw">${['primary', 'accent', 'dark', 'light'].map(k => `<i title="${k} ${esc(b[k] || DEF[k])}" style="background:${esc(b[k] || DEF[k])}"></i>`).join('')}</div>
+      <div class="bk-sw">${['primary', 'accent', 'dark', 'light'].map(k => `<i title="${k} ${esc(b[k] || DEF[k])}" data-bkc="${esc(b[k] || DEF[k])}"></i>`).join('')}</div>
       <div class="bk-act"><button class="primary" data-bka="${esc(b.id)}"><i class="ti ti-check"></i> Áp dụng cho dự án</button><span class="grow"></span>
         <button class="icon" title="Sửa" data-bke="${esc(b.id)}"><i class="ti ti-pencil"></i></button><button class="icon" title="Nhân bản" data-bkd="${esc(b.id)}"><i class="ti ti-copy"></i></button><button class="icon danger" title="Xoá" data-bkx="${esc(b.id)}"><i class="ti ti-trash"></i></button></div></div>`;
   }
@@ -57,7 +68,7 @@
     const b = EDIT, inp = (k, l, ph = '') => `<div><label>${l}</label><input data-bk="${k}" value="${esc(b[k] || '')}" placeholder="${esc(ph)}"></div>`;
     const col = (k, l) => `<div><label>${l}</label><input type="color" data-bk="${k}" value="${esc(b[k] || DEF[k])}"></div>`;
     const sel = (k, l, opts) => `<div><label>${l}</label><select data-bk="${k}">${opts.map(([v, t]) => `<option value="${esc(v)}" ${(b[k] || '') === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`;
-    return `<div class="bk-card bk-form"><b style="font-size:12.5px">${b.id ? 'Sửa thương hiệu' : 'Thương hiệu mới'}</b>
+    return `<div class="bk-card bk-form"><b class="bk-title">${b.id ? 'Sửa thương hiệu' : 'Thương hiệu mới'}</b>
       ${inp('title', 'Tên bộ nhận diện (chỉ để bạn phân biệt)', 'VD: Kênh BĐS Sài Gòn')}
       <div class="bk-g4">${col('primary', 'Màu chính')}${col('accent', 'Màu nhấn')}${col('dark', 'Nền tối')}${col('light', 'Chữ sáng')}</div>
       <div class="bk-g2">${sel('font', 'Font chữ', FONTS)}${sel('disp', 'Font tiêu đề', FONTS)}</div>
@@ -72,7 +83,7 @@
     $('#libact').innerHTML = `<button class="icon" id="bk-new" title="Thương hiệu mới"><i class="ti ti-plus"></i></button>`;
     $('#bk-new').onclick = () => { EDIT = { ...DEF }; render(); };
     if (!LIST) { $('#libbody').innerHTML = '<div class="help">Đang tải…</div>'; return; }
-    $('#libbody').innerHTML = `<div class="help" style="margin-top:4px">Lưu nhiều bộ nhận diện (màu, font, logo, liên hệ) dùng lại cho mọi dự án và cho <b>Làm hàng loạt</b>. Lưu ở <code>~/.ai-video-studio/brands.json</code>.</div>
+    $('#libbody').innerHTML = `<div class="help bk-intro">Lưu nhiều bộ nhận diện (màu, font, logo, liên hệ) dùng lại cho mọi dự án và cho <b>Làm hàng loạt</b>. Lưu ở <code>~/.ai-video-studio/brands.json</code>.</div>
       ${EDIT ? form() : ''}
       ${LIST.map(card).join('') || (EDIT ? '' : '<div class="help">Chưa có thương hiệu nào.</div>')}
       <div class="acts"><button id="bk-new2"><i class="ti ti-plus"></i> Thương hiệu mới</button><button id="bk-fromproj" title="Lấy màu, tên, liên hệ đang đặt trong dự án này"><i class="ti ti-download"></i> Lưu từ dự án này</button></div>`;
@@ -80,6 +91,7 @@
   }
   function bind() {
     const B = $('#libbody');
+    paint(B);
     $('#bk-new2').onclick = () => { EDIT = { ...DEF }; render(); };
     $('#bk-fromproj').onclick = () => { const t = Studio.TL.brand || {}; EDIT = { ...DEF, ...Object.fromEntries(['primary', 'accent', 'dark', 'light', 'font', 'disp', 'name', 'handle', 'phone', 'website'].filter(k => t[k]).map(k => [k, t[k]])), title: t.name || Studio.META.name, pack: Studio.TL.pack || '' }; render(); };
     B.querySelectorAll('[data-bka]').forEach(b => (b.onclick = () => apply(b.dataset.bka)));
@@ -110,21 +122,22 @@
     if (!sw) return;
     const b = LIST?.find(x => x.id === cur());
     sw.querySelector('b').textContent = b ? b.title || b.name : 'Thương hiệu';
-    sw.querySelector('.sw').style.background = b?.primary || Studio.TL?.brand?.primary || 'var(--bg4)';
+    sw.querySelector('.sw').style.background = b?.primary || Studio.TL?.brand?.primary || 'rgb(var(--color-surface-hover))';
   }
   function menu() {
     document.getElementById('bk-menu')?.remove();
     const r = sw.getBoundingClientRect(), m = document.createElement('div'); m.id = 'bk-menu';
     m.style.top = r.bottom + 6 + 'px'; m.style.left = Math.min(innerWidth - 250, r.left) + 'px';
-    m.innerHTML = (LIST || []).map(b => `<button data-bkm="${esc(b.id)}"><span class="dots"><i style="background:${esc(b.primary || DEF.primary)}"></i><i style="background:${esc(b.accent || DEF.accent)}"></i></span>${esc(b.title || b.name)}${cur() === b.id ? ' <i class="ti ti-check" style="margin-left:auto;color:var(--acc)"></i>' : ''}</button>`).join('')
+    m.innerHTML = (LIST || []).map(b => `<button data-bkm="${esc(b.id)}"><span class="dots"><i data-bkc="${esc(b.primary || DEF.primary)}"></i><i data-bkc="${esc(b.accent || DEF.accent)}"></i></span>${esc(b.title || b.name)}${cur() === b.id ? ' <i class="ti ti-check bk-cur"></i>' : ''}</button>`).join('')
       + `${LIST?.length ? '<hr>' : ''}<button data-bkm=""><i class="ti ti-settings"></i> Quản lý thương hiệu…</button>`;
+    paint(m);
     document.body.appendChild(m);
     m.onclick = e => { const b = e.target.closest('[data-bkm]'); if (!b) return; m.remove(); if (b.dataset.bkm) apply(b.dataset.bkm); else document.querySelector('#rail [data-p="brands"]')?.click(); };
     setTimeout(() => document.addEventListener('mousedown', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', off); } }), 0);
   }
   Studio.addPanel('brands', 'ti-palette', 'Thương hiệu', () => { render(); if (!LIST) load(); });
   Studio.onReady(() => {
-    sw = Studio.addTopButton('<button class="ghost" id="bk-sw" title="Đổi nhanh thương hiệu"><span class="sw" style="width:12px;height:12px;border-radius:4px;display:inline-block"></span><b>Thương hiệu</b><i class="ti ti-chevron-down" style="font-size:13px"></i></button>', menu);
+    sw = Studio.addTopButton('<button class="ghost" id="bk-sw" title="Đổi nhanh thương hiệu"><span class="sw"></span><b>Thương hiệu</b><i class="ti ti-chevron-down"></i></button>', menu);
     load();
   });
 })();

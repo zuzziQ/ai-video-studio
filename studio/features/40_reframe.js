@@ -30,7 +30,7 @@
         <small>${o.reframe.length} điểm · nguồn ${o.ar ? (o.ar > 1 ? 'ngang' : 'dọc') + ' ' + o.ar.toFixed(2) + ':1' : ''}</small></div></div>
         <div class="acts"><button data-rf="toggle" class="${on ? 'on' : ''}"><i class="ti ${on ? 'ti-toggle-right' : 'ti-toggle-left'}"></i> ${on ? 'Tắt' : 'Bật'}</button>
         <button data-rf="run"><i class="ti ti-refresh"></i> Dò lại</button><button data-rf="clear" class="danger"><i class="ti ti-trash"></i> Xoá</button></div>
-        ${(o.fit || 'cover') !== 'cover' ? '<div class="help" style="color:var(--warn)">Bám mặt chỉ có tác dụng ở chế độ Lấp đầy (tab Cơ bản).</div>' : ''}
+        ${(o.fit || 'cover') !== 'cover' ? '<div class="help rf-warn">Bám mặt chỉ có tác dụng ở chế độ Lấp đầy (tab Cơ bản).</div>' : ''}
         <div class="help">${same ? 'Nguồn cùng khổ với khung nên không cần dời khung; tăng <b>Phóng to</b> ở tab Cơ bản để zoom vào mặt (tâm zoom bám theo mặt).'
           : 'Khung cắt tự dời theo mặt; Tâm X/Y ở tab Cơ bản bị thay bằng vị trí mặt. Phóng to &gt; 1 sẽ zoom quanh mặt.'}</div>`;
     }
@@ -135,22 +135,23 @@
 
   const st = document.createElement('style');
   st.textContent = `
-#rfpanel .rfstat { display:flex; gap:10px; align-items:center; padding:10px; border:1px solid var(--line2); border-radius:var(--r); background:var(--bg2); margin-top:4px; }
-#rfpanel .rfstat i { font-size:22px; color:var(--tx3); } #rfpanel .rfstat.on i { color:var(--ok); }
-#rfpanel .rfstat small { display:block; color:var(--tx3); font-size:11px; }
-#rfpanel button.on { background:var(--acc-soft); border-color:var(--acc-line); }
-#dubp .seg3 { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
-#dubp .seg3 button.on { background:var(--acc-soft); border-color:var(--acc-line); }
-#dubp .row { display:flex; gap:8px; } #dubp .row > div { flex:1; min-width:0; } #dubp select { width:100%; }
-#dubp audio { width:100%; height:32px; margin-top:6px; }
-#dubp .dubfile { font-size:11px; color:var(--tx2); margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; word-break:break-all; }
-#dubp .trlist { display:flex; flex-direction:column; gap:6px; max-height:420px; overflow:auto; }
-#dubp .trlist small { display:block; color:var(--tx3); font-size:10.5px; margin-bottom:2px; }
+#rfpanel .rfstat { display:flex; gap:var(--space-3); align-items:center; padding:var(--space-3); border:1px solid rgb(var(--color-line-strong)); border-radius:var(--radius-control); background:rgb(var(--color-surface-raised)); margin-top:var(--space-1); }
+#rfpanel .rfstat i { font-size:var(--text-xl); color:rgb(var(--color-fg-subtle)); } #rfpanel .rfstat.on i { color:rgb(var(--color-success)); }
+#rfpanel .rfstat small { display:block; color:rgb(var(--color-fg-subtle)); font-size:var(--text-2xs); }
+#rfpanel button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); }
+#rfpanel .help.rf-warn { color:rgb(var(--color-warning-text)); }
+#dubp .seg3 { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-1); }
+#dubp .seg3 button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); }
+#dubp .row { display:flex; gap:var(--space-2); } #dubp .row > div { flex:1; min-width:0; } #dubp select { width:100%; }
+#dubp audio { width:100%; height:var(--h-md); margin-top:var(--space-2); }
+#dubp .dubfile { font-size:var(--text-2xs); color:rgb(var(--color-fg-muted)); margin-top:var(--space-2); display:flex; flex-wrap:wrap; gap:var(--space-2); align-items:center; word-break:break-all; }
+#dubp .trlist { display:flex; flex-direction:column; gap:var(--space-2); max-height:420px; overflow:auto; }
+#dubp .trlist small { display:block; color:rgb(var(--color-fg-subtle)); font-size:var(--text-2xs); margin-bottom:var(--space-050); }
 #dubp .trlist input { width:100%; }
-.xasp { display:flex; flex-direction:column; gap:4px; margin:4px 0 2px; }
-.xasp label { display:flex; gap:6px; align-items:center; font-size:12px; cursor:pointer; } .xasp small { color:var(--tx3); }
-.xouts { display:flex; flex-direction:column; gap:6px; margin:6px 0 10px; }
-.xouts > div { padding:8px 10px; border:1px solid var(--line2); border-radius:var(--rs); background:var(--bg2); }
-.xouts a { color:var(--acc); margin-left:6px; } .xouts small { display:block; color:var(--tx3); margin-top:3px; }`;
+.xasp { display:flex; flex-direction:column; gap:var(--space-1); margin:var(--space-1) 0 var(--space-050); }
+.xasp label { display:flex; gap:var(--space-2); align-items:center; font-size:var(--text-xs); cursor:pointer; } .xasp small { color:rgb(var(--color-fg-subtle)); }
+.xouts { display:flex; flex-direction:column; gap:var(--space-2); margin:var(--space-2) 0 var(--space-3); }
+.xouts > div { padding:var(--space-2) var(--space-3); border:1px solid rgb(var(--color-line-strong)); border-radius:var(--radius-control); background:rgb(var(--color-surface-raised)); }
+.xouts a { color:rgb(var(--color-accent-text)); margin-left:var(--space-2); } .xouts small { display:block; color:rgb(var(--color-fg-subtle)); margin-top:var(--space-1); }`;
   document.head.appendChild(st);
 })();

@@ -6,21 +6,25 @@
   const css = document.createElement('style');
   css.textContent = `
   #modalbox.pub-wide { width: min(820px, 94vw); }
-  .pub-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
-  .pub-honest { background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: #F5D58A; border-radius: 8px; padding: 8px 10px; font-size: 11.5px; line-height: 1.5; margin: 10px 0; }
-  .pub-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line2); margin: 12px 0 0; flex-wrap: wrap; }
-  .pub-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--tx2); padding: 8px 10px; }
-  .pub-tabs button.on { color: var(--tx); border-bottom-color: var(--acc); }
-  .pub-tabs button input { margin: 0 2px 0 0; }
-  .pub-body { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 14px; padding-top: 10px; }
-  .pub-f { margin-bottom: 8px; } .pub-f .h { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--tx3); margin-bottom: 4px; } .pub-f .h .grow { flex: 1; }
-  .pub-f .h button { padding: 2px 8px; font-size: 10.5px; } .pub-f textarea { width: 100%; min-height: 80px; } .pub-f input { width: 100%; }
-  .pub-f .cnt { font-size: 10px; color: var(--tx3); } .pub-f .cnt.over { color: var(--bad); }
-  .pub-chk { font-size: 11px; display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; } .pub-chk div { display: flex; gap: 6px; align-items: flex-start; line-height: 1.35; }
-  .pub-chk .ok { color: var(--ok); } .pub-chk .warn { color: var(--warn); } .pub-chk .bad { color: var(--bad); }
-  .pub-side img { width: 100%; max-height: 220px; object-fit: contain; background: #000; border-radius: 8px; border: 1px solid var(--line2); margin-top: 6px; }
-  .pub-side .acts { padding-top: 6px; } .pub-side .acts button { width: 100%; justify-content: center; }
-  .pub-empty { padding: 26px 10px; text-align: center; color: var(--tx3); }`;
+  .pub-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: end; }
+  .pub .lbl.pub-mt0 { margin-top: 0; }
+  .pub-honest { background: rgb(var(--color-warning) / .08); border: 1px solid rgb(var(--color-warning) / .3); color: rgb(var(--color-warning-text)); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); font-size: var(--text-xs); line-height: 1.5; margin: var(--space-3) 0; }
+  .pub .bar i.pub-ind { width: 45%; }
+  .pub-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid rgb(var(--color-line-strong)); margin: var(--space-3) 0 0; flex-wrap: wrap; }
+  .pub-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: rgb(var(--color-fg-muted)); padding: var(--space-2) var(--space-3); transition: color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard); }
+  .pub-tabs button:hover { background: transparent; color: rgb(var(--color-fg)); }
+  .pub-tabs button.on { color: rgb(var(--color-fg)); border-bottom-color: rgb(var(--color-accent-text)); }
+  .pub-tabs button input { margin: 0 var(--space-050) 0 0; }
+  .pub-body { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: var(--space-4); padding-top: var(--space-3); }
+  .pub-f { margin-bottom: var(--space-2); } .pub-f .h { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin-bottom: var(--space-1); } .pub-f .h .grow { flex: 1; }
+  .pub-f .h button { padding: var(--space-050) var(--space-2); font-size: var(--text-2xs); } .pub-f textarea { width: 100%; min-height: 80px; } .pub-f input { width: 100%; }
+  .pub-f .cnt { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); } .pub-f .cnt.over { color: rgb(var(--color-danger-text)); }
+  .pub-acts-xs { padding-top: var(--space-050); }
+  .pub-chk { font-size: var(--text-2xs); display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); } .pub-chk div { display: flex; gap: var(--space-2); align-items: flex-start; line-height: 1.35; }
+  .pub-chk .ok { color: rgb(var(--color-success)); } .pub-chk .warn { color: rgb(var(--color-warning)); } .pub-chk .bad { color: rgb(var(--color-danger)); }
+  .pub-cover-row { display: flex; gap: var(--space-2); } .pub-cover-row input { width: 80px; } .pub-cover-row button { flex: 1; justify-content: center; }
+  .pub-side img { width: 100%; max-height: 220px; object-fit: contain; background: rgb(var(--color-black)); border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); margin-top: var(--space-2); }
+  .pub-side .acts { padding-top: var(--space-2); } .pub-side .acts button { width: 100%; justify-content: center; }`;
   document.head.appendChild(css);
   const box = () => $('#modalbox');
   const copy = async (txt, what) => { try { await navigator.clipboard.writeText(txt); } catch { const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); } Studio.toast('Đã chép ' + what); };
@@ -58,25 +62,25 @@
   function render() {
     const P = S.plats || {}, d = S.data?.platforms?.[S.tab], chk = S.check?.checks?.[S.tab] || [];
     Studio.modal(`<div class="pub"><h3><i class="ti ti-send"></i> Đăng mạng xã hội</h3>
-      <div class="pub-top"><div><label class="lbl" style="margin-top:0">Video đã xuất</label><select id="pub-vid">${S.videos.length ? S.videos.map(v => `<option ${v.path === S.video ? 'selected' : ''}>${esc(v.path)}</option>`).join('') : '<option value="">— chưa có video, bấm Xuất trước —</option>'}</select></div>
+      <div class="pub-top"><div><label class="lbl pub-mt0">Video đã xuất</label><select id="pub-vid">${S.videos.length ? S.videos.map(v => `<option ${v.path === S.video ? 'selected' : ''}>${esc(v.path)}</option>`).join('') : '<option value="">— chưa có video, bấm Xuất trước —</option>'}</select></div>
         <button class="primary" id="pub-gen" ${S.busy || !S.video ? 'disabled' : ''}>${S.busy ? '<i class="ti ti-loader-2 spin"></i> Đang viết…' : `<i class="ti ti-sparkles"></i> ${S.data ? 'Viết lại' : 'Viết nội dung'} bằng AI`}</button></div>
       <label class="lbl">Ghi chú cho AI (tuỳ chọn)</label><input id="pub-notes" placeholder="VD: nhấn mạnh ưu đãi tháng này, giọng vui vẻ, kêu gọi inbox" value="${esc(S.notes)}">
       <div class="pub-honest"><i class="ti ti-info-circle"></i> Studio <b>không tự đăng</b> lên TikTok/Facebook/Instagram/Zalo — việc đó cần ứng dụng OAuth được từng nền tảng duyệt. Bấm <b>Chép</b> từng phần, <b>Mở trang đăng</b> rồi kéo file MP4 vào, hoặc <b>Lên lịch</b> để Studio nhắc đúng giờ (YouTube: tự tải lên nếu đã <b>Kết nối YouTube</b> ở mục Lịch đăng). Thông số kiểm tra là tham khảo (nền tảng đổi thường xuyên).</div>
-      ${S.busy ? `<div class="muted" id="pub-busy"><i class="ti ti-loader-2 spin"></i> ${esc(S.busy)}</div><div class="bar"><i style="width:45%"></i></div>` : ''}
+      ${S.busy ? `<div class="muted" id="pub-busy"><i class="ti ti-loader-2 spin"></i> ${esc(S.busy)}</div><div class="bar"><i class="pub-ind"></i></div>` : ''}
       <div class="pub-tabs">${Object.entries(P).map(([k, p]) => `<button data-ptab="${k}" class="${k === S.tab ? 'on' : ''}"><input type="checkbox" data-psel="${k}" ${S.sel[k] ? 'checked' : ''} title="Viết cho nền tảng này"><i class="ti ${ICON[k]}"></i> ${esc(p.name)}</button>`).join('')}</div>
       <div class="pub-body"><div>
         ${d ? `${S.tab === 'youtube' ? field('title', 'Tiêu đề', d.title, { max: 100 }) : ''}
           ${field('caption', S.tab === 'youtube' ? 'Mô tả' : 'Caption', d.caption, { area: 5, max: LIM[S.tab] })}
           ${field('hashtags', 'Hashtag', (d.hashtags || []).join(' '), { copyAs: 'hashtag' })}
           ${field('first_comment', 'Bình luận đầu tiên (ghim)', d.first_comment, { area: 2, copyAs: 'bình luận' })}
-          <div class="acts" style="padding-top:2px"><button id="pub-all"><i class="ti ti-clipboard-text"></i> Chép tất cả (caption + hashtag)</button><button id="pub-save"><i class="ti ti-device-floppy"></i> Lưu chỉnh sửa</button></div>
+          <div class="acts pub-acts-xs"><button id="pub-all"><i class="ti ti-clipboard-text"></i> Chép tất cả (caption + hashtag)</button><button id="pub-save"><i class="ti ti-device-floppy"></i> Lưu chỉnh sửa</button></div>
           <div class="help">Lưu tại <code>publish/${S.tab}.txt</code> trong thư mục dự án.</div>`
-        : `<div class="pub-empty"><i class="ti ti-sparkles" style="font-size:26px"></i><br>${S.video ? 'Bấm <b>Viết nội dung bằng AI</b>: Claude đọc lời thoại và viết tiêu đề, caption, hashtag, bình luận đầu và gợi ý ảnh bìa cho từng nền tảng.' : 'Chưa có video đã xuất trong <code>out/</code>.'}</div>`}
+        : `<div class="ui-state ui-state--empty"><i class="ti ti-sparkles ui-state__icon"></i><div>${S.video ? 'Bấm <b>Viết nội dung bằng AI</b>: Claude đọc lời thoại và viết tiêu đề, caption, hashtag, bình luận đầu và gợi ý ảnh bìa cho từng nền tảng.' : 'Chưa có video đã xuất trong <code>out/</code>.'}</div></div>`}
       </div><div class="pub-side">
-        <div class="lbl" style="margin-top:0">Kiểm tra cho ${esc(P[S.tab]?.name || '')}</div>
+        <div class="lbl pub-mt0">Kiểm tra cho ${esc(P[S.tab]?.name || '')}</div>
         <div class="pub-chk">${chk.length ? chk.map(c => `<div class="${c.level}"><i class="ti ${c.level === 'ok' ? 'ti-circle-check' : c.level === 'warn' ? 'ti-alert-triangle' : 'ti-circle-x'}"></i><span>${esc(c.msg)}</span></div>`).join('') : '<span class="muted">—</span>'}</div>
         <div class="lbl">Ảnh bìa${d?.thumb_text ? ` · chữ gợi ý: “${esc(d.thumb_text)}”` : ''}</div>
-        <div style="display:flex;gap:6px"><input id="pub-ct" type="number" step="0.1" min="0" value="${esc(S.coverT)}" style="width:80px" title="Giây"><button id="pub-cover" style="flex:1;justify-content:center"><i class="ti ti-photo"></i> Xuất ảnh bìa</button></div>
+        <div class="pub-cover-row"><input id="pub-ct" type="number" step="0.1" min="0" value="${esc(S.coverT)}" title="Giây"><button id="pub-cover"><i class="ti ti-photo"></i> Xuất ảnh bìa</button></div>
         ${d?.thumb_time != null ? `<div class="help">AI gợi ý khung ${d.thumb_time}s</div>` : ''}
         ${S.cover ? `<img src="${esc(S.cover.url)}"><div class="acts"><button data-preveal="${esc(S.cover.out)}"><i class="ti ti-folder"></i> Hiện ảnh bìa</button></div>` : ''}
         <div class="acts"><button class="primary" id="pub-open"><i class="ti ti-external-link"></i> Mở trang đăng ${esc(P[S.tab]?.name || '')}</button>
