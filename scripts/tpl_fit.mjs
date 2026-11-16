@@ -91,12 +91,13 @@ const key = p => p.join('.');
 const STOP = new Set(('la va thi ma cua cac nhung mot cai nay do day kia roi da se dang co duoc bi cho voi de tu den o tren duoi trong ngoai ban ' +
   'chung ta toi minh em anh chi no ho nguoi ai gi sao nao the vay nhe a ah oi u um nhu khi neu vi nen cung con van can phai lam di ' +
   'bay gio hien nay luc sau truoc nua hay hoac rat qua nhieu it moi tung ca hon nhat dau thoi ha ak uh ok oke').split(' '));
-function phrase(text, ex) {
+// Also used by the "Ngắn hơn" text assistant (scripts/assist.mjs) as its offline fallback, with an explicit max length.
+export function phrase(text, ex, maxLen) {
   const ws = String(text).replace(/[.,!?…:;"“”()]/g, ' ').split(/\s+/).filter(Boolean);
   const content = ws.map(w => ({ w, stop: STOP.has(fold(w)) }));
   while (content.length && content[0].stop) content.shift();
   while (content.length && content[content.length - 1].stop) content.pop();
-  const max = Math.max(10, Math.round(ex.length * 1.25));  // ex padded by callers that already cut to length
+  const max = maxLen || Math.max(10, Math.round(ex.length * 1.25));  // ex padded by callers that already cut to length
   let s = '';
   for (const { w } of content) { if ((s + ' ' + w).trim().length > max) break; s = (s + ' ' + w).trim(); }
   if (!s) return null;

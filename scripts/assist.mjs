@@ -18,6 +18,7 @@ import { safeFetch } from './net_guard.mjs';
 import { pyBin } from './platform.mjs';
 import { INDUSTRIES } from './products.mjs';
 import { normalizeEntries, nameEntries } from './dict.mjs';
+import { phrase as shortPhrase } from './tpl_fit.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -328,6 +329,275 @@ const product = {
   },
 };
 
+// ---------------------------------------------------------------- M92: dùng chung cho chữ, phụ đề, mẫu, ảnh bìa
+const PURPOSE_VI = { bds: 'bất động sản', khoahoc: 'khoá học', banhang: 'bán hàng', review: 'review sản phẩm', chiase: 'chia sẻ kiến thức', tintuc: 'tin tức', doanhnghiep: 'doanh nghiệp', khac: 'khác' };
+const purposeOf = v => (Object.hasOwn(PURPOSE_VI, v) ? v : '');
+const obj = raw => { if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw bad('Body phải là object JSON'); return raw; };
+const int = v => (Number.isInteger(+v) && String(v).trim() !== '' ? +v : NaN);
+/** Cắt chữ ≤ max ký tự ở ranh giới từ, bỏ dấu câu treo cuối. */
+export function cutWords(s, max) {
+  s = str(s, 2000);
+  if ([...s].length <= max) return s;
+  const head = [...s].slice(0, max + 1).join('');
+  return (head.replace(/\s+\S*$/, '') || [...s].slice(0, max).join('')).replace(/[\s,;:–—-]+$/u, '');
+}
+const RISKY_NOTE = 'Có từ tuyệt đối, dễ bị nền tảng quảng cáo từ chối';
+const NUMS = s => (String(s).match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'));
+/** Ghi chú rủi ro cho một câu AI viết: từ tuyệt đối, số liệu không có trong nguồn. */
+function riskOf(text, source) {
+  const notes = [], risk = [];
+  const m = text.match(RISKY_WORDS);
+  if (m) { notes.push(`${RISKY_NOTE} (“${m[0]}”)`); risk.push({ severity: 'med', message: 'từ tuyệt đối: ' + m[0] }); }
+  const have = new Set(NUMS(source)), extra = NUMS(text).filter(n => !have.has(n));
+  if (extra.length) { notes.push(`Có số ${extra.slice(0, 3).join(', ')} không thấy trong lời thoại, kiểm lại trước khi dùng`); risk.push({ severity: 'high', message: 'số liệu không có nguồn' }); }
+  return risk.length ? { note: notes.join(' · '), risk } : {};
+}
+const brandOf = b => (b && typeof b === 'object' && !Array.isArray(b)
+  ? { name: str(b.name, 80), voice: str(b.voice, 200), cta: str(b.cta, 80), slogan: str(b.slogan, 80) } : { name: '', voice: '', cta: '', slogan: '' });
+const brandLines = b => [b.name && 'Thương hiệu: ' + b.name, b.voice && 'Giọng văn: ' + b.voice, b.slogan && 'Slogan: ' + b.slogan, b.cta && 'CTA quen dùng: ' + b.cta].filter(Boolean).join('\n');
+
+// ---------------------------------------------------------------- trợ lý Chữ trên video
+const TEXT_MODES = {
+  write: ['Viết giúp', 'Viết MỚI chữ hiện trên video (tiêu đề, câu nhấn) hợp với lời thoại đang nói ở đoạn này.'],
+  shorter: ['Ngắn hơn', 'Rút NGẮN chữ hiện tại, giữ ý chính và từ khoá; bỏ từ đệm.'],
+  punchier: ['Giật tít hơn', 'Viết lại chữ hiện tại cho GIẬT TÍT, gây tò mò, mạnh hơn, vẫn đúng ý lời thoại (không câu view sai sự thật).'],
+  cta: ['Thêm CTA', 'Viết lại chữ hiện tại kèm LỜI KÊU GỌI hành động ngắn (theo dõi, nhắn tin, bấm link…), ưu tiên CTA của thương hiệu nếu có.'],
+};
+const text = {
+  label: 'Chữ trên video',
+  check(raw) {
+    const b = obj(raw);
+    const mode = b.mode == null || b.mode === '' ? 'write' : String(b.mode);
+    if (!Object.hasOwn(TEXT_MODES, mode)) throw bad('mode phải là: ' + Object.keys(TEXT_MODES).join(', '));
+    const max = b.max == null ? 60 : int(b.max);
+    if (!(max >= 6 && max <= 200)) throw bad('max phải là số nguyên 6–200');
+    const input = { mode, text: str(b.text, 300), context: str(b.context, 1500), brand: brandOf(b.brand), purpose: purposeOf(b.purpose), max };
+    if (mode !== 'write' && !input.text) throw bad('Chọn một chữ có nội dung để viết lại');
+    if (!input.text && !input.context) throw bad('Cần lời thoại quanh đoạn này hoặc chữ hiện tại');
+    return input;
+  },
+  prompt(i) {
+    return [
+      'Bạn viết chữ hiện trên video ngắn tiếng Việt (TikTok, Reels, YouTube Shorts): chữ to, đọc trong 1–2 giây.',
+      'Việc: ' + TEXT_MODES[i.mode][1],
+      i.text ? dataBlock('Chữ hiện tại', i.text) : '',
+      i.context ? dataBlock('Lời thoại quanh thời điểm chữ hiện', i.context) : '',
+      brandLines(i.brand), i.purpose ? 'Lĩnh vực video: ' + PURPOSE_VI[i.purpose] : '',
+      `Mỗi phương án TỐI ĐA ${i.max} ký tự (kể cả dấu cách; đếm kỹ, ngắn hơn giới hạn càng tốt), không xuống dòng, không emoji, không dấu ngoặc kép bao quanh.`,
+      'Trả về DUY NHẤT một JSON, không lời dẫn: {"options":[{"text":"<phương án 1>","why":"<≤ 12 từ: vì sao>"},{"text":"…","why":"…"},{"text":"…","why":"…"}]}',
+      'Luật: đúng 3 phương án khác nhau; tiếng Việt có dấu, tự nhiên; chỉ dùng thông tin có trong lời thoại hoặc chữ hiện tại; KHÔNG bịa số liệu, giá, giải thưởng;'
+        + ' không dùng từ tuyệt đối (tốt nhất, số 1, 100%, cam kết, duy nhất).',
+    ].filter(Boolean).join('\n\n');
+  },
+  normalize(v, i) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('cần một object JSON');
+    const list = Array.isArray(v.options) ? v.options : [];
+    if (!list.length) throw new Error('thiếu "options"');
+    const warnings = [], fields = [], seen = new Set([normTxt(i.mode === 'write' ? '' : i.text)]);
+    const fit = [], over = [];
+    for (const o of list) {
+      const raw = str(typeof o === 'object' && o ? o.text : o, 400).replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim();
+      if (!raw) continue;
+      const t = cutWords(raw, i.max);
+      if (!t || seen.has(normTxt(t))) continue;
+      seen.add(normTxt(t));
+      (t === raw ? fit : over).push({ t, why: str(o?.why, 120) });
+    }
+    // vừa khung trước; phương án phải cắt (dễ cụt ý) xếp sau, có ghi chú
+    for (const { t, why } of [...fit, ...over].slice(0, 3)) {
+      const r = riskOf(t, i.text + ' ' + i.context), cutNote = over.some(x => x.t === t) ? `đã cắt cho vừa ${i.max} ký tự, đọc lại trước khi dùng` : '';
+      const note = [r.note, cutNote, !r.note && !cutNote ? why : ''].filter(Boolean).join(' · ');
+      fields.push({ key: 'text', label: 'Phương án ' + (fields.length + 1), kind: 'text', value: t, ...r, ...(note ? { note } : {}) });
+    }
+    if (!fields.length) throw new Error('mọi phương án đều rỗng hoặc trùng chữ hiện tại');
+    const cut = fields.filter(f => /đã cắt cho vừa/.test(f.note || '')).length;
+    if (cut) warnings.push(`${cut} phương án dài quá ${i.max} ký tự: đã cắt ở ranh giới từ.`);
+    return { fields, warnings, mode: i.mode, max: i.max };
+  },
+  fallback(i) {
+    if (i.mode !== 'shorter') return null; // chỉ "Ngắn hơn" có cách làm theo luật: bỏ từ đệm (cùng hàm của tpl_fit)
+    const t = shortPhrase(i.text, i.text, Math.min(i.max, Math.max(6, [...i.text].length - 1)));
+    return t && normTxt(t) !== normTxt(i.text) ? { fields: [{ key: 'text', label: 'Phương án 1', kind: 'text', value: t, note: 'bỏ từ đệm theo luật' }], warnings: [], mode: i.mode, max: i.max } : null;
+  },
+};
+
+// ---------------------------------------------------------------- trợ lý Phụ đề: nhấn từ khoá / ngắt dòng
+const CAP_MODES = { hl: 'Tự nhấn từ khoá', br: 'Ngắt dòng hợp nghĩa' };
+const CAP_FORBID = ['w', 'words', 'text', 't0', 't1', 's', 'e', 'start', 'end'];
+const capView = (words, mode, set) => words.map((w, j) => (mode === 'hl' && set.has(j) ? `*${w}*` : w) + (mode === 'br' && set.has(j) ? ' /' : '')).join(' ');
+const captions = {
+  label: 'Phụ đề',
+  check(raw) {
+    const b = obj(raw);
+    if (!Object.hasOwn(CAP_MODES, b.mode)) throw bad('mode phải là hl hoặc br');
+    if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 800) throw bad('lines phải là mảng 1–800 dòng phụ đề');
+    const idx = (a, n) => (Array.isArray(a) ? [...new Set(a.map(Number).filter(j => Number.isInteger(j) && j >= 0 && j < n))] : []);
+    const lines = b.lines.map(l => {
+      const words = Array.isArray(l?.words) ? l.words.slice(0, 60).map(w => str(typeof w === 'object' && w ? w.w : w, 40)) : null;
+      if (!words) throw bad('Mỗi dòng cần words: [chữ]');
+      return { words, hl: idx(l.hl, words.length), br: idx(l.br, words.length) };
+    });
+    if (!lines.some(l => l.words.length)) throw bad('Phụ đề rỗng');
+    return { mode: b.mode, lines, purpose: purposeOf(b.purpose) };
+  },
+  prompt(i) {
+    const body = i.lines.map((l, c) => (l.words.length ? `[${c}] ` + l.words.map((w, j) => `${j}:${w}`).join(' ') : '')).filter(Boolean).join('\n');
+    const task = i.mode === 'hl'
+      ? 'Chọn TỪ KHOÁ để nhấn màu trong phụ đề: danh từ chính, con số, động từ mạnh, tên riêng. Tối đa 2 từ mỗi dòng, không phải dòng nào cũng cần; tổng cộng khoảng 1 từ cho mỗi 2 dòng.'
+        + '\nTrả về DUY NHẤT một JSON: {"lines":[{"c":<số dòng>,"hl":[<chỉ số từ>]}]} — chỉ các dòng cần nhấn; "hl" là danh sách MỚI đầy đủ của dòng đó.'
+      : 'Chọn chỗ NGẮT DÒNG cho hợp nghĩa (không tách cụm danh từ, số với đơn vị, tên riêng). Chỉ ngắt dòng có từ 5 từ trở lên; tối đa 2 chỗ mỗi dòng; mỗi đoạn sau khi ngắt có ít nhất 2 từ; không ngắt sau từ cuối.'
+        + '\nTrả về DUY NHẤT một JSON: {"lines":[{"c":<số dòng>,"br":[<chỉ số từ mà SAU nó xuống dòng>]}]} — chỉ các dòng cần ngắt.';
+    return [
+      'Bạn biên tập phụ đề video ngắn tiếng Việt. Mỗi dòng phụ đề dạng [số dòng] chỉ_số:từ.',
+      i.purpose ? 'Lĩnh vực video: ' + PURPOSE_VI[i.purpose] : '',
+      dataBlock('Phụ đề', body), task,
+      'TUYỆT ĐỐI không đổi chữ, không thêm/bớt từ, không đổi thời gian: chỉ trả chỉ số từ.',
+    ].filter(Boolean).join('\n\n');
+  },
+  normalize(v, i) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('cần một object JSON');
+    const list = Array.isArray(v.lines) ? v.lines : Array.isArray(v.changes) ? v.changes : null;
+    if (!list) throw new Error('thiếu "lines"');
+    const m = i.mode, cap = 2, fields = [], done = new Set();
+    let outOfRange = 0, blocked = 0, over = 0, short = 0, changes = 0;
+    for (const e of list) {
+      if (!e || typeof e !== 'object') continue;
+      const c = int(e.c ?? e.i ?? e.line);
+      if (!(c >= 0 && c < i.lines.length) || !i.lines[c].words.length) { outOfRange++; continue; }
+      if (CAP_FORBID.some(k => Object.hasOwn(e, k))) blocked++; // AI định sửa chữ/thời gian: chỉ lấy phần chỉ số
+      if (done.has(c)) continue;
+      done.add(c);
+      const n = i.lines[c].words.length, lo = m === 'br' ? 1 : 0, hi = m === 'br' ? n - 3 : n - 1; // br: mỗi đoạn sau khi ngắt ≥ 2 từ
+      if (m === 'br' && n < 5) { short++; continue; }
+      let set = [];
+      for (const x of Array.isArray(e[m]) ? e[m] : e[m] == null ? [] : [e[m]]) {
+        const j = int(x);
+        if (!(j >= 0 && j < n)) { outOfRange++; continue; }
+        if (j < lo || j > hi) { short++; continue; }
+        if (!set.includes(j)) set.push(j);
+      }
+      if (set.length > cap) { over += set.length - cap; set = set.slice(0, cap); }
+      set.sort((a, b) => a - b);
+      const cur = i.lines[c][m];
+      const diff = set.filter(j => !cur.includes(j)).length + cur.filter(j => !set.includes(j)).length;
+      if (!diff) continue;
+      changes += diff;
+      fields.push({ key: m, label: 'Dòng ' + (c + 1), kind: 'caption', value: { c, [m]: set },
+        display: capView(i.lines[c].words, m, new Set(set)), current: capView(i.lines[c].words, m, new Set(cur)) });
+    }
+    const warnings = [];
+    if (outOfRange) warnings.push(`Bỏ ${outOfRange} chỉ số dòng/từ nằm ngoài phụ đề.`);
+    if (blocked) warnings.push(`AI định đổi chữ hoặc thời gian ở ${blocked} dòng: Studio chặn, chỉ lấy ${m === 'hl' ? 'từ nhấn' : 'chỗ ngắt'}.`);
+    if (short) warnings.push(`Bỏ ${short} chỗ ngắt ở dòng dưới 5 từ hoặc để lại đoạn 1 từ.`);
+    if (over) warnings.push(`Bỏ ${over} ${m === 'hl' ? 'từ nhấn' : 'chỗ ngắt'} vượt quá ${cap} mỗi dòng.`);
+    return { fields, warnings, mode: m, changes };
+  },
+};
+
+// ---------------------------------------------------------------- trợ lý Gợi ý mẫu
+const ASPECTS = ['9:16', '16:9', '1:1'];
+const templates = {
+  label: 'Gợi ý mẫu',
+  check(raw) {
+    const b = obj(raw);
+    if (!Array.isArray(b.catalog) || !b.catalog.length || b.catalog.length > 400) throw bad('catalog phải là danh sách 1–400 mẫu');
+    const catalog = [];
+    for (const t of b.catalog) {
+      const id = str(t?.id, 80);
+      if (!/^[\w.-]+$/.test(id)) continue;
+      catalog.push({ id, name: str(t.name, 80) || id, category: str(t.category, 30), aspect: ASPECTS.includes(t.aspect) ? t.aspect : '9:16', desc: str(t.desc, 160), pack: str(t.pack, 40) });
+    }
+    if (!catalog.length) throw bad('catalog không có id mẫu hợp lệ');
+    const input = { catalog, transcript: str(b.transcript, 3000), purpose: purposeOf(b.purpose), aspect: ASPECTS.includes(b.aspect) ? b.aspect : '' };
+    if (!input.transcript && !input.purpose) throw bad('Cần lời thoại hoặc lĩnh vực');
+    return input;
+  },
+  prepare(i) {
+    // cùng khổ trước (nếu đủ 3 mẫu), cùng lĩnh vực lên đầu; tối đa 150 mẫu vào prompt
+    const same = i.aspect ? i.catalog.filter(t => t.aspect === i.aspect) : i.catalog;
+    const pool = (same.length >= 3 ? same : i.catalog).slice().sort((a, b) => (b.category === i.purpose) - (a.category === i.purpose)).slice(0, 150);
+    return { pool, ids: new Map(i.catalog.map(t => [t.id, t])), warnings: [] };
+  },
+  prompt(i, prep) {
+    return [
+      'Bạn chọn MẪU dựng video (template) hợp nhất cho một video ngắn tiếng Việt.',
+      i.purpose ? 'Lĩnh vực: ' + PURPOSE_VI[i.purpose] : '', i.aspect ? 'Khổ video: ' + i.aspect : '',
+      i.transcript ? dataBlock('Lời thoại của video', i.transcript) : '',
+      'Danh sách mẫu (id | tên | danh mục | khổ | mô tả) — CHỈ được chọn id trong danh sách này:\n'
+        + prep.pool.map(t => `${t.id} | ${t.name} | ${t.category} | ${t.aspect} | ${t.desc}`).join('\n'),
+      'Trả về DUY NHẤT một JSON: {"picks":[{"id":"<id>","reason":"<≤ 20 từ: vì sao hợp video này>"}]} — đúng 3 mẫu khác nhau, hợp nhất trước.',
+    ].filter(Boolean).join('\n\n');
+  },
+  normalize(v, i, prep) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('cần một object JSON');
+    const list = Array.isArray(v.picks) ? v.picks : [];
+    const fields = [], bogus = [];
+    for (const p of list) {
+      const id = str(typeof p === 'object' && p ? p.id : p, 80), t = prep.ids.get(id);
+      if (!t) { if (id) bogus.push(id.slice(0, 40)); continue; }
+      if (fields.some(f => f.value === id)) continue;
+      fields.push({ key: 'template', label: t.name, kind: 'template', value: id, display: t.name, note: str(p?.reason, 160) });
+      if (fields.length === 3) break;
+    }
+    if (!fields.length) throw new Error(bogus.length ? 'các id không có trong danh sách mẫu: ' + bogus.join(', ') : 'thiếu "picks"');
+    return { fields, warnings: bogus.length ? [`Bỏ ${bogus.length} mẫu không có trong thư viện: ${bogus.join(', ')}.`] : [] };
+  },
+  fallback(i, prep) {
+    // JSON hỏng: theo luật = mẫu cùng lĩnh vực (và cùng khổ) đầu tiên; chưa chọn lĩnh vực thì không gợi ý
+    if (!i.purpose) return null;
+    const pick = prep.pool.filter(t => t.category === i.purpose).slice(0, 3);
+    return pick.length ? { fields: pick.map(t => ({ key: 'template', label: t.name, kind: 'template', value: t.id, display: t.name, note: 'cùng lĩnh vực ' + PURPOSE_VI[i.purpose] })), warnings: [] } : null;
+  },
+};
+
+// ---------------------------------------------------------------- trợ lý Ảnh bìa
+const COVER_TEXT = 32;
+const cover = {
+  label: 'Ảnh bìa',
+  check(raw) {
+    const b = obj(raw);
+    const image = decodeImage(b.image);
+    if (!image) throw bad('Cần ảnh lưới khung hình');
+    const times = Array.isArray(b.times) ? b.times.map(Number) : [];
+    if (times.length < 2 || times.length > 12 || !times.every(t => Number.isFinite(t) && t >= 0 && t < 36000)) throw bad('times phải là 2–12 thời điểm (giây)');
+    const near = Array.isArray(b.near) ? b.near.slice(0, times.length).map(s => str(s, 200)) : [];
+    return { image, times: times.map(t => Math.round(t * 10) / 10), near, transcript: str(b.transcript, 1500), purpose: purposeOf(b.purpose), brand: brandOf(b.brand) };
+  },
+  image: i => i.image, imageName: 'frames',
+  prompt(i) {
+    const n = i.times.length;
+    return [
+      'Bạn chọn ẢNH BÌA (thumbnail) cho video ngắn tiếng Việt.',
+      `Thư mục hiện tại có file frames.${i.image.ext}: lưới ${n} ô khung hình của video, mỗi ô có SỐ ở góc trên bên trái (1–${n}). DÙNG CÔNG CỤ Read để XEM file đó trước khi trả lời.`,
+      'Thời điểm của từng ô: ' + i.times.map((t, k) => `ô ${k + 1} = ${t}s${i.near[k] ? ` (đang nói: “${i.near[k]}”)` : ''}`).join('; '),
+      i.transcript ? dataBlock('Lời thoại', i.transcript) : '', brandLines(i.brand), i.purpose ? 'Lĩnh vực: ' + PURPOSE_VI[i.purpose] : '',
+      'Chọn 3 ô làm bìa tốt nhất: mặt người rõ, mắt mở, biểu cảm có hồn, không mờ nhoè, bố cục còn chỗ đặt chữ. Kèm CHỮ BÌA gây tò mò, đúng nội dung lời thoại.',
+      `Trả về DUY NHẤT một JSON: {"picks":[{"frame":<số ô>,"text":"<chữ bìa ≤ ${COVER_TEXT - 4} ký tự>","why":"<≤ 12 từ>"}]} — 3 ô khác nhau, tốt nhất trước.`,
+      'Không bịa số liệu; không dùng từ tuyệt đối (tốt nhất, số 1, 100%, cam kết).',
+    ].filter(Boolean).join('\n\n');
+  },
+  normalize(v, i) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('cần một object JSON');
+    const list = Array.isArray(v.picks) ? v.picks : [];
+    const fields = [], warnings = [];
+    let bogus = 0;
+    for (const p of list) {
+      const k = int(p?.frame ?? p?.cell ?? p?.i);
+      if (!(k >= 1 && k <= i.times.length)) { bogus++; continue; }
+      const t = i.times[k - 1];
+      if (fields.some(f => f.value.t === t)) continue;
+      const txt = cutWords(str(p.text, 200).replace(/^["“”']+|["“”']+$/g, ''), COVER_TEXT);
+      const r = txt ? riskOf(txt, i.transcript + ' ' + i.near.join(' ')) : {};
+      const why = str(p.why, 120);
+      fields.push({ key: 'cover', label: `Khung ${t}s (ô ${k})`, kind: 'cover', value: { t, text: txt, cell: k }, display: txt ? `“${txt}”` : '(không có chữ bìa)', ...r, ...(why && !r.note ? { note: why } : {}) });
+      if (fields.length === 3) break;
+    }
+    if (!fields.length) throw new Error(bogus ? 'số ô phải trong 1–' + i.times.length : 'thiếu "picks"');
+    if (bogus) warnings.push(`Bỏ ${bogus} ô không có trong lưới.`);
+    return { fields, warnings };
+  },
+};
+
 /** Soát các câu claim bằng scripts/ad_gates.py --script (chính sách Meta/TikTok + cụm từ rủi ro). null khi không chạy được. */
 export function adGates(texts, industry, { py, adGatesScript = path.join(SKILL, 'scripts/ad_gates.py') } = {}) {
   const payload = { beats: texts.map(text => ({ text, type: 'body', where: 'claim' })), ads: { ...(INDUSTRIES.includes(industry) ? { industry } : {}) } };
@@ -487,7 +757,7 @@ const transcript = {
 };
 
 // ---------------------------------------------------------------- bảng trợ lý + chạy
-export const ASSISTANTS = { brand, product, transcript };
+export const ASSISTANTS = { brand, product, text, captions, templates, cover, transcript };
 export const list = () => Object.entries(ASSISTANTS).map(([name, a]) => ({ name, label: a.label }));
 export const has = name => Object.hasOwn(ASSISTANTS, name);
 export function check(name, raw) { if (!has(name)) throw new AssistError('Không có trợ lý ' + String(name).slice(0, 40), 404); return ASSISTANTS[name].check(raw); }

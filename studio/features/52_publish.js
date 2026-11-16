@@ -2,7 +2,13 @@
 (() => {
   const { $, esc } = Studio;
   const ICON = { tiktok: 'ti-brand-tiktok', youtube: 'ti-brand-youtube', facebook: 'ti-brand-facebook', instagram: 'ti-brand-instagram', zalo: 'ti-message-circle' };
-  const S = { video: null, videos: [], plats: null, check: null, data: null, tab: 'tiktok', sel: null, notes: '', busy: false, cover: null, coverT: null };
+  const S = { video: null, videos: [], plats: null, check: null, data: null, tab: 'tiktok', sel: null, notes: '', busy: false, cover: null, coverT: null, coverText: '' };
+  // M92: Claude xem lưới 9 khung hình (Studio.coverSheet, 06_ai_suggest.js) → 3 khung + chữ bìa; Dùng = đặt thời điểm rồi xuất ảnh bìa như cũ.
+  const coverAI = Studio.assistPanel ? Studio.assistPanel({
+    name: 'cover', label: 'Gợi ý khung bìa', pick: true, okLabel: 'Dùng', hint: 'Claude xem 9 khung hình, chọn 3 khung kèm chữ bìa.',
+    input: () => Studio.coverSheet(),
+    onAccept: async f => { S.coverT = f.value.t; S.coverText = f.value.text || ''; render(); await exportCover(); },
+  }) : null;
   const css = document.createElement('style');
   css.textContent = `
   #modalbox.pub-wide { width: min(820px, 94vw); }
@@ -79,9 +85,10 @@
       </div><div class="pub-side">
         <div class="lbl pub-mt0">Kiểm tra cho ${esc(P[S.tab]?.name || '')}</div>
         <div class="pub-chk">${chk.length ? chk.map(c => `<div class="${c.level}"><i class="ti ${c.level === 'ok' ? 'ti-circle-check' : c.level === 'warn' ? 'ti-alert-triangle' : 'ti-circle-x'}"></i><span>${esc(c.msg)}</span></div>`).join('') : '<span class="muted">—</span>'}</div>
-        <div class="lbl">Ảnh bìa${d?.thumb_text ? ` · chữ gợi ý: “${esc(d.thumb_text)}”` : ''}</div>
+        <div class="lbl">Ảnh bìa${S.coverText || d?.thumb_text ? ` · chữ gợi ý: “${esc(S.coverText || d.thumb_text)}”` : ''}</div>
         <div class="pub-cover-row"><input id="pub-ct" type="number" step="0.1" min="0" value="${esc(S.coverT)}" title="Giây"><button id="pub-cover"><i class="ti ti-photo"></i> Xuất ảnh bìa</button></div>
         ${d?.thumb_time != null ? `<div class="help">AI gợi ý khung ${d.thumb_time}s</div>` : ''}
+        ${coverAI && Studio.coverSheet ? '<div id="pub-ai-cover"></div>' : ''}
         ${S.cover ? `<img src="${esc(S.cover.url)}"><div class="acts"><button data-preveal="${esc(S.cover.out)}"><i class="ti ti-folder"></i> Hiện ảnh bìa</button></div>` : ''}
         <div class="acts"><button class="primary" id="pub-open"><i class="ti ti-external-link"></i> Mở trang đăng ${esc(P[S.tab]?.name || '')}</button>
           ${window.openScheduleFor ? `<button id="pub-sched" ${S.video ? '' : 'disabled'} title="Lên lịch đăng (dùng caption AI ở trên)"><i class="ti ti-calendar-plus"></i> Lên lịch ${esc(P[S.tab]?.name || '')}…</button>` : ''}
@@ -91,6 +98,12 @@
       <div class="actions"><button onclick="closeModal()">Đóng</button></div></div>`);
     box().classList.add('pub-wide');
     bind();
+  }
+  async function exportCover() {
+    const b = $('#pub-cover'); if (b) b.innerHTML = '<i class="ti ti-loader-2 spin"></i> Đang render…';
+    const r = await Studio.api('/api/publish/cover', { t: S.coverT });
+    if (r.error) { Studio.toast(r.error); if ($('.pub')) render(); return; }
+    S.cover = r; if ($('.pub')) render();
   }
   function collect() { const o = {}; document.querySelectorAll('.pub [data-pf]').forEach(i => (o[i.dataset.pf] = i.value)); if (o.hashtags != null) o.hashtags = o.hashtags.split(/\s+/).filter(Boolean); return o; }
   function bind() {
@@ -103,12 +116,8 @@
     if ($('#pub-all')) $('#pub-all').onclick = () => { const o = collect(); copy([o.title, o.caption, '', (o.hashtags || []).join(' ')].filter(x => x != null).join('\n').trim(), 'caption + hashtag'); };
     if ($('#pub-save')) $('#pub-save').onclick = async () => { const r = await Studio.api('/api/publish/save', { platform: S.tab, data: collect() }); if (r.error) return Studio.toast(r.error); Object.assign(S.data.platforms[S.tab], collect()); Studio.toast('Đã lưu ' + r.file); };
     $('#pub-ct').onchange = e => (S.coverT = +e.target.value);
-    $('#pub-cover').onclick = async () => {
-      $('#pub-cover').innerHTML = '<i class="ti ti-loader-2 spin"></i> Đang render…';
-      const r = await Studio.api('/api/publish/cover', { t: S.coverT });
-      if (r.error) { Studio.toast(r.error); render(); return; }
-      S.cover = r; render();
-    };
+    $('#pub-cover').onclick = exportCover;
+    if ($('#pub-ai-cover')) coverAI.mount($('#pub-ai-cover'));
     document.querySelectorAll('.pub [data-preveal]').forEach(b => (b.onclick = () => Studio.api('/api/reveal', { path: b.dataset.preveal })));
     $('#pub-open').onclick = async () => { const r = await Studio.api('/api/publish/open', { platform: S.tab }); Studio.toast(r.error || 'Đã mở ' + r.url + ' trong trình duyệt'); };
     $('#pub-reveal').onclick = () => Studio.api('/api/reveal', { path: S.video });

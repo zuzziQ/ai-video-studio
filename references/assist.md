@@ -9,9 +9,10 @@ Lớp dùng chung để gắn LLM vào một tính năng của Studio theo cùng
 | Bảng trợ lý, kiểm đầu vào, gọi LLM, chuẩn hoá kết quả | `scripts/assist.mjs` |
 | API + job | `studio/routes/05_assist.mjs` |
 | Giao diện dùng chung | `studio/features/05_assist.js` (`Studio.assist`, `Studio.assistPanel`, `Studio.imagePayload`) |
-| Test (CLI giả, mạng giả) | `scripts/tests/assist.test.mjs` |
+| Giao diện các trợ lý M92 (chữ, phụ đề, mẫu, ảnh bìa) | `studio/features/06_ai_suggest.js`, ô ảnh bìa trong `studio/features/52_publish.js` |
+| Test (CLI giả, mạng giả) | `scripts/tests/assist.test.mjs`, `scripts/tests/assist_text.test.mjs` (M92) |
 
-Trợ lý có sẵn: `brand` (bước Thương hiệu của hướng dẫn lần đầu, form brand kit ở panel Thương hiệu) và `product` (bước Tài nguyên của hướng dẫn, panel Sản phẩm). `M90` (soát lời thoại) và `M92` (trợ lý chữ, nhấn từ khoá, gợi ý mẫu, ảnh bìa) thêm trợ lý mới vào cùng bảng.
+Trợ lý có sẵn: `brand` (bước Thương hiệu của hướng dẫn lần đầu, form brand kit ở panel Thương hiệu), `product` (bước Tài nguyên của hướng dẫn, panel Sản phẩm), và từ `M92`: `text` (chữ trên video), `captions` (nhấn từ khoá, ngắt dòng phụ đề), `templates` (gợi ý mẫu), `cover` (ảnh bìa), `transcript` của `M90` (soát lời thoại, panel Lời thoại).
 
 ## Luồng
 
@@ -71,7 +72,40 @@ Nhà cung cấp: có ảnh → Claude xem ảnh bằng `--allowedTools Read --ad
 - Lùi về: cửa sổ nào AI trả JSON hỏng (sau một lần hỏi lại) thì lấy đề xuất theo từ điển cho cửa sổ đó (`txDictEdits`: cặp từ điển + tên viết hoa), kèm cảnh báo; thiếu `claude`, chưa đăng nhập, quá giờ, huỷ → báo nguyên văn.
 - Kết quả: `{suggestions: [{id, start, end, old, new, kind, reason}], counts, windows, dropped, fallbackWindows, warnings, provider, ms}`. Giao diện đổi chỉ số → mốc thời gian lúc gửi, bỏ chỗ người dùng đã sửa trong lúc chờ, hiện bằng lớp đề xuất của M89 (`Studio.transcript.suggest`); không lưu vào timeline.
 
-## Thêm một trợ lý mới (cho M90, M92…)
+## Trợ lý `text` (M92)
+
+Đầu vào: `{mode, text?, context?, brand?: {name, voice, cta, slogan}, purpose?, max?}`. `mode`: `write` (Viết giúp, cần `context` hoặc `text`), `shorter` (Ngắn hơn), `punchier` (Giật tít hơn), `cta` (Thêm CTA); ba kiểu sau cần `text`. `max` 6–200 ký tự (mặc định 60): giao diện tính theo khung = bề ngang khung hình / (cỡ chữ × 0,56), 2 dòng; Ngắn hơn lấy 70 % độ dài hiện tại. `context` là lời thoại ±8 s quanh chữ; `purpose` là lĩnh vực ở `onboarding.json`.
+- Kết quả ≤ 3 trường `{key: 'text', label: 'Phương án n', value}`; giao diện dùng `pick: true` (chọn một, các phương án khác thành Đã bỏ).
+- Chuẩn hoá: bỏ ngoặc kép bao quanh, bỏ rỗng và trùng (kể cả trùng chữ hiện tại); phương án dài quá `max` bị **cắt ở ranh giới từ**, xếp sau các phương án vừa khung và ghi chú "đã cắt…" (cảnh báo).
+- Ghi chú rủi ro: từ tuyệt đối (`RISKY_WORDS`) → `risk` mức `med`; con số không có trong chữ hiện tại + lời thoại → `risk` mức `high` ("số liệu không có nguồn").
+- JSON hỏng sau khi hỏi lại: chỉ `shorter` lùi về luật (`phrase` của `scripts/tpl_fit.mjs`: bỏ từ đệm đầu/cuối, cắt theo từ; `provider: 'rules'`), kiểu khác báo lỗi.
+- Giao diện: panel Chữ **Viết giúp** → **Thêm** (chữ mới tại playhead, `addText`, có hoàn tác); inspector khi chọn một chữ **Viết lại ▾** → **Dùng** (`touch(o, 'text')` rồi đổi chữ, Ctrl+Z hoàn tác).
+
+## Trợ lý `captions` (M92)
+
+Đầu vào: `{mode: 'hl'|'br', lines: [{words: [chữ], hl?: [chỉ số], br?: [chỉ số]}], purpose?}` (≤ 800 dòng, ≤ 60 từ/dòng; chỉ số cũ sai bị lọc). Prompt đánh số `[dòng] chỉ_số:từ`; AI trả `{"lines":[{"c", "hl"|"br": [chỉ số]}]}` = tập mới đầy đủ của các dòng cần đổi.
+- Kết quả: mỗi dòng đổi là một trường `{key: mode, kind: 'caption', value: {c, hl|br}, display, current}` (`*từ*` = nhấn, ` /` = xuống dòng) + `changes` (tổng số từ đổi cờ).
+- **Không đổi chữ, không đổi thời gian**: kết quả chỉ mang chỉ số; dòng AI gửi kèm `w`, `words`, `text`, `t0`, `t1`, `s`, `e` → phần đó bị chặn (cảnh báo), chỉ lấy chỉ số.
+- Chỉ số dòng/từ ngoài khoảng bị bỏ; `hl` tối đa 2 từ mỗi dòng; `br` chỉ ở dòng ≥ 5 từ, mỗi đoạn sau khi ngắt ≥ 2 từ, tối đa 2 chỗ. Dòng không đổi so với hiện tại không thành trường.
+- Không có luật lùi: JSON hỏng → lỗi, không áp gì.
+- Giao diện (inspector phụ đề, dưới "Áp dụng … cho mọi phụ đề"): **Tự nhấn từ khoá** / **Ngắt dòng hợp nghĩa** → "AI đề xuất N thay đổi ở M dòng" + xem trước 5 dòng → **Nhận** (một `pushUndo` cho cả lượt; dòng đã bị sửa chữ sau khi gửi thì bỏ qua) / **Bỏ**.
+
+## Trợ lý `templates` (M92)
+
+Đầu vào: `{catalog: [{id, name, category, aspect, desc, pack}], transcript?, purpose?, aspect?}` (cần lời thoại hoặc lĩnh vực). Giao diện gửi đúng danh sách `GET /api/templates` (mẫu có thật); id phải khớp `[\w.-]+`.
+- `prepare`: ưu tiên mẫu cùng khổ (nếu có ≥ 3), cùng lĩnh vực lên đầu, ≤ 150 mẫu vào prompt.
+- Chuẩn hoá: **chỉ giữ id có trong catalog** (id bịa bị bỏ, cảnh báo; mọi id đều bịa → hỏi lại), bỏ trùng, ≤ 3; `note` là lý do.
+- JSON hỏng: có lĩnh vực → mẫu cùng lĩnh vực (`provider: 'rules'`); không có → lỗi.
+- Giao diện: panel Mẫu, hàng **Gợi ý cho video này** trên lưới (bấm để hỏi, không tự chạy để khỏi chiếm ô trợ lý — một trợ lý một lúc); thẻ mẫu dùng lại `data-tpl` / `data-use` của `library.js`. Lỗi hoặc thiếu AI → ẩn hàng (toast lý do), gallery như cũ.
+
+## Trợ lý `cover` (M92)
+
+Đầu vào: `{image, times: [2–12 thời điểm], near?: [lời đang nói ở từng ô], transcript?, purpose?, brand?}`. `Studio.coverSheet()` dựng `image`: 9 khung đều từ 6 % tới 94 % thời lượng, lấy ảnh khung của clip (`clipAtT` → `clipFrameUrl`, ảnh trong `work/frames` qua `/project/`), vẽ thành lưới 3×3 có số ô, JPEG. Không gửi đường dẫn; thiếu `work/frames` → báo "Tạo lại khung hình".
+- Claude xem `frames.jpg` bằng Read; trả `{"picks":[{"frame", "text", "why"}]}`.
+- Chuẩn hoá: ô ngoài 1…n bị bỏ, trùng bỏ, ≤ 3; thời điểm lấy từ `times` của đầu vào (AI không tự đặt giây); chữ bìa cắt ≤ 32 ký tự ở ranh giới từ, có ghi chú rủi ro như `text`.
+- Giao diện: hộp thoại **Đăng** (`52_publish`), ô **Gợi ý khung bìa** dưới "Ảnh bìa" → **Dùng** = đặt thời điểm ảnh bìa + chữ gợi ý, rồi chạy **Xuất ảnh bìa** như cũ (`/api/publish/cover`).
+
+## Thêm một trợ lý mới
 
 1. Trong `scripts/assist.mjs`, viết một object và thêm vào `ASSISTANTS`:
    ```js
