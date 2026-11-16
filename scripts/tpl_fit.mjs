@@ -13,6 +13,7 @@ import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadProject, callClaude, parseJson } from './ai_edit.mjs';
 import { sentences, search as stockSearch, fetchMedia } from './ai_broll.mjs';
+import { keywordsOf, queriesOf, rankImages, slotOrientation, mediaHashes, fileHash, dropMedia } from './fit_images.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const r2 = v => Math.round(v * 100) / 100;
@@ -118,7 +119,7 @@ export async function fitProject(src, { claude = false, model = 'sonnet', images
   if (fs.existsSync(ex)) for (const f of fs.readdirSync(ex)) samples.add('media/' + f);
   // every template scene gets speech text; only the ones that are not full-length frames / keep:true are re-timed
   const scenes = (tl.scenes || []).filter(mine).sort((a, b) => a.t0 - b.t0);
-  const sum = { fit: scenes.length, texts: 0, images: 0, hl: 0, claude: null, missing: [] };
+  const sum = { fit: scenes.length, texts: 0, images: 0, hl: 0, claude: null, missing: [], picks: [] };
   if (!scenes.length) { say(1, 'Không có cảnh mẫu cần bám lời thoại'); return sum; }
   const info = scenes.map((s, i) => ({ i, s, fixed: FRAME(s, dur), texts: textSlots(s), imgs: images ? imageSlots(s, samples) : [] })).filter(x => !x.fixed || x.texts.length || x.imgs.length);
   const wordT = (c, w) => { const cap = caps[+c]; if (!cap) return null; const ws = cap.words; return (ws[Math.min(ws.length - 1, Math.max(0, +w || 0))] || {}).s ?? cap.t0; };
@@ -145,7 +146,7 @@ ${list}
 # Việc cần làm
 1. Mỗi cảnh S<i>: chọn thời điểm bắt đầu "c","w" = dòng/từ mà người nói bắt đầu nói tới nội dung của cảnh (cảnh mở đầu đặt ở câu đầu, cảnh kêu gọi/kết ở câu cuối). Giữ đúng thứ tự cảnh, không chồng nhau, "dur" 1.5–8 giây (gợi ý giữ gần độ dài hiện tại, cảnh cuối có thể kéo tới hết video).
 2. "texts": viết lại MỌI trường chữ bằng nội dung lấy từ lời thoại (tên sản phẩm, con số, ưu/nhược điểm, giá, lời kêu gọi… đúng như người nói nói; sửa lỗi chính tả). Độ dài xấp xỉ chữ mẫu (graphic thiết kế cho độ dài đó), giữ kiểu viết HOA nếu mẫu viết hoa, giữ định dạng (dấu phẩy ngăn các mục, *nhấn*, \\n xuống dòng). Nếu lời thoại không nhắc tới thông tin đó thì viết nội dung chung hợp với chủ đề clip — KHÔNG để lại chữ mẫu như "Tên sản phẩm", "ví dụ", "mẫu".
-3. "images": với mỗi ẢNH, cho 2–4 từ khoá TIẾNG ANH để tìm ảnh stock minh hoạ đúng câu đang nói lúc đó.
+3. "images": với mỗi ẢNH, cho 2–4 từ khoá TIẾNG ANH để tìm ảnh stock minh hoạ đúng câu đang nói lúc đó. Từ khoá phải tả thứ CHỤP ĐƯỢC: người đang làm gì, đồ vật, nơi chốn (vd "woman editing video laptop", "hands typing keyboard", "office desk clock"); KHÔNG dùng từ trừu tượng hay khái niệm ("AI", "artificial intelligence", "success", "productivity", "growth") — muốn nói về AI thì tả cảnh như "robot hand laptop"; từ quan trọng nhất đặt trước. Ảnh không khớp sẽ bị bỏ, giữ ảnh mẫu.
 4. "hl": với các dòng phụ đề có từ khoá quan trọng, chỉ số 1–2 từ cần nhấn (không phải dòng nào cũng cần).
 
 Chỉ trả về DUY NHẤT một object JSON:
@@ -236,26 +237,45 @@ Chỉ trả về DUY NHẤT một object JSON:
   }
 
   // 4. images ----------------------------------------------------------------------------
+  // A photo replaces a sample only when its title/tags contain the keywords (fit_images.mjs); otherwise the sample stays.
   const want = info.flatMap(({ i, s, imgs }) => imgs.map(m => ({ s, m, q: byI.get(i)?.images?.[key(m.path)] || sentAt(s.t0)?.text || '' })));
   if (want.length && !dry) {
-    const vertical = (tl.height || 1920) > (tl.width || 1080), used = new Set();
+    const vertical = (tl.height || 1920) > (tl.width || 1080), used = new Set(), hashes = mediaHashes(dir);
     let n = 0;
     for (const { s, m, q } of want) {
       say(.82 + .15 * (n++ / want.length), `Tìm ảnh theo lời thoại: ${String(q).slice(0, 40)}`);
+      const orient = slotOrientation(m.path, m.ex, { vertical, skill: SKILL });
+      let put = null;
       try {
-        // free libraries often have nothing for 4 keywords: retry with the first 2, then the first one
-        const ws = String(q).split(/\s+/).filter(Boolean), tries = [...new Set([ws.join(' '), ws.slice(0, 2).join(' '), ws[0]].filter(Boolean))];
-        let h = null;
-        for (const qq of tries) {
-          const r = await stockSearch(qq, { kind: 'photo', n: 8, en: /^[\x00-\x7F]+$/.test(qq) ? qq : undefined });
-          h = (r.items || []).find(x => !used.has(x.url) && (x.w || 1000) >= 500); if (h) break;
+        // Vietnamese (no Claude) is translated by search(); keywords then come from the English it searched with.
+        // Tries: all keywords, then the first 2 — never a single word (fit_images.queriesOf).
+        const find = async (qq, en) => {
+          const r = await stockSearch(qq, { kind: 'photo', n: 20, en });
+          if (r.missing?.length) sum.noStockKey = true;
+          return r;
+        };
+        let kws = /^[\x00-\x7F]+$/.test(q) ? keywordsOf(q) : null, cands = [], tries = kws ? queriesOf(kws) : [];
+        if (!kws) {
+          const r = await find(q);
+          kws = keywordsOf(r.en); cands = rankImages(r.items, kws, { want: orient, usedUrls: used });
+          tries = queriesOf(kws).slice(1);
         }
-        if (!h) throw new Error('không thấy ảnh');
-        used.add(h.url);
-        const f = await fetchMedia(h.url, dir, { kind: 'photo', name: 'fit-' + String(q).slice(0, 20), vertical,
-          meta: { provider: h.provider, author: h.author, license: h.license, page: h.page, query: q } });
-        setP(s, m.path, f.path); sum.images++;
-      } catch { sum.missing.push('ảnh ' + m.ex.replace(/^media\//, '')); }
+        for (const qq of tries) {
+          if (cands.length) break;
+          cands = rankImages((await find(qq, qq)).items, kws, { want: orient, usedUrls: used });
+        }
+        // a downloaded picture identical to one already in the project (same bytes) is dropped for the next candidate
+        for (const c of cands.slice(0, 3)) {
+          const h = c.item; used.add(h.url);
+          let f; try { f = await fetchMedia(h.url, dir, { kind: 'photo', name: 'fit-' + String(q).slice(0, 20), vertical,
+            meta: { provider: h.provider, author: h.author, license: h.license, page: h.page, query: q } }); } catch { continue; }
+          const hx = fileHash(path.join(dir, f.path));
+          if (hashes.has(hx)) { dropMedia(dir, f.path); continue; }
+          hashes.add(hx); put = { f, c }; break;
+        }
+      } catch { /* network */ }
+      if (put) { setP(s, m.path, put.f.path); sum.images++; sum.picks.push({ q, file: put.f.path, title: put.c.item.title, score: put.c.score }); }
+      else sum.missing.push('ảnh ' + m.ex.replace(/^media\//, '') + (q ? ` (không thấy ảnh khớp “${String(q).slice(0, 40)}”)` : ''));
     }
   }
 

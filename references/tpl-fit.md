@@ -22,10 +22,22 @@ Chỉ đụng cảnh của mẫu: `_tpl` / `_recipe`, chưa sửa tay (`_orig`),
   định dạng. Không có Claude: lấy lần lượt các cụm từ người nói nói từ đầu cảnh; số chỉ thay khi lời nói có số cùng loại (giá
   cần đơn vị tiền, % cần %). Chỗ không lấy được ghi vào `missing` để báo người dùng.
 - **Ảnh**: trường ảnh (`image/media/bg/before/after/tiles/images/avatar/src`) đang trỏ ảnh mẫu `media/<file trong examples/media>`
-  → tìm ảnh stock (Openverse/Commons, Pexels/Pixabay nếu có key) theo từ khoá tiếng Anh Claude đưa (thử lại 2 từ, 1 từ), tải vào
-  `media/fit-*.jpg` + `media/credits.json`. Không có mạng → giữ ảnh mẫu, ghi `missing`.
+  → tìm ảnh stock (Openverse/Commons, Pexels/Pixabay nếu có key) theo từ khoá tiếng Anh Claude đưa (prompt đòi thứ chụp được:
+  người/vật/cảnh, cấm từ trừu tượng như "AI", "success"), tải vào `media/fit-*.jpg` + `media/credits.json`. Chọn ảnh ở
+  `scripts/fit_images.mjs` (thuần, test `scripts/tests/fit_images.test.mjs`):
+  - lấy 20 ứng viên, chấm theo số từ khoá (bỏ stopword, stem nhẹ) có trong tên ảnh + tag Openverse; tên do nhà cung cấp tự điền
+    bằng chính từ khoá (ảnh không tên) không tính; danh mục Commons không dùng (quá nhiễu);
+  - đạt khi khớp 1/1, 2 của 2–3, 3 của 4+ từ khoá, và đủ từ *cụ thể* (từ trong `ABSTRACT` như artificial, intelligence, success,
+    technology không tính phần cụ thể); loại bản đồ/sơ đồ/scan/logo/tài liệu/ảnh lưu trữ (trừ khi từ khoá hỏi đúng thứ đó), ảnh
+    < 500 px, URL đã dùng; trừ điểm tên có năm cũ (15xx–1950s);
+  - hướng ô ảnh: `bg` theo khung video, đường dẫn có `card` → ngang, còn lại theo tỉ lệ ảnh mẫu trong `examples/media`;
+    cùng hướng +4, lệch hướng −6;
+  - thử cả câu rồi 2 từ cụ thể đầu, không lùi về 1 từ; vẫn không đạt → giữ ảnh mẫu, ghi `missing` kèm từ khoá;
+  - chống trùng theo nội dung: sha1 file sau khi tải so với mọi ảnh trong `media/` của dự án; trùng thì xoá file + dòng
+    credits, thử ứng viên kế (tối đa 3).
+  Không có mạng → giữ ảnh mẫu. Chưa có key Pexels/Pixabay → kết quả có `noStockKey: true`, Studio gợi ý thêm key (không đọc key).
 - **Phụ đề**: Claude chọn 1–2 từ khoá mỗi dòng → `hl:true`.
-- Cảnh đã xử lý có `_fit: true`. Kết quả: `{fit, texts, images, hl, claude, missing[]}`.
+- Cảnh đã xử lý có `_fit: true`. Kết quả: `{fit, texts, images, hl, claude, missing[], picks[{q, file, title, score}], noStockKey?}`.
 
 CLI: `node scripts/tpl_fit.mjs <dự án|timeline.json> [--claude] [--model sonnet] [--no-images] [--dry]`.
 Prompt/đáp án Claude lưu ở `.studio/tplfit_prompt.txt`, `.studio/tplfit_raw.txt`.

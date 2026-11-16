@@ -34,10 +34,12 @@
       if (!x.fit) return S.modal(`<h3><i class="ti ti-info-circle"></i> Chưa có cảnh mẫu để bám lời thoại</h3>
         <p>${x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : ''}“Bám lời thoại” viết lại chữ và canh thời gian cho các cảnh của một <b>mẫu</b>. Chọn một mẫu ở panel <b>Mẫu</b> rồi bấm “Dùng mẫu”: mẫu sẽ tự bám lời thoại.</p>
         <div class="actions"><button class="primary" onclick="closeModal()">OK</button></div>`);
+      // free libraries only (no Pexels/Pixabay key): photos that do not match are skipped, so suggest adding a key
+      const key = x.noStockKey ? `<p class="muted"><i class="ti ti-key"></i> Ảnh chỉ tìm trong thư viện miễn phí (Openverse/Commons), ảnh không khớp lời thoại được bỏ qua. Thêm key Pexels hoặc Pixabay (panel <b>B-roll AI</b> → nút <b>⚙ Key</b>) để có ảnh khớp hơn.</p>` : '';
       const ai = x.claude && x.claude !== 'ok' ? `<p class="muted"><i class="ti ti-alert-triangle"></i> Không dùng được Claude (${esc(x.claude)}), chữ được lấy thẳng từ lời nói — nên đọc lại.</p>` : '';
-      if (miss.length || ai) {
+      if (miss.length || ai || key) {
         S.modal(`<h3><i class="ti ti-check"></i> Mẫu đã khớp lời thoại</h3>
-          <p>${x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : ''}${x.fit} cảnh canh theo câu nói · ${x.texts} chữ viết lại · ${x.images} ảnh theo lời thoại${x.hl ? ` · ${x.hl} từ khoá phụ đề` : ''}.</p>${ai}
+          <p>${x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : ''}${x.fit} cảnh canh theo câu nói · ${x.texts} chữ viết lại · ${x.images} ảnh theo lời thoại${x.hl ? ` · ${x.hl} từ khoá phụ đề` : ''}.</p>${ai}${key}
           ${miss.length ? `<p class="muted">Còn ${miss.length} chỗ lời thoại không nhắc tới, bạn tự sửa nhé: ${miss.slice(0, 8).map(esc).join(' · ')}</p>` : ''}
           <div class="actions"><button class="primary" onclick="closeModal()">OK</button></div>`);
       } else {
