@@ -83,8 +83,8 @@
       ${appIcon(o.icon || 'mail', 50)}
       <div style="flex:1;min-width:0;line-height:1.22">
         <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:600;color:#6b6b70;letter-spacing:-.01em"><span>${h(o.app || 'Thư')}</span><span>${h(o.time || 'bây giờ')}</span></div>
-        <div style="font-size:19px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(o.title || '')}</div>
-        ${o.text ? `<div style="font-size:17px;font-weight:400;color:#2b2b2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(o.text)}</div>` : ''}</div></div>`;
+        <div class="fit" style="font-size:19px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(o.title || '')}</div>
+        ${o.text ? `<div class="fit" style="font-size:17px;font-weight:400;color:#2b2b2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(o.text)}</div>` : ''}</div></div>`;
   }
   const toggle = (on, c, k = 1) => {
     const p = clamp(on);
@@ -375,7 +375,7 @@
     }
     return `<div style="position:absolute;inset:0;background:#fff;font-family:${FONT.inter}">${nav}<div style="position:relative;transform:translateY(${f1(-scroll)}px)">${body}</div></div>`;
   }
-  const strip = (txt, size, o = {}) => `<span style="display:inline-block;padding:${o.pad || '.1em .32em .14em'};background:${o.bg || '#fff'};color:${o.fg || '#000'};font:${o.w || 700} ${size}px/1.15 ${FONT.inter};letter-spacing:-.025em;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18)">${h(txt)}</span>`;
+  const strip = (txt, size, o = {}) => `<span class="fit" style="max-width:${o.max ?? DIMS()[0] - 40}px;display:inline-block;padding:${o.pad || '.1em .32em .14em'};background:${o.bg || '#fff'};color:${o.fg || '#000'};font:${o.w || 700} ${size}px/1.15 ${FONT.inter};letter-spacing:-.025em;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18)">${h(txt)}</span>`;
   const STAN = {
     // Screen band at the top, edge to edge, behind the head (cutouts) or ending above it. screen:{kind:'app'|'chat', media, …}.
     ex_stan_screen(s, t, lt) {

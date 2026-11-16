@@ -36,6 +36,7 @@
   {
    "type": "hf",
    "block": "notification-stack",
+   "on_vertical": {"size": 175},
    "t0": 0.2,
    "t1": 4.4,
    "hideCaptions": true

@@ -110,7 +110,7 @@
       const header = `<div class="abs"${cidOf(s)} style="left:0;top:0;width:${W}px;height:${px(hh * kh)};overflow:hidden;background:${c.page}">
         ${guides(gr, 0, hh, c.guide)}
         <div class="abs" style="left:${gr.m}px;top:${px(hh * .585)};width:${px((gr.right - gr.m) * clamp(prog(lt, .1, .35)))};height:2px;background:${c.ink}"></div>
-        <div class="abs" style="left:${gr.m}px;top:${px(hh * .64)};font:500 ${px(32 * u)}/1.15 ${c.font};color:${c.ink};white-space:nowrap;max-width:${px(gr.right - gr.m - 150)};overflow:hidden">${riseText(s.title || 'Tiêu đề', lt, .2, .05)}</div>
+        <div class="abs fit" style="left:${gr.m}px;top:${px(hh * .64)};font:500 ${px(32 * u)}/1.15 ${c.font};color:${c.ink};white-space:nowrap;max-width:${px(gr.right - gr.m - 150)};overflow:hidden">${riseText(s.title || 'Tiêu đề', lt, .2, .05)}</div>
         <div class="abs" style="right:${px(W - gr.right)};top:${px(hh * .64)};font:500 ${px(32 * u)}/1.15 ${c.font};color:${c.ink};white-space:nowrap;font-variant-numeric:tabular-nums">${counter}</div></div>
         ${s.signal === false ? '' : `<div class="abs" style="left:0;top:${px(hh * kh)};width:${px(W * clamp(prog(lt, 0, .45)))};height:3px;background:${c.sig}"></div>`}`;
       const page = `<div class="abs" style="left:0;top:${px(H - (H - top) * kp)};width:${W}px;height:${px(H - top)};background:${c.page};overflow:hidden">${guides(gr, 0, H - top, c.guide)}</div>`;

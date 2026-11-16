@@ -40,7 +40,7 @@ function hfCatalog() {
   return (HF = win.HF_CATALOG || {});
 }
 // [{path:[…keys], ex:"current text"}] — path is relative to the scene; hf scenes expose vars.<id> and texts.<i>.
-function textSlots(s) {
+export function textSlots(s) {
   const out = [];
   if (s.type === 'hf') {
     const b = hfCatalog()[s.block]; if (!b) return out;

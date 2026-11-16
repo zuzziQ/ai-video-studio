@@ -117,7 +117,7 @@
       const ty = typed(s.time || '06:42 · 12.10.2019', lt, .8, s.cps ?? 16);
       return { front: `<div class="abs"${cidOf(s)} style="left:${x}px;top:${yb}px;transform:translateY(-100%);opacity:${o.toFixed(3)};display:flex;gap:16px;align-items:stretch;text-shadow:0 2px 12px rgba(0,0,0,.75)">
           <div style="width:2px;background:${p.warm};transform:scaleY(${kl.toFixed(3)});transform-origin:50% 100%"></div>
-          <div><div style="font:600 ${g.v ? 24 : 24}px/1.3 ${p.sans};letter-spacing:.32em;text-transform:uppercase;color:${p.ink};white-space:nowrap;clip-path:inset(0 ${((1 - kp) * 100).toFixed(1)}% 0 0)">${esc(s.place || 'Hà Nội, Việt Nam')}</div>
+          <div><div class="fit" style="max-width:${g.W - x - 60}px;font:600 ${g.v ? 24 : 24}px/1.3 ${p.sans};letter-spacing:.32em;text-transform:uppercase;color:${p.ink};white-space:nowrap;clip-path:inset(0 ${((1 - kp) * 100).toFixed(1)}% 0 0)">${esc(s.place || 'Hà Nội, Việt Nam')}</div>
           <div style="margin-top:6px;font:400 ${g.v ? 18 : 18}px/1.3 ${MONO};color:rgba(242,238,230,.8);letter-spacing:.06em;white-space:nowrap;min-height:1.3em">${esc(ty.txt)}${lt > .7 ? cursor(t, !ty.done, 'rgba(242,238,230,.8)', '1em') : ''}</div></div></div>` };
     },
 

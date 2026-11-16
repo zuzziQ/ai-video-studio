@@ -302,7 +302,7 @@
       const from = s.from ?? 0, to = s.to ?? 100, dec = s.decimals ?? (Number.isInteger(from) && Number.isInteger(to) ? 0 : 1);
       let v = (from + (to - from) * k).toFixed(dec);
       if (dec === 0 && Math.abs(+v) >= 10000) v = (+v).toLocaleString('vi-VN');
-      const pupil = s.pupil || N.pupil, is = Math.round(size * 1.2);
+      const pupil = s.pupil || N.pupil, is = Math.round(size * 1.2), room = Math.max(160, 2 * Math.min(x, DESIGN()[0] - x) - 40); // M94: centred on x, inside the frame
       const ICON = {
         eye: `<path d="M6 50 C24 24 76 24 94 50 C76 76 24 76 6 50Z" fill="#FFFFFF"/><circle cx="50" cy="50" r="15" fill="none" stroke="${pupil}" stroke-width="9"/>`,
         play: `<path d="M30 20 L80 50 L30 80 Z" fill="#FFFFFF"/>`,
@@ -313,9 +313,9 @@
       return { front: `<div class="abs"${cidOf(s)} style="left:${x}px;top:${y}px;transform:translate(-50%,-50%) scale(${sc.toFixed(3)});opacity:${o.toFixed(3)};
         display:flex;flex-direction:column;align-items:center;gap:2px;font-family:${FONT}">
         ${s.icon === '' ? '' : `<svg viewBox="0 0 100 100" width="${is}" height="${is}" style="filter:drop-shadow(0 0 18px rgba(255,255,255,.55))">${ICON[s.icon || 'eye'] || ICON.eye}</svg>`}
-        <div style="font-weight:800;font-size:${size}px;line-height:1;letter-spacing:-.02em;color:#fff;white-space:nowrap;
+        <div class="fit" style="max-width:${room}px;font-weight:800;font-size:${size}px;line-height:1;letter-spacing:-.02em;color:#fff;white-space:nowrap;
           text-shadow:0 0 30px rgba(255,255,255,.45),0 3px 16px rgba(0,0,0,.4)">${esc((s.prefix || '') + v + (s.unit ? ' ' + s.unit : ''))}</div>
-        ${s.label ? `<div style="font-weight:700;font-size:${Math.round(size * .36)}px;color:#fff;text-shadow:${WHITE_SHADOW};white-space:nowrap">${esc(s.label)}</div>` : ''}</div>` };
+        ${s.label ? `<div class="fit" style="max-width:${room}px;font-weight:700;font-size:${Math.round(size * .36)}px;color:#fff;text-shadow:${WHITE_SHADOW};white-space:nowrap">${esc(s.label)}</div>` : ''}</div>` };
     },
 
     // Rounded dark chip with the product name or logo, neon rim — appears on the sentence that names the product.

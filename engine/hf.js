@@ -47,11 +47,19 @@
     for (const el of [L, C]) el.style.cssText = `position:absolute;left:0;top:0;width:${stage.style.width};height:${stage.style.height};transform:${stage.style.transform};transform-origin:0 0;overflow:hidden;pointer-events:none`;
   }
   const absUrl = v => (typeof v === 'string' && /\.(jpe?g|png|webp|gif|svg|mp4)$/i.test(v) && !/^(https?:|data:|file:)/.test(v) ? new URL(url(v), document.baseURI).href : v);
+  // M94: an overlay block's content box is only as wide as its sample text; show it across the frame width (still inside
+  // the block's own canvas) so longer text has room before engine/fit.js shrinks it. Stage px [xa, xb] ↔ iframe px [x0, x1].
+  function clipX(sl, b) {
+    const k = +sl.dataset.k, ox = +sl.dataset.ox, left = parseFloat(sl.style.left), w = parseFloat(sl.style.width);
+    if (b.layer !== 'over') return { xa: left, xb: left + w, x0: ox, x1: ox + w / k };
+    const xa = Math.min(left, Math.max(0, left - ox * k)), xb = Math.max(left + w, Math.min(DIMS()[0], left + (b.w - ox) * k));
+    return { xa, xb, x0: ox + (xa - left) / k, x1: ox + (xb - left) / k };
+  }
   const hasBuild = w => { const br = w.__hf?.buildReady; return !!br && (!!br.then || Object.keys(br).length > 0); };
-  function frame(key, blk) {
+  function frame(key, blk, sl) {
     let f = FR.get(key);
     if (f) return f;
-    const b = CAT[blk], host = document.createElement('div'), ifr = document.createElement('iframe');
+    const b = CAT[blk], cx = clipX(sl, b), host = document.createElement('div'), ifr = document.createElement('iframe');
     ifr.name = key; ifr.src = b.file; ifr.setAttribute('scrolling', 'no');
     ifr.style.cssText = `position:absolute;left:0;top:0;width:${b.w}px;height:${b.h}px;border:0;transform-origin:0 0;background:transparent;pointer-events:none`;
     host.appendChild(ifr); L.appendChild(host);
@@ -65,6 +73,15 @@
       // M57: blocks publish buildReady as { [block]: Promise } (fonts, models, textures built async), not as one promise
       const br = w.__hf?.buildReady, builds = br?.then ? [br] : Object.values(br || {});
       await Promise.race([Promise.all([d.fonts?.ready, ...builds]), new Promise(r => setTimeout(r, 8000))]);
+      // M94: Vietnamese for texts the block's own script writes (engine/hf/vi.js `live`), unless the scene set texts itself
+      if (b.vlive) for (const tw = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT); tw.nextNode();) {
+        const n = tw.currentNode, v = b.vlive[n.nodeValue.trim()]; if (v != null) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), v);
+      }
+      // M94: texts longer than the block's box shrink to fit (engine/fit.js), measured once at fixed block times
+      if (window.hfFit) try {
+        const [, by, , bh] = b.layer === 'full' || !b.box ? [0, 0, b.w, b.h] : b.box;
+        hfFit(w, { x0: cx.x0, y0: by, x1: cx.x1, y1: by + bh }, t => hfSeek(w, t), [.3, .45, .6, .75, .9].map(f => f * b.dur));
+      } catch (e) { console.warn('hf fit', key, e); }
     });
     f = { host, ifr, ready: Promise.race([ready, new Promise(r => setTimeout(r, 15000))]), used: 0 };
     FR.set(key, f);
@@ -76,15 +93,16 @@
     layers(stage);
     const live = new Set(), n = performance.now();
     for (const sl of slots) {
-      const key = sl.dataset.hf, f = frame(key, sl.dataset.blk);
+      const key = sl.dataset.hf, b = CAT[sl.dataset.blk], f = frame(key, sl.dataset.blk, sl), cx = clipX(sl, b);
       live.add(key); f.used = n;
       await f.ready;
       const k = +sl.dataset.k;
       // the iframe lives outside #stage: carry over the opacity of the slot's wrappers (scene in/out envelope, keyframes)
       let op = +sl.dataset.op;
       for (let e = sl.parentElement; e && e !== stage; e = e.parentElement) if (e.style.opacity !== '') op *= +e.style.opacity;
-      f.host.style.cssText = `${sl.style.cssText};overflow:hidden;opacity:${op.toFixed(3)};display:block;z-index:${live.size}`;
-      f.ifr.style.transform = `translate(${-sl.dataset.ox * k}px,${-sl.dataset.oy * k}px) scale(${k})`;
+      f.host.style.cssText = `${sl.style.cssText};left:${cx.xa.toFixed(1)}px;width:${(cx.xb - cx.xa).toFixed(1)}px;overflow:hidden;opacity:${op.toFixed(3)};display:block;z-index:${live.size}`;
+      f.host.dataset.x0 = cx.x0.toFixed(1);
+      f.ifr.style.transform = `translate(${(-cx.x0 * k).toFixed(2)}px,${-sl.dataset.oy * k}px) scale(${k})`;
       try { hfSeek(f.ifr.contentWindow, +sl.dataset.t); } catch (e) { console.warn('hf seek', key, e); }
     }
     for (const [key, f] of FR) if (!live.has(key)) f.host.style.display = 'none';

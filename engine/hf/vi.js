@@ -39,7 +39,10 @@
     'data-chart': { texts: { 'Monthly Revenue vs. Conversion Rate': 'Doanh thu và tỉ lệ chốt đơn', 'Revenue': 'Doanh thu', 'Conversion Rate': 'Tỉ lệ chốt', 'Source: Internal analytics': 'Nguồn: số liệu nội bộ' } },
     'animated-bar-chart': { texts: { 'Animated Bar Chart': 'Doanh số 7 tháng', 'Jan': 'T1', 'Feb': 'T2', 'Mar': 'T3', 'Apr': 'T4', 'May': 'T5', 'Jun': 'T6', 'Jul': 'T7' } },
     'apple-money-count': { texts: { '$0': '0đ' } },
-    'world-map': { texts: { 'Global GDP per Capita': 'Thị trường xuất khẩu', 'Low': 'Thấp', 'High': 'Cao', 'Source: International Monetary Fund': 'Nguồn: số liệu nội bộ' } },
+    'world-map': { texts: { 'Global GDP per Capita': 'Thị trường xuất khẩu', 'Nominal GDP per capita, 2024 IMF estimates': 'Doanh thu theo quốc gia, số liệu ví dụ', 'Low': 'Thấp', 'High': 'Cao', 'Source: International Monetary Fund': 'Nguồn: số liệu nội bộ' } },
+    'logo-wall': { texts: { 'Trusted by teams': 'Được nhiều doanh nghiệp tin dùng' } },
+    // live: texts the block's own script writes (not data-hft), swapped by engine/hf.js once the block is built (M94)
+    'notification-pileup': { live: { 'Messages': 'Tin nhắn', 'Can you take a quick look?': 'Bạn xem giúp mình nhé?', 'Calendar': 'Lịch', 'Stand-up moved to 10:30': 'Họp dời sang 10:30', 'Mail': 'Thư', 'Five new replies in your thread': '5 trả lời mới trong chuỗi thư', 'Updates': 'Cập nhật', 'A new version is ready': 'Đã có phiên bản mới', 'Tasks': 'Việc cần làm', 'Deadline changed to today': 'Hạn chót dời về hôm nay', 'Drive': 'Tài liệu', 'Someone requested access': 'Có người xin quyền truy cập', 'Security': 'Bảo mật', 'New sign-in needs review': 'Đăng nhập mới cần xác nhận', 'Social': 'Mạng xã hội', 'You have twelve new mentions': 'Bạn có 12 lượt nhắc mới', 'Notes': 'Ghi chú', 'Shared checklist was updated': 'Danh sách chung vừa cập nhật', 'Reminders': 'Nhắc việc', 'Follow up before end of day': 'Phản hồi trước cuối ngày' } },
     'flowchart': { texts: { 'Yes': 'Có', 'Not sure': 'Chưa chắc', 'Should I learn to code?': 'Có nên mở cửa hàng online?', 'Start with Pythom': 'Bắt đầu với Shopee', 'Try no-code first': 'Thử bán qua Facebook', 'Build a personal website': 'Làm website riêng', 'Take a free intro course': 'Học khoá miễn phí' } },
     'flowchart-vertical': { texts: { 'Yes': 'Có', 'Not sure': 'Chưa chắc', 'Should I learn to code?': 'Có nên mở cửa hàng online?', 'Start with Pythom': 'Bắt đầu với Shopee', 'Try no-code first': 'Thử bán qua Facebook', 'Build a personal website': 'Làm website riêng', 'Take a free intro course': 'Học khoá miễn phí' } },
     'confetti': { texts: { 'Confetti': 'Chúc mừng!' } },
@@ -70,6 +73,7 @@
     const b = C[name]; if (!b) continue;
     const ids = new Set(b.vars.map(v => v.id));
     if (d.vars) b.vi = Object.fromEntries(Object.entries(d.vars).filter(([k]) => ids.has(k)));
+    if (d.live) b.vlive = d.live;
     if (d.texts) b.vit = Object.assign(b.vit || {}, Object.fromEntries(Object.entries(d.texts).map(([def, v]) => [b.texts.find(t => t.def === def)?.i, v]).filter(([i]) => i != null)));
   }
 })();
