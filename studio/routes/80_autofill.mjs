@@ -2,7 +2,7 @@
 //   POST /api/autofill {mode:'all'|'broll'|'sfx'|'clear', goal, variety 0..1, density,
 //        src:[preset,hf,text,emoji,logo,aroll,media,lib,stock,stockvid,aiimg], claude, level, music}
 //        -> job "autofill"; rewrites timeline.json in place (history snapshot + timeline.json.bak first); job.out = summary
-import fs from 'node:fs'; import path from 'node:path';
+import fs from 'node:fs'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
 
 const DENS = ['thua', 'vua', 'day', 'ratday'], LEVELS = ['nhe', 'vua', 'phongphu'], SRCS = ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'lib', 'stock', 'stockvid', 'aiimg'];
 const GOALS = ['auto', 'banhang', 'bds', 'khoahoc', 'review', 'tintuc', 'kechuyen', 'doanhnghiep', 'amthuc', 'giaitri'];
@@ -43,6 +43,8 @@ export default ctx => {
         await ctx.run(ctx.PY, ['-I', '-X', 'utf8', S('auto_sfx.py'), tlf, '--level', level, ...(b.music ? ['--music', 'auto'] : []), ...(b.claude && b.music ? ['--claude'] : [])], l => {
           if (/^level \d/.test(l)) sum.sfx = l;
         });
+        // S12 · M99: đoạn nhạc nào có bài hợp mood trong Nhac/ của Kho thì dùng bài đó (media/kho_*)
+        if (b.music) { try { const { khoMusicBeds } = await import(pathToFileURL(S('kho_media.mjs')).href); const n = await khoMusicBeds(ctx.project.dir); if (n) sum.kho_music = n; } catch (e) { console.error('kho music:', e.message); } }
       }
       ctx.job.out = sum;
     });

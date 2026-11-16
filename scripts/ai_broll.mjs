@@ -104,7 +104,9 @@ const run = (cmd, a) => { const r = spawnSync(cmd, a, { encoding: 'utf8' }); if 
 const slug = s => fold(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'broll';
 export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur = 3, vertical = true, meta = {} } = {}) {
   const md = path.join(dir, 'media'); fs.mkdirSync(md, { recursive: true });
-  let base = `${slug(name)}`; for (let i = 1; fs.existsSync(path.join(md, base + (kind === 'video' ? '.mp4' : '.jpg'))); i++) base = `${slug(name)}_${i}`;
+  // S12 mục 2.2: file tải từ kho stock mang tiền tố nguồn stock_ (tab "Dự án này" gom theo tiền tố; nguồn/giấy phép ở credits.json)
+  const stem = `stock_${slug(name)}`; let base = stem;
+  for (let i = 1; fs.existsSync(path.join(md, base + (kind === 'video' ? '.mp4' : '.jpg'))) || fs.existsSync(path.join(md, base + '_frames')); i++) base = `${stem}_${i}`;
   const r = await safeFetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(120000) });
   if (!r.ok) throw new Error(`tải thất bại (${r.status})`);
   const tmp = path.join(os.tmpdir(), `avs_dl_${process.pid}_${Date.now()}`); fs.writeFileSync(tmp, Buffer.from(await r.arrayBuffer()));

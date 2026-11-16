@@ -1,0 +1,137 @@
+// Bước 3 Dựng dùng tài nguyên Kho (S12 · M99): /api/kho/use, tên trùng, đường dẫn thoát Kho, junction, nhạc Kho,
+// b-roll tự động ưu tiên Kho. run: node --test scripts/tests/kho_media.test.mjs
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as K from '../kho_media.mjs';
+
+const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const TMP = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'avs-khom-')));
+const HOME = path.join(TMP, 'home'), KHO = path.join(TMP, 'Kho Nha Dep'), OUT = path.join(TMP, 'ngoai');
+const PROJ = path.join(KHO, 'Du an', 'clip 1');
+const put = (rel, data = 'x') => { const f = path.join(KHO, ...rel.split('/')); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data); return f; };
+fs.mkdirSync(HOME, { recursive: true }); fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(PROJ, { recursive: true });
+fs.writeFileSync(path.join(KHO, '.kho.json'), JSON.stringify({ version: 1, brand: '', title: 'Nhà Đẹp' }));
+put('Anh/logo.png', 'png-1'); put('BRoll/logo.png', 'png-2'); put('Anh/ca phe sang.jpg', 'jpg'); put('Nhac/hype_soi_dong.mp3', 'mp3');
+put('Du an/clip 1/media/x.jpg', 'no'); fs.writeFileSync(path.join(OUT, 'bi-mat.jpg'), 'secret');
+const CAPS = [
+  { t0: .5, t1: 4, words: [['Sáng', .5], ['nay', .8], ['tôi', 1.1], ['uống', 1.4], ['cà', 1.8], ['phê', 2.1], ['ở', 2.5], ['quán', 2.8], ['quen', 3.2]] },
+  { t0: 4.2, t1: 8, words: [['Ly', 4.2], ['cà', 4.6], ['phê', 5], ['sáng', 5.4], ['thật', 5.9], ['thơm', 6.4], ['và', 6.9], ['đậm', 7.3]] },
+  { t0: 8.2, t1: 11, words: [['Hẹn', 8.2], ['gặp', 8.7], ['lại', 9.2], ['các', 9.7], ['bạn', 10.2]] },
+].map(c => ({ ...c, words: c.words.map(([w, s]) => ({ w, s, e: s + .3 })) }));
+fs.writeFileSync(path.join(PROJ, 'timeline.json'), JSON.stringify({ width: 1080, height: 1920, duration: 12, pack: 'slate', scenes: [], captions: CAPS }));
+const ws = K.khoOf(PROJ);
+const media = (...p) => path.join(PROJ, 'media', ...p);
+
+test('khoOf: dự án trong <Kho>/Du an/<tên> tìm ra Kho qua .kho.json', () => {
+  assert.equal(ws.root, KHO); assert.equal(ws.found, 'kho');
+});
+
+test('useFromKho: liên kết vào media/kho_*, tên trùng → _2, dùng lại không tạo bản mới, ghi nguồn', async () => {
+  const a = await K.useFromKho(PROJ, ws, 'Anh/logo.png');
+  assert.equal(a.name, 'kho_logo.png'); assert.equal(a.path, 'media/kho_logo.png'); assert.equal(a.kind, 'image'); assert.equal(a.kho, 'Anh/logo.png');
+  assert.ok(['link', 'copy'].includes(a.linked));
+  if (a.linked === 'link') assert.equal(fs.statSync(media(a.name), { bigint: true }).ino, fs.statSync(path.join(KHO, 'Anh', 'logo.png'), { bigint: true }).ino);
+  const b = await K.useFromKho(PROJ, ws, 'BRoll/logo.png');
+  assert.equal(b.name, 'kho_logo_2.png'); assert.equal(fs.readFileSync(media(b.name), 'utf8'), 'png-2');
+  const again = await K.useFromKho(PROJ, ws, 'Anh\\logo.png');
+  assert.equal(again.name, 'kho_logo.png'); assert.equal(again.linked, 'reuse');
+  const sp = await K.useFromKho(PROJ, ws, 'Anh/ca phe sang.jpg');
+  assert.equal(sp.name, 'kho_ca_phe_sang.jpg'); // không khoảng trắng/ngoặc: url() CSS của engine
+  const cr = JSON.parse(fs.readFileSync(media('credits.json'), 'utf8'));
+  assert.deepEqual(cr.map(x => [x.file, x.kho, x.provider]), [['kho_logo.png', 'Anh/logo.png', 'Kho'], ['kho_logo_2.png', 'BRoll/logo.png', 'Kho'], ['kho_ca_phe_sang.jpg', 'Anh/ca phe sang.jpg', 'Kho']]);
+  const list = K.khoItems(PROJ, ws);
+  assert.equal(list.find(x => x.rel === 'Anh/logo.png').used, 'media/kho_logo.png');
+  assert.equal(list.find(x => x.rel === 'Nhac/hype_soi_dong.mp3').used, null);
+  assert.equal(list.find(x => x.rel === 'Nhac/hype_soi_dong.mp3').group, 'music');
+  assert.ok(!list.some(x => x.rel.startsWith('Du an/')));
+  // file đã có trong dự án bị xoá → dùng lại thì liên kết lần nữa
+  fs.rmSync(media('kho_logo_2.png'));
+  assert.equal((await K.useFromKho(PROJ, ws, 'BRoll/logo.png')).linked !== 'reuse', true);
+});
+
+test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, file lạ → 400; không thấy → 404', async () => {
+  for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', '.kho.json', '', null, 42])
+    await assert.rejects(K.useFromKho(PROJ, ws, rel), e => e.status === 400, String(rel));
+  await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/khong-co.jpg'), e => e.status === 404);
+  assert.ok(!fs.readdirSync(media()).some(f => f.includes('bi-mat')));
+});
+
+test('junction/symlink trong Kho trỏ ra ngoài: không lấy được file qua liên kết', async t => {
+  const j = path.join(KHO, 'BRoll', 'ngoai');
+  try { fs.symlinkSync(OUT, j, process.platform === 'win32' ? 'junction' : 'dir'); } catch { return t.skip('không tạo được junction'); }
+  await assert.rejects(K.useFromKho(PROJ, ws, 'BRoll/ngoai/bi-mat.jpg'), e => e.status === 400);
+  assert.ok(!K.khoItems(PROJ, ws).some(x => x.rel.includes('bi-mat')));
+  fs.rmSync(j, { recursive: false, force: true });
+});
+
+const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
+test('video từ Kho: chuỗi khung + audio.m4a như upload(), mục như mediaList()', { skip: !hasFfmpeg && 'không có ffmpeg' }, async () => {
+  const v = path.join(KHO, 'BRoll', 'quay cafe.mp4');
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30:duration=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', v]);
+  assert.equal(r.status, 0, String(r.stderr));
+  const it = await K.useFromKho(PROJ, ws, 'BRoll/quay cafe.mp4');
+  assert.equal(it.kind, 'video'); assert.equal(it.name, 'kho_quay_cafe.mp4');
+  assert.equal(it.seq.seq, 'media/kho_quay_cafe_frames/%05d.jpg'); assert.ok(it.seq.count >= 28, String(it.seq.count));
+  assert.equal(it.thumb, 'media/kho_quay_cafe_frames/00001.jpg'); assert.equal(it.preview_audio, 'media/kho_quay_cafe_frames/audio.m4a');
+  assert.ok(fs.existsSync(media('kho_quay_cafe_frames', 'audio.m4a')));
+  // khung bị dọn (gửi máy render) → dùng lại thì tạo lại khung, không tạo kho_quay_cafe_2.mp4
+  fs.rmSync(media('kho_quay_cafe_frames'), { recursive: true });
+  const again = await K.useFromKho(PROJ, ws, 'BRoll/quay cafe.mp4');
+  assert.equal(again.name, 'kho_quay_cafe.mp4'); assert.ok(again.seq.count >= 28);
+});
+
+test('route /api/kho/*: liệt kê kèm đã dùng, rel thoát Kho → 400, dùng → mục chèn được', async () => {
+  const route = (await import(pathToFileURL(path.join(SKILL, 'studio/routes/61_kho_media.mjs')).href)).default;
+  let bodyOf = null;
+  const ctx = { SKILL, project: { dir: PROJ, tlFile: path.join(PROJ, 'timeline.json') }, json: (res, o, code = 200) => { res.code = code; res.o = o; }, body: async () => bodyOf, sendFile: (req, res, f) => { res.file = f; } };
+  const h = route(ctx);
+  const call = async (method, url, b) => { bodyOf = b; const res = {}, u = new URL(url, 'http://x'); const ok = await h({ method }, res, u.pathname, u); return { ok, ...res }; };
+  const g = await call('GET', '/api/kho/media?group=image');
+  assert.equal(g.code, 200); assert.equal(g.o.kho.title, 'Nhà Đẹp');
+  assert.ok(g.o.items.every(x => x.group === 'image')); assert.equal(g.o.items.find(x => x.rel === 'Anh/logo.png').used, 'media/kho_logo.png');
+  assert.equal((await call('GET', '/api/kho/media?group=lung-tung')).code, 400);
+  assert.equal((await call('POST', '/api/kho/use', { rel: '../ngoai/bi-mat.jpg' })).code, 400);
+  assert.equal((await call('POST', '/api/kho/use', {})).code, 400);
+  assert.equal((await call('GET', '/api/kho/file?rel=' + encodeURIComponent('../ngoai/bi-mat.jpg'))).code, 400);
+  assert.equal((await call('GET', '/api/kho/file?rel=Anh%2Flogo.png')).file, path.join(KHO, 'Anh', 'logo.png'));
+  const u = await call('POST', '/api/kho/use', { rel: 'Anh/logo.png' });
+  assert.equal(u.code, 200); assert.equal(u.o.path, 'media/kho_logo.png'); assert.equal(u.o.thumb, 'media/kho_logo.png');
+  assert.equal(await h({ method: 'GET' }, {}, '/api/khac', new URL('http://x/api/khac')), false);
+});
+
+test('nhạc nền: bài trong Nhac/ hợp mood → media/kho_*, không hợp → null; khoMusicBeds đổi đúng đoạn', async () => {
+  assert.equal((await K.khoMusic(PROJ, null, 'sad')), null);
+  const m = await K.khoMusic(PROJ, null, 'hype');
+  assert.deepEqual(m, { file: 'media/kho_hype_soi_dong.mp3', kho: 'Nhac/hype_soi_dong.mp3', title: 'hype_soi_dong.mp3' });
+  assert.equal(JSON.parse(fs.readFileSync(media('credits.json'), 'utf8')).find(x => x.file === 'kho_hype_soi_dong.mp3').provider, 'Kho · Nhac');
+  const tlf = path.join(PROJ, 'timeline.json'), tl = JSON.parse(fs.readFileSync(tlf, 'utf8'));
+  tl.audio = { music: [{ t0: 0, t1: 6, mood: 'hype', _auto: true }, { t0: 6, t1: 12, mood: 'sad', _auto: true }, { t0: 0, t1: 12, mood: 'hype' }] };
+  fs.writeFileSync(tlf, JSON.stringify(tl));
+  assert.equal(await K.khoMusicBeds(PROJ), 1);
+  const mu = JSON.parse(fs.readFileSync(tlf, 'utf8')).audio.music;
+  assert.equal(mu[0].file, 'media/kho_hype_soi_dong.mp3'); assert.equal(mu[1].file, undefined); assert.equal(mu[2].file, undefined);
+  delete tl.audio; fs.writeFileSync(tlf, JSON.stringify(tl));
+});
+
+test('b-roll tự động: câu nhắc "cà phê" lấy ảnh Anh/ của Kho trước ảnh của dự án, qua media/kho_*', () => {
+  fs.writeFileSync(media('zz_cua_toi.jpg'), 'mine');
+  const r = spawnSync(process.execPath, [path.join(SKILL, 'scripts/auto_broll.mjs'), path.join(PROJ, 'timeline.json'), '--src', 'media', '--density', 'ratday', '--seed', '1'],
+    { encoding: 'utf8', env: { ...process.env, AVS_HOME: HOME } });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const note = JSON.parse(r.stdout.trim().split('\n').filter(l => l.startsWith('{')).at(-1));
+  assert.ok(note.sources.kho >= 1, JSON.stringify(note));
+  const tl = JSON.parse(fs.readFileSync(path.join(PROJ, 'timeline.json'), 'utf8'));
+  const kho = tl.scenes.filter(s => s._src === 'kho');
+  assert.ok(kho.some(s => s.media === 'media/kho_ca_phe_sang.jpg'), JSON.stringify(kho));
+  const first = tl.scenes.filter(s => s._src === 'kho' || s._src === 'media').sort((a, b) => a.t0 - b.t0)[0];
+  assert.equal(first._src, 'kho');
+  // không tham chiếu đường dẫn ngoài dự án
+  assert.ok(!JSON.stringify(tl.scenes).includes(KHO.replace(/\\/g, '\\\\')));
+});
+
+test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
