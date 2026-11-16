@@ -104,7 +104,8 @@ export function mediaItem(dir, name) {
   return it;
 }
 
-const ff = (args, run) => (run ? run('ffmpeg', args) : new Promise((ok, no) => execFile('ffmpeg', args, { maxBuffer: 1 << 24 }, e => (e ? no(e) : ok()))));
+// có hạn giờ: ffmpeg treo (file hỏng, ổ mạng) không giữ mãi lời hứa trong `pending` (≤ 3 phút video của route tách xong trong ~1 phút)
+const ff = (args, run) => (run ? run('ffmpeg', args) : new Promise((ok, no) => execFile('ffmpeg', args, { maxBuffer: 1 << 24, timeout: 600000, killSignal: 'SIGKILL' }, e => (e ? no(e) : ok()))));
 /** Chuỗi khung 30 fps (≤ 1280 px) + audio.m4a cho một video trong media/, như upload() của server. Ghi vào thư mục mới. */
 // Tách vào thư mục tạm rồi đổi tên: ffmpeg bị ngắt giữa chừng không để lại <tên>_frames dở (bị coi là đủ mãi).
 export async function expandVideo(src, fr, { run } = {}) {
@@ -136,7 +137,7 @@ export function useFromKho(projectDir, ws, rel, o = {}) {
   const p = useOnce(projectDir, ws, rel, o).finally(() => pending.delete(k));
   pending.set(k, p); return p;
 }
-const probeDur = f => new Promise(ok => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], (e, o) => ok(e ? NaN : +String(o).trim())));
+const probeDur = f => new Promise(ok => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], { timeout: 30000, killSignal: 'SIGKILL' }, (e, o) => ok(e ? NaN : +String(o).trim())));
 async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b-roll tự động', copy = false } = {}) {
   const src = fs.realpathSync.native(resolveRel(ws, rel)), relN = rel.split(/[\\/]+/).filter(Boolean).join('/'); // symlink trong Kho: liên kết/chép file thật
   // b-roll tự động chỉ dùng ~2 s đầu: video Kho dài (footage thô) không tách cả nghìn khung trong job (o.maxDur giây)

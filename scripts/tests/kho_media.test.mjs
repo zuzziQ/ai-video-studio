@@ -1,4 +1,4 @@
-// Bước 3 Dựng dùng tài nguyên Kho (S12 · M99): /api/kho/use, tên trùng, đường dẫn thoát Kho, junction, nhạc Kho,
+// Bước 3 Dựng dùng tài nguyên Kho (S12 · M99): /api/media/kho/use, tên trùng, đường dẫn thoát Kho, junction, nhạc Kho,
 // b-roll tự động ưu tiên Kho. run: node --test scripts/tests/kho_media.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -157,21 +157,21 @@ test('video từ Kho: chuỗi khung + audio.m4a như upload(), mục như mediaL
   assert.ok(fs.readdirSync(media('kho_hai_ben_frames')).filter(f => f.endsWith('.jpg')).length >= 28);
 });
 
-test('route /api/kho/*: liệt kê kèm đã dùng, rel thoát Kho → 400, dùng → mục chèn được', async () => {
+test('route /api/media/kho*: liệt kê kèm đã dùng, rel thoát Kho → 400, dùng → mục chèn được', async () => {
   const route = (await import(pathToFileURL(path.join(SKILL, 'studio/routes/61_kho_media.mjs')).href)).default;
   let bodyOf = null;
   const ctx = { SKILL, project: { dir: PROJ, tlFile: path.join(PROJ, 'timeline.json') }, json: (res, o, code = 200) => { res.code = code; res.o = o; }, body: async () => bodyOf, sendFile: (req, res, f) => { res.file = f; } };
   const h = route(ctx);
-  const call = async (method, url, b) => { bodyOf = b; const res = {}, u = new URL(url, 'http://x'); const ok = await h({ method }, res, u.pathname, u); return { ok, ...res }; };
-  const g = await call('GET', '/api/kho/media?group=image');
+  const call = async (method, url, b) => { bodyOf = b; const res = { setHeader() {} }, u = new URL(url, 'http://x'); const ok = await h({ method }, res, u.pathname, u); return { ok, ...res }; };
+  const g = await call('GET', '/api/media/kho?group=image');
   assert.equal(g.code, 200); assert.equal(g.o.kho.title, 'Nhà Đẹp');
   assert.ok(g.o.items.every(x => x.group === 'image')); assert.equal(g.o.items.find(x => x.rel === 'Anh/logo.png').used, 'media/kho_logo.png');
-  assert.equal((await call('GET', '/api/kho/media?group=lung-tung')).code, 400);
-  assert.equal((await call('POST', '/api/kho/use', { rel: '../ngoai/bi-mat.jpg' })).code, 400);
-  assert.equal((await call('POST', '/api/kho/use', {})).code, 400);
-  assert.equal((await call('GET', '/api/kho/file?rel=' + encodeURIComponent('../ngoai/bi-mat.jpg'))).code, 400);
-  assert.equal((await call('GET', '/api/kho/file?rel=Anh%2Flogo.png')).file, path.join(KHO, 'Anh', 'logo.png'));
-  const u = await call('POST', '/api/kho/use', { rel: 'Anh/logo.png' });
+  assert.equal((await call('GET', '/api/media/kho?group=lung-tung')).code, 400);
+  assert.equal((await call('POST', '/api/media/kho/use', { rel: '../ngoai/bi-mat.jpg' })).code, 400);
+  assert.equal((await call('POST', '/api/media/kho/use', {})).code, 400);
+  assert.equal((await call('GET', '/api/media/kho/file?rel=' + encodeURIComponent('../ngoai/bi-mat.jpg'))).code, 400);
+  assert.equal((await call('GET', '/api/media/kho/file?rel=Anh%2Flogo.png')).file, path.join(KHO, 'Anh', 'logo.png'));
+  const u = await call('POST', '/api/media/kho/use', { rel: 'Anh/logo.png' });
   assert.equal(u.code, 200); assert.equal(u.o.path, 'media/kho_logo.png'); assert.equal(u.o.thumb, 'media/kho_logo.png');
   assert.equal(await h({ method: 'GET' }, {}, '/api/khac', new URL('http://x/api/khac')), false);
   assert.equal(await h({ method: 'GET' }, {}, '/api/kho/status', new URL('http://x/api/kho/status')), false); // của 12_workspace

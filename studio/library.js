@@ -262,7 +262,7 @@ let MEDIA = [], BRES = [], KHOM = null, khoGroup = '', khoBusy = '';
 // Mới mở dự án (hoặc dự án khác): đọc lại cả Kho, vì Kho đi theo thương hiệu của dự án
 async function MEDIA_LOAD() { MEDIA = await api('/api/media'); KHOM = null; if (panel === 'media') renderPanel(); }
 async function KHO_LOAD() {
-  try { KHOM = await api('/api/kho/media'); } catch { KHOM = { error: 'Không đọc được Kho' }; }
+  try { KHOM = await api('/api/media/kho'); } catch { KHOM = { error: 'Không đọc được Kho' }; }
   if (!KHOM || typeof KHOM !== 'object') KHOM = { error: 'Không đọc được Kho' };
   if (panel === 'media' && mediaTab === 'kho') renderPanel();
 }
@@ -282,7 +282,7 @@ function mediaCell(m) {
       <div class="nm">${esc(m.name)}</div></div>`;
 }
 function khoCell(it, i) {
-  const th = it.kind === 'image' ? avsUrl('/api/kho/file?rel=' + encodeURIComponent(it.rel)) : '';
+  const th = it.kind === 'image' ? avsUrl('/api/media/kho/file?rel=' + encodeURIComponent(it.rel)) : '';
   const ic = it.kind === 'image' ? 'ti-photo' : it.kind === 'video' ? 'ti-video' : 'ti-music';
   return `<div class="mcell" data-k="${i}" draggable="true" title="${esc(it.rel)}">
       <div class="th" data-dbg="${esc(th)}">${th ? '' : `<i class="ti ${it.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
@@ -324,13 +324,13 @@ function panelMedia() {
     ${MEDIA.length ? (groups.length ? '' : empty('ti-filter-off', 'Không có file phù hợp', 'Xoá ô tìm.')) : empty('ti-photo-plus', 'Chưa có media', 'Nhập ảnh hoặc video, hoặc chèn từ tab Kho. Bấm vào một file để thêm vào track chính tại playhead.')}`;
   $('#upl').onchange = e => uploadFiles([...e.target.files]);
 }
-// Kho → media/kho_* (POST /api/kho/use) rồi chèn như file media thường. how: clip | overlay | music; at: giây (thả lên timeline)
+// Kho → media/kho_* (POST /api/media/kho/use) rồi chèn như file media thường. how: clip | overlay | music; at: giây (thả lên timeline)
 async function useKho(it, how, at) {
   if (!it || khoBusy) return;
   khoBusy = it.rel; if (panel === 'media') renderPanel();
   if (it.kind === 'video' && !it.used) toast('Đang tách khung hình video…');
   let m = null;
-  try { m = await api('/api/kho/use', { rel: it.rel }); } catch (e) { m = { error: e.message }; }
+  try { m = await api('/api/media/kho/use', { rel: it.rel }); } catch (e) { m = { error: e.message }; }
   khoBusy = '';
   if (!m || m.error) { if (panel === 'media') renderPanel(); return toast('Không chèn được: ' + (m?.error || 'lỗi')); }
   it.used = m.path;
