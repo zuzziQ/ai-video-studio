@@ -143,6 +143,31 @@ test('rehear: lỗi Whisper báo đúng dòng lỗi; trộn hỏng thì dùng fi
   assert.equal(r.text, 'xin chào');
 });
 
+test('rehearMany (M96): nhiều đoạn một lần chạy rehear.py (--spans), prompt riêng từng đoạn, dùng cache tiếng nói', async () => {
+  const { dir, tl } = project('m1', { asr: { model: 'large-v3-turbo' } });
+  process.env.FAKE_HEARD_LIST = JSON.stringify(['15 đến 30 phút', 'video clip']);
+  const log = [], steps = [];
+  const spans = [{ s: at('15').s, e: at('phút').e }, { s: at('video').s, e: at('clip').e }];
+  const o = { dir, tl, words: WORDS, terms: ['Lychee'], spans, skill: SKILL, py: 'python' };
+  const r = await R.rehearMany(o, { run: fakeRun(log), onProgress: (p, st) => steps.push([p, st]) });
+  assert.equal(r.model, 'large-v3');
+  assert.deepEqual(r.spans.map(x => x.text), ['15 đến 30 phút', 'video clip']);
+  r.spans.forEach((x, k) => { const c = R.checkSpan(spans[k], tl.duration); assert.ok(x.from === c.from && x.to === c.to); assert.equal(x.s, spans[k].s); });
+  assert.deepEqual(log.map(x => x.script), ['mix_audio.py', 'rehear.py'], 'một lần nạp model cho mọi đoạn');
+  const a = log[1].args;
+  assert.ok(a.includes('--spans')); assert.equal(a[a.indexOf('--model') + 1], 'large-v3');
+  assert.doesNotMatch(r.spans[0].prompt, /đến 3 phút/); assert.match(r.spans[0].prompt, /Lychee/);
+  assert.ok(steps.some(([, st]) => /^Đoạn 2\/2/.test(st)) && steps.every(([p]) => p >= 0 && p <= 1));
+  assert.deepEqual(fs.readdirSync(path.join(dir, '.studio')).filter(f => /^rehear_(spans_)?\d/.test(f)), [], 'dọn file tạm');
+  const log2 = [];
+  assert.equal((await R.rehearMany({ ...o, model: 'medium' }, { run: fakeRun(log2) })).cached, true);
+  assert.deepEqual(log2.map(x => x.script), ['rehear.py']);
+  assert.throws(() => R.checkSpans([], 30), e => e.status === 400);
+  assert.throws(() => R.checkSpans(Array.from({ length: R.MAX_SPANS + 1 }, () => ({ s: 1, e: 2 })), 30), e => e.status === 400);
+  assert.throws(() => R.checkSpans([{ s: 1, e: 2 }, { s: 3, e: 2 }], 30), e => e.status === 400);
+  delete process.env.FAKE_HEARD_LIST;
+});
+
 // ---------- route ----------
 const { readJson } = await import('../../studio/security.mjs');
 const json = (res, obj, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); };
@@ -152,7 +177,7 @@ const ctx = {
   get project() { return cur && { dir: cur.dir, tlFile: path.join(cur.dir, 'timeline.json') }; },
   get job() { return job; },
   readProject: () => ({ timeline: JSON.parse(fs.readFileSync(path.join(cur.dir, 'timeline.json'), 'utf8')), captions: [{ t0: 11, t1: 16, words: WORDS }] }),
-  rehearLib: { ...R, rehear: (o, env) => R.rehear(o, { ...env, run: fakeRun([]) }) },
+  rehearLib: { ...R, rehear: (o, env) => R.rehear(o, { ...env, run: fakeRun([]) }), rehearMany: (o, env) => R.rehearMany(o, { ...env, run: fakeRun([]) }) },
 };
 const handler = (await import('../../studio/routes/22_rehear.mjs')).default(ctx);
 const app = http.createServer(async (req, res) => {
@@ -195,4 +220,23 @@ test('route: một lượt một lúc (409), không chạy chồng "Tạo lời 
   assert.equal(s.state, 'cancelled');
   delete process.env.FAKE_SLEEP_MS; job = null;
   assert.deepEqual((await call('/api/rehear/cancel', {})).j, { ok: true, cancelled: false });
+});
+
+test('route batch (M96): nhiều đoạn trong cùng ô job, tiến độ theo đoạn, huỷ được; đoạn sai = 400', async () => {
+  cur = project('r3', {});
+  assert.equal((await call('/api/rehear/batch', { spans: [] })).code, 400);
+  assert.equal((await call('/api/rehear/batch', { spans: [{ s: 2, e: 1 }] })).code, 400);
+  process.env.FAKE_HEARD_LIST = JSON.stringify(['15 đến 30 phút', 'video clip']);
+  const r = await call('/api/rehear/batch', { spans: [{ s: at('15').s, e: at('phút').e }, { s: at('video').s, e: at('clip').e }] });
+  assert.equal(r.code, 200);
+  const s = await until(x => x.run === r.j.run && x.state !== 'running');
+  assert.equal(s.state, 'done'); assert.equal(s.batch, true);
+  assert.deepEqual(s.spans.map(x => x.text), ['15 đến 30 phút', 'video clip']);
+  process.env.FAKE_SLEEP_MS = '3000';
+  const r2 = await call('/api/rehear/batch', { spans: [{ s: 1, e: 2 }] });
+  await until(x => x.run === r2.j.run && /Cắt đoạn|Đoạn/.test(x.step || ''));
+  assert.equal((await call('/api/rehear', { s: 1, e: 2 })).code, 409, 'chung ô job với nghe lại một đoạn');
+  await call('/api/rehear/cancel', {});
+  assert.equal((await until(x => x.run === r2.j.run && x.state !== 'running')).state, 'cancelled');
+  delete process.env.FAKE_SLEEP_MS; delete process.env.FAKE_HEARD_LIST;
 });

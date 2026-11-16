@@ -1,7 +1,7 @@
 """Karaoke caption chunks (3–6 words, avg ~4.3) from words.json.
 
 usage: python captions.py <words.json> <out_captions.json> [--fix "chơi biết=chưa biết;rưu rương=du dương"]
-Output: [{"t0", "t1", "words": [{"w","s","e"}]}]
+Output: [{"t0", "t1", "words": [{"w","s","e","p"?}]}]  (p = Whisper word probability when words.json has it, M96)
 --fix replaces word sequences (whisper mistakes) before chunking: case and tone-mark placement do not matter;
 same word count keeps each timing, otherwise the old span is split by text length (scripts/dict.mjs builds it).
 """
@@ -31,8 +31,8 @@ def fold(w):
 
 def retime(old, dst):
     """Same word count: keep each word's timing. Otherwise split [first s, last e] by text length (like the Studio)."""
-    if len(old) == len(dst):
-        return [{**o, "w": d} for o, d in zip(old, dst)]
+    if len(old) == len(dst):  # a word the dictionary changed is no longer Whisper's guess: drop its probability
+        return [{k: v for k, v in o.items() if k != "p" or o["w"] == d} | {"w": d} for o, d in zip(old, dst)]
     s, e = old[0]["s"], old[-1]["e"]
     weights = [max(1, len(d)) for d in dst]
     out, acc = [], 0
@@ -64,7 +64,10 @@ for pair in filter(None, a.fix.split(";")):
 glued = []
 for w in words:
     if glued and w["w"][:1] in "%-–":
-        glued[-1] = {"w": glued[-1]["w"] + w["w"], "s": glued[-1]["s"], "e": w["e"]}
+        g = {"w": glued[-1]["w"] + w["w"], "s": glued[-1]["s"], "e": w["e"]}
+        if "p" in glued[-1] and "p" in w:
+            g["p"] = min(glued[-1]["p"], w["p"])
+        glued[-1] = g
     else:
         glued.append(dict(w))
 words = glued
@@ -148,6 +151,6 @@ out = []
 for i, c in enumerate(chunks):
     t1 = chunks[i + 1][0]["s"] if i + 1 < len(chunks) else c[-1]["e"] + 0.3
     out.append({"t0": round(c[0]["s"], 3), "t1": round(t1, 3),
-                "words": [{"w": w["w"].strip(",.!"), "s": w["s"], "e": w["e"]} for w in c]})
+                "words": [{"w": w["w"].strip(",.!"), "s": w["s"], "e": w["e"], **({"p": w["p"]} if "p" in w else {})} for w in c]})
 json.dump(out, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print(f"{len(out)} chunks, avg {sum(len(c['words']) for c in out) / max(1, len(out)):.1f} words")
