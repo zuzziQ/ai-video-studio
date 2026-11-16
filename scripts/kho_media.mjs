@@ -10,6 +10,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { KHO_DIRS, kindOf, inWorkspace, linkOrCopy, listWorkspace, workspaceOfProject } from './workspace.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
+import { credit as writeCredit } from './ai_broll.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PREFIX = 'kho_';
@@ -111,13 +112,7 @@ export async function expandVideo(src, fr, { run } = {}) {
   } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw e; }
 }
 
-function addCredit(dir, rec) {
-  const f = path.join(dir, 'media', 'credits.json'); let c = readJson(f); if (!Array.isArray(c)) c = [];
-  if (c.some(x => x?.file === rec.file)) return;
-  c.push({ ...rec, at: new Date().toISOString() });
-  // credits.json không phải liên kết cứng nhưng có thể là bản chép của dự án gốc (biến thể): ghi file mới rồi đổi tên
-  writeJson(f, c);
-}
+const addCredit = (dir, rec) => writeCredit(path.join(dir, 'media'), rec); // một bản ghi cho mỗi file kho_* (có khoá, ghi file mới)
 
 const pending = new Map();
 /**
@@ -130,8 +125,14 @@ export function useFromKho(projectDir, ws, rel, o = {}) {
   const p = useOnce(projectDir, ws, rel, o).finally(() => pending.delete(k));
   pending.set(k, p); return p;
 }
-async function useOnce(dir, ws, rel, { run, credit = 'Kho' } = {}) {
+const probeDur = f => new Promise(ok => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], (e, o) => ok(e ? NaN : +String(o).trim())));
+async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0 } = {}) {
   const src = resolveRel(ws, rel), relN = rel.split(/[\\/]+/).filter(Boolean).join('/');
+  // b-roll tự động chỉ dùng ~2 s đầu: video Kho dài (footage thô) không tách cả nghìn khung trong job (o.maxDur giây)
+  if (maxDur > 0 && kindOf(src) === 'video' && !usedName(dir, relN)) {
+    const d = await probeDur(src);
+    if (!(d <= maxDur)) throw bad(`Video dài ${Number.isFinite(d) ? Math.round(d) + ' s' : 'không rõ'} (quá ${maxDur} s cho b-roll tự động)`);
+  }
   const md = path.join(dir, 'media'); fs.mkdirSync(md, { recursive: true });
   const lock = mapFile(dir) + '.lock'; fs.mkdirSync(path.dirname(lock), { recursive: true });
   // Đọc sổ, chọn tên và tạo liên kết trong cùng một khoá (auto_broll chạy ở tiến trình khác): không hai lần lấy cùng một tên

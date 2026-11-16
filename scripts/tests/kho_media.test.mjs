@@ -92,6 +92,8 @@ test('video từ Kho: chuỗi khung + audio.m4a như upload(), mục như mediaL
   const v = path.join(KHO, 'BRoll', 'quay cafe.mp4');
   const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30:duration=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', v]);
   assert.equal(r.status, 0, String(r.stderr));
+  await assert.rejects(K.useFromKho(PROJ, ws, 'BRoll/quay cafe.mp4', { maxDur: .5 }), e => e.status === 400 && /quá 0.5 s/.test(e.message));
+  assert.ok(!fs.existsSync(media('kho_quay_cafe.mp4'))); // b-roll tự động không tách video dài
   const it = await K.useFromKho(PROJ, ws, 'BRoll/quay cafe.mp4');
   assert.equal(it.kind, 'video'); assert.equal(it.name, 'kho_quay_cafe.mp4');
   assert.equal(it.seq.seq, 'media/kho_quay_cafe_frames/%05d.jpg'); assert.ok(it.seq.count >= 28, String(it.seq.count));

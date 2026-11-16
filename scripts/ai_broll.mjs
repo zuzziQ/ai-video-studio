@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { askJSON } from './llm.mjs';
 import { safeFetch } from './net_guard.mjs';
 import { videoArgs } from './encoder_cli.mjs';
+import { retryBusy, withFileLock } from './file_lock.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
@@ -133,9 +134,17 @@ export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur =
     return { name: base + '.jpg', path: `media/${base}.jpg`, kind: 'image', thumb: `media/${base}.jpg` };
   } finally { fs.rmSync(tmp, { force: true }); }
 }
-function credit(md, rec) {
-  const f = path.join(md, 'credits.json'); let c = []; try { c = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
-  c.push({ ...rec, at: new Date().toISOString() }); fs.writeFileSync(f, JSON.stringify(c, null, 1));
+// media/credits.json: dùng chung với scripts/kho_media.mjs (cùng khoá credits.json.lock: route và job chạy ở hai tiến trình);
+// ghi file mới rồi đổi tên (M54: dự án biến thể có thể liên kết cứng file của dự án gốc).
+export function credit(md, rec) {
+  const f = path.join(md, 'credits.json');
+  withFileLock(f + '.lock', () => {
+    let c = []; try { c = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+    if (!Array.isArray(c)) c = [];
+    if (rec.kho && c.some(x => x?.file === rec.file)) return;
+    c.push({ ...rec, at: new Date().toISOString() });
+    const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(c, null, 1)); retryBusy(() => fs.renameSync(t, f));
+  });
 }
 
 // ---------- AI suggestions (claude -p) ----------

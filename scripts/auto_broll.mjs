@@ -604,7 +604,7 @@ for (const s of slots) {
   if (c.kind === 'aroll') { fxAdded.push({ ...fxPick(s), _auto: true }); continue; }
   if (c.kind === 'media') { const m = MEDIA[mediaI++ % MEDIA.length]; c.media = m.seq ? { seq: m.seq } : { path: m.path }; }
   if (c.kind === 'kho') {
-    try { const it = await KHO.useFromKho(DIR, KHO_WS, c.kho.rel, { credit: 'Kho · b-roll tự động' }); c.media = it.seq ? { seq: it.seq, credit: 'Kho' } : { path: it.path, credit: 'Kho' }; }
+    try { const it = await KHO.useFromKho(DIR, KHO_WS, c.kho.rel, { credit: 'Kho · b-roll tự động', maxDur: 30 }); c.media = it.seq ? { seq: it.seq, credit: 'Kho' } : { path: it.path, credit: 'Kho' }; }
     catch (e) { console.log(`Kho: bỏ ${c.kho.rel} (${e.message})`); continue; }
   }
   if (c.kind === 'lib') c.media = (() => { const r = LIB.useIn(c.lib, DIR); return typeof r === 'string' ? { path: r, credit: 'Thư viện của tôi' } : { seq: r, credit: 'Thư viện của tôi' }; })();
