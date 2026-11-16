@@ -14,7 +14,8 @@
   const SETTINGS = ['settings', 'Cài đặt', 'ti-settings'];
   // id panel -> [bước, thứ tự, mức]. Mức 'pro' bị ẩn ở chế độ Cơ bản.
   const PANELS = {
-    brands: ['prep', 1], products: ['prep', 2], media: ['prep', 3],
+    // S12 (M97): Kho thay Media ở Chuẩn bị; Media (file của dự án đang mở) chuyển sang bước Dựng
+    brands: ['prep', 1], products: ['prep', 2], kho: ['prep', 3], media: ['build', 2],
     'wf-new': ['source', 1], longform: ['source', 2], words: ['source', 3], ai: ['source', 4],
     autopilot: ['build', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 1], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
     aibroll: ['build', 6], 'wf-broll': ['build', 6], fx: ['build', 7], sticker: ['build', 8], trans: ['build', 9], filter: ['build', 10], dub: ['build', 11],

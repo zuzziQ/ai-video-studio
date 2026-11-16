@@ -82,6 +82,9 @@ test('bodyStatus: JSON vs upload limits, chunked refused', () => {
   assert.equal(s('/api/save', { 'content-length': '101' }), 413);
   assert.equal(s('/api/upload', { 'content-length': '900' }), 0);
   assert.equal(s('/api/autopilot/upload', { 'content-length': '1001' }), 413);
+  assert.equal(s('/api/kho/upload', { 'content-length': '900' }), 0); // M97: Kho stream xuống đĩa
+  assert.equal(s('/api/kho/upload', { 'content-length': '1001' }), 413);
+  assert.equal(s('/api/kho/set', { 'content-length': '101' }), 413); // JSON của Kho giữ trần JSON
   assert.equal(s('/api/save', { 'transfer-encoding': 'chunked' }), 411);
   assert.equal(s('/api/batch/sheet', { 'content-length': '101' }), 413); // buffered in memory → JSON cap
 });

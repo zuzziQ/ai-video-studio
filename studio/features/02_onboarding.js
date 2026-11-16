@@ -1,6 +1,7 @@
 // Lần đầu mở Studio (ROADMAP M83, references/studio.md): hướng dẫn 3 bước + trang chủ khi chưa mở dự án.
 // - Hướng dẫn mở SAU màn tác giả (00_author.js, overlay #author) khi $AVS_HOME/onboarding.json chưa done/skipped.
-//   (a) Thương hiệu → /api/brands/save + /api/brands/logo (51_brands); (b) Tài nguyên → /api/upload (Media "Của tôi")
+//   (a) Thương hiệu → /api/brands/save + /api/brands/logo (51_brands); (b) Kho → /api/kho/create|set|pick-folder|upload (12_workspace,
+//   S12/M97: Kho của thương hiệu vừa lưu, không cần dự án đang mở)
 //   + /api/products/save (53_products); (c) Mục đích → /api/onboarding (02_onboarding.mjs).
 //   Bước (a) có "Gợi ý bằng AI" (trợ lý brand), bước (b) có "Điền bằng AI" (trợ lý product): 05_assist.js, M91. Chỉ ghi khi bấm Nhận.
 // - Trang chủ (#onb-home): 4 cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Tự lái, Video mới + Mẫu, Video dài, Hàng loạt)
@@ -16,7 +17,7 @@
   const ASPECTS = [['9:16', 'Dọc 9:16', 'TikTok, Reels, Shorts'], ['16:9', 'Ngang 16:9', 'YouTube, Facebook'], ['1:1', 'Vuông 1:1', 'Bài đăng Facebook, Instagram']];
   const PLATFORMS = [['tiktok', 'ti-brand-tiktok', 'TikTok'], ['youtube', 'ti-brand-youtube', 'YouTube'], ['facebook', 'ti-brand-facebook', 'Facebook'],
     ['instagram', 'ti-brand-instagram', 'Instagram'], ['zalo', 'ti-message-dots', 'Zalo']];
-  const STEPS = ['Thương hiệu', 'Tài nguyên', 'Mục đích'];
+  const STEPS = ['Thương hiệu', 'Kho', 'Mục đích'];
   let ST = null, W = null, HOME = null, TPLS = null;
 
   const css = document.createElement('style');
@@ -46,6 +47,8 @@
   .onb-logo img { width: 100%; height: 100%; object-fit: contain; }
   .onb-sw { display: flex; gap: 8px; align-items: center; } .onb-sw input[type=color] { width: 40px; height: 32px; padding: 0; border: 1px solid var(--line2); border-radius: var(--r); background: none; cursor: pointer; }
   .onb-nosw { width: 40px; height: 32px; border: 1px dashed var(--line3); border-radius: var(--r); background: var(--bg1); }
+  .onb-kho { cursor: default; } .onb-kho:hover { border-color: var(--line3); color: var(--tx2); } .onb-kp { min-width: 0; flex: 1; } .onb-kp b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .onb-kacts { margin-top: 8px; } .onb-sw #onb-kdir { flex: 1; min-width: 0; }
   .onb-files { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; } .onb-files li { display: flex; gap: 8px; align-items: center; padding: 4px 0; color: var(--tx2); }
   .onb-files li .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .onb-files .ok { color: var(--ok); } .onb-files .bad { color: var(--bad); }
   .onb-pick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -122,7 +125,7 @@
     const kit = (Array.isArray(brands) ? brands : []).find(b => b.id === ST?.brand) || null;
     W = { step: Math.min(step ?? ST?.step ?? 0, 2), kit, logoFile: null, logoUrl: kit?.logoUrl ? avsUrl(kit.logoUrl) : '', colors: [kit?.primary || '', kit?.accent || ''],
       name: kit?.title || kit?.name || '', phone: kit?.phone || '', website: kit?.website || '', handle: kit?.handle || '',
-      files: [], uploading: 0, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: {}, pImage: null, pUrl: '', bAi: null, pAi: null,
+      files: [], uploading: 0, kho: null, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: {}, pImage: null, pUrl: '', bAi: null, pAi: null,
       purpose: ST?.purpose || '', aspect: ST?.aspect || '9:16', platforms: [...(ST?.platforms || [])], busy: false };
     const ov = document.createElement('div');
     ov.className = 'onb-ov'; ov.id = 'onb-wiz';
@@ -137,7 +140,7 @@
     const box = document.querySelector('#onb-wiz .onb-card'); if (!box || !W) return;
     const s = W.step, heads = [
       ['Thương hiệu của bạn', 'Tên và logo sẽ hiện trên mọi video. Màu chủ đạo tự lấy từ logo.'],
-      ['Tài nguyên dùng nhiều', 'Ảnh, video sản phẩm và nhạc riêng. Bước này không bắt buộc.'],
+      ['Kho của thương hiệu', 'Một thư mục trên máy chứa video quay, ảnh, nhạc và logo; mọi video sau lấy file từ đây. Bước này không bắt buộc.'],
       ['Bạn làm video để làm gì?', 'Studio gợi ý gói style, mẫu và khổ hình hợp với bạn.']];
     box.innerHTML = `<div class="onb-head"><div class="onb-prog">${STEPS.map((_, i) => `<i class="${i <= s ? 'on' : ''}"></i>`).join('')}</div>
       <p class="onb-kick">Bước ${s + 1}/3 · ${STEPS[s]}</p><h2 id="onb-title">${heads[s][0]}</h2><p>${heads[s][1]}</p></div>
@@ -166,7 +169,8 @@
       ${field('onb-web', 'Website <em>(không bắt buộc)</em>', 'Ví dụ: nhadep.vn', text('onb-web', W.website, 'nhadep.vn'))}
       ${field('onb-handle', 'Tên kênh <em>(không bắt buộc)</em>', 'Ví dụ: @nhadep', text('onb-handle', W.handle, '@nhadep'))}</div>`;
   function wireBrand(box) {
-    const sync = () => { W.name = box.querySelector('#onb-name').value; W.phone = box.querySelector('#onb-phone').value; W.website = box.querySelector('#onb-web').value; W.handle = box.querySelector('#onb-handle').value;
+    // box (.onb-card) sống qua mọi bước, listener cộng dồn: chỉ đọc ô khi đang ở bước này
+    const sync = () => { if (W?.step !== 0 || !box.querySelector('#onb-name')) return; W.name = box.querySelector('#onb-name').value; W.phone = box.querySelector('#onb-phone').value; W.website = box.querySelector('#onb-web').value; W.handle = box.querySelector('#onb-handle').value;
       const c1 = box.querySelector('#onb-c1'), c2 = box.querySelector('#onb-c2'); if (c1) W.colors[0] = c1.value; if (c2) W.colors[1] = c2.value; };
     box.addEventListener('input', sync);
     mountBrandAi(box, sync);
@@ -219,6 +223,7 @@
       b = await r.json(); if (!r.ok || b.error) throw new Error(b.error || 'Không tải được logo lên');
       W.logoFile = null;
     }
+    if (W.kit?.id !== b.id) W.kho = null; // Kho theo thương hiệu: đổi thương hiệu thì đọc lại
     W.kit = b;
     await saveState({ brand: b.id, step: 1 });
     // "Đang dùng": with a project open, apply the kit to it the same way the Thương hiệu panel does (undoable).
@@ -228,15 +233,28 @@
     }
   }
 
-  const stepAssets = () => {
-    const off = !ST?.project, zone = (id, icon, title, sub, accept) => `<div class="onb-drop ${off ? 'off' : ''}" id="${id}" role="button" tabindex="${off ? -1 : 0}"><i class="ti ${icon}"></i>
-      <div><b>${title}</b><span>${sub}</span></div><input type="file" accept="${accept}" multiple hidden></div>`;
-    const st = { up: '<i class="ti ti-loader-2 spin"></i>', ok: '<i class="ti ti-circle-check ok"></i>', bad: '<i class="ti ti-alert-circle bad"></i>' };
-    return `<div class="onb-f"><label>Ảnh và video sản phẩm</label>${zone('onb-media', 'ti-photo-video', 'Kéo thả ảnh hoặc video vào đây', 'hoặc bấm để chọn nhiều file', 'image/*,video/*')}
-      <p class="onb-hint">${off ? 'Mở hoặc tạo một dự án để thêm vào Media. Làm sau ở mục Media được.' : 'File vào mục Media › Của tôi của dự án đang mở.'}</p></div>
-      <div class="onb-f"><label>Nhạc riêng</label>${zone('onb-music', 'ti-music', 'Kéo thả file nhạc vào đây', 'MP3, M4A, WAV', 'audio/*')}
-      <p class="onb-hint">Chỉ dùng nhạc bạn có quyền dùng. Nhạc cũng vào Media › Của tôi.</p></div>
-      ${W.files.length ? `<ul class="onb-files">${W.files.map(f => `<li>${st[f.st]}<span class="nm">${esc(f.name)}</span>${f.msg ? `<small class="bad">${esc(f.msg)}</small>` : ''}</li>`).join('')}</ul>` : ''}
+  // S12 (M97): Kho của thương hiệu vừa lưu: tạo thư mục mặc định, hoặc chọn thư mục có sẵn (dán đường dẫn / hộp chọn thư mục), rồi tải lên.
+  const khoBrand = () => W.kit?.id || '';
+  const stepKho = () => {
+    const K = W.kho;
+    if (!K) return '<div class="onb-f"><label>Kho</label><p class="onb-hint"><i class="ti ti-loader-2 spin"></i> Đang mở Kho…</p></div>';
+    if (K.error) return `<div class="onb-f"><label>Kho</label><p class="onb-err"><i class="ti ti-alert-circle"></i> ${esc(K.error)}</p></div>`;
+    const ws = K.ws, st = { up: '<i class="ti ti-loader-2 spin"></i>', ok: '<i class="ti ti-circle-check ok"></i>', bad: '<i class="ti ti-alert-circle bad"></i>' };
+    const pick = `<div class="onb-f"><label for="onb-kdir">Thư mục có sẵn</label><div class="onb-sw"><input id="onb-kdir" value="${esc(K.dir ?? (ws.custom ? ws.root : ''))}" placeholder="Ví dụ D:\\Videos\\Nha Dep" spellcheck="false">
+        <button type="button" id="onb-kpick"><i class="ti ti-folder-search"></i> Chọn…</button><button type="button" class="primary" id="onb-kset" ${K.busy ? 'disabled' : ''}>Dùng</button></div>
+        <p class="onb-hint">Studio chỉ đọc và phân nhóm file theo đuôi, không chép, không đòi đúng cấu trúc thư mục con.</p></div>`;
+    return `<div class="onb-f"><label>Thư mục Kho${ws.exists ? '' : ' <em>(chưa tạo)</em>'}</label><div class="onb-drop onb-kho" title="${esc(ws.root)}"><i class="ti ti-folder"></i><div class="onb-kp"><b>${esc(ws.root)}</b>
+        <span>${ws.exists ? (ws.custom ? 'Thư mục bạn chọn' : 'Thư mục mặc định') : 'Sẽ tạo sẵn Nguon, Anh, BRoll, Nhac, Thuong hieu'}</span></div></div>
+        ${K.warning ? `<p class="onb-hint">${esc(K.warning)}</p>` : ''}
+        <div class="onb-chips onb-kacts">${ws.exists ? '' : `<button type="button" class="primary" id="onb-kcreate" ${K.busy ? 'disabled' : ''}><i class="ti ti-folder-plus"></i> Tạo Kho mặc định</button>`}
+        <button type="button" id="onb-kedit"><i class="ti ti-folder-cog"></i> ${ws.exists ? 'Đổi thư mục' : 'Chọn thư mục có sẵn'}</button></div></div>
+      ${K.editing ? pick : ''}
+      <div class="onb-f"><label>Tải file vào Kho</label><div class="onb-drop" id="onb-kup" role="button" tabindex="0"><i class="ti ti-cloud-upload"></i>
+        <div><b>Kéo thả video, ảnh, nhạc vào đây</b><span>hoặc bấm để chọn nhiều file. Video vào Nguon, ảnh vào Anh, nhạc vào Nhac.</span></div><input type="file" accept="video/*,image/*,audio/*" multiple hidden></div>
+      <p class="onb-hint">Chỉ dùng nhạc bạn có quyền dùng.${ws.exists ? '' : ' Chưa có Kho thì Studio tạo thư mục mặc định ở trên khi bạn thả file.'}</p></div>
+      ${W.files.length ? `<ul class="onb-files">${W.files.map(f => `<li>${st[f.st]}<span class="nm">${esc(f.name)}</span>${f.msg ? `<small class="bad">${esc(f.msg)}</small>` : f.rel ? `<small>${esc(f.rel.split('/')[0])}</small>` : ''}</li>`).join('')}</ul>` : ''}`;
+  };
+  const stepAssets = () => `${stepKho()}
       <div class="onb-f"><label>Một sản phẩm <em>(không bắt buộc)</em></label><p class="onb-hint onb-lead">AI dùng hồ sơ này khi viết lời và soát quảng cáo. Thêm sản phẩm khác ở mục Sản phẩm.</p></div>
       <div class="onb-g2">${field('onb-pname', 'Tên sản phẩm', 'Ví dụ: Căn hộ 2 phòng ngủ Quận 7', text('onb-pname', W.product.name, 'Tên sản phẩm'))}
       ${field('onb-price', 'Giá', 'Ghi như bạn muốn hiện, ví dụ 2,9 tỷ', text('onb-price', W.product.price, '2,9 tỷ'))}</div>
@@ -245,22 +263,60 @@
       ${Studio.assistPanel ? `<div class="onb-g2">${field('onb-purl', 'Link sản phẩm <em>(không bắt buộc)</em>', 'Trang bán hàng công khai: AI đọc tên, giá, điểm mạnh.', text('onb-purl', W.pUrl, 'https://…'))}
         <div class="onb-f"><label>Ảnh sản phẩm <em>(cho AI)</em></label><button id="onb-pimg-btn" type="button"><i class="ti ti-photo"></i> ${W.pImage ? 'Đổi ảnh' : 'Chọn ảnh'}</button><input type="file" id="onb-pimg" accept="image/*" hidden>
         <p class="onb-hint">${W.pImage ? esc(W.pImage.name) : 'Ảnh chụp sản phẩm hoặc bao bì.'}</p></div></div><div id="onb-ai-prod"></div>` : ''}`;
-  };
   function wireAssets(box) {
-    const psync = () => { W.product = { ...W.product, name: box.querySelector('#onb-pname').value, price: box.querySelector('#onb-price').value, strengths: box.querySelector('#onb-strong').value }; const u = box.querySelector('#onb-purl'); if (u) W.pUrl = u.value; };
+    const psync = () => { if (W?.step !== 1 || !box.querySelector('#onb-pname')) return; W.product = { ...W.product, name: box.querySelector('#onb-pname').value, price: box.querySelector('#onb-price').value, strengths: box.querySelector('#onb-strong').value }; const u = box.querySelector('#onb-purl'); if (u) W.pUrl = u.value; };
     box.addEventListener('input', psync);
     mountProductAi(box, psync);
-    if (!ST?.project) return;
+    wireKho(box);
+  }
+  const khoLoad = async () => {
+    const want = khoBrand(), r = await api('/api/kho?brand=' + encodeURIComponent(want)).catch(e => ({ error: e.message }));
+    if (!W || want !== khoBrand()) return; // đổi thương hiệu trong lúc chờ: bỏ kết quả cũ
+    W.kho = r.error ? { error: r.error } : { ws: r.ws, warning: r.warning, editing: false, dir: null };
+    if (W.step === 1) render();
+  };
+  async function khoDo(path, body, ok) {
+    const K = W.kho; K.busy = true; render();
+    const r = await api(path, body).catch(e => ({ error: e.message }));
+    if (!W) return null;
+    K.busy = false;
+    if (r.error) { render(); err(r.error); return null; }
+    W.kho = { ws: r.ws, warning: null, editing: false, dir: null }; render(); if (ok) toast(ok);
+    return r;
+  }
+  function wireKho(box) {
+    if (!W.kho) { khoLoad(); return; }
+    if (W.kho.error) return;
+    const K = W.kho, $k = s => box.querySelector(s);
+    $k('#onb-kcreate')?.addEventListener('click', () => khoDo('/api/kho/create', { brand: khoBrand() }, 'Đã tạo Kho'));
+    $k('#onb-kedit')?.addEventListener('click', () => { K.editing = !K.editing; render(); box.querySelector('#onb-kdir')?.focus(); });
+    $k('#onb-kdir')?.addEventListener('input', e => (K.dir = e.target.value));
+    $k('#onb-kdir')?.addEventListener('keydown', e => { if (e.key === 'Enter') $k('#onb-kset').click(); });
+    $k('#onb-kset')?.addEventListener('click', () => khoDo('/api/kho/set', { brand: khoBrand(), dir: ($k('#onb-kdir').value || '').trim() }, 'Đã chọn thư mục Kho'));
+    $k('#onb-kpick')?.addEventListener('click', async e => {
+      e.currentTarget.disabled = true;
+      const r = await api('/api/kho/pick-folder', {}).catch(() => ({ error: 'Không mở được hộp chọn thư mục' }));
+      if (!W) return;
+      if (r.error) err(r.error);
+      else if (r.unsupported) err('Máy này không mở được hộp chọn thư mục: dán đường dẫn vào ô bên cạnh.');
+      else if (r.path) K.dir = r.path;
+      render();
+    });
     const up = async files => {
+      // Kho chưa có: tạo thư mục mặc định trước (ghi đường dẫn vào brand kit), như bấm "Tạo Kho mặc định"
+      if (!W.kho.ws.exists && !(await khoDo('/api/kho/create', { brand: khoBrand() }))) return;
       for (const f of files) {
         const it = { name: f.name, st: 'up' }; W.files.push(it); W.uploading++; render();
-        try { const r = await fetch('/api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || 'lỗi'); it.st = 'ok'; }
-        catch (e) { it.st = 'bad'; it.msg = e.message; }
+        try {
+          const r = await fetch(`/api/kho/upload?brand=${encodeURIComponent(khoBrand())}&name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f });
+          const j = await r.json().catch(() => ({ error: r.status === 413 ? 'File quá lớn' : `Lỗi ${r.status}` }));
+          if (!r.ok || j.error) throw new Error(j.error || 'lỗi'); it.st = 'ok'; it.rel = j.rel;
+        } catch (e) { it.st = 'bad'; it.msg = e.message; }
+        if (!W) return;
         W.uploading--; render();
       }
     };
-    dropzone(box.querySelector('#onb-media'), fs => up(fs.filter(f => /^(image|video)\//.test(f.type))));
-    dropzone(box.querySelector('#onb-music'), fs => up(fs.filter(f => /^audio\//.test(f.type))));
+    dropzone(box.querySelector('#onb-kup'), fs => up(fs.filter(f => /^(image|video|audio)\//.test(f.type) || /\.(mts|mkv|heic|ttf|otf)$/i.test(f.name))));
   }
   // M91: trợ lý Sản phẩm (ảnh và/hoặc link). Claim AI đề xuất vào ô Điểm mạnh, lưu ở trạng thái chờ duyệt như mọi điểm mạnh.
   function mountProductAi(box, psync) {
