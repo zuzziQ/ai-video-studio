@@ -12,10 +12,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { askJSON, runLLM, LlmError } from './llm.mjs';
 import { safeFetch } from './net_guard.mjs';
 import { pyBin } from './platform.mjs';
 import { INDUSTRIES } from './products.mjs';
+import { normalizeEntries, nameEntries } from './dict.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -341,8 +343,151 @@ export function adGates(texts, industry, { py, adGatesScript = path.join(SKILL, 
   });
 }
 
+// ---------------------------------------------------------------- trợ lý Soát lời thoại (M90)
+// Đầu vào: các từ có mốc thời gian (chỉ số = vị trí trong mảng) + từ điển, tên thương hiệu/sản phẩm, lĩnh vực.
+// Chia cửa sổ ~60–90 s hoặc ≤ 400 từ, hỏi AI từng cửa sổ (run → runTurns), kiểm chặt từng đề xuất rồi gộp:
+//   { suggestions: [{ id, start, end (chỉ số từ), old, new, reason, kind }], counts, windows, dropped, warnings }
+// Cửa sổ AI trả JSON hỏng (sau một lần hỏi lại) → đề xuất theo từ điển cho cửa sổ đó.
+const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
+export const TX_KINDS = ['nhận dạng', 'tên riêng', 'chính tả', 'dấu câu'];
+export const TX_LIMITS = { words: 30000, perWindow: 20, span: 6, newChars: 80, dWords: 3, dist: 0.45 };
+const keepLetters = s => String(s).normalize('NFC').toLocaleLowerCase('vi').replace(/[^\p{L}\p{N}]+/gu, '');
+const baseLetters = s => keepLetters(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+function editDist(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
+}
+/** Cửa sổ [{a, b}] (chỉ số từ, gồm cả hai đầu): ≤ maxWords từ, ≤ maxSec giây; qua minSec giây thì cắt ở chỗ ngừng ≥ 0,5 s hoặc cuối câu. */
+export function txWindows(words, { maxWords = 400, maxSec = 90, minSec = 60 } = {}) {
+  const out = [];
+  let a = 0;
+  for (let i = 0; i < words.length; i++) {
+    const next = words[i + 1], dur = words[i].e - words[a].s;
+    const soft = !next || next.s - words[i].e >= 0.5 || /[.!?…]["”']?$/.test(words[i].w);
+    if (!next || i - a + 1 >= maxWords || dur >= maxSec || (dur >= minSec && soft)) { out.push({ a, b: i }); a = i + 1; }
+  }
+  return out;
+}
+const txTerms = input => [...new Set([...input.names, ...input.dict.map(e => e.to)])];
+const foldAll = s => TC.tokenize(s).map(x => TC.fold(x)).join(' ');
+/**
+ * Kiểm một đề xuất của AI trong cửa sổ win → { ok: true, edit } hoặc { ok: false, why: 'mismatch'|'rewrite'|'noop'|'bad' }.
+ * old phải khớp đúng chữ tại start..end (chỉ bỏ qua hoa thường, dấu câu hai đầu, chỗ đặt dấu thanh); ≤ 6 từ; new ≤ 80 ký tự,
+ * số từ đổi ≤ 3, chữ cái (bỏ dấu) khác ≤ 45 % (trừ khi new là tên/thuật ngữ đã biết); đổi chỉ hoa thường chỉ nhận cho tên riêng.
+ */
+export function txCheckEdit(it, words, win, terms = []) {
+  if (!it || typeof it !== 'object') return { ok: false, why: 'bad' };
+  const start = Number(it.start), end = it.end == null ? start : Number(it.end);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < win.a || end > win.b || end < start || end - start + 1 > TX_LIMITS.span) return { ok: false, why: 'bad' };
+  const toks = words.slice(start, end + 1).map(w => w.w), actual = toks.join(' ');
+  const oldToks = TC.tokenize(typeof it.old === 'string' ? it.old : '');
+  if (oldToks.join(' ') !== actual && (oldToks.length !== toks.length || oldToks.some((t, i) => TC.fold(t) !== TC.fold(toks[i])))) return { ok: false, why: 'mismatch' };
+  const neu = TC.tokenize(typeof it.new === 'string' ? it.new : '').join(' ');
+  if (!neu || neu.length > TX_LIMITS.newChars || /[<>{}]/.test(neu)) return { ok: false, why: 'bad' };
+  if (neu === actual) return { ok: false, why: 'noop' };
+  let kind = TX_KINDS.includes(it.kind) ? it.kind : 'chính tả';
+  if (Math.abs(TC.tokenize(neu).length - toks.length) > TX_LIMITS.dWords) return { ok: false, why: 'rewrite' };
+  const known = terms.some(t => foldAll(t) === foldAll(neu));
+  if (keepLetters(neu) === keepLetters(actual)) { // chỉ khác hoa thường / dấu câu / khoảng trắng
+    const marks = s => s.replace(/[\p{L}\p{N}\s]/gu, '');
+    if (marks(neu) === marks(actual)) { if (kind !== 'tên riêng' && !known) return { ok: false, why: 'noop' }; kind = 'tên riêng'; } else kind = 'dấu câu';
+  } else {
+    if (kind === 'dấu câu') kind = 'chính tả';
+    const a = baseLetters(actual), b = baseLetters(neu);
+    if (!known && editDist(a, b) / Math.max(1, a.length, b.length) > TX_LIMITS.dist) return { ok: false, why: 'rewrite' };
+  }
+  return { ok: true, edit: { start, end, old: actual, new: neu, kind, reason: str(it.reason, 160) } };
+}
+function pickEdits(list, cap = Infinity) { // bỏ đề xuất chồng lên đề xuất trước, giữ tối đa cap
+  const out = [];
+  for (const e of list) if (out.length < cap && !out.some(o => e.start <= o.end && e.end >= o.start)) out.push(e);
+  return out;
+}
+/** Đề xuất theo từ điển trong cửa sổ win (lùi về khi AI hỏng): cặp "sai=đúng" + tên thương hiệu/sản phẩm viết hoa. */
+export function txDictEdits(input, win) {
+  const words = input.words.slice(win.a, win.b + 1).map(w => w.w), hits = [];
+  for (const e of [...nameEntries(input.names).map(x => ({ ...x, kind: 'tên riêng' })), ...input.dict.map(x => ({ ...x, kind: 'chính tả' }))]) {
+    for (const h of TC.findMatches(words, e.from)) {
+      const old = words.slice(h.i, h.i + h.n).join(' ');
+      if (old !== e.to) hits.push({ start: win.a + h.i, end: win.a + h.i + h.n - 1, old, new: e.to, kind: e.kind, reason: 'Theo từ điển' });
+    }
+  }
+  return pickEdits(hits.sort((x, y) => x.start - y.start));
+}
+const transcript = {
+  label: 'Soát lời thoại',
+  check(raw) {
+    const b = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+    if (!b) throw bad('Body phải là object JSON');
+    if (!Array.isArray(b.words) || !b.words.length || b.words.length > TX_LIMITS.words) throw bad(`words phải là mảng 1–${TX_LIMITS.words} từ`);
+    const words = b.words.map(x => ({ w: str(x?.w, 60), s: Number(x?.s), e: Number(x?.e) }));
+    if (!words.every(x => x.w && !/\s/.test(x.w) && Number.isFinite(x.s) && Number.isFinite(x.e) && x.s >= 0 && x.e >= x.s)) throw bad('Mỗi từ cần {w, s, e} (chữ không rỗng, s ≤ e)');
+    const names = (Array.isArray(b.names) ? b.names : []).map(n => str(n, 80)).filter(Boolean).slice(0, 20);
+    return { words, dict: normalizeEntries(b.dict).slice(-200), names: [...new Set(names)], industry: str(b.industry, 60) };
+  },
+  prepare(input) { return { windows: txWindows(input.words), warnings: [] }; },
+  prompt(input, prep, win, k) {
+    const terms = txTerms(input);
+    const text = input.words.slice(win.a, win.b + 1).map((w, j) => `${win.a + j}:${w.w}`).join(' ');
+    return [
+      'Bạn soát phụ đề tiếng Việt do máy nhận dạng giọng nói (Whisper) tạo ra, để người dùng duyệt từng chỗ.',
+      `Lĩnh vực: ${input.industry || '(chưa rõ)'}`,
+      terms.length ? 'Tên riêng, thương hiệu, sản phẩm, thuật ngữ viết đúng là:\n' + terms.map(t => '- ' + t).join('\n') : '',
+      input.dict.length ? 'Từ điển của người dùng (sai = đúng):\n' + input.dict.map(e => `- ${e.from} = ${e.to}`).join('\n') : '',
+      dataBlock(`Lời thoại đoạn ${k + 1}/${prep.windows.length}, mỗi từ dạng <chỉ số>:<từ>`, text),
+      'Chỉ sửa: từ máy nghe nhầm (kind "nhận dạng"), tên riêng/thương hiệu/sản phẩm viết sai ("tên riêng"), lỗi chính tả ("chính tả"), dấu câu sai rõ ràng ("dấu câu").',
+      'Lỗi nhận dạng là chỗ máy nghe nhầm: chữ đúng phải ĐỌC GẦN GIỐNG chữ cũ và hợp với câu trước sau. Chữ đã đúng thì KHÔNG đưa vào danh sách. Bạn không nghe được âm thanh: KHÔNG đoán lại con số, giá, ngày giờ chỉ vì thấy lạ.',
+      'KHÔNG viết lại câu, không đổi nghĩa hay văn phong, không thêm bớt ý, không sửa khẩu ngữ hay từ địa phương đúng. Không chắc thì bỏ qua.',
+      'Trả về DUY NHẤT một JSON, không lời dẫn:',
+      '{"edits":[{"start":<chỉ số từ đầu>,"end":<chỉ số từ cuối>,"old":"<chép ĐÚNG các từ từ start đến end>","new":"<chữ đúng>","kind":"nhận dạng|tên riêng|chính tả|dấu câu","reason":"<lý do ≤ 12 từ>"}]}',
+      `Mỗi sửa tối đa ${TX_LIMITS.span} từ liền nhau; tối đa ${TX_LIMITS.perWindow} sửa; không có lỗi thì {"edits":[]}. Lý do viết tiếng Việt có dấu.`,
+    ].filter(Boolean).join('\n\n');
+  },
+  /** Một cửa sổ: kiểm từng đề xuất, đếm số bị bỏ theo lý do. Ném lỗi khi không phải {"edits":[…]} (askJSON hỏi lại). */
+  normalizeWindow(v, input, win) {
+    const list = Array.isArray(v) ? v : v && typeof v === 'object' && Array.isArray(v.edits) ? v.edits : null;
+    if (!list) throw new Error('cần {"edits":[…]}');
+    const dropped = { mismatch: 0, rewrite: 0, noop: 0, bad: 0, dup: 0 }, ok = [], terms = txTerms(input);
+    for (const it of list.slice(0, TX_LIMITS.perWindow * 2)) { const r = txCheckEdit(it, input.words, win, terms); if (r.ok) ok.push(r.edit); else dropped[r.why]++; }
+    const items = pickEdits(ok.sort((x, y) => x.start - y.start), TX_LIMITS.perWindow);
+    dropped.dup += ok.length - items.length;
+    return { items, dropped };
+  },
+  async run(input, prep, env, ask) {
+    const n = prep.windows.length, all = [], dropped = { mismatch: 0, rewrite: 0, noop: 0, bad: 0, dup: 0 }, warnings = [];
+    let provider = 'rules', fb = 0, why = '';
+    for (const [k, win] of prep.windows.entries()) {
+      if (env.cancelled?.()) throw new LlmError('Đã huỷ', { kind: 'cancel' });
+      const at = (f, s) => env.onProgress?.(Math.min(0.97, 0.03 + 0.94 * (k + f) / n), `Đoạn ${k + 1}/${n}: ${s}`);
+      at(0, 'AI đang đọc…');
+      let got;
+      try {
+        const r = await ask(this.prompt(input, prep, win, k), v => this.normalizeWindow(v, input, win), {
+          onTick: s => at(Math.min(0.9, 1 - Math.exp(-s / 25)), `AI đang soát… ${Math.round(s)} s`), onRetry: () => at(0.5, 'AI trả kết quả lỗi, đang hỏi lại…') });
+        provider = r.provider; got = r.value;
+      } catch (e) {
+        if (!(e instanceof LlmError) || e.kind !== 'parse') throw e; // thiếu claude, chưa đăng nhập, quá giờ, huỷ: báo nguyên văn
+        got = { items: txDictEdits(input, win), dropped: {} }; fb++; why ||= e.message.slice(0, 120);
+      }
+      all.push(...got.items);
+      for (const [key, v] of Object.entries(got.dropped)) dropped[key] += v;
+    }
+    if (fb) warnings.push((fb === n ? 'AI trả kết quả không đọc được' : `${fb}/${n} đoạn AI trả kết quả không đọc được`) + ` (${why}): ${fb === n ? 'chỉ còn' : 'các đoạn đó chỉ có'} đề xuất theo từ điển.`);
+    if (dropped.mismatch) warnings.push(`Bỏ ${dropped.mismatch} đề xuất vì chữ cũ không khớp đúng vị trí.`);
+    if (dropped.rewrite) warnings.push(`Bỏ ${dropped.rewrite} đề xuất viết lại câu hoặc đổi quá nhiều chữ.`);
+    const suggestions = all.map((e, i) => ({ id: `tx-${i}`, ...e }));
+    const counts = Object.fromEntries(TX_KINDS.map(x => [x, suggestions.filter(s => s.kind === x).length]));
+    return { suggestions, counts, windows: n, dropped, fallbackWindows: fb, warnings, provider: fb === n ? 'rules' : provider };
+  },
+};
+
 // ---------------------------------------------------------------- bảng trợ lý + chạy
-export const ASSISTANTS = { brand, product };
+export const ASSISTANTS = { brand, product, transcript };
 export const list = () => Object.entries(ASSISTANTS).map(([name, a]) => ({ name, label: a.label }));
 export const has = name => Object.hasOwn(ASSISTANTS, name);
 export function check(name, raw) { if (!has(name)) throw new AssistError('Không có trợ lý ' + String(name).slice(0, 40), 404); return ASSISTANTS[name].check(raw); }
@@ -357,6 +502,7 @@ export function check(name, raw) { if (!has(name)) throw new AssistError('Không
 export async function runAssist(name, input, env = {}) {
   const a = ASSISTANTS[name];
   if (!a) throw new AssistError('Không có trợ lý ' + name, 404);
+  if (a.run) return runTurns(name, a, input, env); // trợ lý hỏi AI nhiều lượt (soát lời thoại theo cửa sổ)
   const t0 = Date.now(), say = (p, s) => env.onProgress?.(p, s);
   const prep = a.prepare ? await a.prepare(input, env) : { warnings: [] };
   const img = a.image?.(input) || null;
@@ -393,4 +539,27 @@ export async function runAssist(name, input, env = {}) {
   } finally {
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Trợ lý có run(input, prep, env, ask): tự hỏi AI nhiều lượt (chỉ chữ, nhà cung cấp theo cấu hình). ask(prompt, validate, {onTick, onRetry})
+ * → { value, provider }; prompt qua assertCleanPrompt, hỏi lại một lần khi JSON hỏng. env.cancelled() để dừng giữa các lượt.
+ */
+async function runTurns(name, a, input, env) {
+  const t0 = Date.now();
+  const prep = a.prepare ? await a.prepare(input, env) : { warnings: [] };
+  const timeout = env.timeout ?? ((+process.env.AVS_ASSIST_TIMEOUT_S > 0 ? +process.env.AVS_ASSIST_TIMEOUT_S : 180) * 1000);
+  const ask = async (prompt, validate, o = {}) => {
+    let provider = 'claude';
+    const value = await askJSON(assertCleanPrompt(prompt), {
+      shape: a.shape || 'object', retries: 1, model: env.model || 'sonnet', timeout, timeoutMsg: `AI quá ${Math.round(timeout / 1000)} giây chưa trả lời. Thử lại sau.`,
+      cwd: os.tmpdir(), task: 'text', onProc: env.onProc, onTick: o.onTick, onAttempt: n => { if (n) o.onRetry?.(); },
+      run: async (p, ro) => { const r = await (env.run || runLLM)(p, ro); provider = r.provider || 'claude'; return r; },
+      validate,
+    });
+    return { value, provider };
+  };
+  const out = await a.run(input, prep, env, ask);
+  out.warnings = [...(prep.warnings || []), ...(out.warnings || [])];
+  return { name, ...out, ms: Date.now() - t0 };
 }

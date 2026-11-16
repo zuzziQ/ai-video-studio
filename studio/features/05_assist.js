@@ -5,6 +5,7 @@
 //     Ô đề xuất dùng chung: nút gọi AI → tiến độ (Huỷ) → danh sách đề xuất từng trường với Nhận / Bỏ / Nhận tất cả.
 //     Trạng thái nằm trong đối tượng trả về nên phần gọi vẽ lại giao diện thì chỉ cần mount(el) lại. Không tự ghi đè gì:
 //     chỉ gọi onAccept(field) khi người dùng bấm Nhận.
+//   Studio.assistCancel() → dừng trợ lý đang chạy (POST /api/assist/cancel; không dừng xuất video).
 //   Studio.imagePayload(src, { max, type }) → data URL ảnh vẽ lại qua canvas (thu nhỏ, bỏ EXIF/vị trí chụp) để gửi cho trợ lý.
 'use strict';
 (() => {
@@ -50,6 +51,9 @@
       const e = new Error(s.error || 'Trợ lý lỗi'); e.kind = s.kind; e.state = s.state; throw e;
     }
   }
+
+  // Trợ lý có ô job riêng (routes/05_assist.mjs): Huỷ chỉ dừng trợ lý, không đụng job xuất video.
+  const cancel = () => api('/api/assist/cancel', {});
 
   // Vẽ lại ảnh qua canvas: thu nhỏ (cạnh dài ≤ max), đổi về PNG/JPEG, bỏ metadata. src: File, Blob hoặc URL cùng origin.
   async function imagePayload(src, { max = 768, type = 'image/png', quality = 0.9 } = {}) {
@@ -104,7 +108,7 @@
           <div class="as-head"><button data-as="go"><i class="ti ti-sparkles"></i> ${esc(st.state === 'error' ? 'Thử lại' : o.label || 'Gợi ý bằng AI')}</button><span class="as-hint">${esc(o.hint || 'AI chỉ đề xuất, bạn chọn Nhận hoặc Bỏ từng mục.')}</span></div>`;
       }
       el.querySelector('[data-as=go]')?.addEventListener('click', start);
-      el.querySelector('[data-as=stop]')?.addEventListener('click', () => api('/api/job/cancel', {}));
+      el.querySelector('[data-as=stop]')?.addEventListener('click', cancel);
       el.querySelector('[data-as=all]')?.addEventListener('click', async () => { for (const f of fields()) if (!st.mark[f.id]) await accept(f); });
       el.querySelectorAll('[data-ok]').forEach(b => b.addEventListener('click', () => accept(fields().find(f => f.id === b.dataset.ok))));
       el.querySelectorAll('[data-no]').forEach(b => b.addEventListener('click', () => { st.mark[b.dataset.no] = 'skip'; paint(); }));
@@ -127,5 +131,5 @@
     return { mount(e) { el = e; paint(); }, start, state: st };
   }
 
-  Object.assign(Studio, { assist, assistPanel: panel, imagePayload });
+  Object.assign(Studio, { assist, assistCancel: cancel, assistPanel: panel, imagePayload });
 })();
