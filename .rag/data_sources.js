@@ -17,7 +17,7 @@ export const GUARDRAIL_SOURCES = {
     [{ file: "references/ad-gates.md", section: "Chặn xuất" }],
   ],
   upstream: [
-    [{ file: AG, section: "Kéo bản mới từ repo gốc (upstream)" }],
+    [{ file: AG, section: "Repo gốc" }],
   ],
   workflow: [
     [{ file: AG, section: "Luật làm việc của bản này (`zuzziQ/ai-video-studio`)" }],

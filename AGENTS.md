@@ -26,7 +26,7 @@ Bản này là repo riêng tư dựa trên repo gốc ở trên, nằm trong hub
 Đọc file này trước, rồi `docs/ROADMAP.md` (SSOT kế hoạch: đợt `Sxx`, mục `Mxx`, quyết định `Cxx`), rồi `references/studio.md` khi sửa Studio.
 
 - **Hợp đồng tính năng của Studio** (`references/studio.md`): mỗi tính năng là một file `studio/routes/NN_x.mjs` + một file `studio/features/NN_x.js`; việc chạy lâu là một loại job trong `scripts/queue.mjs`. Trạng thái lưu bằng JSON (`timeline.json`, `.studio/`, `~/.ai-video-studio/`), không thêm cơ sở dữ liệu.
-- **Phần thêm của mình nằm ở file mới** (`scripts/ad_gates.py`, `references/ad-gates.md`, route/feature số mới…) để ít đụng file gốc và kéo bản mới từ upstream ít xung đột. Phải sửa file gốc thì sửa nhỏ, gom vào một chỗ, ghi rõ trong PR.
+- **Repo này phát triển độc lập** (chốt 2026-11-16, xem mục "Repo gốc"): sửa thẳng file gốc khi cần, không phải dồn phần thêm vào file mới. Tính năng mới vẫn theo hợp đồng route/feature bên dưới.
 - Không đọc, không in, không commit `.env*` hay token trong `~/.ai-video-studio/` (Telegram, YouTube, Claude).
 - Commit và PR **không ghi tên AI** (không `Co-Authored-By`, không chân "Generated with"). Tiêu đề theo Conventional Commit, scope là area: `infra, qc, ads, llm, voice, export, security, docs`.
 - Không render video trong CI; render thật chỉ chạy trên máy.
@@ -69,21 +69,9 @@ Bản này là repo riêng tư dựa trên repo gốc ở trên, nằm trong hub
 - PR chờ duyệt đồng thời: tối đa 4 (duyệt tay). Tệp nóng chỉ một phiên sửa một lúc: `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`, `docs/ROADMAP.md` (mỗi PR chỉ sửa dòng mục của mình).
 - Phiên, worktree và subagent theo `D:/ai/docs/SESSIONS-WORKTREES.md`: 1 Phase = 1 worktree = 1 PR. Ship bằng `python3 D:/ai/scripts/pr-ship.py --branch auto` (hoặc `--no-auto` khi chủ repo muốn tự merge) rồi dừng lượt, không poll CI.
 
-## Kéo bản mới từ repo gốc (upstream)
+## Repo gốc
 
-Remote `upstream` = `https://github.com/nguyentatkiem/ai-video-studio` (chỉ kéo; push đã tắt bằng `git remote set-url --push upstream DISABLED`). Không bao giờ đẩy lên upstream; đóng góp ngược (nếu `C05` chốt có) đi qua fork công khai riêng.
-
-```bash
-git fetch upstream
-git switch -c chore/upstream-sync-$(date +%Y%m%d) origin/main
-git merge --no-ff upstream/main     # merge, không rebase: giữ nguyên lịch sử gốc để lần sau gộp tiếp dễ
-```
-
-1. Gộp vào **nhánh riêng** như trên, không gộp thẳng vào `main`.
-2. Xung đột: ưu tiên bản upstream cho file gốc; phần thêm của mình nằm ở file mới nên hiếm xung đột. File gốc mình đã sửa (ví dụ `scripts/ai_qc.mjs`, `studio/features/16_qc.js`, `README.md`) thì giữ cả hai phần, kiểm lại bằng test.
-3. Kiểm lại ghi công: `LICENSE`, `NOTICE`, `studio/features/00_author.js`, dòng tác giả và dòng "Dựa trên…" ở đầu `README.md` còn nguyên.
-4. Chạy lệnh verify ở mục dưới, rồi mở PR `chore(infra): kéo bản mới từ upstream <commit ngắn>` với `Roadmap: M09`, ghi trong thân PR dải commit upstream đã gộp (`git log --oneline main..upstream/main`).
-5. PR này chỉ chứa phần gộp; sửa thêm (nếu có) đi PR sau.
+Chốt 2026-11-16: repo này dùng và phát triển riêng, **không kéo bản mới từ repo gốc** (`https://github.com/nguyentatkiem/ai-video-studio`) và không đóng góp ngược (`C05`). Không gộp `upstream/main`, không đẩy lên repo gốc. Remote `upstream` (nếu còn trên máy) chỉ để tham khảo, push đã tắt. Ghi công tác giả ở khối đầu file vẫn bắt buộc như cũ.
 
 ## Lệnh verify (2 cấp) và bàn giao
 
