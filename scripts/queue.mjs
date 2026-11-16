@@ -23,6 +23,8 @@ import { killTree } from './platform.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
 import { scheduleHasDue } from './schedule_due.mjs';
 import { resolvePerf, perfEnv, lowerPriority } from './perf_profile.mjs';
+import { allWorkspaces, workspaceFor, ensureWorkspace, sub, safeName } from './workspace.mjs';
+import { loadStore } from './profile.mjs';
 export { withFileLock };
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,26 +32,34 @@ export const AVS_HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-vid
 const QFILE = path.join(AVS_HOME, 'queue.json'), SFILE = path.join(AVS_HOME, 'autopilot.json'), LOCK = path.join(AVS_HOME, 'queue.lock'), QLOCK = QFILE + '.lock';
 export const VIDEO_EXT = /\.(mp4|mov|m4v|mkv)$/i;
 const MOVIES = path.join(os.homedir(), 'Movies', 'AI Video Studio');
+// Thư mục canh cũ (trước S12): chỉ còn canh khi đã có trên máy hoặc người dùng tự thêm; mặc định mới là Tha vao day/ của mỗi Kho.
 export const DEFAULT_FOLDER = { in: path.join(MOVIES, 'Thả video vào đây'), done: path.join(MOVIES, 'Đã xong'), processed: path.join(MOVIES, 'Đã xử lý'), profile: '' };
+// S12 M98: <Kho>/Nguon/Tha vao day/ của mọi Kho đã có. Video nhận xong chuyển sang Nguon/, dự án vào Du an/ của Kho đó,
+// thành phẩm vào Thanh pham/ (autopilot.mjs). Hồ sơ: hồ sơ đầu tiên gắn thương hiệu của Kho, không có thì hồ sơ mặc định.
+// Lượt quét chỉ canh Tha vao day/ đã có (exists), không tạo thư mục trong Kho người dùng chọn sẵn; nút "Mở thư mục" tạo nó.
+export function khoInboxes() {
+  const profs = (() => { try { return loadStore().profiles; } catch { return []; } })();
+  return allWorkspaces().filter(ws => fs.existsSync(ws.root)).map(ws => ({ in: sub(ws, 'inbox'), done: '', processed: sub(ws, 'source'), brand: ws.brand, kho: ws.title,
+    profile: (ws.brand && profs.find(p => p.brand === ws.brand)?.id) || '', exists: fs.existsSync(sub(ws, 'inbox')) }));
+}
+const khoTopicDir = (brand, name) => { const ws = ensureWorkspace(workspaceFor(brand || '')); return path.join(sub(ws, 'projects', { mkdir: true }), safeName(name)); };
 const LA_LABEL = 'com.aivideostudio.watch';
 const LA_DIR = process.env.AVS_LA_DIR || path.join(os.homedir(), 'Library/LaunchAgents');
 
 // BUSY / retryBusy (Windows busy-file retries) and withFileLock live in file_lock.mjs, shared with publish.mjs (M40).
 const rd = (f, d) => { try { return JSON.parse(retryBusy(() => fs.readFileSync(f, 'utf8'), 10)); } catch { return d; } };
 function wr(f, o) { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`; fs.writeFileSync(t, JSON.stringify(o, null, 1)); try { retryBusy(() => fs.renameSync(t, f)); } catch (e) { fs.rmSync(t, { force: true }); throw e; } }
-const slug = s => String(s || 'x').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'x';
 const alive = pid => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
 // ---------- settings ----------
 export function loadSettings() {
   const s = rd(SFILE, {}) || {};
   return { notify: s.notify !== false, appDrop: !!s.appDrop, agent: !!s.agent, profile: s.profile || '',
-    watch: { on: !!s.watch?.on, folders: (s.watch?.folders?.length ? s.watch.folders : [DEFAULT_FOLDER]).map(f => ({ ...DEFAULT_FOLDER, ...f })) } };
+    watch: { on: !!s.watch?.on, folders: (Array.isArray(s.watch?.folders) ? s.watch.folders : fs.existsSync(DEFAULT_FOLDER.in) ? [DEFAULT_FOLDER] : []).map(f => ({ ...DEFAULT_FOLDER, ...f })) } };
 }
 export function saveSettings(patch) {
   const cur = loadSettings(), next = { ...cur, ...patch, watch: { ...cur.watch, ...(patch.watch || {}) } };
   next.watch.folders = next.watch.folders.map(f => ({ in: String(f.in || '').replace(/^~(?=\/)/, os.homedir()), done: String(f.done || '').replace(/^~(?=\/)/, os.homedir()), processed: String(f.processed || '').replace(/^~(?=\/)/, os.homedir()), profile: f.profile || '' })).filter(f => f.in);
-  if (!next.watch.folders.length) next.watch.folders = [DEFAULT_FOLDER];
   wr(SFILE, next); return next;
 }
 
@@ -142,9 +152,9 @@ export function clearFailed() { return mutate(q => { const n = q.items.length; q
 
 function argsFor(it) {
   const o = it.opts || {}, k = it.kind, A = [];
-  if (k === 'autopilot') { A.push(it.input); if (o.profile) A.push('--profile', o.profile); if (o.out) A.push('--out', o.out); if (o.project) A.push('--project', o.project); if (o.qc_override) A.push('--qc-override', String(o.qc_override)); }
-  else if (k === 'highlights') { A.push(it.input, '--out', o.out || path.join(AVS_HOME, 'autopilot/highlights', `${slug(path.basename(it.input, path.extname(it.input)))}-${it.id}`)); for (const f of ['n', 'min', 'max', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
-  else if (k === 'topic') { A.push(it.input, '--out', o.out || path.join(AVS_HOME, 'autopilot/topics', it.id)); /* fresh folder per item: topic_video nests into an existing one */ for (const f of ['dur', 'voice', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
+  if (k === 'autopilot') { A.push(it.input); if (o.profile) A.push('--profile', o.profile); if (o.out) A.push('--out', o.out); if (o.project) A.push('--project', o.project); if (typeof o.brand === 'string') A.push('--brand', o.brand); if (o.qc_override) A.push('--qc-override', String(o.qc_override)); }
+  else if (k === 'highlights') { A.push(it.input, '--out', o.out || khoTopicDir(o.brand, `${path.basename(it.input, path.extname(it.input)).slice(0, 50)} - clip ngắn ${it.id}`)); for (const f of ['n', 'min', 'max', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
+  else if (k === 'topic') { A.push(it.input, '--out', o.out || khoTopicDir(o.brand, `${String(it.input).slice(0, 50)} ${it.id}`)); /* fresh folder per item: topic_video nests into an existing one */ for (const f of ['dur', 'voice', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
   else if (k === 'variants') { A.push(it.input, '--n', String(o.n || 3)); if (o.kind) A.push('--kind', o.kind); }
   else if (k === 'publish') { A.push(o.action || 'youtube-upload', it.input); if (o.meta) A.push('--meta', o.meta); if (o.schedule) A.push('--schedule', o.schedule); }
   if (Array.isArray(o.args)) A.push(...o.args.map(String));
@@ -311,9 +321,10 @@ export class Runner {
   // Watch folders: a video whose size+mtime stayed the same for 5 s is moved to "Đã xử lý" and queued for Tự lái.
   scan(st) {
     this.watchErr = null;
-    for (const f of st.watch.folders) {
+    let kho = []; try { kho = khoInboxes(); } catch (e) { this.watchErr = `Kho: ${e.message}`; }
+    for (const f of [...kho.filter(k => k.exists), ...st.watch.folders]) {
       try {
-        for (const d of [f.in, f.done, f.processed]) fs.mkdirSync(d, { recursive: true });
+        for (const d of [f.in, f.done, f.processed]) if (d) fs.mkdirSync(d, { recursive: true });
         for (const name of fs.readdirSync(f.in)) {
           const abs = path.join(f.in, name);
           if (name.startsWith('.') || /\.(download|crdownload|part|tmp)$/i.test(name) || !VIDEO_EXT.test(name)) continue;
@@ -328,7 +339,7 @@ export class Runner {
           fs.renameSync(abs, dst);
           const base = path.basename(dst, path.extname(dst));
           let it;
-          try { it = addItem({ kind: 'autopilot', input: dst, opts: { profile: f.profile || st.profile || undefined, out: path.join(f.done, base) }, source: 'watch' }); }
+          try { it = addItem({ kind: 'autopilot', input: dst, opts: { profile: f.profile || st.profile || undefined, ...(f.done ? { out: path.join(f.done, base) } : {}), ...(typeof f.brand === 'string' ? { brand: f.brand } : {}) }, source: 'watch' }); }
           catch (e) { try { fs.renameSync(dst, abs); } catch {} throw e; } // not queued: put the video back so the next scan retries it
           this.log(`watch: ${name} → hàng đợi (${it.id})`);
         }

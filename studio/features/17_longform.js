@@ -5,17 +5,14 @@
   const { $, esc } = Studio;
   const LS = k => { try { return localStorage.getItem('lf_' + k); } catch { return null; } };
   const LSset = (k, v) => { try { localStorage.setItem('lf_' + k, v); } catch {} };
-  const S = { tab: LS('tab') || 'long', video: LS('video') || '', dir: LS('dir') || '', list: null, runs: [], queue: false, topicOut: null, uploading: 0 };
+  // S12 M98: video lấy từ Kho của thương hiệu (bộ chọn dùng chung Studio.videoPicker), kết quả vào <Kho>/Du an/
+  const S = { tab: LS('tab') || 'long', video: LS('video') || '', dir: LS('dir') || '', list: null, runs: [], queue: false, topicOut: null, brand: LS('brand'), brands: null };
   const css = document.createElement('style');
   css.textContent = `
   .lf-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
   .lf-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); display: flex; align-items: center; gap: var(--space-2); color: rgb(var(--color-fg)); }
   .lf-card h4 .r { margin-left: auto; font-weight: 500; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
   .lf-lbl { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin: var(--space-2) 0 var(--space-1); }
-  .lf-drop { border: 1.5px dashed rgb(var(--color-line-hover)); border-radius: var(--radius-card); padding: var(--space-4) var(--space-3); text-align: center; color: rgb(var(--color-fg-muted)); cursor: pointer; font-size: var(--text-xs); transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
-  .lf-drop i { font-size: 24px; color: rgb(var(--color-accent-text)); display: block; margin-bottom: var(--space-1); }
-  .lf-drop small { font-size: var(--text-2xs); }
-  .lf-drop.over, .lf-drop:hover { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .24); }
   .lf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-2); }
   .lf-grid .full { grid-column: 1 / 3; }
   .lf-go { width: 100%; justify-content: center; margin-top: var(--space-3); }
@@ -41,6 +38,12 @@
   const api = (u, b) => Studio.api(u, b).catch(e => ({ error: e.message }));
 
   async function refresh() {
+    if (!S.brands) {
+      const [b, onb] = await Promise.all([api('/api/brands'), S.brand == null ? api('/api/onboarding') : null]);
+      S.brands = Array.isArray(b) ? b : [];
+      if (S.brand == null) S.brand = onb?.brand || (S.brands.length === 1 ? S.brands[0].id : '');
+      if (S.brand && !S.brands.some(x => x.id === S.brand)) S.brand = '';
+    }
     const r = await api('/api/longform/runs');
     S.runs = r.runs || []; S.queue = !!r.queue;
     if (S.dir) { const l = await api('/api/longform/list?dir=' + encodeURIComponent(S.dir)); S.list = l.items || null; if (!l.items) S.dir = ''; }
@@ -49,10 +52,13 @@
 
   function render() {
     const body = $('#libbody'); if (!body) return;
-    body.innerHTML = `<div class="seg" id="lf-tabs"><button data-t="long" class="${S.tab === 'long' ? 'on' : ''}"><i class="ti ti-scissors"></i> Video dài</button>
+    const BR = S.brands || [];
+    body.innerHTML = `<label class="lf-lbl">Thương hiệu (Kho lấy video và lưu kết quả)</label><select id="lf-brand"><option value="">Chung (không thương hiệu)</option>${BR.map(b => `<option value="${esc(b.id)}" ${b.id === S.brand ? 'selected' : ''}>${esc(b.title || b.name || b.id)}</option>`).join('')}</select>
+      <div class="seg" id="lf-tabs"><button data-t="long" class="${S.tab === 'long' ? 'on' : ''}"><i class="ti ti-scissors"></i> Video dài</button>
       <button data-t="topic" class="${S.tab === 'topic' ? 'on' : ''}"><i class="ti ti-bulb"></i> Chủ đề</button></div>
       <div id="lf-body">${S.tab === 'long' ? longHTML() : topicHTML()}</div>`;
     body.querySelectorAll('#lf-tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.t; LSset('tab', S.tab); render(); });
+    $('#lf-brand').onchange = e => { S.brand = e.target.value; LSset('brand', S.brand); S.picker?.setBrand(S.brand); };
     S.tab === 'long' ? bindLong() : bindTopic();
   }
 
@@ -60,9 +66,7 @@
   function longHTML() {
     const hl = S.runs.filter(r => r.kind === 'highlights');
     return `<div class="lf-card"><h4><i class="ti ti-scissors"></i> Video dài → nhiều clip ngắn</h4>
-      <div class="lf-drop" id="lf-drop"><i class="ti ti-movie"></i><b>${S.uploading ? `Đang tải lên ${S.uploading}%…` : 'Thả video dài vào đây'}</b><br><small>hoặc bấm để chọn · 30–90 phút vẫn được</small></div>
-      <input type="file" id="lf-file" accept="video/*" hidden>
-      <label class="lf-lbl">Hoặc đường dẫn video trên máy</label><input id="lf-video" placeholder="/Users/…/livestream.mp4" value="${esc(S.video)}">
+      <label class="lf-lbl">Video dài (30–90 phút vẫn được) — chọn trong Kho, chọn từ máy hoặc thả vào đây</label><div id="lf-vp"></div>
       <div class="lf-grid">
         <div><label class="lf-lbl">Số clip</label><select id="lf-n">${[3, 4, 5, 6, 8, 10].map(n => `<option ${n === +(LS('n') || 6) ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
         <div><label class="lf-lbl">Khung</label><select id="lf-or"><option value="vertical">Dọc 9:16</option><option value="horizontal" ${LS('or') === 'horizontal' ? 'selected' : ''}>Ngang 16:9</option></select></div>
@@ -89,28 +93,13 @@
         <div class="b"><button class="ui-btn ui-btn--sm" data-open="${it.i}" ${it.exists ? '' : 'disabled'}><i class="ti ti-edit"></i> Mở</button>${it.mp4Url ? `<button class="ui-btn ui-btn--sm" data-play="${it.i}"><i class="ti ti-player-play"></i> Xem</button>` : ''}</div></div></div>`).join('')}</div>`;
   }
   function bindLong() {
-    const drop = $('#lf-drop'), file = $('#lf-file');
-    drop.onclick = () => file.click();
-    drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
-    drop.ondragleave = () => drop.classList.remove('over');
-    drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) upload(f); };
-    file.onchange = () => file.files[0] && upload(file.files[0]);
-    $('#lf-video').onchange = e => { S.video = e.target.value.trim(); LSset('video', S.video); };
+    S.picker = Studio.videoPicker($('#lf-vp'), { brand: S.brand || '', value: S.video, onChange: p => { S.video = p; LSset('video', S.video); } });
     $('#lf-go').onclick = startLong;
     const runs = $('#lf-runs'); if (runs) runs.onchange = async () => { S.dir = runs.value; LSset('dir', S.dir); S.list = null; await refresh(); };
     const auto = $('#lf-auto'); if (auto) auto.onclick = autopilotAll;
     const exp = $('#lf-exp'); if (exp) exp.onclick = exportAll;
     document.querySelectorAll('#lf-body [data-open]').forEach(b => b.onclick = () => openProject(S.list[+b.dataset.open].dir));
     document.querySelectorAll('#lf-body [data-play]').forEach(b => b.onclick = () => play(S.list[+b.dataset.play]));
-  }
-  function upload(f) {
-    if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name)) return Studio.toast('Chỉ nhận file video');
-    const x = new XMLHttpRequest();
-    x.open('POST', '/api/longform/upload?name=' + encodeURIComponent(f.name));
-    x.upload.onprogress = e => { if (e.lengthComputable) { S.uploading = Math.round(e.loaded / e.total * 100); const d = $('#lf-drop b'); if (d) d.textContent = `Đang tải lên ${S.uploading}%…`; } };
-    x.onload = () => { S.uploading = 0; let r = {}; try { r = JSON.parse(x.responseText); } catch {} if (r.path) { S.video = r.path; LSset('video', S.video); Studio.toast('Đã tải video lên'); } else Studio.toast(r.error || 'Tải lên lỗi'); render(); };
-    x.onerror = () => { S.uploading = 0; Studio.toast('Tải lên lỗi'); render(); };
-    x.send(f);
   }
   function progress(title, onDone) {
     const t0 = Date.now();
@@ -125,9 +114,9 @@
     });
   }
   async function startLong() {
-    const video = ($('#lf-video').value || S.video).trim();
+    const video = (S.picker?.value || S.video).trim();
     if (!video) return Studio.toast('Chọn video dài trước');
-    const b = { video, n: +$('#lf-n').value, min: +$('#lf-min').value, max: +$('#lf-max').value, orient: $('#lf-or').value, model: $('#lf-model').value };
+    const b = { video, brand: S.brand || '', n: +$('#lf-n').value, min: +$('#lf-min').value, max: +$('#lf-max').value, orient: $('#lf-or').value, model: $('#lf-model').value };
     if (!(b.min > 3 && b.max > b.min)) return Studio.toast('Độ dài tối đa phải lớn hơn tối thiểu');
     for (const [k, v] of [['video', video], ['n', b.n], ['min', b.min], ['max', b.max], ['or', b.orient], ['model', b.model]]) LSset(k, v);
     S.video = video;
@@ -194,7 +183,7 @@
   async function startTopic() {
     const topic = $('#lf-topic').value.trim();
     if (topic.length < 4) return Studio.toast('Nhập chủ đề trước');
-    const b = { topic, dur: +$('#lf-dur').value, orient: $('#lf-tor').value, voice: $('#lf-voice').value, handle: $('#lf-handle').value.trim(), export: $('#lf-texp').checked };
+    const b = { topic, brand: S.brand || '', dur: +$('#lf-dur').value, orient: $('#lf-tor').value, voice: $('#lf-voice').value, handle: $('#lf-handle').value.trim(), export: $('#lf-texp').checked };
     for (const [k, v] of [['topic', topic], ['dur', b.dur], ['tor', b.orient], ['voice', b.voice], ['handle', b.handle], ['texp', b.export ? '1' : '0']]) LSset(k, v);
     const r = await api('/api/longform/topic', b);
     if (!r.ok) return Studio.toast(r.error || 'Không chạy được');
