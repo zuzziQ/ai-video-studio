@@ -16,7 +16,7 @@ Trợ lý có sẵn: `brand` (bước Thương hiệu của hướng dẫn lần
 ## Luồng
 
 1. Giao diện gom đầu vào (`input()` của `assistPanel`): ảnh được vẽ lại qua canvas (`Studio.imagePayload`, thu nhỏ, bỏ EXIF và vị trí chụp) thành data URL; màu logo đo bằng canvas (`Studio.logoColors`, cùng hàm của hướng dẫn lần đầu).
-2. `POST /api/assist/<tên>` → `check(raw)` của trợ lý (sai → 400) → `ctx.startJob('assist', …)`: dùng ô job chung của Studio (một job một lúc như xuất video; đang bận → 409; huỷ bằng `POST /api/job/cancel`, `job.proc` là tiến trình `claude`). Không dùng `scripts/queue.mjs` (hàng đợi Tự lái): việc trợ lý chạy ngay, ngắn (5–60 s), người dùng ngồi chờ.
+2. `POST /api/assist/<tên>` → `check(raw)` của trợ lý (sai → 400) → chạy trong **ô job riêng của trợ lý** (M90; không dùng `ctx.startJob`): đang xuất video hay tạo video mới vẫn chạy được trợ lý; vẫn chỉ một trợ lý một lúc (trợ lý khác đang chạy → 409). Huỷ bằng `POST /api/assist/cancel` (`Studio.assistCancel()`, nút Huỷ của `assistPanel`): đặt cờ huỷ và dừng tiến trình `claude` đang chạy; `POST /api/job/cancel` chỉ dừng job xuất video, không đụng trợ lý. Server tắt thì tiến trình `claude` của trợ lý cũng bị dừng. Không dùng `scripts/queue.mjs` (hàng đợi Tự lái): việc trợ lý chạy ngay, ngắn (5–60 s), người dùng ngồi chờ.
 3. `runAssist`: `prepare` (tải website nếu có) → ghi ảnh vào một thư mục tạm chỉ chứa ảnh đó (`logo.png`, `product.jpg`) → `askJSON` của `scripts/llm.mjs` (`shape: 'object'`, `retries: 1`, `validate` = `normalize` của trợ lý) → `post` (soát thêm, ví dụ `ad_gates.py`) → xoá thư mục tạm.
 4. Giao diện hỏi `GET /api/assist/<tên>` mỗi 0,8 s (setTimeout, không dựa animation) tới khi `state` khác `running`, rồi hiện đề xuất.
 
@@ -62,6 +62,15 @@ Nhà cung cấp: có ảnh → Claude xem ảnh bằng `--allowedTools Read --ad
 - Claim luôn `pending`; AI ghi `approved` hay `evidence` → bị bỏ, kèm cảnh báo.
 - Cờ rủi ro: `python scripts/ad_gates.py --script -` trên các câu claim (chính sách Meta/TikTok, cụm từ rủi ro; `risk_source: 'ad_gates'`); không chạy được Python thì dò danh sách từ đơn giản (`risk_source: 'rules'`).
 
+## Trợ lý `transcript` (M90, panel Lời thoại)
+
+Đầu vào: `{words: [{w, s, e}] (≤ 30 000, chỉ số = vị trí), dict?: [{from, to}] (từ điển thương hiệu + dự án), names?: [tên thương hiệu, sản phẩm], industry?}`. Không có ảnh; chỉ có chữ → nhà cung cấp theo cấu hình.
+- Trợ lý có `run(input, prep, env, ask)` thay cho `prompt/normalize` một lượt: `runAssist` chuyển sang `runTurns`, gọi AI **từng cửa sổ** (`txWindows`: ≤ 400 từ, ≤ 90 s; qua 60 s thì cắt ở chỗ ngừng ≥ 0,5 s hoặc cuối câu), không một lần cả bài dài. Tiến độ "Đoạn k/n"; `env.cancelled()` được hỏi giữa các cửa sổ.
+- Prompt đưa từng từ dạng `<chỉ số>:<từ>` (trong khối DỮ LIỆU), danh sách tên/thuật ngữ đúng, từ điển; xin `{"edits":[{start, end, old, new, kind, reason}]}`, `kind` ∈ `nhận dạng | tên riêng | chính tả | dấu câu`. AI không nghe được âm thanh nên được dặn không đoán lại số, giá, ngày giờ.
+- Kiểm chặt (`txCheckEdit`): `old` phải khớp đúng chữ tại `start..end` (chỉ bỏ qua hoa thường, dấu câu hai đầu, chỗ đặt dấu thanh), lệch → bỏ (`mismatch`); ≤ 6 từ; `new` ≤ 80 ký tự; số từ đổi ≤ 3 và chữ cái (bỏ dấu) khác ≤ 45 % (trừ khi `new` là tên/thuật ngữ đã biết), quá → bỏ (`rewrite`); không đổi gì hoặc chỉ đổi hoa thường (trừ tên riêng) → bỏ (`noop`); chồng nhau → giữ cái trước (`dup`); ≤ 20 mỗi cửa sổ. Khác dấu câu mà cùng chữ → `dấu câu`.
+- Lùi về: cửa sổ nào AI trả JSON hỏng (sau một lần hỏi lại) thì lấy đề xuất theo từ điển cho cửa sổ đó (`txDictEdits`: cặp từ điển + tên viết hoa), kèm cảnh báo; thiếu `claude`, chưa đăng nhập, quá giờ, huỷ → báo nguyên văn.
+- Kết quả: `{suggestions: [{id, start, end, old, new, kind, reason}], counts, windows, dropped, fallbackWindows, warnings, provider, ms}`. Giao diện đổi chỉ số → mốc thời gian lúc gửi, bỏ chỗ người dùng đã sửa trong lúc chờ, hiện bằng lớp đề xuất của M89 (`Studio.transcript.suggest`); không lưu vào timeline.
+
 ## Thêm một trợ lý mới (cho M90, M92…)
 
 1. Trong `scripts/assist.mjs`, viết một object và thêm vào `ASSISTANTS`:
@@ -90,4 +99,5 @@ Nhà cung cấp: có ảnh → Claude xem ảnh bằng `--allowedTools Read --ad
    ai.mount(el);                                 // vẽ lại panel thì mount lại; trạng thái nằm trong `ai`
    ```
    Hoặc gọi thẳng `await Studio.assist(name, input, { onStep })` nếu cần giao diện riêng (gạch chân trong lời thoại của M90).
+   Trợ lý cần hỏi AI nhiều lượt (theo cửa sổ, theo cảnh…) thì viết `run(input, prep, env, ask)` thay cho `prompt/normalize`: `ask(prompt, validate, {onTick, onRetry})` → `{value, provider}` (đã qua `assertCleanPrompt`, hỏi lại một lần khi JSON hỏng); trả `{…, warnings, provider}` (xem `transcript`).
 4. Cập nhật bảng API trong `references/studio.md` nếu thêm route khác, và mục trợ lý trong file này.

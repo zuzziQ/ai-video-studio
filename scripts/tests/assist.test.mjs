@@ -204,7 +204,8 @@ test('route /api/assist: 400, 404, 409, chạy job và trả kết quả', async
   const B = `http://127.0.0.1:${app.address().port}`;
   const call = async (p, b) => { const r = await fetch(B + p, b === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); return { status: r.status, j: await r.json() }; };
   try {
-    assert.deepEqual((await call('/api/assist')).j.map(x => x.name), ['brand', 'product']);
+    const names = (await call('/api/assist')).j.map(x => x.name);
+    for (const n of ['brand', 'product']) assert.ok(names.includes(n), n);
     assert.equal((await call('/api/assist/khac', {})).status, 404);
     assert.equal((await call('/api/assist/brand', { colors: 'đỏ' })).status, 400);
     assert.equal((await call('/api/assist/brand')).j.state, 'idle');
@@ -212,8 +213,8 @@ test('route /api/assist: 400, 404, 409, chạy job và trả kết quả', async
     process.env.AVS_ASSIST_TIMEOUT_S = '2';
     const a = await call('/api/assist/brand', { name: 'X', colors: ['#E63946'] });
     assert.equal(a.status, 200); assert.equal(a.j.ok, true);
-    assert.equal((await call('/api/assist/product', { image: PNG })).status, 409); // một job một lúc
-    assert.equal(job.kind, 'assist'); assert.equal(job.assist, 'brand'); assert.ok(job.proc, 'job.proc để /api/job/cancel dừng được');
+    assert.equal((await call('/api/assist/product', { image: PNG })).status, 409); // một trợ lý một lúc
+    assert.equal(job, null, 'trợ lý có ô job riêng, không chiếm ctx.startJob (M90)');
     let s; for (let i = 0; i < 60 && (s = (await call('/api/assist/brand')).j).state === 'running'; i++) await new Promise(ok => setTimeout(ok, 100));
     assert.equal(s.state, 'error'); assert.equal(s.kind, 'timeout'); assert.equal(s.run, a.j.run);
     delete process.env.AVS_ASSIST_TIMEOUT_S;

@@ -6,7 +6,10 @@
 //   - Menu đoạn (chuột phải, phím Menu / Shift F10, thanh nổi): Sửa, Nhấn mạnh, Xuống dòng, Ẩn khỏi phụ đề,
 //     Cắt khỏi video, Phát lại đoạn (lặp, Esc dừng).
 //   - Tìm và thay (Ctrl H), từ điển "sai=đúng" của dự án (/api/dict, routes/21_dict.mjs) và thương hiệu (brand kit `dict`).
-//   - Lớp "đề xuất" (dữ liệu tạm, không lưu) cho M90: Studio.transcript.suggest([{s, e, to, reason}]).
+//   - Lớp "đề xuất" (dữ liệu tạm, không lưu): Studio.transcript.suggest([{s, e, to, from, reason, kind}]).
+//   - AI soát lỗi (M90): trợ lý `transcript` (scripts/assist.mjs, qua Studio.assist) đọc lời thoại theo từng đoạn ~1 phút,
+//     trả đề xuất → gạch sóng; bấm một chỗ: cũ → mới + lý do, Nhận / Bỏ, Nhận tất cả (một bước ⌘Z), lọc theo loại,
+//     thêm vào từ điển khi sửa lặp lại được. Không tự ghi đè, đề xuất không lưu vào timeline.
 // Cắt video dùng Studio.ai (20_ai.js): cutRanges, wordSpan, allWords.
 'use strict';
 (() => {
@@ -64,7 +67,21 @@
   .tx-menu [role="menuitem"]:hover, .tx-menu [role="menuitem"]:focus { background: rgb(var(--color-surface-hover)); outline: none; }
   .tx-menu [role="menuitem"] span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tx-menu kbd { font-family: var(--font-mono); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
-  .tx-menu [role="separator"] { height: 1px; margin: var(--space-1) 0; background: rgb(var(--color-line)); }`;
+  .tx-menu [role="separator"] { height: 1px; margin: var(--space-1) 0; background: rgb(var(--color-line)); }
+  .tx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); }
+  .tx-ai-run { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
+  .tx-ai-run span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .tx-ai-bar { height: 4px; border-radius: var(--radius-pill); background: rgb(var(--color-surface-hover)); overflow: hidden; }
+  .tx-ai-bar i { display: block; height: 100%; width: calc(var(--tx-p, 0) * 100%); background: rgb(var(--color-accent-text)); transition: width var(--duration-base) var(--ease-standard); }
+  .tx-ai-sum { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-xs); min-width: 0; }
+  .tx-ai-sum b { font-size: var(--text-sm); } .tx-ai-sum small { color: rgb(var(--color-fg-subtle)); } .tx-ai-sum .grow { flex: 1; }
+  .tx-ai-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); background: rgb(var(--color-surface)); font-size: var(--text-xs); min-width: 0; }
+  .tx-ai-diff { font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere; }
+  .tx-ai-diff del { color: rgb(var(--color-danger-text)); } .tx-ai-diff ins { color: rgb(var(--color-success-text)); text-decoration: none; font-weight: 600; }
+  .tx-ai-why { color: rgb(var(--color-fg-muted)); line-height: 1.5; overflow-wrap: anywhere; }
+  .tx-ai-warn { margin: 0; padding: 0 0 0 var(--space-4); font-size: var(--text-2xs); line-height: 1.5; color: rgb(var(--color-warning-text)); } .tx-ai-warn li { overflow-wrap: anywhere; }
+  .tx-hits .tx-kd { flex: none; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+  .tw.sug.sug-cur { background: rgb(var(--color-warning) / .25); color: rgb(var(--color-fg)); }`;
   document.head.appendChild(css);
 
   // ---------- state ----------
@@ -73,6 +90,8 @@
   let tw = { a: -1, b: -1, drag: false, moved: false }, W = [], sig = null, curK = -1;
   let editing = null, box = '', dict = null, draft = null, loopT = null, sugs = [], sugId = 0; // draft: unsaved dictionary text
   const find = { q: '', r: '', na: false, mem: false, scope: 'project', hits: [], cur: 0 };
+  const KINDS = ['nhận dạng', 'tên riêng', 'chính tả', 'dấu câu'];
+  const ai = { state: 'idle', step: '', p: 0, error: '', res: null, filter: '', cur: 0, ok: 0, no: 0, stale: 0, picks: {} }; // M90
   const selRange = () => (tw.a < 0 || !W[tw.a] || !W[tw.b] ? null : [Math.min(tw.a, tw.b), Math.max(tw.a, tw.b)]);
   const textOf = (a, b) => W.slice(a, b + 1).map(x => x.w.w).join(' ');
   const short = t => (t.length > 32 ? t.slice(0, 32) + '…' : t);
@@ -93,7 +112,8 @@
     if (tw.a >= W.length || tw.b >= W.length) tw = { a: -1, b: -1 };
     $('#libact').innerHTML = ibtn('data-transcribe', 'ti-microphone', 'Tạo lại lời thoại tự động (Whisper)')
       + ibtn('data-tx="find"', 'ti-replace', 'Tìm và thay (Ctrl H)', `aria-pressed="${box === 'find'}"`)
-      + ibtn('data-tx="dict"', 'ti-book-2', 'Từ điển sửa lời thoại', `aria-pressed="${box === 'dict'}"`);
+      + ibtn('data-tx="dict"', 'ti-book-2', 'Từ điển sửa lời thoại', `aria-pressed="${box === 'dict'}"`)
+      + ibtn('data-tx="ai"', 'ti-sparkles', 'AI soát lỗi lời thoại', `aria-pressed="${box === 'ai'}"`);
     if (!W.length) { $('#libbody').innerHTML = S.ctaTranscribe('Sửa video bằng chữ'); return; }
     const fl = S.ai.fillers, flags = new Set(), sugK = new Map();
     if (fl) for (const c of fl.cuts) for (const [k, x] of W.entries()) if (x.w.s >= c.a - .01 && x.w.e <= c.b + .05) flags.add(k);
@@ -104,23 +124,25 @@
       if (x.w.s - lastE >= .5 || since >= 40) { html += `${k ? '<br>' : ''}<span class="tm" data-tws="${x.w.s}" title="Tua tới ${fmt(x.w.s)}">${fmt(x.w.s)}</span>`; since = 0; }
       lastE = x.w.e; since++;
       const g = sugK.get(k);
-      const cls = ['tw', x.w.hl && 'hl', x.w.br && 'br', x.w.ed && 'ed', flags.has(k) && 'flag', g && 'sug'].filter(Boolean).join(' ');
-      html += `<span class="${cls}" data-k="${k}"${g ? ` title="Đề xuất: ${esc(g.to)}${g.reason ? ' · ' + esc(g.reason) : ''}"` : x.w.ed ? ' title="Đã sửa tay"' : ''}>${esc(x.w.w)}</span> `;
+      const cls = ['tw', x.w.hl && 'hl', x.w.br && 'br', x.w.ed && 'ed', flags.has(k) && 'flag', g && 'sug', g && g.id === ai.cur && 'sug-cur'].filter(Boolean).join(' ');
+      html += `<span class="${cls}" data-k="${k}"${g ? ` title="Đề xuất: ${esc(g.to)}${g.reason ? ' · ' + esc(g.reason) : ''} (bấm để xem)"` : x.w.ed ? ' title="Đã sửa tay"' : ''}>${esc(x.w.w)}</span> `;
     }
     const help = mode === 'text'
       ? 'Bấm đúp một từ, hoặc chọn rồi gõ hay Enter để sửa (Enter lưu, Esc huỷ). <b>Delete xoá chữ khỏi phụ đề, video giữ nguyên.</b> Chuột phải mở menu.'
       : 'Kéo hoặc Shift-bấm để chọn một đoạn. <b>Delete cắt đoạn đó khỏi video</b> (dồn cả timeline). Chuột phải mở menu.';
     $('#libbody').innerHTML = `<div class="tx-head"><div class="ui-tabs tx-mode" role="radiogroup" aria-label="Phím Delete trong lời thoại">
         ${[['text', 'ti-pencil', 'Sửa chữ'], ['cut', 'ti-scissors', 'Cắt video']].map(([k, i, l]) => `<button type="button" class="ui-tab${mode === k ? ' is-active' : ''}" role="radio" aria-checked="${mode === k}" tabindex="${mode === k ? 0 : -1}" data-txmode="${k}"><i class="ti ${i}"></i> ${l}</button>`).join('')}</div></div>
-      <p class="tx-help">${help} ${fl ? 'Gạch chân vàng là lỗi nói đã dò. ' : ''}${sugs.length ? `Gạch sóng là ${sugs.length} đề xuất (chuột phải để nhận hoặc bỏ). ` : ''}Hoàn tác ⌘Z.</p>
+      <p class="tx-help">${help} ${fl ? 'Gạch chân vàng là lỗi nói đã dò. ' : ''}${sugs.length ? `Gạch sóng là ${sugs.length} đề xuất (bấm để xem, Nhận hoặc Bỏ). ` : ''}Hoàn tác ⌘Z.</p>
+      ${box === 'ai' ? '' : `<div class="tx-tools"><button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-tx="ai"><i class="ti ${ai.state === 'running' ? 'ti-loader-2 spin' : 'ti-sparkles'}"></i> ${ai.state === 'running' ? 'AI đang soát…' : sugs.length ? `Xem ${sugs.length} đề xuất của AI` : 'AI soát lỗi'}</button></div>`}
       <div id="txbox">${boxHtml()}</div>
       <div class="tw-wrap${mode === 'cut' ? ' is-cut' : ''}" id="twwrap" tabindex="0" aria-label="Lời thoại, ${W.length} từ. Chọn từ bằng chuột hoặc mũi tên.">${html}</div>
       <div class="tx-bar" id="txbar" role="toolbar" aria-label="Việc với đoạn đã chọn" hidden></div>`;
     paintSel(); markCur();
     if (box === 'find') updateFind();
+    if (box === 'ai') paintAiRun();
   }
-  function boxHtml() { return box === 'find' ? findHtml() : box === 'dict' ? dictHtml() : ''; }
-  function renderBox() { const b = $('#txbox'); if (b) { b.innerHTML = boxHtml(); if (box === 'find') updateFind(); } }
+  function boxHtml() { return box === 'find' ? findHtml() : box === 'dict' ? dictHtml() : box === 'ai' ? aiHtml() : ''; }
+  function renderBox() { const b = $('#txbox'); if (b) { b.innerHTML = boxHtml(); if (box === 'find') updateFind(); if (box === 'ai') paintAiRun(); } }
   function paintSel() {
     const r = selRange();
     for (const el of document.querySelectorAll('#twwrap .tw')) { const k = +el.dataset.k; el.classList.toggle('sel', !!r && k >= r[0] && k <= r[1]); }
@@ -430,6 +452,7 @@
     render();
     if (box === 'find') { const q = $('#txq'); const r = selRange(); if (r && !find.q) { q.value = find.q = textOf(r[0], r[1]); updateFind(); } q.focus(); q.select(); }
     if (box === 'dict') $('#txdp')?.focus();
+    if (box === 'ai') ($('#txai [data-txai="ok"]') || $('#txai [data-txai="go"]'))?.focus();
     if (!box) focusWrap();
   }
 
@@ -441,7 +464,7 @@
   function sugAt(r) { return sugs.find(g => { const q = sugRange(g); return q && q[0] <= r[1] && q[1] >= r[0]; }); }
   function suggest(list) {
     sugs = (Array.isArray(list) ? list : []).filter(x => x && Number.isFinite(+x.s) && Number.isFinite(+x.e) && typeof x.to === 'string')
-      .map(x => ({ id: ++sugId, s: +x.s, e: +x.e, to: x.to.slice(0, 200), from: String(x.from || '').slice(0, 200), reason: String(x.reason || '').slice(0, 300) }));
+      .map(x => ({ id: ++sugId, s: +x.s, e: +x.e, to: x.to.slice(0, 200), from: String(x.from || '').slice(0, 200), reason: String(x.reason || '').slice(0, 300), kind: KINDS.includes(x.kind) ? x.kind : '' }));
     if (panel === 'words') render();
     return sugs.map(g => ({ ...g }));
   }
@@ -450,11 +473,137 @@
     const q = sugRange(g); sugs = sugs.filter(x => x !== g);
     if (!q) { render(); return false; }
     const old = textOf(q[0], q[1]);
+    if (g.from && old !== g.from) { render(); S.toast(`Chữ ở chỗ này đã đổi thành “${short(old)}”, bỏ đề xuất`); return false; }
     applyEdit(q[0], q[1], g.to);
     S.toast(`Đã nhận đề xuất “${short(old)}” → “${short(g.to)}” · ⌘Z hoàn tác`);
     return true;
   }
   function rejectSuggestion(id) { const n = sugs.length; sugs = sugs.filter(x => x.id !== id); if (panel === 'words') render(); return sugs.length < n; }
+
+  // ---------- AI soát lỗi (M90): trợ lý `transcript`, kết quả là đề xuất trong bộ nhớ ----------
+  const PROV = { claude: 'Claude', ollama: 'Ollama', rules: 'Theo từ điển' };
+  const visibleSugs = () => sugs.filter(g => !ai.filter || g.kind === ai.filter).sort((x, y) => x.s - y.s);
+  const inDict = g => !!dict && [...dict.project, ...dict.brand, ...dict.auto].some(e => C().fold(e.from) === C().fold(g.from));
+  // "Thêm vào từ điển" chỉ khi sửa lặp lại được: cặp hợp lệ, không phải dấu câu, chưa có trong từ điển
+  const repeatable = g => g.kind !== 'dấu câu' && !!C().cleanSide(g.from) && !!C().cleanSide(g.to) && C().fold(g.from) !== C().fold(g.to) && !inDict(g);
+  const pick = g => (g.id in ai.picks ? ai.picks[g.id] : g.kind === 'tên riêng');
+  function aiHtml() {
+    const head = `<div class="tx-boxhead"><b><i class="ti ti-sparkles"></i> AI soát lỗi</b>${ibtn('data-txai="close"', 'ti-x', 'Đóng AI soát lỗi')}</div>`;
+    if (ai.state === 'running') {
+      return `<section class="tx-box" id="txai" aria-label="AI soát lỗi" aria-busy="true">${head}
+        <div class="tx-ai-run" role="status"><i class="ti ti-loader-2 spin"></i><span id="txaistep">${esc(ai.step || 'Đang gửi…')}</span><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="stop">Huỷ</button></div>
+        <div class="tx-ai-bar"><i id="txaibar"></i></div><p class="tx-note">Vẫn sửa, xem hay xuất video được trong lúc chờ.</p></section>`;
+    }
+    if (ai.state !== 'done' && !sugs.length) {
+      return `<section class="tx-box" id="txai" aria-label="AI soát lỗi">${head}
+        ${ai.error ? `<p class="tx-err" role="alert">${esc(ai.error)}</p>` : ''}
+        <p class="tx-note">AI đọc lời thoại theo từng đoạn khoảng 1 phút, cùng từ điển, tên thương hiệu và sản phẩm, rồi đề xuất sửa lỗi <b>nhận dạng</b>, <b>tên riêng</b>, <b>chính tả</b>, <b>dấu câu</b>. Không tự sửa gì: bạn Nhận hoặc Bỏ từng chỗ.</p>
+        <div class="tx-acts"><button type="button" class="ui-btn ui-btn--primary ui-btn--sm" data-txai="go"><i class="ti ti-sparkles"></i> ${ai.error ? 'Thử lại' : 'Bắt đầu soát'}</button></div></section>`;
+    }
+    const list = visibleSugs(), g = list.find(x => x.id === ai.cur) || list[0], r = ai.res;
+    const meta = r ? `<small>${esc(PROV[r.provider] || r.provider || '')} · ${r.windows} đoạn · ${Math.max(1, Math.round((r.ms || 0) / 1000))} s</small>` : '';
+    const chips = [['', sugs.length], ...KINDS.map(k => [k, sugs.filter(x => x.kind === k).length]).filter(([, n]) => n)];
+    const card = g ? `<div class="tx-ai-card" aria-live="polite">
+        <div class="tx-ai-sum"><span class="ui-chip">${esc(g.kind || 'đề xuất')}</span><small>${fmt(g.s)}</small><span class="grow"></span>
+          ${ibtn('data-txai="prev"', 'ti-chevron-left', 'Đề xuất trước')}${ibtn('data-txai="next"', 'ti-chevron-right', 'Đề xuất sau')}</div>
+        <div class="tx-ai-diff"><del>${esc(g.from)}</del> → <ins>${esc(g.to)}</ins></div>
+        ${g.reason ? `<div class="tx-ai-why">${esc(g.reason)}</div>` : ''}
+        ${repeatable(g) ? `<div class="tx-opts"><label><input type="checkbox" id="txaidict" ${pick(g) ? 'checked' : ''}> Thêm “${esc(short(g.from))} = ${esc(short(g.to))}” vào từ điển</label>
+          ${dict?.kit ? `<select class="ui-input tx-scope" id="txaiscope" aria-label="Thêm vào từ điển của"><option value="project">của dự án</option><option value="brand" ${find.scope === 'brand' ? 'selected' : ''}>của ${esc(dict.kit.title)}</option></select>` : ''}</div>` : ''}
+        <div class="tx-acts"><button type="button" class="ui-btn ui-btn--primary ui-btn--sm" data-txai="ok"><i class="ti ti-check"></i> Nhận</button><button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" data-txai="no"><i class="ti ti-x"></i> Bỏ</button><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="hear" aria-pressed="${!!loopT}"><i class="ti ti-headphones"></i> ${loopT ? 'Dừng nghe' : 'Nghe đoạn này'}</button></div></div>` : '';
+    const warns = [...(r?.warnings || []), ...(ai.stale ? [`Bỏ ${ai.stale} đề xuất vì lời thoại đã đổi trong lúc AI soát.`] : [])];
+    return `<section class="tx-box" id="txai" aria-label="AI soát lỗi">${head}
+      <div class="tx-ai-sum"><b>${sugs.length} đề xuất</b>${meta}<span class="grow"></span>
+        ${list.length ? `<button type="button" class="ui-btn ui-btn--primary ui-btn--sm" data-txai="all">Nhận tất cả${ai.filter ? ' ' + list.length : ''}</button><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="none">Bỏ tất cả</button>` : ''}</div>
+      ${sugs.length > 1 ? `<div class="tx-chips" role="group" aria-label="Lọc đề xuất theo loại">${chips.map(([k, n]) => `<button type="button" class="ui-chip" data-txaif="${esc(k)}" aria-pressed="${ai.filter === k}">${esc(k || 'Tất cả')} ${n}</button>`).join('')}</div>` : ''}
+      ${warns.length ? `<ul class="tx-ai-warn">${warns.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+      ${card || `<p class="tx-note">${ai.ok || ai.no ? `Đã xử lý hết: nhận ${ai.ok}, bỏ ${ai.no}.` : 'AI không thấy lỗi nào cần sửa.'}</p>`}
+      ${list.length > 1 ? `<ul class="tx-hits" role="listbox" aria-label="Danh sách đề xuất, bấm để xem">${list.map(x => `<li role="option" aria-selected="${x === g}" data-sugid="${x.id}"><span class="tx-t">${fmt(x.s)}</span><span class="tx-ctx">${esc(x.from)} → <mark>${esc(x.to)}</mark></span><span class="tx-kd">${esc(x.kind)}</span></li>`).join('')}</ul>` : ''}
+      <div class="tx-acts"><button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" data-txai="go"><i class="ti ti-refresh"></i> Soát lại</button></div></section>`;
+  }
+  function paintAiRun() {
+    const st = $('#txaistep'); if (st) st.textContent = ai.step || 'Đang gửi…';
+    $('#txaibar')?.style.setProperty('--tx-p', String(ai.p || 0));
+  }
+  async function aiStart() {
+    if (ai.state === 'running') return;
+    W = S.ai.allWords();
+    if (!W.length) return S.toast('Chưa có lời thoại để soát');
+    if (sugs.length && !confirm(`Soát lại sẽ bỏ ${sugs.length} đề xuất đang chờ. Tiếp tục?`)) return;
+    Object.assign(ai, { state: 'running', step: 'Đang chuẩn bị…', p: 0, error: '', res: null, filter: '', cur: 0, ok: 0, no: 0, stale: 0, picks: {} });
+    sugs = []; box = 'ai'; render();
+    if (!dict) await loadDict();
+    const input = {
+      words: W.map(x => ({ w: x.w.w, s: x.w.s, e: x.w.e })), dict: [...(dict?.brand || []), ...(dict?.project || [])],
+      names: [...new Set([dict?.kit?.title, ...(dict?.auto || []).map(e => e.to)].filter(Boolean))], industry: S.TL.ads?.industry || '',
+    };
+    try {
+      const r = await S.assist('transcript', input, { onStep: (st, p) => { ai.step = st; ai.p = p; paintAiRun(); } });
+      // chỉ số từ → mốc thời gian lúc gửi; chỗ người dùng đã sửa trong lúc chờ thì bỏ
+      const list = r.suggestions.map(x => ({ s: input.words[x.start].s, e: input.words[x.end].e, from: x.old, to: x.new, reason: x.reason, kind: x.kind }));
+      W = S.ai.allWords();
+      const fresh = list.filter(g => { const q = sugRange(g); return q && textOf(q[0], q[1]) === g.from; });
+      Object.assign(ai, { state: 'done', res: r, stale: list.length - fresh.length });
+      suggest(fresh);
+      ai.cur = visibleSugs()[0]?.id || 0;
+    } catch (e) {
+      Object.assign(ai, { state: 'idle', error: e.state === 'cancelled' ? 'Đã huỷ soát lỗi.' : e.message });
+    }
+    if (panel === 'words') render();
+  }
+  function stepId(id, d) { const l = visibleSugs(), i = l.findIndex(x => x.id === id); return l[i + d]?.id || l[i - d]?.id || 0; }
+  function showSug(id, { seek = true } = {}) {
+    const g = sugs.find(x => x.id === id); if (!g) return;
+    ai.cur = id;
+    if (ai.filter && g.kind !== ai.filter) ai.filter = '';
+    const q = sugRange(g);
+    if (q) tw = { a: q[0], b: q[1] };
+    box = 'ai';
+    render();
+    setTimeout(() => $('#txai .tx-ai-card')?.scrollIntoView({ block: 'nearest' }), 0); // sau khi chuột/tiêu điểm xong: thẻ cũ → mới phải thấy được
+    if (q && seek) S.setTime(g.s + .001);
+  }
+  async function aiAccept(id) {
+    const g = sugs.find(x => x.id === id); if (!g) return;
+    const add = repeatable(g) && pick(g);
+    ai.cur = stepId(id, 1);
+    if (!acceptSuggestion(id)) return;
+    ai.ok++;
+    if (add) { const m = await remember([{ from: g.from, to: g.to }]); S.toast(`Đã nhận “${short(g.from)}” → “${short(g.to)}”${m} · ⌘Z hoàn tác`); if (box === 'ai') renderBox(); }
+  }
+  function aiReject(id) { ai.cur = stepId(id, 1); if (rejectSuggestion(id)) ai.no++; if (panel === 'words') render(); }
+  async function aiAll(ok) {
+    const list = visibleSugs(); if (!list.length) return;
+    const ids = new Set(list.map(g => g.id));
+    if (!ok) { sugs = sugs.filter(g => !ids.has(g.id)); ai.no += list.length; ai.filter = ''; ai.cur = visibleSugs()[0]?.id || 0; render(); return S.toast(`Đã bỏ ${list.length} đề xuất`); }
+    W = S.ai.allWords();
+    S.pushUndo();
+    let n = 0, skip = 0; const pairs = [];
+    for (const g of [...list].sort((x, y) => y.s - x.s)) { // từ cuối lên: chỗ phía trước giữ nguyên chỉ số
+      const q = sugRange(g);
+      if (!q || textOf(q[0], q[1]) !== g.from) { skip++; continue; }
+      applyEdit(q[0], q[1], g.to, { batch: true }); n++;
+      if (repeatable(g) && pick(g) && !pairs.some(p => C().fold(p.from) === C().fold(g.from))) pairs.push({ from: g.from, to: g.to });
+    }
+    sugs = sugs.filter(g => !ids.has(g.id)); ai.ok += n; ai.filter = ''; ai.cur = visibleSugs()[0]?.id || 0;
+    commit(null);
+    let msg = `Đã nhận ${n} đề xuất${skip ? `, bỏ ${skip} chỗ chữ đã đổi` : ''}`;
+    if (pairs.length) msg += await remember(pairs);
+    S.toast(msg + ' · ⌘Z hoàn tác cả lượt');
+    if (box === 'ai') renderBox();
+  }
+  function aiAct(k) {
+    if (k === 'close') return openBox('ai');
+    if (k === 'go') return aiStart();
+    if (k === 'stop') { S.assistCancel?.(); ai.step = 'Đang huỷ…'; return paintAiRun(); }
+    if (k === 'all') return aiAll(true);
+    if (k === 'none') return aiAll(false);
+    const l = visibleSugs(), cur = l.find(x => x.id === ai.cur) || l[0]; if (!cur) return;
+    if (k === 'ok') return aiAccept(cur.id);
+    if (k === 'no') return aiReject(cur.id);
+    if (k === 'hear') { const q = sugRange(cur); if (!q) return; if (!loopT) { tw = { a: Math.max(0, q[0] - 2), b: Math.min(W.length - 1, q[1] + 2) }; paintSel(); } loopSel(); return renderBox(); } // nghe lặp đoạn (thêm 2 từ mỗi bên) trước khi quyết
+    if (k === 'prev' || k === 'next') return showSug(l[(l.indexOf(cur) + (k === 'next' ? 1 : -1) + l.length) % l.length].id);
+  }
 
   // ---------- events ----------
   S.addPanel('words', 'ti-file-text', 'Lời thoại', render);
@@ -478,7 +627,10 @@
   window.addEventListener('mouseup', e => {
     if (panel !== 'words' || !tw.drag) return;
     tw.drag = false;
-    if (!tw.moved && !e.shiftKey && W[tw.a]) S.setTime(W[tw.a].w.s + .001);
+    if (!tw.moved && !e.shiftKey && W[tw.a]) {
+      S.setTime(W[tw.a].w.s + .001);
+      const g = sugAt([tw.a, tw.a]); if (g) showSug(g.id, { seek: false }); // bấm chỗ gạch sóng: xem cũ → mới, Nhận / Bỏ
+    }
   });
   lib.addEventListener('dblclick', e => {
     if (panel !== 'words') return;
@@ -494,8 +646,12 @@
     if (panel !== 'words') return;
     const t = e.target, m = t.closest('[data-tws]');
     if (m) return S.setTime(+m.dataset.tws);
-    const b = t.closest('[data-txmode],[data-txact],[data-txf],[data-txd],[data-hit]');
+    const b = t.closest('[data-txmode],[data-txact],[data-txf],[data-txd],[data-hit],[data-tx],[data-txai],[data-txaif],[data-sugid]');
     if (!b) return;
+    if (b.dataset.tx) return openBox(b.dataset.tx);
+    if (b.dataset.txai) return aiAct(b.dataset.txai);
+    if (b.dataset.txaif != null) { ai.filter = ai.filter === b.dataset.txaif ? '' : b.dataset.txaif; ai.cur = visibleSugs()[0]?.id || 0; return render(); }
+    if (b.dataset.sugid) return showSug(+b.dataset.sugid);
     if (b.dataset.txmode) return setMode(b.dataset.txmode);
     if (b.dataset.txact) return act(b.dataset.txact);
     if (b.dataset.hit) return goHit(+b.dataset.hit);
@@ -511,9 +667,10 @@
     if (id === 'txr') find.r = e.target.value;
     if (id === 'txna') { find.na = e.target.checked; updateFind(); }
     if (id === 'txmem') find.mem = e.target.checked;
-    if (id === 'txscope') find.scope = e.target.value;
+    if (id === 'txscope' || id === 'txaiscope') find.scope = e.target.value;
+    if (id === 'txaidict' && ai.cur) ai.picks[ai.cur] = e.target.checked;
   });
-  lib.addEventListener('change', e => { if (panel === 'words' && e.target.id === 'txscope') find.scope = e.target.value; });
+  lib.addEventListener('change', e => { if (panel === 'words' && (e.target.id === 'txscope' || e.target.id === 'txaiscope')) find.scope = e.target.value; });
   lib.addEventListener('keydown', e => {
     if (panel !== 'words') return;
     const id = e.target.id;
@@ -566,6 +723,8 @@
     applyEdit(i, n, text) { W = S.ai.allWords(); if (!(i >= 0 && n >= 1 && i + n <= W.length)) return false; return applyEdit(i, i + n - 1, String(text ?? '')); },
     find: (q, opts) => { const w = S.ai.allWords(); return C().findMatches(w.map(x => x.w.w), q, opts).map(h => ({ ...h, s: w[h.i].w.s, e: w[h.i + h.n - 1].w.e, text: w.slice(h.i, h.i + h.n).map(x => x.w.w).join(' ') })); },
     suggest, acceptSuggestion, rejectSuggestion,
+    review: () => aiStart(), openReview: () => openBox('ai'), acceptAll: () => aiAll(true), rejectAll: () => aiAll(false),
+    reviewState: () => ({ state: ai.state, step: ai.step, error: ai.error, ok: ai.ok, no: ai.no, stale: ai.stale, res: ai.res && { provider: ai.res.provider, windows: ai.res.windows, ms: ai.res.ms, dropped: ai.res.dropped, warnings: ai.res.warnings } }),
     suggestions: () => sugs.map(g => ({ ...g })),
     clearSuggestions: () => suggest([]),
     dict: { load: async () => { await loadDict(); return dict; }, saveProject: async entries => { const r = await S.api('/api/dict', { entries }); if (!r.error && dict) dict.project = r.project; return r; } },
