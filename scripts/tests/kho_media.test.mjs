@@ -108,6 +108,17 @@ test('video từ Kho: chuỗi khung + audio.m4a như upload(), mục như mediaL
   fs.rmSync(media('kho_quay_cafe_frames'), { recursive: true });
   const again = await K.useFromKho(PROJ, ws, 'BRoll/quay cafe.mp4');
   assert.equal(again.name, 'kho_quay_cafe.mp4'); assert.ok(again.seq.count >= 28);
+  // hai tiến trình cùng dùng một video lần đầu: cùng một file, khung đủ, không file nào bị xoá
+  const v2 = path.join(KHO, 'BRoll', 'hai ben.mp4'); fs.copyFileSync(v, v2);
+  const code = `const K = await import(${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts/kho_media.mjs')).href)}); const ws = K.khoOf(${JSON.stringify(PROJ)}); const it = await K.useFromKho(${JSON.stringify(PROJ)}, ws, 'BRoll/hai ben.mp4'); console.log(it.name + ' ' + it.seq.count);`;
+  const { spawn } = await import('node:child_process');
+  const runOne = () => new Promise(ok => { const p = spawn(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, AVS_HOME: HOME } }); let o = ''; p.stdout.on('data', d => (o += d)); p.on('close', c => ok([c, o.trim()])); });
+  const res = await Promise.all([runOne(), runOne()]);
+  const ok = res.filter(([c]) => c === 0).map(([, o]) => o);
+  assert.ok(ok.length >= 1, JSON.stringify(res));
+  for (const o of ok) assert.match(o, /^kho_hai_ben\.mp4 \d+$/);
+  assert.ok(fs.existsSync(media('kho_hai_ben.mp4'))); assert.ok(!fs.existsSync(media('kho_hai_ben_2.mp4')));
+  assert.ok(fs.readdirSync(media('kho_hai_ben_frames')).filter(f => f.endsWith('.jpg')).length >= 28);
 });
 
 test('route /api/kho/*: liệt kê kèm đã dùng, rel thoát Kho → 400, dùng → mục chèn được', async () => {

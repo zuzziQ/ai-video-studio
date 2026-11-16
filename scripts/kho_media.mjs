@@ -111,7 +111,11 @@ export async function expandVideo(src, fr, { run } = {}) {
     const tmp = path.join(work, '.audio.tmp.m4a');
     try { await ff(['-v', 'error', '-y', '-i', src, '-map', '0:a:0?', '-vn', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', tmp], run); } catch {}
     if (fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, path.join(work, 'audio.m4a')); else fs.rmSync(tmp, { force: true });
-    fs.rmSync(fr, { recursive: true, force: true }); retryBusy(() => fs.renameSync(work, fr));
+    // tiến trình khác (route / job auto_broll) tách xong trước: giữ bản của nó, bỏ bản này
+    const done = () => { try { return fs.readdirSync(fr).some(f => f.endsWith('.jpg')); } catch { return false; } };
+    if (done()) { fs.rmSync(work, { recursive: true, force: true }); return; }
+    fs.rmSync(fr, { recursive: true, force: true });
+    try { retryBusy(() => fs.renameSync(work, fr)); } catch (e) { if (!done()) throw e; fs.rmSync(work, { recursive: true, force: true }); }
   } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw e; }
 }
 
@@ -145,7 +149,11 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
   withFileLock(lock, () => {
     had = usedName(dir, relN);
     if (had) return;
-    const map = readMap(dir); delete map[relN];
+    const map = readMap(dir), old = map[relN];
+    // đang chép khác ổ ở tiến trình khác (sổ đã giữ tên, file đích chưa đổi tên xong): không cấp lại tên đó
+    if (typeof old === 'string' && fs.readdirSync(md).some(f => f.startsWith(old + '.') && f.endsWith('.tmp')))
+      throw bad('File này đang được đưa vào dự án, thử lại sau ít giây', 409);
+    delete map[relN];
     name = mediaName(md, src, new Set(Object.values(map)));
     try { fs.linkSync(src, path.join(md, name)); linked = 'link'; } catch (e) { if (e.code === 'EEXIST') throw e; linked = 'copy'; }
     map[relN] = name; writeJson(mapFile(dir), { version: 1, items: map });
@@ -153,9 +161,12 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
   if (had) {
     const it = mediaItem(dir, had);
     if (it.kind !== 'video' || it.seq?.count) return { ...it, kho: relN, linked: 'reuse' };
-    // khung bị xoá (dọn _frames để gửi máy render): tạo lại
-    await expandVideo(path.join(md, had), path.join(md, had.replace(/\.\w+$/, '') + '_frames'), { run });
-    return { ...mediaItem(dir, had), kho: relN, linked: 'reuse' };
+    // khung bị xoá (dọn _frames để gửi máy render) hoặc tiến trình khác đang tách: tạo lại / chờ bản đó
+    try { await expandVideo(path.join(md, had), path.join(md, had.replace(/\.\w+$/, '') + '_frames'), { run }); }
+    catch (e) { throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
+    const again = mediaItem(dir, had);
+    if (!again.seq?.count) throw bad('Video không có hình để chèn');
+    return { ...again, kho: relN, linked: 'reuse' };
   }
   const dst = path.join(md, name), fr = path.join(md, name.replace(/\.\w+$/, '') + '_frames');
   const undo = () => { fs.rmSync(fr, { recursive: true, force: true }); withFileLock(lock, () => { const m = readMap(dir); if (m[relN] === name) { delete m[relN]; writeJson(mapFile(dir), { version: 1, items: m }); } }); };
@@ -164,8 +175,9 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
     try { await fs.promises.copyFile(src, tmp, fs.constants.COPYFILE_EXCL); retryBusy(() => fs.renameSync(tmp, dst)); }
     catch (e) { fs.rmSync(tmp, { force: true }); undo(); throw bad('Không chép được file từ Kho: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
   }
-  try { if (kindOf(name) === 'video') await expandVideo(dst, fr, { run }); }
-  catch (e) { fs.rmSync(dst, { force: true }); undo(); throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
+  try {
+    if (kindOf(name) === 'video') { await expandVideo(dst, fr, { run }); if (!mediaItem(dir, name).seq?.count) throw Object.assign(new Error('Video không có hình để chèn'), { status: 400 }); }
+  } catch (e) { fs.rmSync(dst, { force: true }); undo(); if (e.status === 400) throw e; throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
   withFileLock(lock, () => addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) }));
   return { ...mediaItem(dir, name), kho: relN, linked };
 }
