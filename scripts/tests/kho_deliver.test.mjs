@@ -2,7 +2,7 @@
 // trùng tên, Kho ở thư mục khác, tắt giao, gói quảng cáo ghi kèm bản giao, Đăng / Lịch đăng thấy video trong Thanh pham/.
 // Không render thật: file mp4 giả, render của batch.mjs giả (như batch_runjob.test.mjs).
 // Chạy: node --test scripts/tests/kho_deliver.test.mjs
-import test, { after } from 'node:test';
+import test, { after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -59,6 +59,30 @@ test('render lại cùng tên: sổ không trả bản giao cũ; bản async + x
   assert.equal(K.fileName('', '.mp4'), 'Thanh pham.mp4');
   assert.equal(K.fileName('😀'.repeat(80), '.mp4'), '😀'.repeat(35) + '.mp4', 'không cắt đôi emoji');
   assert.ok(!fs.readdirSync(r.dir).some(f => f.includes('.part.')), 'không còn file tạm');
+});
+
+test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file tạm, không còn .part, trùng tên ra (2), bản sync và async', async () => {
+  const ws = chung(), d = project(ws, 'Chep Khac O');
+  const a = W(path.join(d, 'out', 'a.mp4'), 'mot'), b = W(path.join(d, 'out', 'b.mp4'), 'hai');
+  const real = fs.linkSync;
+  // liên kết từ out/ sang Kho lỗi như khác ổ; liên kết file tạm → tên thật (cùng thư mục) vẫn chạy
+  const m = mock.method(fs, 'linkSync', (s, t) => { if (!String(s).includes('.part.')) throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }); return real(s, t); });
+  try {
+    const r1 = K.deliverExports(d, [{ src: a, w: 1080, h: 1920 }], { date: DATE });
+    const r2 = await K.deliverExportsAsync(d, [{ src: b, w: 1080, h: 1920 }], { date: DATE });
+    assert.deepEqual([r1.items[0].how, r2.items[0].how], ['copy', 'copy']);
+    assert.deepEqual([r1.items[0].dst, r2.items[0].dst].map(f => path.basename(f)), ['Chep Khac O 9x16.mp4', 'Chep Khac O 9x16 (2).mp4']);
+    assert.deepEqual([r1.items[0].dst, r2.items[0].dst].map(f => fs.readFileSync(f, 'utf8')), ['mot', 'hai']);
+    assert.ok(!fs.readdirSync(r1.dir).some(f => f.includes('.part.')), 'không còn file tạm');
+    assert.equal(K.deliveredOf(d, 'out/a.mp4'), r1.items[0].dst, 'bản chép: sổ so cỡ + mtime của nguồn');
+  } finally { m.mock.restore(); }
+  // ổ không có liên kết cứng nào (FAT/exFAT): file tạm đổi tên sang tên thật
+  const m2 = mock.method(fs, 'linkSync', () => { throw Object.assign(new Error('not supported'), { code: 'EPERM' }); });
+  try {
+    const r3 = K.deliverExports(d, [{ src: a, w: 1080, h: 1920 }], { date: DATE });
+    assert.equal(r3.items[0].how, 'copy'); assert.equal(path.basename(r3.items[0].dst), 'Chep Khac O 9x16 (3).mp4');
+    assert.ok(!fs.readdirSync(r3.dir).some(f => f.includes('.part.')));
+  } finally { m2.mock.restore(); }
 });
 
 test('trùng tên: lần giao sau thành "(2)", không ghi đè bản đã giao', () => {

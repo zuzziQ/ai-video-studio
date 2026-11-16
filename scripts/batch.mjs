@@ -386,6 +386,8 @@ async function renderRow(dir, tl, onProgress, { workers = null, env = null } = {
   if (tl.audio && (tl.audio.voice || tl.audio.music?.length || tl.audio.sfx?.length || tl.clips?.some(c => c.audio))) {
     onProgress(0, 'trộn âm thanh'); await sh(PY, ['-I', '-X', 'utf8', path.join(HERE, 'mix_audio.py'), tlFile]);
   }
+  // render vào .part rồi rename: bản cũ có thể đã liên kết cứng sang Thanh pham/ (S12 M100); rename chỉ thay mục thư mục,
+  // không ghi vào inode của bản đã giao (ffmpeg -y trên chính file đó thì sẽ ghi đè tại chỗ)
   const out = path.join(dir, 'out', `${path.basename(dir)}.mp4`), part = out.replace(/\.mp4$/, '.part.mp4');
   onProgress(0, 'render');
   await sh('node', [path.join(HERE, 'render.mjs'), tlFile, part, ...(workers ? ['--workers', String(workers)] : [])], { env, onLine: l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onProgress(Math.min(.99, +m[1] / +m[2]), 'render'); } });

@@ -10,6 +10,7 @@
 // 54_thanhpham.mjs.
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { AVS_HOME, KINDS, deliveredDir, ensureWorkspace, freeName, inWorkspace, safeName, sub, workspaceFor, workspaceOfProject } from './workspace.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
 
@@ -50,7 +51,8 @@ export function deliverFolder(ws, { folder = '', date = new Date() } = {}) {
 // ".part" rồi linkSync sang tên thật (nguyên tử, không ghi đè); ổ không có liên kết cứng (FAT/exFAT) thì rename khi tên
 // thật còn trống.
 const nameIn = (d, name) => path.join(d, freeName(d, name));
-const partOf = dst => `${dst}.part.${process.pid}`;
+// tên tạm riêng cho từng lần chép: hai lần giao song song trong cùng tiến trình (ảnh bìa + xuất) không dùng chung file tạm
+const partOf = dst => `${dst}.part.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
 function claim(tmp, d, name) {
   for (let i = 0; ; i++) {
     const dst = nameIn(d, name);
