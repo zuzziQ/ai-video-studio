@@ -5,8 +5,10 @@
 // Mặc định: <Videos>/AI Video Studio/<tên thương hiệu> (Windows/Linux ~/Videos, macOS ~/Movies). Kho không bao giờ nằm trong
 // $AVS_HOME, thư mục ẩn của người dùng hay thư mục hệ thống; mọi chỗ ghi phải đi qua inWorkspace()/sub().
 // Một Kho thuộc đúng một thương hiệu (.kho.json): chọn thư mục đang là Kho của thương hiệu khác → 409.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
+import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { AVS_HOME, forbiddenDir } from '../studio/security.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
@@ -232,4 +234,37 @@ export function listWorkspace(ws, { kind = null, depth = 4, max = 5000, scan = 2
   };
   if (fs.existsSync(ws.root)) walk(ws.root, '', 0);
   return out.sort((a, b) => b.mtime - a.mtime).slice(0, max);
+}
+
+/** Mọi Kho đã đăng ký: Kho Chung + Kho của từng thương hiệu trong brands.json (bỏ trùng gốc). Chưa tạo vẫn có, xem .exists. */
+export function allWorkspaces({ home = AVS_HOME(), userHome = os.homedir() } = {}) {
+  const ids = ['', ...(readJson(brandsFile(home))?.brands || []).map(b => b?.id).filter(x => typeof x === 'string' && x)];
+  const seen = new Set();
+  return ids.map(id => workspaceFor(id, { home, userHome })).filter(ws => { const k = key(ws.root); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+/** sha256 (hex) của một file, đọc bằng stream (video vài GB không nạp cả vào RAM). */
+export function hashFile(f) {
+  return new Promise((ok, bad) => {
+    const h = crypto.createHash('sha256'), s = fs.createReadStream(f);
+    s.on('data', d => h.update(d)); s.on('error', bad); s.on('end', () => ok(h.digest('hex')));
+  });
+}
+/**
+ * Lưu một luồng tải lên (req của HTTP, hay mọi Readable) vào thư mục d với tên không trùng (freeName). Ghi ra "<tên>.part"
+ * rồi mới đổi tên: danh sách Kho không thấy file dở, lỗi giữa chừng thì xoá file dở. → đường dẫn file đã lưu.
+ */
+export async function saveUpload(stream, d, name) {
+  fs.mkdirSync(d, { recursive: true });
+  const n = safeName(path.basename(String(name || 'video.mp4'))), part = path.join(d, `.${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}.part`);
+  try {
+    await pipeline(stream, fs.createWriteStream(part, { flags: 'wx' }));
+    for (;;) {
+      const dst = path.join(d, freeName(d, n));
+      try { fs.linkSync(part, dst); return dst; } catch (e) {
+        if (e.code === 'EEXIST') continue;
+        if (fs.existsSync(dst)) continue; // ổ không có liên kết cứng (exFAT…): đổi tên, nhưng không đè file vừa xuất hiện
+        fs.renameSync(part, dst); return dst;
+      }
+    }
+  } finally { fs.rmSync(part, { force: true }); }
 }

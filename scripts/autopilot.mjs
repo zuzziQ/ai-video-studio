@@ -1,5 +1,5 @@
 // Tự lái (autopilot): one raw video → finished videos + cover + publish texts, following a channel profile (references/autopilot.md).
-// usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
+// usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--brand <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
 //        [--qc-override "<lý do>"]   (QC chặn xuất vì lỗi claim / nguyên bản: ghi lý do rồi xuất tiếp; lỗi chính sách thì không)
 //        node scripts/autopilot.mjs --steps            (list step ids)
 // Chain (each optional step can be turned off in the profile; a failing optional step logs a warning and the chain goes on):
@@ -9,6 +9,8 @@
 // QC gate (scripts/export_gate.mjs): ad issues of high severity left after QC stop the chain at the qc step (step 'error' + blocked:true, run state 'blocked',
 // line "LỖI: … CHẶN XUẤT …", exit 1); re-running repeats QC.
 // Output: progress "@@ <0..1> <text>", "PROJECT <dir>" once, and finally "RESULT {json}"; <project>/out/summary.json.
+// S12 M98: dự án mới ở <Kho>/Du an/<tên>-<mã> (Kho của --brand, không có thì thương hiệu của hồ sơ, không có nữa thì Kho Chung);
+// bước deliver đưa video, ảnh bìa, .srt, nội dung đăng vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng), --out vẫn chép thêm như cũ.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +23,7 @@ import { AVS_HOME, getProfile, effectiveProfile } from './profile.mjs';
 import { notify } from './notify.mjs';
 import { findChrome } from './platform.mjs';
 import { readGate, recordOverride, gateText } from './export_gate.mjs';
+import { workspaceFor, ensureWorkspace, workspaceOfProject, sub, deliver as deliverToKho, safeName } from './workspace.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const S = f => path.join(SKILL, 'scripts', f);
@@ -49,11 +52,15 @@ const slug = s => String(s || 'video').normalize('NFD').replace(/[̀-ͯ]/g, '').
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const r2 = v => Math.round(v * 100) / 100;
 
-// Deterministic project folder for a video, so re-running the same file resumes it.
-export function projectDirFor(video) {
+// Deterministic project folder for a video, so re-running the same file resumes it: <Kho>/Du an/<tên video>-<mã>.
+// A run started before S12 lives in $AVS_HOME/autopilot/projects/<slug>-<mã>: keep resuming it there.
+export function projectDirFor(video, ws = workspaceFor('')) {
   const st = fs.statSync(video);
   const h = crypto.createHash('md5').update(path.resolve(video) + ':' + st.size).digest('hex').slice(0, 6);
-  return path.join(AVS_HOME, 'autopilot', 'projects', `${slug(path.basename(video, path.extname(video)))}-${h}`);
+  const old = path.join(AVS_HOME, 'autopilot', 'projects', `${slug(path.basename(video, path.extname(video)))}-${h}`);
+  if (fs.existsSync(old)) return old;
+  ensureWorkspace(ws);
+  return path.join(sub(ws, 'projects', { mkdir: true }), `${safeName(path.basename(video, path.extname(video))).slice(0, 60)}-${h}`);
 }
 
 let CUR = null; // running child (killed on SIGTERM)
@@ -167,13 +174,15 @@ async function exportProject(dir, { quality = '1080', aspects = [] }, say) {
 }
 
 // ---------- main ----------
-export async function autopilot(input, { profile: profId, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
+export async function autopilot(input, { profile: profId, brand: brandArg, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
   const t00 = Date.now();
   const abs = path.resolve(input.replace(/^~(?=\/)/, os.homedir()));
   if (!fs.existsSync(abs)) throw new Error(`Không thấy ${abs}`);
   const isProj = fs.statSync(abs).isDirectory() && fs.existsSync(path.join(abs, 'timeline.json'));
   if (!isProj && !(fs.statSync(abs).isFile() && VIDEO.test(abs))) throw new Error('Chỉ nhận tệp video (mp4, mov, m4v, mkv…) hoặc thư mục dự án có timeline.json');
-  const dir = path.resolve(projArg || (isProj ? abs : projectDirFor(abs)));
+  // Kho của dự án mới: --brand (thư mục canh của một Kho), không có thì thương hiệu của hồ sơ
+  const khoOf = () => workspaceFor(typeof brandArg === 'string' ? brandArg : getProfile(profId).brand || '');
+  const dir = path.resolve(projArg || (isProj ? abs : projectDirFor(abs, khoOf())));
   const stFile = path.join(dir, '.studio/autopilot.json');
   let st = rd(stFile);
   const prof0 = getProfile(profId || st?.profile);
@@ -367,13 +376,21 @@ export async function autopilot(input, { profile: profId, out: outDir, project: 
         publish: (res.publish || []).map(f => P(f)), qc: res.qc || null, ai: res.ai || null, fillers: res.fillers || null, broll: res.broll || null, sfx: res.sfx || null,
         schedule_slot: prof.slot || null,
       };
+      // Thành phẩm vào <Kho>/Thanh pham/<YYYY-MM>/ (Kho chứa dự án, không thì theo brand kit của dự án)
+      const ws = workspaceOfProject(dir, rd(P('timeline.json')));
+      const give = (src, base) => { if (!src || !fs.existsSync(src)) return; try { files.push(deliverToKho(ws, src, { name: base })); } catch (e) { console.log(`! không đưa được ${base} vào Thanh pham: ${e.message}`); } };
+      for (const v of summary.videos) give(v.out, `${name} ${v.aspect.replace(':', 'x')}.mp4`);
+      give(summary.cover, `${name} - ảnh bìa.jpg`); give(summary.srt, `${name}.srt`);
+      if (summary.publish.length) { fs.writeFileSync(P('out/noi-dung-dang.txt'), summary.publish.filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n\n-----\n\n')); give(P('out/noi-dung-dang.txt'), `${name} - nội dung đăng.txt`); }
+      const copies = []; // --out / thư mục "Đã xong" cũ: chép thêm, chỉ là kết quả chính khi Thanh pham không nhận được gì
       if (st.out) {
         fs.mkdirSync(st.out, { recursive: true });
-        const cp = (src, base) => { if (!src || !fs.existsSync(src)) return; const dst = path.join(st.out, base); fs.copyFileSync(src, dst); files.push(dst); };
+        const cp = (src, base) => { if (!src || !fs.existsSync(src)) return; const dst = path.join(st.out, base); fs.copyFileSync(src, dst); copies.push(dst); };
         for (const v of summary.videos) cp(v.out, `${name} ${v.aspect.replace(':', 'x')}.mp4`);
         cp(summary.cover, `${name} - ảnh bìa.jpg`); cp(summary.srt, `${name}.srt`);
-        if (summary.publish.length) { const txt = summary.publish.filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n\n-----\n\n'); fs.writeFileSync(path.join(st.out, `${name} - nội dung đăng.txt`), txt); files.push(path.join(st.out, `${name} - nội dung đăng.txt`)); }
+        if (summary.publish.length) { const txt = summary.publish.filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n\n-----\n\n'); fs.writeFileSync(path.join(st.out, `${name} - nội dung đăng.txt`), txt); copies.push(path.join(st.out, `${name} - nội dung đăng.txt`)); }
       }
+      if (!files.length) files.push(...copies);
       summary.delivered = files; summary.steps.deliver = { ...summary.steps.deliver, state: 'done', msg: `${summary.videos.length} video` };
       summary.seconds = Math.round((Date.now() - new Date(st.started).getTime()) / 1000);
       wr(P('out/summary.json'), summary);
@@ -381,7 +398,7 @@ export async function autopilot(input, { profile: profId, out: outDir, project: 
       res.summary = P('out/summary.json'); res.delivered = files;
       const warn = Object.values(st.steps).filter(s => s.state === 'warn').length;
       await notify('Tự lái xong', `${name}: ${summary.videos.length} video${warn ? ` · ${warn} bước có cảnh báo` : ''}`);
-      return `${summary.videos.length} video${st.out ? ` → ${st.out}` : ''}`;
+      return `${summary.videos.length} video → ${files.length ? path.dirname(files[0]) : st.out || P('out')}`;
     },
   };
 
@@ -425,8 +442,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { try { CUR?.kill('SIGTERM'); } catch {} process.exit(130); });
   if (args.includes('--steps')) { for (const [id, l, , r] of STEPS) console.log(`${id.padEnd(8)} ${l}${r ? ' (bắt buộc)' : ''}`); process.exit(0); }
   const input = args.find((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && !['--restart'].includes(args[i - 1])));
-  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
-  autopilot(input, { profile: opt('--profile'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
+  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--brand <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
+  autopilot(input, { profile: opt('--profile'), brand: opt('--brand'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
     .then(() => process.exit(0))
     .catch(e => { console.error('LỖI: ' + e.message); process.exit(1); });
 }

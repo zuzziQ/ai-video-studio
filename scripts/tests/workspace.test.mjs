@@ -150,3 +150,13 @@ test('workspaceOfProject / deliver / writeSource', () => {
 });
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
+
+test('M98: allWorkspaces gồm Kho Chung + từng thương hiệu, không trùng gốc', () => {
+  const all = W.allWorkspaces(opt);
+  assert.ok(all.some(w => w.brand === '') && all.some(w => w.brand === 'nha-dep-ab12'));
+  assert.equal(new Set(all.map(w => w.root.toLowerCase())).size, all.length);
+});
+test('M98: hashFile = sha256 đọc bằng stream', async () => {
+  const f = path.join(TMP, 'h.bin'); fs.writeFileSync(f, 'abc');
+  assert.equal(await W.hashFile(f), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+});
