@@ -4,13 +4,14 @@
 // it slides in, closes by itself after 3 s (the count pauses while the pointer or keyboard focus is on it), never blocks
 // the editor and never takes focus. Close button, or Esc while focus is inside. The chip reopens it (then it stays until
 // closed). Element id stays `author`: 02_onboarding.js waits for #author to be gone before opening the first-run guide.
+// z-index 55 sits above #modal (50): a dialog that opens on start (missing frames, QC) used to cover the card for its 3 s.
 'use strict';
 (() => {
   const AUTHOR = 'Nguyễn Tất Kiểm', COURSE = 'https://nguyentatkiem.com.vn/aiplusntk/', SITE = 'https://taki.vn';
   const SHOW_MS = 3000;
   const css = document.createElement('style');
   css.textContent = `
-  #author { position: fixed; right: var(--space-4); bottom: calc(var(--tlh, 300px) + var(--space-4)); z-index: 40; width: min(320px, calc(100vw - 2 * var(--space-4)));
+  #author { position: fixed; right: var(--space-4); bottom: calc(var(--tlh, 300px) + var(--space-4)); z-index: 55; /* above #modal (50), below .toast (60): a dialog opened at start must not blur the credit */ width: min(320px, calc(100vw - 2 * var(--space-4)));
     display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-3);
     background: rgb(var(--color-surface-raised)); color: rgb(var(--color-fg)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card);
     box-shadow: var(--shadow-raised); overflow: hidden; animation: au-in var(--duration-slow) var(--ease-standard); }
