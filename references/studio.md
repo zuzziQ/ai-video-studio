@@ -11,7 +11,13 @@ Cần Node ≥ 18, ffmpeg, Chrome (để xuất video), và `scripts/.venv` (whi
 
 ## Màn hình (v2 — giao diện tối kiểu editor chuyên nghiệp)
 Code: `studio/index.html`, `studio.css` (theme tối, accent tím), `clips.js` (track chính + ripple), `library.js` (thanh icon trái + thư viện), `studio.js` (preview, inspector, timeline, phát, lưu/xuất). Icon: tabler-icons webfont (jsdelivr).
-- **Thanh trên**: tên dự án + trạng thái Đã lưu / Chưa lưu, hoàn tác ↶ / làm lại ↷, nhãn khổ hình (9:16 / 16:9), **Vừa khung** (fit preview + timeline), **Lịch sử** (60 bản lưu trong `<dự án>/.studio/history/`), **Video mới**, **Lưu** (⌘S), **Xuất** (nút chính).
+- **Thanh trên** (M82, `features/01_workflow.js`): logo + tên dự án + trạng thái Đã lưu / Chưa lưu, hoàn tác ↶ / làm lại ↷, **thanh 5 bước** ở giữa (1 Chuẩn bị · 2 Nguồn · 3 Dựng · 4 Kiểm tra · 5 Xuất và đăng), menu **⋯**, **Lưu** (⌘S), **Xuất** (nút chính duy nhất). Màn dưới 1180 px chỉ bước đang mở hiện chữ.
+  - Bấm một bước: thanh icon trái chỉ hiện công cụ của bước đó (tối đa 7, phần còn lại trong **Thêm…**) và tự mở công cụ đầu. Bước đang mở lưu theo máy (`localStorage` `avs.step`). Mở một panel từ chỗ khác (liên kết, nút) thì thanh bước tự chuyển theo.
+  - Bước: ① Thương hiệu, Sản phẩm, Media · ② Video mới, Video dài, Lời thoại, AI (cắt lỗi nói) · ③ Tự lái, AI dựng, Mẫu, Chữ, Âm thanh, Hiệu ứng, Sticker, Thêm… (Chuyển cảnh, Bộ lọc, B-roll AI, Tự động, Âm thanh+, Lồng tiếng) · ④ Kiểm tra (thẻ Kiểm tra chất lượng + Nhiều phiên bản của `16_qc`), Thành phần · ⑤ Xuất, Đăng, Lịch đăng, Hàng loạt.
+  - **⋯**: Chế độ Cơ bản / Chuyên nghiệp, **Lịch sử** (60 bản lưu trong `<dự án>/.studio/history/`), **Vừa khung** (fit preview + timeline), **Mô hình & giọng**, đổi nhanh **Thương hiệu**, **Mở thư mục dự án** (app Mac), **Cài đặt…**.
+  - **Cài đặt** (trang riêng, mở từ ⋯): Giao diện (chọn chế độ), Mô hình & giọng, Hiệu năng, Agent, Tạo style.
+  - **Chế độ Cơ bản / Chuyên nghiệp** (`avs.uiLevel`, mặc định hằng `DEFAULT_LEVEL` = Chuyên nghiệp cho tới khi chốt `C13`): Cơ bản ẩn tab Keyframe, Mặt nạ, Nâng cao (JSON) và panel Agent, Tạo style, Hiệu năng, Thành phần (panel đang mở vẫn hiện).
+  - Nút cũ **Video mới**, **Tự lái**, **AI dựng giúp**, **Đăng** và nhãn khổ hình rời header (phần tử vẫn còn trong DOM, giấu ở `#wf-park`): thẻ của bước ②/③/⑤ bấm hộ chúng; khổ hình vẫn ở thanh dưới preview.
 - **Thanh icon trái** mở thư viện:
   - **Mẫu**: gallery từ `GET /api/templates` (lọc theo BĐS, Khoá học, Review, Chia sẻ, Tin tức, Bán hàng, AI, Khác + ô tìm). Rê chuột = phát preview mp4. **Dùng mẫu** gọi `win.applyTemplate(TL, tpl, CAP, title)` của engine (`packs/core.js`): gói, kiểu phụ đề, brand (gộp, giá trị của người dùng thắng), theme, nhạc, fx, cảnh của recipe (`_recipe`) + cảnh của mẫu (`_tpl`, dời theo `base_dur`). Dùng lại mẫu khác sẽ thay chứ không chồng. **Lưu thành mẫu** → `POST /api/templates/save` → `templates/user/<id>.json` + ảnh bìa `templates/previews/<id>.jpg`.
   - **Media**: “Của tôi” (tải lên bằng nút hoặc kéo thả, `/api/upload`) — bấm **Track chính** để chèn ảnh/video làm clip vào chỗ nối gần playhead nhất (phần sau tự dồn), hoặc **Lớp phủ** để chèn cảnh `photo` như cũ; file nhạc → nhạc nền. “B-roll động”: gõ chủ đề + Enter, bấm để chèn `media_card`.
@@ -100,7 +106,9 @@ Render mỗi item `make(2)` tại 2,7 s lên footage thật → `studio/thumbs/<
 Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js` (giao diện) theo thứ tự tên.
 - Route: `export default ctx => async (req, res, p, u) => true|false`. `ctx` có `project, job, startJob, run, json, body, save, readProject, P, PY, SKILL`.
 - Feature: dùng đối tượng toàn cục `Studio`: `TL, CAP, addPanel(id, icon, tên, fn), addTopButton(html, fn), addInspectorTab(c => [key, nhãn, html]), onReady, reload, changed, pushUndo, api, pollJob, toast, modal`.
+- `addPanel(id, icon, tên, fn, opts)` và `addTopButton(html, fn, opts)` nhận `opts = { step, level }` không bắt buộc (M82): `step` là `prep | source | build | check | ship | settings`, `level` là `basic | pro` (`pro` ẩn ở chế độ Cơ bản). Panel không có `opts` và không có trong bảng `PANELS` của `01_workflow.js` rơi vào **Thêm…** của bước Dựng. Nút trên header không có `opts.step` vào menu ⋯; có `opts.step` thì thành một mục trên thanh trái của bước đó (thẻ giải thích + nút bấm hộ). Hook nội bộ: `Studio._popts`, `Studio._top` (gọi sau `addTopButton`), `Studio._rail` (gọi sau `renderRail`).
 - Tính năng có sẵn:
+  - `01_workflow`: bố cục theo 5 bước, menu ⋯, trang Cài đặt, chế độ Cơ bản / Chuyên nghiệp (xem mục Màn hình).
   - `18_schedule`: Lịch đăng + Kết nối YouTube (`references/publish-schedule.md`).
   - `20_ai`: AI dựng giúp, Cắt lỗi nói, Lời thoại.
   - `28_engines`: nút **Mô hình & giọng**: nhà cung cấp LLM cho việc chỉ có chữ (Claude/Ollama, `references/llm.md`) và giọng VieNeu (`references/voice.md`).

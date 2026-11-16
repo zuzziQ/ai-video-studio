@@ -30,6 +30,7 @@ const ANIM_LIST = [['pop', 'Bật'], ['fade', 'Mờ dần'], ['slide_l', 'Trư�
 
 function renderRail() {
   $('#rail').innerHTML = RAIL.map(([k, ic, name]) => `<button data-p="${k}" class="${panel === k ? 'on' : ''}"><i class="ti ${ic}"></i><span>${name}</span></button>`).join('');
+  for (const h of window.Studio?._rail || []) h($('#rail')); // M82: 01_workflow.js filters the rail by step
 }
 $('#rail').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) openPanel(b.dataset.p); });
 function openPanel(p) {
