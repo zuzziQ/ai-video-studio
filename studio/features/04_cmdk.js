@@ -62,9 +62,9 @@
 
   const css = document.createElement('style');
   css.textContent = `
-  #cmdk { position: fixed; inset: 0; z-index: 90; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; background: color-mix(in srgb, var(--bg0) 66%, transparent); }
+  #cmdk { position: fixed; inset: 0; z-index: 90; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; background: rgb(var(--color-scrim) / .66); }
   #cmdk[hidden] { display: none; }
-  #cmdk .ck-box { width: min(560px, 100%); max-height: 64vh; display: flex; flex-direction: column; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-overlay, none); overflow: hidden; }
+  #cmdk .ck-box { width: min(560px, 100%); max-height: 64vh; display: flex; flex-direction: column; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-overlay); overflow: hidden; }
   #cmdk .ck-in { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); flex: none; }
   #cmdk .ck-in .ti { color: var(--tx3); font-size: 18px; }
   #cmdk .ck-in input { flex: 1; min-width: 0; height: 48px; border: 0; background: transparent; font-size: 15px; color: var(--tx); outline: none; box-shadow: none; padding: 0; }
