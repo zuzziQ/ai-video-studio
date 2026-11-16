@@ -3,7 +3,7 @@
 // công cụ của bước đang mở (tối đa 7 + "Thêm…"); menu ⋯ gom việc phụ; chế độ Cơ bản / Chuyên nghiệp lưu theo máy.
 // Không bỏ tính năng nào: panel/nút chưa gắn bước rơi vào "Thêm…" của bước Dựng, nút trên header chưa gắn bước vào menu ⋯.
 // Gắn bước/mức: Studio.addPanel(id, icon, name, fn, { step, level }) / Studio.addTopButton(html, fn, { step, level }),
-// hoặc bảng PANELS / TOPS bên dưới cho panel có sẵn. Chỉ dùng biến CSS có sẵn (--bg*, --tx*, --acc*, --line*, --r, --rs).
+// hoặc bảng PANELS / TOPS bên dưới cho panel có sẵn. M84: bảng GROUPS gộp việc trùng thành một mục có tab. Chỉ dùng biến CSS có sẵn (--bg*, --tx*, --acc*, --line*, --r, --rs).
 'use strict';
 (() => {
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc;
@@ -16,8 +16,8 @@
   const PANELS = {
     brands: ['prep', 1], products: ['prep', 2], media: ['prep', 3],
     'wf-new': ['source', 1], longform: ['source', 2], words: ['source', 3], ai: ['source', 4],
-    autopilot: ['build', 1], 'wf-aihelp': ['build', 2], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], fx: ['build', 6], sticker: ['build', 7],
-    trans: ['build', 8], filter: ['build', 9], aibroll: ['build', 10], autofill: ['build', 11], audioplus: ['build', 12], dub: ['build', 13],
+    autopilot: ['build', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 1], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
+    aibroll: ['build', 6], 'wf-broll': ['build', 6], fx: ['build', 7], sticker: ['build', 8], trans: ['build', 9], filter: ['build', 10], dub: ['build', 11],
     'wf-qc': ['check', 1], comp: ['check', 2, 'pro'],
     'wf-export': ['ship', 1], 'wf-publish': ['ship', 2], schedule: ['ship', 3], batch: ['ship', 4],
     'wf-mode': ['settings', 1], 'wf-engines': ['settings', 2], perf: ['settings', 3, 'pro'], agent: ['settings', 4, 'pro'], stylelab: ['settings', 5, 'pro'],
@@ -25,6 +25,14 @@
   // nút header (id) -> 'park' (giấu, panel của bước làm thay) | 'menu' (vào ⋯). Nút không có ở đây và không có opts.step -> 'menu'.
   const TOPS = { 'ap-topbtn': 'park', aibtn: 'park', 'pub-btn': 'park', newproj: 'park', aspect: 'park', 'eng-btn': 'menu', 'app-reveal': 'menu', 'bk-sw': 'menu', fitall: 'menu' };
   const PRO_TABS = ['kf', 'mask', 'json']; // tab inspector ẩn ở Cơ bản: Keyframe, Mặt nạ, Nâng cao (JSON)
+  // M84: việc trùng gộp thành một mục trên thanh trái + dải tab trên panel. Panel thành viên vẫn mở được bằng id
+  // (#rail [data-p=x] còn trong DOM, chỉ ẩn); mục trên thanh trái mở lại tab dùng gần nhất.
+  const GROUPS = [
+    { id: 'quick', name: 'Dựng nhanh AI', short: 'Dựng AI', icon: 'ti-wand', tabs: [['autopilot', 'Tự lái'], ['wf-aihelp', 'AI dựng giúp'], ['autofill', 'Tự động']] },
+    { id: 'audio', name: 'Âm thanh', icon: 'ti-music', tabs: [['audio', 'Nhạc & SFX'], ['audioplus', 'Giọng & trộn']] },
+    { id: 'broll', name: 'B-roll', icon: 'ti-movie', tabs: [['aibroll', 'Kho & AI'], ['wf-broll', 'B-roll động']] },
+  ];
+  const groupOf = id => GROUPS.find(g => g.tabs.some(t => t[0] === id));
 
   const store = {
     get(k, d) { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } },
@@ -70,6 +78,13 @@
   .wf-card button { align-self: flex-start; }
   .wf-card.pick { cursor: pointer; } .wf-card.pick:hover { border-color: var(--line3); } .wf-card.pick.on { border-color: var(--acc-line); background: var(--acc-soft); }
   .wf-hint { color: var(--tx3); font-size: 11px; line-height: 1.5; margin: 0 0 8px; }
+  #wf-tabs { display: flex; gap: 4px; padding: 0 12px 8px; flex: none; overflow-x: auto; }
+  #wf-tabs[hidden] { display: none; }
+  #wf-tabs button { height: 28px; padding: 0 12px; font-size: 12px; background: transparent; border-color: var(--line); color: var(--tx2); white-space: nowrap; }
+  #wf-tabs button:hover { background: var(--bg3); color: var(--tx); }
+  #wf-tabs button.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
+  #libbody .seg [data-mtab="broll"] { display: none; } /* B-roll động đã có tab riêng trong mục B-roll */
+  .wf-bq { display: flex; gap: 8px; margin-bottom: 8px; } .wf-bq input { flex: 1; min-width: 0; height: 32px; } .wf-bq button { height: 32px; }
   body.wf-basic .itabs ${PRO_TABS.map(k => `[data-itab="${k}"]`).join(', body.wf-basic .itabs ')} { display: none; }
   @media (max-width: 1180px) { #wf-steps button:not(.on) span { display: none; } #wf-steps button:not(.on) { padding: 0 6px; } #wf-steps .ln { width: 8px; } }
   `;
@@ -151,7 +166,8 @@
     if (meta(panel).step !== step) step = meta(panel).step; // panel mở từ nơi khác (nút, liên kết): đi theo bước của panel
     store.set('step', step);
     const btns = [...rail.querySelectorAll('button[data-p]')];
-    const mine = btns.filter(b => { const m = meta(b.dataset.p); return m.step === step && (level === 'pro' || m.level === 'basic' || b.dataset.p === panel); })
+    const lead = groupLeads(btns);
+    const mine = btns.filter(b => { const m = meta(b.dataset.p), g = groupOf(b.dataset.p); return m.step === step && (!g || lead[g.id] === b) && (level === 'pro' || m.level === 'basic' || b.dataset.p === panel); })
       .sort((a, b) => { const x = meta(a.dataset.p), y = meta(b.dataset.p); return (x.known === y.known ? 0 : x.known ? -1 : 1) || x.order - y.order; });
     for (const b of btns) b.hidden = true;
     const shown = mine.slice(0, MAX_RAIL); overflow = mine.slice(MAX_RAIL);
@@ -163,8 +179,33 @@
       m.innerHTML = `<i class="ti ti-dots-circle-horizontal"></i><span>Thêm…</span>`; rail.appendChild(m);
     }
     for (const b of nav.querySelectorAll('[data-step]')) b.classList.toggle('on', b.dataset.step === step);
+    renderTabs();
   }
   S._rail.push(filterRail);
+  // mỗi nhóm: một nút đại diện (tab đang mở, hoặc tab dùng gần nhất), đổi nhãn/icon thành tên nhóm
+  function groupLeads(btns) {
+    const lead = {};
+    for (const g of GROUPS) {
+      const ids = g.tabs.map(t => t[0]).filter(id => btns.some(b => b.dataset.p === id));
+      if (!ids.length) continue;
+      const pick = ids.includes(panel) ? panel : ids.includes(store.get('grp.' + g.id, '')) ? store.get('grp.' + g.id, '') : ids[0];
+      const b = btns.find(x => x.dataset.p === pick);
+      b.innerHTML = `<i class="ti ${g.icon}"></i><span>${esc(g.short || g.name)}</span>`; b.title = g.name; b.classList.toggle('on', ids.includes(panel));
+      lead[g.id] = b;
+      for (const id of ids) PANEL_TITLE[id] = g.name;
+    }
+    return lead;
+  }
+  const tabsEl = document.createElement('div'); tabsEl.id = 'wf-tabs'; tabsEl.setAttribute('role', 'tablist'); tabsEl.hidden = true;
+  $('#lib .libhead')?.after(tabsEl);
+  function renderTabs() {
+    const g = groupOf(panel);
+    tabsEl.hidden = !g; if (!g) return;
+    store.set('grp.' + g.id, panel);
+    const have = new Set(RAIL.map(r => r[0]));
+    tabsEl.innerHTML = g.tabs.filter(([id]) => have.has(id)).map(([id, l]) => `<button role="tab" aria-selected="${id === panel}" data-gt="${esc(id)}" class="${id === panel ? 'on' : ''}">${esc(l)}</button>`).join('');
+  }
+  tabsEl.addEventListener('click', e => { const b = e.target.closest('[data-gt]'); if (b && b.dataset.gt !== panel) openPanel(b.dataset.gt); });
   $('#rail').addEventListener('click', e => {
     const m = e.target.closest('[data-wf="more"]'); if (!m) return;
     if ($('#wf-pop')) return $('#wf-pop').remove();
@@ -178,7 +219,12 @@
     return RAIL.map(r => r[0]).filter(id => { const m = meta(id); return m.step === st && (level === 'pro' || m.level === 'basic'); })
       .sort((a, b) => meta(a).order - meta(b).order)[0];
   }
-  function goStep(st) { step = st; const id = firstOf(st); if (id) openPanel(id); else renderRail(); }
+  function goStep(st) {
+    step = st; let id = firstOf(st);
+    const g = id && groupOf(id), last = g && store.get('grp.' + g.id, '');
+    if (g) id = RAIL.some(r => r[0] === last) ? last : g.tabs.map(t => t[0]).find(x => RAIL.some(r => r[0] === x)) || id;
+    if (id) openPanel(id); else renderRail();
+  }
   nav.addEventListener('click', e => { const b = e.target.closest('[data-step]'); if (b) goStep(b.dataset.step); });
 
   // ---------- panel do bước thêm: thẻ giải thích + nút làm việc ----------
@@ -192,6 +238,31 @@
     'Chọn một video quay sẵn: Studio tách lời thoại, làm phụ đề và mở dự án mới để dựng.', 'Chọn video', clickEl('newproj', 'Chưa có nút Video mới')));
   S.addPanel('wf-aihelp', 'ti-wand', 'AI dựng', () => card('ti-wand', 'AI dựng giúp',
     'Claude đọc lời thoại rồi đặt graphic, phụ đề, nhạc và hiệu ứng âm thanh. Bạn xem lại và sửa từng thứ sau.', 'Mở AI dựng giúp', clickEl('aibtn', 'Tính năng AI chưa sẵn sàng')));
+  // B-roll động (9.080 media_card, GET /api/broll) — cùng dữ liệu với tab "B-roll động" cũ của Media, nay nằm trong mục B-roll
+  let bq = '', bres = [], bbusy = false;
+  const r2 = v => Math.round(v * 100) / 100;
+  function renderBroll() {
+    $('#libbody').innerHTML = `<div class="wf-bq"><input id="wf-bq" placeholder="Chủ đề, ví dụ: tiền, AI, nhà đẹp" value="${esc(bq)}"><button data-wf="bq"><i class="ti ti-search"></i>Tìm</button></div>
+      <p class="wf-hint">${bbusy ? 'Đang tìm…' : 'Chữ và hình hoạt hình dựng sẵn. Bấm một mục để chèn tại đầu phát.'}</p>
+      <div class="bres">${bres.map((b, i) => `<div data-wfb="${i}"><i class="ti ti-movie"></i><div><b>${esc(b.text || b.id)}</b><small>${esc(b.template)} · ${esc(b.id)}</small></div><i class="ti ti-plus add"></i></div>`).join('')}</div>`;
+    const inp = $('#wf-bq'); inp.onkeydown = e => { if (e.key === 'Enter') findBroll(); }; inp.oninput = () => (bq = inp.value);
+  }
+  async function findBroll() {
+    if (!bq.trim()) return S.toast('Gõ chủ đề trước');
+    bbusy = true; renderBroll();
+    try { const r = await S.api('/api/broll?q=' + encodeURIComponent(bq.trim())); bres = Array.isArray(r) ? r : []; } catch { bres = []; }
+    bbusy = false; if (panel === 'wf-broll') { renderBroll(); $('#wf-bq')?.focus(); }
+    if (!bres.length) S.toast('Không thấy b-roll hợp chủ đề này');
+  }
+  $('#libbody').addEventListener('click', e => {
+    if (panel !== 'wf-broll') return;
+    if (e.target.closest('[data-wf="bq"]')) return findBroll();
+    const b = e.target.closest('[data-wfb]'), it = b && bres[+b.dataset.wfb]; if (!it || !S.TL) return;
+    S.pushUndo(); const T = S.T;
+    const sc = { type: 'media_card', t0: r2(T), t1: r2(Math.min(S.TL.duration, T + 3)), screen: { broll: { id: it.id, ...(it.text ? { text: it.text } : {}) } } };
+    S.TL.scenes.push(sc); S.changed(); S.select(S.compOf(sc));
+  });
+  S.addPanel('wf-broll', 'ti-movie', 'B-roll động', renderBroll);
   S.addPanel('wf-qc', 'ti-shield-check', 'Kiểm tra', () => {
     // thẻ "Kiểm tra chất lượng" và "Nhiều phiên bản" của 16_qc.js tự chèn vào panel có [data-ai="open"]
     $('#libbody').innerHTML = `<p class="wf-hint">Soi lỗi trước khi xuất: chữ tràn khung, graphic che mặt, phụ đề quá dài, đoạn trống, âm lượng.</p><span data-ai="open" hidden></span>`;
@@ -217,6 +288,8 @@
   }
   const insp = $('#insp'); if (insp) new MutationObserver(fixInspTab).observe(insp, { childList: true });
 
+  // cho 03_nextstep / 04_cmdk: đổi bước, tra bước/nhóm của panel
+  S.workflow = { STEPS, SETTINGS, goStep, meta, groupOf, setLevel, get step() { return step; }, get level() { return level; }, openMore, closeMore };
   S.onReady(() => { if (want && meta(panel).step !== want) goStep(want); else renderRail(); });
   renderRail();
 })();
