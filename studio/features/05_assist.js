@@ -1,7 +1,8 @@
 // Lớp trợ lý LLM phía giao diện (ROADMAP M91, references/assist.md). Route: studio/routes/05_assist.mjs, logic: scripts/assist.mjs.
 //   Studio.assist(name, input, { onStep(step, progress) }) → Promise<kết quả {fields, warnings, provider, ms, …}>; lỗi ném Error
 //     với đúng thông điệp của server (thiếu claude, chưa đăng nhập, quá giờ… lấy nguyên văn từ scripts/llm.mjs).
-//   Studio.assistPanel({ name, label, hint, input, current, onAccept, filter }) → { mount(el), start(), state }
+//   Studio.assistPanel({ name, label, hint, input, current, onAccept, filter, pick, okLabel }) → { mount(el), start(), state }
+//     pick: true khi các đề xuất là phương án thay nhau (M92: chữ, ảnh bìa): không có "Nhận tất cả", nhận một thì bỏ các phương án còn lại.
 //     Ô đề xuất dùng chung: nút gọi AI → tiến độ (Huỷ) → danh sách đề xuất từng trường với Nhận / Bỏ / Nhận tất cả.
 //     Trạng thái nằm trong đối tượng trả về nên phần gọi vẽ lại giao diện thì chỉ cần mount(el) lại. Không tự ghi đè gì:
 //     chỉ gọi onAccept(field) khi người dùng bấm Nhận.
@@ -91,7 +92,7 @@
       } else if (st.state === 'done') {
         const fs = fields(), open = fs.filter(f => !st.mark[f.id]);
         el.innerHTML = `<div class="as-top"><b><i class="ti ti-sparkles"></i> Đề xuất của AI</b><small>${esc(PROV[st.res.provider] || st.res.provider || '')} · ${Math.max(1, Math.round((st.res.ms || 0) / 1000))} s</small><span class="grow"></span>
-          ${open.length ? '<button class="primary mini" data-as="all"><i class="ti ti-checks"></i> Nhận tất cả</button>' : ''}</div>
+          ${open.length && !o.pick ? '<button class="primary mini" data-as="all"><i class="ti ti-checks"></i> Nhận tất cả</button>' : ''}</div>
           ${st.res.reason ? `<p class="as-reason">${esc(st.res.reason)}</p>` : ''}
           ${st.res.warnings?.length ? `<ul class="as-warn">${st.res.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
           <div class="as-rows">${fs.map(f => {
@@ -99,7 +100,7 @@
             return `<div class="as-row ${m || ''}" data-id="${esc(f.id)}"><div class="as-k">${esc(f.label)}</div>
               <div class="as-v">${valueHtml(f)}${f.note ? `<small class="as-note ${sev(f)}">${esc(f.note)}</small>` : ''}${cur && !m ? `<small class="as-cur">Hiện tại: ${esc(cur)}</small>` : ''}</div>
               <div class="as-a">${m === 'done' ? '<span class="as-ok"><i class="ti ti-check"></i> Đã nhận</span>' : m === 'skip' ? '<span class="as-no">Đã bỏ</span>'
-                : `<button class="mini" data-ok="${esc(f.id)}">Nhận</button><button class="ghost mini" data-no="${esc(f.id)}">Bỏ</button>`}</div></div>`;
+                : `<button class="mini" data-ok="${esc(f.id)}">${esc(o.okLabel || 'Nhận')}</button><button class="ghost mini" data-no="${esc(f.id)}">Bỏ</button>`}</div></div>`;
           }).join('') || '<p class="as-reason">AI không có đề xuất nào cho phần này.</p>'}</div>
           <div class="as-foot"><button class="ghost mini" data-as="go"><i class="ti ti-refresh"></i> Hỏi lại</button></div>`;
         el.querySelectorAll('[data-asc]').forEach(s => s.style.setProperty('--as-c', s.dataset.asc));
@@ -115,7 +116,7 @@
     };
     async function accept(f) {
       if (!f || st.mark[f.id]) return;
-      try { await o.onAccept(f); st.mark[f.id] = 'done'; } catch (e) { Studio.toast(e.message); }
+      try { await o.onAccept(f); st.mark[f.id] = 'done'; if (o.pick) for (const g of fields()) st.mark[g.id] ||= 'skip'; } catch (e) { Studio.toast(e.message); }
       paint();
     }
     async function start() {
