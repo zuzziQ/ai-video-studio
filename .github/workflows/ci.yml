@@ -66,6 +66,11 @@ jobs:
           done < <(git ls-files 'scripts/*.mjs' 'studio/*.js' 'studio/*.mjs')
           exit $fail
 
+      # Màu viết cứng và style="" trong studio/** chỉ được giảm so với scripts/studio_tokens_baseline.json (M81).
+      - name: Token giao diện Studio (mốc chỉ giảm)
+        if: always()
+        run: node scripts/check_studio_tokens.mjs
+
       - name: Test Python (scripts/tests)
         if: always()
         run: python3 -m unittest discover -s scripts/tests

@@ -7,6 +7,12 @@
       "fix": "đọc lại luật bị đổi, sửa .rag/data.js nếu cần, rồi node .rag/sync.js --pin"
     },
     {
+      "id": "studio-tokens",
+      "cmd": ["node", "scripts/check_studio_tokens.mjs"],
+      "when": ["studio/**", "scripts/check_studio_tokens.mjs", "scripts/studio_tokens_baseline.json"],
+      "fix": "dùng token của studio/theme/tokens.css và lớp ui- thay cho màu viết cứng / style=\"\"; giảm mốc bằng --write"
+    },
+    {
       "id": "unittest",
       "cmd": ["python", "-m", "unittest", "discover", "-s", "scripts/tests"],
       "when": ["scripts/**/*.py"],

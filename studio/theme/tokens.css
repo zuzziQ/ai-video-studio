@@ -1,0 +1,208 @@
+/* ==========================================================================
+   AI Video Studio: design tokens, layer 1 of 3 (SINGLE SOURCE OF TRUTH, M81).
+   Inherits the 82X / Lychee hub design system (D:/ai/templates/design-system/tokens.css):
+   same role names, same navy/neutral/status scales, same motion. What differs (see DESIGN.md):
+   the Studio is DARK (C14: a video editor needs a dark frame so it does not skew how the video's
+   colours look), denser (smaller type, 28/32/40 controls) and has smaller radii.
+
+   This is the ONLY file under studio/ allowed to hold raw colour values
+   (scripts/check_studio_tokens.mjs counts the rest against a baseline that may only go down).
+   Colours are space-separated RGB channels: use them as rgb(var(--color-accent)) or
+   rgb(var(--color-accent) / 0.2).
+
+   Loaded after studio/studio.css, so the old variable names at the bottom (--bg*, --tx*, --acc*, ...)
+   override the old palette and the CSS of studio.css and of every studio/features/*.js follows the
+   tokens without being edited one by one.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Primitives: 82X navy (brand #0620B6 is step 600), copied from the hub --- */
+  --navy-50: 238 241 253;
+  --navy-100: 220 226 251;
+  --navy-200: 185 196 246;
+  --navy-300: 135 152 238;
+  --navy-400: 74 97 220;
+  --navy-500: 31 58 200;
+  --navy-600: 6 32 182;
+  --navy-700: 4 20 138;
+  --navy-800: 3 15 102;
+  --navy-900: 2 10 66;
+  --navy-950: 1 6 40;
+
+  /* 82X red (#EA2229): identity only (logo mark, "82X" tag). Never a status colour: errors use --color-danger. */
+  --brand-red: 234 34 41;
+
+  /* --- Primitives: cool neutral, copied from the hub, plus two in-between steps the dark UI needs --- */
+  --neutral-50: 248 250 252;
+  --neutral-100: 241 245 249;
+  --neutral-200: 226 232 240;
+  --neutral-300: 203 213 225;
+  --neutral-400: 148 163 184;
+  --neutral-500: 100 116 139;
+  --neutral-600: 71 85 105;
+  --neutral-700: 51 65 85;
+  --neutral-750: 41 53 72;   /* Studio only: hover of a control that sits on neutral-800 */
+  --neutral-800: 30 41 59;
+  --neutral-850: 22 32 50;   /* Studio only: raised panel (modal, popover) between 900 and 800 */
+  --neutral-900: 15 23 42;
+  --neutral-950: 2 6 23;
+
+  /* --- Primitives: status, the light steps of the hub scales (light on dark) --- */
+  --success-300: 110 231 183;
+  --success-400: 52 211 153;
+  --warning-200: 253 230 138;
+  --warning-400: 251 191 36;
+  --danger-300: 253 164 175;
+  --danger-400: 251 113 133;
+  --danger-500: 244 63 94;
+
+  /* --- Semantic: surfaces and lines (dark) --- */
+  --color-canvas: var(--neutral-950);        /* app background, timeline gutter */
+  --color-surface: var(--neutral-900);       /* bars, panels, inputs */
+  --color-surface-raised: var(--neutral-850); /* modal, popover, raised cards */
+  --color-surface-muted: var(--neutral-800); /* buttons, chips, group headers */
+  --color-surface-hover: var(--neutral-750); /* hover of anything on surface-muted */
+  --color-line: var(--neutral-800);          /* separators */
+  --color-line-strong: var(--neutral-700);   /* borders of buttons, panels */
+  --color-line-hover: var(--neutral-600);    /* border on hover */
+  --color-line-control: var(--neutral-500);  /* border that alone marks a control (>= 3:1 on surface) */
+
+  /* --- Semantic: text (contrast table in DESIGN.md; neutral-500 is NOT a text colour here: 3.7:1) --- */
+  --color-fg: var(--neutral-50);
+  --color-fg-muted: var(--neutral-300);
+  --color-fg-subtle: var(--neutral-400);
+  --color-fg-on-media: 255 255 255;          /* text on video thumbnails / timeline blocks */
+
+  /* --- Semantic: accent. Fill = navy-600 with white text; on a dark surface the accent as TEXT, icon
+         or focus ring is navy-300 (navy-600 on neutral-900 is only 1.6:1). --- */
+  --color-accent: var(--navy-600);
+  --color-accent-hover: var(--navy-500);
+  --color-accent-fg: 255 255 255;
+  --color-accent-text: var(--navy-300);
+  --color-accent-text-strong: var(--navy-200);
+  --color-accent-soft: var(--navy-600);      /* use with alpha: rgb(var(--color-accent-soft) / 0.22) */
+  --color-focus: var(--navy-300);
+  --color-brand-red: var(--brand-red);
+  --color-info: var(--navy-300);
+  --color-success: var(--success-400);
+  --color-success-text: var(--success-300);
+  --color-warning: var(--warning-400);
+  --color-warning-text: var(--warning-200);
+  --color-danger: var(--danger-400);
+  --color-danger-text: var(--danger-300);
+  --color-highlight: var(--warning-400);     /* highlighted word in the transcript */
+  --color-audio: 45 212 191;                 /* waveform teal, kept from the old theme */
+  --color-playhead: var(--neutral-100);
+  --color-scrim: 2 6 23;                     /* behind modals: rgb(var(--color-scrim) / 0.66) */
+  --color-black: 0 0 0;
+  --color-white: 255 255 255;
+
+  /* --- Preview frame: stays NEUTRAL grey (no blue tint) so the video's colours are judged right --- */
+  --stage-bg: 17 17 19;
+  --stage-glow: 24 24 27;
+  --stage-frame: 0 0 0;
+
+  /* --- Timeline tracks: categorical, 8 steps, white text on each passes 4.5:1 --- */
+  --track-1: 42 47 58;    /* video */
+  --track-2: 4 20 138;    /* scene (navy-700, was violet) */
+  --track-3: 122 91 20;   /* caption */
+  --track-4: 138 58 92;   /* add-on */
+  --track-5: 54 74 147;   /* graphic line */
+  --track-6: 27 98 116;   /* graphic */
+  --track-7: 34 104 74;   /* b-roll */
+  --track-8: 30 90 120;   /* audio */
+
+  /* --- Type: two families, six sizes (dense UI) --- */
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+
+  /* --- Space: 4px grid --- */
+  --space-050: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* --- Radius: smaller than the hub (hub control 12 / card 16) --- */
+  --radius-xs: 4px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
+  --radius-pill: 999px;
+
+  /* --- Control heights --- */
+  --h-sm: 28px;
+  --h-md: 32px;
+  --h-lg: 40px;
+
+  /* --- Elevation (on dark, shadows are black, not neutral-900) --- */
+  --shadow-xs: 0 1px 2px rgb(var(--color-black) / 0.35);
+  --shadow-card: 0 2px 6px rgb(var(--color-black) / 0.4);
+  --shadow-raised: 0 10px 30px rgb(var(--color-black) / 0.5);
+  --shadow-overlay: 0 30px 80px rgb(var(--color-black) / 0.6);
+  --shadow-accent: 0 6px 18px -4px rgb(var(--navy-600) / 0.55);
+
+  /* --- Motion: identical to the hub (DESIGN.md hub section 8) --- */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+
+  /* ======================================================================
+     Old names (studio.css + studio/features/*.js) -> tokens. Do not use them in new code;
+     M85 moves the feature CSS onto the token names and removes these.
+     ====================================================================== */
+  --bg0: rgb(var(--color-canvas));
+  --bg1: rgb(var(--color-surface));
+  --bg2: rgb(var(--color-surface-raised));
+  --bg3: rgb(var(--color-surface-muted));
+  --bg4: rgb(var(--color-surface-hover));
+  --line: rgb(var(--color-line));
+  --line2: rgb(var(--color-line-strong));
+  --line3: rgb(var(--color-line-hover));
+  --tx: rgb(var(--color-fg));
+  --tx2: rgb(var(--color-fg-muted));
+  --tx3: rgb(var(--color-fg-subtle));
+  --acc: rgb(var(--color-accent-text));      /* old code uses --acc mostly as text/border/focus */
+  --acc2: rgb(var(--color-accent));          /* old code uses --acc2 as a fill under white text */
+  --acc-soft: rgb(var(--color-accent-soft) / 0.24);
+  --acc-line: rgb(var(--color-accent-text) / 0.5);
+  --ok: rgb(var(--color-success));
+  --warn: rgb(var(--color-warning));
+  --bad: rgb(var(--color-danger));
+  --wave: rgb(var(--color-audio));
+  --ph: rgb(var(--color-playhead));
+  --t-video: rgb(var(--track-1));
+  --t-scene: rgb(var(--track-2));
+  --t-cap: rgb(var(--track-3));
+  --t-add: rgb(var(--track-4));
+  --t-gline: rgb(var(--track-5));
+  --t-gfx: rgb(var(--track-6));
+  --t-broll: rgb(var(--track-7));
+  --t-audio: rgb(var(--track-8));
+  --ui: var(--font-sans);
+  --mono: var(--font-mono);
+  --r: var(--radius-control);
+  --rs: var(--radius-control);
+}
+
+/* Reduced motion: every transition that uses the duration tokens stops; a loading spinner still turns. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0.01ms;
+    --duration-base: 0.01ms;
+    --duration-slow: 0.01ms;
+  }
+}
