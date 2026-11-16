@@ -170,6 +170,44 @@ export function linkOrCopy(src, dst, { ws = null } = {}) {
 }
 
 /**
+ * Kho của một dự án: thư mục cha gần nhất có .kho.json (dự án trong <Kho>/Du an/<tên>, tối đa 4 cấp),
+ * không có thì theo brand kit của timeline (tl.brand.kit), không có nữa thì Kho Chung. → workspaceFor(...) + { found }
+ */
+export function workspaceOfProject(dir, tl = null, o = {}) {
+  let d = path.resolve(dir);
+  for (let i = 0; i < 4; i++) {
+    const up = path.dirname(d); if (up === d) break; d = up;
+    const k = readJson(path.join(d, '.kho.json'));
+    if (k && typeof k.brand === 'string') {
+      const ws = workspaceFor(k.brand, o);
+      return key(ws.root) === key(d) ? { ...ws, found: 'kho' } : { root: d, brand: k.brand, title: k.title || ws.title, custom: true, exists: true, warning: null, found: 'kho' };
+    }
+  }
+  const kit = tl?.brand?.kit;
+  return { ...workspaceFor(typeof kit === 'string' ? kit : '', o), found: kit ? 'brand' : 'chung' };
+}
+
+/**
+ * Đưa một thành phẩm vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng, khác ổ thì chép), tên không trùng.
+ * name: tên hiển thị (mặc định tên file). → đường dẫn đích. Kho chưa có thì tạo (ensureWorkspace).
+ */
+export function deliver(ws, src, { name = path.basename(src), date = new Date() } = {}) {
+  ensureWorkspace(ws);
+  const d = deliveredDir(ws, date), dst = path.join(d, freeName(d, safeName(name) || path.basename(src)));
+  linkOrCopy(src, dst, { ws });
+  return dst;
+}
+
+/** source.json của dự án (S12 mục 2.2): video gốc theo đường dẫn tương đối với Kho + sha256/dung lượng do người gọi tính. */
+export function writeSource(projectDir, ws, video, extra = {}) {
+  const inKho = inWorkspace(ws, video);
+  const rec = { version: 1, kho: ws.brand || '', video: inKho ? relTo(ws, video) : null, abs: inKho ? null : path.resolve(video), name: path.basename(video), ...extra };
+  writeJson(path.join(projectDir, 'source.json'), rec);
+  return rec;
+}
+export const readSource = projectDir => readJson(path.join(projectDir, 'source.json'));
+
+/**
  * Liệt kê file trong Kho theo loại, đọc cả thư mục có sẵn không theo cấu trúc. Mới nhất trước.
  * Bỏ: file/thư mục ẩn, Du an/, Thanh pham/, *_frames/, thư mục dự án (có timeline.json, kể cả gốc). Sâu tối đa `depth`;
  * duyệt tối đa `scan` file rồi mới sắp và cắt `max`.

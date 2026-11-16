@@ -131,4 +131,22 @@ test('review: gốc Kho là dự án → không liệt kê; max cắt sau khi s�
   assert.equal(W.listWorkspace(w2, { max: 1 })[0].name, 'moi.jpg');
 });
 
+test('workspaceOfProject / deliver / writeSource', () => {
+  const ws = W.ensureWorkspace(W.workspaceFor('nha-dep-ab12', opt));
+  const pd = W.projectDirFor(ws, 'clip x'); fs.mkdirSync(path.join(pd, 'out'), { recursive: true });
+  assert.equal(W.workspaceOfProject(pd, null, opt).root, ws.root);
+  assert.equal(W.workspaceOfProject(pd, null, opt).found, 'kho');
+  const lone = path.join(TMP, 'le', 'p'); fs.mkdirSync(lone, { recursive: true });
+  assert.equal(W.workspaceOfProject(lone, { brand: { kit: 'nha-dep-ab12' } }, opt).root, ws.root);
+  assert.equal(W.workspaceOfProject(lone, null, opt).found, 'chung');
+  const mp4 = path.join(pd, 'out', 'v.mp4'); fs.writeFileSync(mp4, 'v');
+  const a = W.deliver(ws, mp4, { name: 'Clip X.mp4', date: new Date(2026, 10, 1) }), b = W.deliver(ws, mp4, { name: 'Clip X.mp4', date: new Date(2026, 10, 1) });
+  assert.equal(path.relative(ws.root, a).split(path.sep).join('/'), 'Thanh pham/2026-11/Clip X.mp4');
+  assert.equal(path.basename(b), 'Clip X (2).mp4');
+  const v = path.join(W.sub(ws, 'source', { mkdir: true }), 'goc.mp4'); fs.writeFileSync(v, 'g');
+  assert.equal(W.writeSource(pd, ws, v, { size: 1 }).video, 'Nguon/goc.mp4');
+  assert.equal(W.readSource(pd).name, 'goc.mp4');
+  assert.equal(W.writeSource(pd, ws, path.join(TMP, 'src.bin')).video, null);
+});
+
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
