@@ -1,69 +1,8 @@
 {
   "_note": "Mốc của scripts/check_studio_tokens.mjs (M81): chỉ được giảm.",
   "total": {
-    "color": 45,
-    "style": 76
+    "color": 0,
+    "style": 0
   },
-  "files": {
-    "studio/features/28_engines.js": {
-      "color": 4,
-      "style": 1
-    },
-    "studio/features/29_perf.js": {
-      "color": 4,
-      "style": 7
-    },
-    "studio/features/30_audio.js": {
-      "color": 10,
-      "style": 7
-    },
-    "studio/features/40_reframe.js": {
-      "color": 0,
-      "style": 1
-    },
-    "studio/features/46_agent.js": {
-      "color": 0,
-      "style": 13
-    },
-    "studio/features/50_batch.js": {
-      "color": 2,
-      "style": 18
-    },
-    "studio/features/51_brands.js": {
-      "color": 8,
-      "style": 9
-    },
-    "studio/features/52_publish.js": {
-      "color": 4,
-      "style": 8
-    },
-    "studio/features/53_products.js": {
-      "color": 0,
-      "style": 4
-    },
-    "studio/features/60_keyframes.js": {
-      "color": 5,
-      "style": 1
-    },
-    "studio/features/61_mask.js": {
-      "color": 2,
-      "style": 0
-    },
-    "studio/features/62_broll.js": {
-      "color": 3,
-      "style": 2
-    },
-    "studio/features/63_frames.js": {
-      "color": 0,
-      "style": 1
-    },
-    "studio/features/80_autofill.js": {
-      "color": 3,
-      "style": 2
-    },
-    "studio/features/82_broll_alts.js": {
-      "color": 0,
-      "style": 2
-    }
-  }
+  "files": {}
 }

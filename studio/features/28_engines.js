@@ -6,35 +6,33 @@
   const S = { tab: 'llm', cfg: null, st: null, loading: false, trying: false, tryRes: null, starting: false, playing: '', err: '', cloning: false, cloneOk: '' };
   const css = document.createElement('style');
   css.textContent = `
-  .eng-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line2); margin: 0 0 10px; }
-  .eng-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--tx2); padding: 8px 10px; }
-  .eng-tabs button.on { color: var(--tx); border-bottom-color: var(--acc); }
-  .eng-help { font-size: 11.5px; color: var(--tx3); line-height: 1.5; margin: 6px 0; }
-  .eng-help code { font-size: 11px; }
-  .eng-st { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 8px 10px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--line2); margin: 8px 0; min-width: 0; }
+  .eng-tabs { margin: 0 0 var(--space-3); } .eng-tabs .ui-tab { display: inline-flex; align-items: center; gap: var(--space-1); }
+  .eng-help { font-size: var(--text-xs); color: rgb(var(--color-fg-subtle)); line-height: 1.5; margin: var(--space-2) 0; }
+  .eng-help code { font-size: var(--text-2xs); }
+  .eng-st { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: rgb(var(--color-surface-muted)); border: 1px solid rgb(var(--color-line-strong)); margin: var(--space-2) 0; min-width: 0; }
   .eng-st > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-  .eng-st .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--tx3); }
-  .eng-st .dot.ok { background: var(--ok); } .eng-st .dot.bad { background: var(--bad); }
-  .eng-st button { flex: none; padding: 4px 10px; font-size: 11.5px; }
-  .eng-seg { display: flex; gap: 6px; flex-wrap: wrap; } .eng-seg label { flex: 1 1 140px; min-width: 0; display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 8px; cursor: pointer; font-size: 12px; line-height: 1.35; }
-  .eng-seg label.on { border-color: var(--acc-line); background: var(--acc-soft); }
-  .eng-seg small { display: block; color: var(--tx3); font-size: 10.5px; }
+  .eng-st .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); flex: none; background: rgb(var(--color-fg-subtle)); }
+  .eng-st .dot.ok { background: rgb(var(--color-success)); } .eng-st .dot.bad { background: rgb(var(--color-danger)); }
+  .eng-st button { flex: none; padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+  .eng-seg { display: flex; gap: var(--space-2); flex-wrap: wrap; } .eng-seg label { flex: 1 1 140px; min-width: 0; display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); cursor: pointer; font-size: var(--text-xs); line-height: 1.35; transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+  .eng-seg label:hover { border-color: rgb(var(--color-line-hover)); }
+  .eng-seg label.on { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .14); }
+  .eng-seg small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
   #modal .eng input[type=text], #modal .eng select { width: 100%; min-width: 0; box-sizing: border-box; }
-  .eng-res { font-size: 11.5px; padding: 8px 10px; border-radius: 8px; margin-top: 8px; overflow-wrap: anywhere; line-height: 1.45; }
-  .eng-res.ok { background: rgba(52,211,153,.08); border: 1px solid rgba(52,211,153,.3); }
-  .eng-res.bad { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.3); }
-  .eng-voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; margin-top: 4px; }
-  .eng-voice { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line2); border-radius: 8px; min-width: 0; cursor: pointer; }
-  .eng-voice.on { border-color: var(--acc-line); background: var(--acc-soft); }
-  .eng-voice .nm { flex: 1; min-width: 0; font-size: 12px; } .eng-voice .nm small { display: block; color: var(--tx3); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .eng-voice button { flex: none; padding: 3px 7px; }
-  .eng-warn { color: var(--warn); }
-  .eng-clone { border: 1px dashed var(--line2); border-radius: 8px; padding: 10px; margin-top: 10px; min-width: 0; }
-  .eng-clone h4 { margin: 0 0 6px; font-size: 12.5px; }
+  .eng-res { margin-top: var(--space-2); overflow-wrap: anywhere; line-height: 1.45; } .eng-res > div { min-width: 0; }
+  .eng-voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--space-2); max-height: 300px; overflow-y: auto; margin-top: var(--space-1); }
+  .eng-voice { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); min-width: 0; cursor: pointer; }
+  .eng-voice.on { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .14); }
+  .eng-voice .nm { flex: 1; min-width: 0; font-size: var(--text-xs); } .eng-voice .nm small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eng-voice button { flex: none; padding: var(--space-1) var(--space-2); }
+  .eng-warn { color: rgb(var(--color-warning-text)); }
+  .eng label.check.eng-fbl { margin-top: var(--space-3); gap: var(--space-2); font-size: var(--text-xs); }
+  .eng-clone { border: 1px dashed rgb(var(--color-line-strong)); border-radius: var(--radius-control); padding: var(--space-3); margin-top: var(--space-3); min-width: 0; }
+  .eng-clone h4 { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
   .eng-clone .row2 > div { min-width: 0; }
-  #modal .eng-clone input[type=file] { width: 100%; min-width: 0; font-size: 11.5px; }
+  #modal .eng-clone input[type=file] { width: 100%; min-width: 0; font-size: var(--text-xs); }
   #modal .eng-clone input[type=number] { width: 100%; box-sizing: border-box; }
-  .eng-clone label.check { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; margin-top: 8px; line-height: 1.4; }`;
+  .eng-clone label.check { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--text-xs); margin-top: var(--space-2); line-height: 1.4; }`;
   document.head.appendChild(css);
 
   const box = () => $('#modalbox');
@@ -47,7 +45,7 @@
   async function open(tab) {
     if (tab) S.tab = tab;
     S.err = ''; S.tryRes = null;
-    Studio.modal('<div class="eng"><div class="muted">Đang đọc cấu hình…</div></div>');
+    Studio.modal('<div class="eng"><div class="ui-state ui-state--loading" role="status"><i class="ti ti-loader-2 ui-state__icon"></i> Đang đọc cấu hình…</div></div>');
     await load(false); render(); await load(true); if (isOpen()) render();
   }
   const dot = ok => `<i class="dot ${ok == null ? '' : ok ? 'ok' : 'bad'}"></i>`;
@@ -68,10 +66,10 @@
       <div class="row2"><div><span class="lbl">Địa chỉ Ollama (chỉ máy này)${envNote(c.env.url)}</span><input type="text" id="eng-url" value="${esc(c.ollama.url)}" placeholder="http://127.0.0.1:11434" autocomplete="off" spellcheck="false"></div>
         <div><span class="lbl">Model${envNote(c.env.model)}</span><input type="text" id="eng-model" value="${esc(c.ollama.model)}" list="eng-models" placeholder="qwen2.5:7b" autocomplete="off" spellcheck="false">
         <datalist id="eng-models">${models.map(m => `<option value="${esc(m)}">`).join('')}</datalist></div></div>
-      <label class="check" style="margin-top:10px;display:flex;gap:6px;align-items:center;font-size:12px"><input type="checkbox" id="eng-fb" ${c.fallback === 'claude' ? 'checked' : ''}> Ollama không chạy hoặc thiếu model thì dùng Claude thay (không báo lỗi job)${envNote(c.env.fallback)}</label>
+      <label class="check eng-fbl"><input type="checkbox" id="eng-fb" ${c.fallback === 'claude' ? 'checked' : ''}> Ollama không chạy hoặc thiếu model thì dùng Claude thay (không báo lỗi job)${envNote(c.env.fallback)}</label>
       ${ol && !o?.reachable && c.fallback !== 'claude' && S.st ? '<p class="eng-help eng-warn">Ollama đang không chạy: mọi việc chỉ có chữ sẽ báo lỗi cho tới khi bật Ollama hoặc tick ô dùng Claude thay.</p>' : ''}
-      ${r ? `<div class="eng-res ${r.ok ? 'ok' : 'bad'}">${r.ok ? `<b>Được</b> · ${esc(r.provider)} · ${r.sec}s${r.fallbackFrom ? ` · Ollama lỗi nên đã dùng Claude (${esc(r.fallbackFrom)})` : ''}<br>${esc(r.result?.loi_chao || JSON.stringify(r.result))}`
-        : `<b>Lỗi</b>${r.provider ? ` (${esc(r.provider)}${r.sec != null ? ` · ${r.sec}s` : ''})` : ''}: ${esc(r.error || '')}`}</div>` : ''}
+      ${r ? `<div class="ui-banner eng-res ${r.ok ? 'ui-banner--ok' : 'ui-banner--err'}" role="status"><div>${r.ok ? `<b>Được</b> · ${esc(r.provider)} · ${r.sec}s${r.fallbackFrom ? ` · Ollama lỗi nên đã dùng Claude (${esc(r.fallbackFrom)})` : ''}<br>${esc(r.result?.loi_chao || JSON.stringify(r.result))}`
+        : `<b>Lỗi</b>${r.provider ? ` (${esc(r.provider)}${r.sec != null ? ` · ${r.sec}s` : ''})` : ''}: ${esc(r.error || '')}`}</div></div>` : ''}
       <div class="actions"><button data-eng="close">Đóng</button><button data-eng="try" ${S.trying ? 'disabled' : ''}><i class="ti ti-player-play"></i> ${S.trying ? 'Đang thử…' : 'Thử'}</button><button class="primary" data-eng="save-llm"><i class="ti ti-device-floppy"></i> Lưu</button></div>
       <p class="eng-help">"Thử" lưu trước rồi hỏi một câu JSON ngắn, giống <code>node scripts/llm.mjs try</code>.</p>`;
   }
@@ -97,7 +95,7 @@
       <span class="lbl">Giọng mặc định cho job Hàng loạt, Lồng tiếng và Video từ chủ đề</span>
       <div class="eng-seg">${engines.map(([k, n, d]) => `<label class="${de === k ? 'on' : ''}"><input type="radio" name="eng-de" value="${k}" ${de === k ? 'checked' : ''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>
       <span class="lbl">Địa chỉ máy chủ VieNeu (chỉ máy này)${envNote(t.env.url)}</span><input type="text" id="eng-vurl" value="${esc(t.vieneu.url)}" placeholder="http://127.0.0.1:8771" autocomplete="off" spellcheck="false">
-      ${S.err ? `<div class="eng-res bad">${esc(S.err)}</div>` : ''}
+      ${S.err ? `<div class="ui-banner ui-banner--err eng-res" role="alert">${esc(S.err)}</div>` : ''}
       <div class="actions"><button data-eng="close">Đóng</button><button class="primary" data-eng="save-voice"><i class="ti ti-device-floppy"></i> Lưu</button></div>`;
   }
 
@@ -111,7 +109,7 @@
         <div><span class="lbl">Ghi chú đồng ý (ai, khi nào)</span><input type="text" id="eng-cnote" maxlength="300" placeholder="vd Chính tôi, 15/11/2026" autocomplete="off"></div></div>
       <label class="check"><input type="checkbox" id="eng-cconsent"> <span>Tôi là chủ giọng này hoặc đã được chủ giọng đồng ý cho dùng. Không dùng giọng nhái để mạo danh hay
         làm quảng cáo giả lời người khác; nền tảng (Meta, TikTok) có thể yêu cầu ghi rõ nội dung dùng giọng AI.</span></label>
-      ${S.cloneOk ? `<div class="eng-res ok">${esc(S.cloneOk)}</div>` : ''}
+      ${S.cloneOk ? `<div class="ui-banner ui-banner--ok eng-res" role="status">${esc(S.cloneOk)}</div>` : ''}
       <div class="actions"><button data-eng="clone" ${S.cloning ? 'disabled' : ''}><i class="ti ${S.cloning ? 'ti-loader-2' : 'ti-wand'}"></i> ${S.cloning ? 'Đang tạo giọng…' : 'Tạo giọng'}</button></div></div>`;
   }
   async function createClone() {
@@ -144,7 +142,7 @@
 
   function render() {
     if (!S.cfg) return;
-    if (S.cfg.error) return Studio.modal(`<div class="eng"><h3>Mô hình & giọng</h3><div class="eng-res bad">${esc(S.cfg.error)}</div><div class="actions"><button data-eng="close">Đóng</button></div></div>`);
+    if (S.cfg.error) return Studio.modal(`<div class="eng"><h3>Mô hình & giọng</h3><div class="ui-banner ui-banner--err eng-res" role="alert">${esc(S.cfg.error)}</div><div class="actions"><button data-eng="close">Đóng</button></div></div>`);
     // giữ những gì người dùng đang nhập/chọn mà chưa lưu (render lại sau lỗi, sau khi kiểm trạng thái…)
     const keep = { url: $('#eng-url')?.value, model: $('#eng-model')?.value, vurl: $('#eng-vurl')?.value, ptext: $('#eng-ptext')?.value,
       cname: $('#eng-cname')?.value, cnote: $('#eng-cnote')?.value, cstart: $('#eng-cstart')?.value };
@@ -152,7 +150,7 @@
     const radios = Object.fromEntries(['eng-text', 'eng-voice', 'eng-de'].map(n => [n, box()?.querySelector(`.eng input[name="${n}"]:checked`)?.value]));
     const fb = $('#eng-fb')?.checked;
     Studio.modal(`<div class="eng"><h3><i class="ti ti-cpu"></i> Mô hình & giọng</h3>
-      <div class="eng-tabs">${[['llm', 'ti-message-chatbot', 'Mô hình chữ (LLM)'], ['voice', 'ti-microphone', 'Giọng VieNeu']].map(([k, i, n]) => `<button data-engtab="${k}" class="${S.tab === k ? 'on' : ''}"><i class="ti ${i}"></i> ${n}</button>`).join('')}</div>
+      <div class="ui-tabs eng-tabs" role="tablist">${[['llm', 'ti-message-chatbot', 'Mô hình chữ (LLM)'], ['voice', 'ti-microphone', 'Giọng VieNeu']].map(([k, i, n]) => `<button role="tab" data-engtab="${k}" class="ui-tab" aria-selected="${S.tab === k}"><i class="ti ${i}"></i> ${n}</button>`).join('')}</div>
       ${S.tab === 'llm' ? llmTab() : voiceTab()}</div>`);
     for (const [id, k] of [['#eng-url', 'url'], ['#eng-model', 'model'], ['#eng-vurl', 'vurl'], ['#eng-ptext', 'ptext'], ['#eng-cname', 'cname'], ['#eng-cnote', 'cnote'], ['#eng-cstart', 'cstart']])
       if (keep[k] != null && $(id)) $(id).value = keep[k];

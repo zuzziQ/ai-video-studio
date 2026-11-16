@@ -47,9 +47,10 @@
   .ns-list button { height: 32px; justify-content: flex-start; gap: 8px; padding: 0 8px; font-size: 12px; background: transparent; border-color: var(--line); color: var(--tx2); min-width: 0; }
   .ns-list button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ns-list button:hover { background: var(--bg3); color: var(--tx); }
-  .ns-list button.ok { color: var(--tx); }
-  .ns-list button.ok .ti { color: var(--ok); }
-  .ns-list button.next { border-color: var(--acc-line); color: var(--tx); }
+  /* is-done, not .ok: studio.css has #insp .ok (status banner: margin-top 8px, green fill) that pushed done items down a row */
+  .ns-list button.is-done { color: var(--tx); }
+  .ns-list button.is-done .ti { color: var(--ok); }
+  .ns-list button.is-next { border-color: var(--acc-line); color: var(--tx); }
   .ns-more { border-top: 1px solid var(--line); margin: 0 -12px; }
   .ns-more > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 12px; font-weight: 600; color: var(--tx2); }
   .ns-more > summary::-webkit-details-marker { display: none; }
@@ -83,7 +84,7 @@
         <button class="primary" data-ns="go"><i class="ti ${n.ic}"></i>${esc(n.btn)}</button></div>
       <div class="ns-ready"><div class="ns-rh"><i class="ti ti-checklist"></i><span>Sẵn sàng</span><b>${count}/${ITEMS.length}</b></div>
         <div class="ns-bar" role="progressbar" aria-label="Sẵn sàng" aria-valuemin="0" aria-valuemax="${ITEMS.length}" aria-valuenow="${count}">${done.map(d => `<i class="${d ? 'on' : ''}"></i>`).join('')}</div>
-        <div class="ns-list">${ITEMS.map((it, i) => `<button data-ns-i="${i}" class="${done[i] ? 'ok' : ''} ${it === next ? 'next' : ''}" title="${esc(it.label)}: ${done[i] ? 'xong' : 'chưa xong'} · bước ${it.n}">
+        <div class="ns-list">${ITEMS.map((it, i) => `<button data-ns-i="${i}" class="${done[i] ? 'is-done' : ''} ${it === next ? 'is-next' : ''}" title="${esc(it.label)}: ${done[i] ? 'xong' : 'chưa xong'} · bước ${it.n}">
           <i class="ti ${done[i] ? 'ti-circle-check' : it.ic}"></i><span>${esc(it.label)}</span></button>`).join('')}</div></div>`;
   }
 

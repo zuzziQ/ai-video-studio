@@ -2,6 +2,9 @@
 // from the project's video instead of previewing black. Route: studio/routes/63_frames.mjs.
 (() => {
   const S = window.Studio;
+  const css = document.createElement('style');
+  css.textContent = '.fr-list { font-size: var(--text-xs); margin: var(--space-2) 0 0 var(--space-5); }';
+  document.head.appendChild(css);
   S.onReady(async () => {
     let list; try { list = await S.api('/api/frames/check'); } catch { return; }
     if (!Array.isArray(list) || !list.length) return;
@@ -9,7 +12,7 @@
     const rows = list.map(m => `<li><code>${esc(m.seq)}</code> ${m.src ? `← <code>${esc(m.src)}</code>` : '<span class="muted">(không còn video nguồn)</span>'}</li>`).join('');
     S.modal(`<h3><i class="ti ti-photo-off"></i> Dự án thiếu khung hình video</h3>
       <p>Thư mục khung hình đang trống nên preview và bản xuất sẽ bị đen. Thường do dự án được chép thiếu thư mục <code>work/frames</code>.</p>
-      <ul style="font-size:12px;margin:6px 0 0 18px">${rows}</ul>
+      <ul class="fr-list">${rows}</ul>
       ${can.length ? '<p class="muted">Tạo lại bằng ffmpeg từ video trong dự án, mất khoảng vài giây cho mỗi phút video.</p>' : '<p class="muted">Không còn video nguồn: hãy tạo dự án mới bằng “Video mới”.</p>'}
       <div class="actions"><button onclick="closeModal()">Để sau</button>${can.length ? '<button class="primary" id="frgo"><i class="ti ti-refresh"></i> Tạo lại khung hình</button>' : ''}</div>`);
     const go = S.$('#frgo'); if (!go) return;

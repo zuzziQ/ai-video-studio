@@ -8,33 +8,46 @@
   const refreshStatus = async () => { if (S.run) { S.status = okSt(await Studio.api(stUrl())); rerender(); } };
   const css = document.createElement('style');
   css.textContent = `
-  .bt-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
-  .bt-card h4 { margin: 0 0 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; color: var(--tx); }
-  .bt-card h4 .n { width: 18px; height: 18px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); font-size: 10.5px; display: inline-flex; align-items: center; justify-content: center; }
-  .bt-map { display: flex; flex-direction: column; gap: 6px; }
-  .bt-m { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 6px; align-items: center; }
-  .bt-m .k { min-width: 0; font-size: 11.5px; } .bt-m .k b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .bt-m .k small { display: block; color: var(--tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
-  .bt-m .k small.v { color: var(--wave); }
-  .bt-m select { font-size: 11px; padding: 4px 22px 4px 6px; height: 28px; }
-  .bt-m.on .k b { color: #D9D3FF; }
-  .bt-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--tx3); margin: 8px 0 2px; font-weight: 700; }
-  .bt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .bt-grid label { font-size: 10.5px; color: var(--tx3); display: block; margin-bottom: 3px; }
-  .bt-prev { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
-  .bt-prev img { width: 120px; border-radius: 8px; border: 1px solid var(--line2); background: #000; }
-  .bt-row { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; gap: 6px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 11.5px; }
-  .bt-row .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; } .bt-row .st { color: var(--tx3); font-size: 10.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bt-row .st.err { color: var(--bad); }
-  .bt-row .b { display: flex; gap: 2px; } .bt-row .b button { width: 26px; height: 26px; padding: 0; justify-content: center; }
-  .bt-pbar { height: 3px; background: var(--bg4); border-radius: 3px; overflow: hidden; margin-top: 3px; } .bt-pbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--acc2), var(--wave)); }
-  .bt-ok { color: var(--ok); } .bt-bad { color: var(--bad); } .bt-run { color: var(--acc); }
-  .bt-drop { border: 1px dashed var(--line3); border-radius: 8px; padding: 10px; text-align: center; color: var(--tx3); cursor: pointer; font-size: 11.5px; }
-  .bt-drop:hover { border-color: var(--acc); color: var(--tx); }
-  .bt-sum { font-size: 11px; color: var(--tx3); margin: -2px 0 6px; }
-  .bt-pg { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 11px; color: var(--tx3); flex-wrap: wrap; }
+  .bt-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .bt-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); display: flex; align-items: center; gap: var(--space-2); color: rgb(var(--color-fg)); }
+  .bt-card h4 .muted { font-weight: 500; }
+  .bt-card h4 .n { width: 20px; height: 20px; border-radius: var(--radius-pill); background: rgb(var(--color-accent-soft) / .24); color: rgb(var(--color-accent-text)); font-size: var(--text-2xs); display: inline-flex; align-items: center; justify-content: center; }
+  .bt-push { margin-left: auto; }
+  .bt-intro { margin-top: var(--space-1); }
+  .bt-acts-top { padding-top: var(--space-2); }
+  .bt-acts-flush { padding-top: 0; }
+  .bt-step { margin: 0 0 var(--space-1); }
+  .bt-prow { width: 56px; height: var(--h-sm); font-size: var(--text-2xs); padding: var(--space-050) var(--space-5) var(--space-050) var(--space-2); }
+  .bt-map { display: flex; flex-direction: column; gap: var(--space-2); }
+  .bt-m { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: var(--space-2); align-items: center; }
+  .bt-m .k { min-width: 0; font-size: var(--text-xs); } .bt-m .k b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .bt-m .k small { display: block; color: rgb(var(--color-fg-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-2xs); }
+  .bt-m .k small.v { color: rgb(var(--color-audio)); }
+  .bt-m select { font-size: var(--text-2xs); padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2); height: var(--h-sm); }
+  .bt-m.on .k b { color: rgb(var(--color-accent-text-strong)); }
+  .bt-kind { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .05em; color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-050); font-weight: 700; }
+  .bt-kind--tog { cursor: pointer; } .bt-kind--tog i { font-size: var(--text-xs); }
+  .bt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); } .bt-grid label { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin-bottom: var(--space-1); }
+  .bt-span2 { grid-column: 1 / 3; }
+  .bt-end { display: flex; align-items: flex-end; } .bt-end button { width: 100%; justify-content: center; }
+  .bt-prev { display: flex; gap: var(--space-2); align-items: flex-start; margin-top: var(--space-2); }
+  .bt-prev img { width: 120px; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); background: rgb(var(--color-black)); }
+  .bt-prev .help { margin: 0; }
+  .bt-row { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); font-size: var(--text-xs); }
+  .bt-row--hist { grid-template-columns: minmax(0,1fr) auto; }
+  .bt-row .mid { min-width: 0; }
+  .bt-row .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; } .bt-row .st { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bt-row .st.err { color: rgb(var(--color-danger-text)); }
+  .bt-row .b { display: flex; gap: var(--space-050); } .bt-row .b button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
+  .bt-pbar { height: 4px; background: rgb(var(--color-surface-hover)); border-radius: var(--radius-pill); overflow: hidden; margin-top: var(--space-1); } .bt-pbar i { display: block; height: 100%; width: var(--w, 0%); background: linear-gradient(90deg, rgb(var(--color-accent)), rgb(var(--color-audio))); }
+  .bt-ok { color: rgb(var(--color-success)); } .bt-bad { color: rgb(var(--color-danger)); } .bt-run { color: rgb(var(--color-accent-text)); }
+  .bt-drop { border: 1px dashed rgb(var(--color-line-hover)); border-radius: var(--radius-control); padding: var(--space-3); text-align: center; color: rgb(var(--color-fg-subtle)); cursor: pointer; font-size: var(--text-xs); transition: border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+  .bt-drop:hover { border-color: rgb(var(--color-accent-text)); color: rgb(var(--color-fg)); }
+  .bt-sum { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: 0 0 var(--space-2); }
+  .bt-pg { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); flex-wrap: wrap; }
   .bt-pg span { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bt-pg button.icon { width: 26px; height: 26px; padding: 0; justify-content: center; flex: none; }
-  .bt-file { display: flex; align-items: center; gap: 6px; font-size: 11.5px; margin-top: 6px; } .bt-file b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`;
+  .bt-pg button.icon { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; flex: none; }
+  .bt-file { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); margin-top: var(--space-2); } .bt-file b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`;
   document.head.appendChild(css);
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'batch';
   const rerender = () => active() && render();
@@ -120,7 +133,7 @@
       <button class="icon" data-bpg="next" title="Trang sau" ${st.page >= st.pages - 1 ? 'disabled' : ''}><i class="ti ti-chevron-right"></i></button>
       ${S.page != null ? `<button class="icon" data-bpg="follow" title="Về trang có dòng đang làm"><i class="ti ti-focus-2"></i></button>` : ''}</div>` : '';
     $('#libbody').innerHTML = `
-    <div class="help" style="margin-top:4px">Một mẫu + một bảng tính → mỗi dòng một video riêng (thư mục dự án + MP4). Chạy lần lượt, dừng được, chạy tiếp được.</div>
+    <div class="help bt-intro">Một mẫu + một bảng tính → mỗi dòng một video riêng (thư mục dự án + MP4). Chạy lần lượt, dừng được, chạy tiếp được.</div>
     <div class="bt-card"><h4><span class="n">1</span>Nguồn</h4>
       <select id="bt-src"><option value="project" ${S.source === 'project' ? 'selected' : ''}>Dự án đang mở (${esc(S.project || '')})</option>
       ${groups.map(g => `<optgroup label="${esc(g)}">${S.sources.filter(s => s.group === g).map(s => `<option value="${esc(s.key)}" ${s.key === S.source ? 'selected' : ''}>${esc(s.name)} · ${s.aspect || ''}</option>`).join('')}</optgroup>`).join('')}</select>
@@ -128,15 +141,15 @@
       ${S.source === 'project' ? '<div class="help">Dự án hiện tại: thay chữ / ảnh / thương hiệu theo từng dòng, giữ nguyên giọng và video.</div>' : ''}</div>
     <div class="bt-card"><h4><span class="n">2</span>Bảng tính</h4>
       <div class="bt-drop" id="bt-drop"><i class="ti ti-table-import"></i> Chọn hoặc thả file .csv / .xlsx<input type="file" id="bt-file" accept=".csv,.xlsx,.tsv,.txt" hidden></div>
-      <div class="acts" style="padding-top:6px"><button id="bt-ex"><i class="ti ti-building-community"></i> Dùng ví dụ BĐS (5 căn)</button></div>
+      <div class="acts bt-acts-top"><button id="bt-ex"><i class="ti ti-building-community"></i> Dùng ví dụ BĐS (5 căn)</button></div>
       ${S.sheet ? `<div class="bt-file"><i class="ti ti-file-spreadsheet bt-ok"></i><b title="${esc(S.sheet.file)}">${esc(S.sheet.name)}</b><span class="muted">${S.sheet.rows.length} dòng · ${S.sheet.columns.length} cột</span></div>` : ''}</div>
-    <div class="bt-card"><h4><span class="n">3</span>Ghép cột <span class="muted" style="font-weight:500">${S.sheet ? `${nMap} đã ghép` : ''}</span>
-      ${S.sheet ? `<span class="muted" style="margin-left:auto;font-weight:500">dòng</span><select id="bt-prow" style="width:56px;height:24px;font-size:11px;padding:2px 18px 2px 6px">${S.sheet.rows.map((_, i) => `<option value="${i}" ${i === S.prevRow ? 'selected' : ''}>${i + 1}</option>`).join('')}</select>` : ''}</h4>
+    <div class="bt-card"><h4><span class="n">3</span>Ghép cột <span class="muted">${S.sheet ? `${nMap} đã ghép` : ''}</span>
+      ${S.sheet ? `<span class="muted bt-push">dòng</span><select id="bt-prow" class="bt-prow">${S.sheet.rows.map((_, i) => `<option value="${i}" ${i === S.prevRow ? 'selected' : ''}>${i + 1}</option>`).join('')}</select>` : ''}</h4>
       ${!S.sheet ? '<div class="help">Chọn bảng tính để ghép cột vào chỗ trống <b>{{cột}}</b>, chữ mẫu, ảnh và thông tin thương hiệu.</div>' : `<div class="bt-map">
         ${by('placeholder').length ? `<div class="bt-kind">Chỗ trống {{…}}</div>${by('placeholder').map(mapRow).join('')}` : ''}
         <div class="bt-kind">Trường chính</div>${by('field').map(mapRow).join('')}
         ${by('media').length ? `<div class="bt-kind">Ảnh / video trong mẫu</div>${by('media').map(mapRow).join('')}` : ''}
-        ${by('text').length ? `<div class="bt-kind" style="cursor:pointer" id="bt-ttog"><i class="ti ti-chevron-${S.showText ? 'down' : 'right'}" style="font-size:12px"></i> Chữ mẫu trong template (${by('text').length})</div>${S.showText ? by('text').map(mapRow).join('') : ''}` : ''}
+        ${by('text').length ? `<div class="bt-kind bt-kind--tog" id="bt-ttog"><i class="ti ti-chevron-${S.showText ? 'down' : 'right'}"></i> Chữ mẫu trong template (${by('text').length})</div>${S.showText ? by('text').map(mapRow).join('') : ''}` : ''}
       </div>`}</div>
     <div class="bt-card"><h4><span class="n">4</span>Tuỳ chọn</h4>
       <div class="bt-grid">
@@ -144,34 +157,35 @@
         <div><label>Giọng / nền</label><select id="bt-voice">${[['auto', 'Tự động'], ['tts', 'Giọng AI (Linh)'], ['none', 'Chỉ nhạc + ảnh'], ['beat', 'Ảnh theo nhịp']].map(([v, l]) => `<option value="${v}" ${v === S.voice ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div><label>Chất lượng</label><select id="bt-q"><option value="1080" ${S.quality === '1080' ? 'selected' : ''}>1080p</option><option value="720" ${S.quality === '720' ? 'selected' : ''}>720p (nhanh)</option></select></div>
         <div><label>Độ dài mặc định (s)</label><input id="bt-dur" type="number" min="3" placeholder="theo mẫu" value="${esc(S.dur)}"></div>
-        <div style="grid-column:1/3"><label>Chỉ làm các dòng (vd 1-3,5 · trống = tất cả)</label><input id="bt-rows" placeholder="tất cả" value="${esc(S.rows)}"></div>
+        <div class="bt-span2"><label>Chỉ làm các dòng (vd 1-3,5 · trống = tất cả)</label><input id="bt-rows" placeholder="tất cả" value="${esc(S.rows)}"></div>
       </div>
       <div class="help">Tự động: dòng có cột <b>video</b> → dựng từ video người nói; có cột <b>lời đọc</b> → giọng AI tiếng Việt (macOS “Linh”) + ảnh; không có → ảnh + nhạc của mẫu.</div></div>
     <div class="bt-card"><h4><span class="n">5</span>Xem trước & chạy</h4>
       <div class="bt-grid"><div><label>Khung hình tại (s)</label><input id="bt-pt" type="number" step="0.5" min="0" value="${esc(S.prevT)}"></div>
-        <div style="display:flex;align-items:flex-end"><button id="bt-prev" style="width:100%;justify-content:center" ${S.busy || !S.sheet ? 'disabled' : ''}>${S.busy === 'preview' ? '<i class="ti ti-loader-2 spin"></i> Đang dựng…' : `<i class="ti ti-eye"></i> Xem dòng ${S.prevRow + 1}`}</button></div></div>
-      ${S.img ? `<div class="bt-prev"><img src="${esc(S.img)}"><div class="help" style="margin:0">Ảnh tĩnh dòng ${S.prevRow + 1} tại ${S.prevT}s${S.prevDur ? ` · video dài ${S.prevDur}s` : ''}.<br>Chưa có tiếng trong ảnh xem trước.</div></div>` : ''}
+        <div class="bt-end"><button id="bt-prev" ${S.busy || !S.sheet ? 'disabled' : ''}>${S.busy === 'preview' ? '<i class="ti ti-loader-2 spin"></i> Đang dựng…' : `<i class="ti ti-eye"></i> Xem dòng ${S.prevRow + 1}`}</button></div></div>
+      ${S.img ? `<div class="bt-prev"><img src="${esc(S.img)}"><div class="help">Ảnh tĩnh dòng ${S.prevRow + 1} tại ${S.prevT}s${S.prevDur ? ` · video dài ${S.prevDur}s` : ''}.<br>Chưa có tiếng trong ảnh xem trước.</div></div>` : ''}
       <div class="acts"><button class="primary" id="bt-go" ${!S.sheet || running ? 'disabled' : ''}><i class="ti ti-player-play"></i> Bắt đầu ${S.sheet ? `(${S.rows || S.sheet.rows.length + ' video'})` : ''}</button>
         ${running && !st ? '<button class="danger" id="bt-stop"><i class="ti ti-player-stop"></i> Dừng</button>' : ''}</div></div>
-    ${st ? `<div class="bt-card"><h4><i class="ti ti-list-check"></i>${esc(st.name)} <span class="muted" style="font-weight:500;margin-left:auto">${C.done || 0}/${st.total}</span></h4>
+    ${st ? `<div class="bt-card"><h4><i class="ti ti-list-check"></i>${esc(st.name)} <span class="muted bt-push">${C.done || 0}/${st.total}</span></h4>
       <div class="bt-sum">${[['done', 'xong', 'bt-ok'], ['running', 'đang làm', 'bt-run'], ['pending', 'chờ', ''], ['error', 'lỗi', 'bt-bad'], ['cancelled', st.cancelled ? 'đã huỷ' : 'đã dừng', '']].filter(([k]) => C[k]).map(([k, l, c]) => `<span class="${c}">${C[k]} ${l}</span>`).join(' · ')}${st.cancelled ? ' · <b>lô đã huỷ</b>' : ''}</div>
-      ${running ? `<div class="help" style="margin:0 0 4px">${esc(st.pausing ? 'Sẽ tạm dừng khi xong dòng đang làm…' : S.job.step || '')}</div>
-        <div class="acts" style="padding-top:0"><button id="bt-pause" ${st.pausing ? 'disabled' : ''}><i class="ti ti-player-pause"></i> ${st.pausing ? 'Đang chờ dòng này xong…' : 'Tạm dừng'}</button><button class="danger" id="bt-cancel"><i class="ti ti-x"></i> Huỷ lô</button></div>` : ''}
+      ${running ? `<div class="help bt-step">${esc(st.pausing ? 'Sẽ tạm dừng khi xong dòng đang làm…' : S.job.step || '')}</div>
+        <div class="acts bt-acts-flush"><button id="bt-pause" ${st.pausing ? 'disabled' : ''}><i class="ti ti-player-pause"></i> ${st.pausing ? 'Đang chờ dòng này xong…' : 'Tạm dừng'}</button><button class="danger" id="bt-cancel"><i class="ti ti-x"></i> Huỷ lô</button></div>` : ''}
       ${pager}
       ${st.rows.map(r => `<div class="bt-row"><i class="ti ${r.state === 'done' ? 'ti-circle-check bt-ok' : r.state === 'error' ? 'ti-alert-triangle bt-bad' : r.state === 'running' ? 'ti-loader-2 spin bt-run' : r.state === 'cancelled' ? 'ti-player-pause muted' : 'ti-clock muted'}"></i>
-        <div style="min-width:0"><span class="nm">${r.i + 1}. ${esc(r.title || r.name || 'Dòng ' + (r.i + 1))}</span>
+        <div class="mid"><span class="nm">${r.i + 1}. ${esc(r.title || r.name || 'Dòng ' + (r.i + 1))}</span>
           <span class="st ${r.state === 'error' ? 'err' : ''}" title="${esc(r.error || r.step || '')}">${esc(r.error || (r.state === 'pending' ? 'chờ' : r.state === 'cancelled' ? (st.cancelled ? 'đã huỷ' : 'đã dừng — bấm Chạy tiếp') : r.step || r.state))}</span>
-          ${r.state === 'running' ? `<div class="bt-pbar"><i style="width:${Math.round((r.progress || 0) * 100)}%"></i></div>` : ''}</div>
+          ${r.state === 'running' ? `<div class="bt-pbar"><i data-w="${Math.round((r.progress || 0) * 100)}"></i></div>` : ''}</div>
         <div class="b">${r.url ? `<button class="icon" title="Mở video" data-bopen="${esc(r.url)}"><i class="ti ti-player-play"></i></button><button class="icon" title="Hiện trong Finder" data-breveal="${esc(r.rout)}"><i class="ti ti-folder"></i></button>` : ''}
           ${r.rdir ? `<button class="icon" title="Mở dự án này trong Studio" data-bproj="${esc(r.rdir)}"><i class="ti ti-edit"></i></button>` : ''}</div></div>`).join('')}
       ${pager}
       ${!running && (C.done || 0) < st.count ? `<div class="acts"><button id="bt-resume"><i class="ti ti-player-track-next"></i> Chạy tiếp ${st.count - (C.done || 0)} dòng chưa xong</button>${st.cancelled ? '' : '<button class="danger" id="bt-cancel"><i class="ti ti-x"></i> Huỷ lô</button>'}</div>` : ''}</div>` : ''}
-    ${S.history.length ? `<div class="sect"><i class="ti ti-history"></i> Lần chạy trước</div>${S.history.slice(0, 6).map(h => `<div class="bt-row" style="grid-template-columns:minmax(0,1fr) auto"><div style="min-width:0"><span class="nm">${esc(h.name)}</span><span class="st">${h.done}/${h.total} video${h.cancelled ? ' · đã huỷ' : ''}</span></div>
+    ${S.history.length ? `<div class="sect"><i class="ti ti-history"></i> Lần chạy trước</div>${S.history.slice(0, 6).map(h => `<div class="bt-row bt-row--hist"><div class="mid"><span class="nm">${esc(h.name)}</span><span class="st">${h.done}/${h.total} video${h.cancelled ? ' · đã huỷ' : ''}</span></div>
       <div class="b"><button class="icon" title="Xem" data-bhist="${esc(h.dir)}"><i class="ti ti-list"></i></button><button class="icon" title="Hiện trong Finder" data-breveal="${esc(h.dir)}"><i class="ti ti-folder"></i></button></div></div>`).join('')}` : ''}`;
     bind();
   }
   function bind() {
     const B = $('#libbody');
+    B.querySelectorAll('.bt-pbar i[data-w]').forEach(i => i.style.setProperty('--w', i.dataset.w + '%'));
     $('#bt-src').onchange = e => { S.source = e.target.value; S.mapping = {}; loadTargets(); };
     $('#bt-drop').onclick = () => $('#bt-file').click();
     $('#bt-file').onchange = e => e.target.files[0] && upload(e.target.files[0]);

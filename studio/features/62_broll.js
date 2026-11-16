@@ -43,28 +43,29 @@
     if (tab === 'stock') {
       h = `<div class="abq"><input id="abq" placeholder="VD: văn phòng, robot, city night…" value="${esc(Q)}"><button data-abgo class="primary"><i class="ti ti-search"></i></button></div>
         <div class="chips">${[['photo', 'Ảnh'], ['video', 'Video']].map(([k, l]) => `<button class="chip ${KIND === k ? 'on' : ''}" data-abkind="${k}">${l}</button>`).join('')}</div>${keyNote()}
-        ${LOADING ? '<div class="empty"><i class="ti ti-loader-2 abspin"></i><b>Đang tìm…</b></div>' : !RES ? '<div class="empty"><i class="ti ti-photo-search"></i><b>Tìm b-roll thật</b><span>Gõ chủ đề (tiếng Việt hoặc Anh) rồi Enter. Bấm một kết quả để tải về media/ và chèn tại playhead (2,5 s).</span></div>'
+        ${LOADING ? '<div class="ui-state ui-state--loading" role="status"><i class="ti ti-loader-2 ui-state__icon"></i><b class="ui-state__title">Đang tìm…</b></div>' : !RES ? '<div class="ui-state ui-state--empty"><i class="ti ti-photo-search ui-state__icon"></i><b class="ui-state__title">Tìm b-roll thật</b><span>Gõ chủ đề (tiếng Việt hoặc Anh) rồi Enter. Bấm một kết quả để tải về media/ và chèn tại playhead (2,5 s).</span></div>'
           : RES.items.length ? `<div class="help">“${esc(RES.query)}” → <b>${esc(RES.en)}</b> · ${RES.items.length} kết quả</div><div class="abgrid">${RES.items.map((it, i) => `<div class="abcell" data-abi="${i}" title="${esc(it.title)} — ${esc(it.author || '')} (${esc(it.license || '')})">
-              <div class="th" style="background-image:url('${esc(it.thumb || '')}')">${it.kind === 'video' ? `<span class="du"><i class="ti ti-player-play-filled"></i>${it.dur ? Math.round(it.dur) + 's' : ''}</span>` : ''}<span class="pv">${esc(it.provider)}</span></div>
+              <div class="th" data-thumb="${esc(it.thumb || '')}">${it.kind === 'video' ? `<span class="du"><i class="ti ti-player-play-filled"></i>${it.dur ? Math.round(it.dur) + 's' : ''}</span>` : ''}<span class="pv">${esc(it.provider)}</span></div>
               <div class="nm">${esc(it.license || '')}</div></div>`).join('')}</div>`
-          : `<div class="empty"><i class="ti ti-mood-empty"></i><b>Không có kết quả</b><span>Thử từ khoá tiếng Anh đơn giản hơn${RES.missing.length ? ', hoặc thêm key Pexels/Pixabay' : ''}.</span></div>`}`;
+          : `<div class="ui-state ui-state--empty"><i class="ti ti-mood-empty ui-state__icon"></i><b class="ui-state__title">Không có kết quả</b><span>Thử từ khoá tiếng Anh đơn giản hơn${RES.missing.length ? ', hoặc thêm key Pexels/Pixabay' : ''}.</span></div>`}`;
     } else if (tab === 'ai') {
       h = `<div class="help">Claude đọc phụ đề, chọn câu đáng minh hoạ và đề xuất: <b>b-roll động</b> có sẵn trong thư viện (9.080 preset) hoặc <b>từ khoá ảnh stock</b>. Tick những mục muốn dùng rồi chèn.</div>
-        <div class="acts"><button class="primary" data-abact="suggest"><i class="ti ti-sparkles"></i> ${SUG ? 'Gợi ý lại' : 'AI gợi ý b-roll'}</button>${SUG?.length ? `<button data-abact="insert"><i class="ti ti-plus"></i> Chèn ${PICK.size} mục</button>` : ''}</div>${SUG?.length && vert() ? `<div class="chips" style="margin:8px 0 0">${[['full', 'B-roll động toàn màn'], ['card', 'Dạng thẻ']].map(([k, l]) => `<button class="chip ${INS === k ? 'on' : ''}" data-abins="${k}">${l}</button>`).join('')}</div>` : ''}
+        <div class="acts"><button class="primary" data-abact="suggest"><i class="ti ti-sparkles"></i> ${SUG ? 'Gợi ý lại' : 'AI gợi ý b-roll'}</button>${SUG?.length ? `<button data-abact="insert"><i class="ti ti-plus"></i> Chèn ${PICK.size} mục</button>` : ''}</div>${SUG?.length && vert() ? `<div class="chips ab-ins">${[['full', 'B-roll động toàn màn'], ['card', 'Dạng thẻ']].map(([k, l]) => `<button class="chip ${INS === k ? 'on' : ''}" data-abins="${k}">${l}</button>`).join('')}</div>` : ''}
         ${SUG ? SUG.length ? `<div class="ablist">${SUG.map((s, i) => `<label class="absug ${PICK.has(i) ? 'on' : ''}"><input type="checkbox" data-abpick="${i}" ${PICK.has(i) ? 'checked' : ''}>
             <div><div class="t"><a data-abseek="${s.t0}">${fmt(s.t0)}–${fmt(s.t1)}</a> <span class="kd ${s.kind}">${s.kind === 'preset' ? 'B-roll động' : 'Ảnh stock'}</span></div>
             <div class="q">“${esc(s.text)}”</div>
             <div class="w">${s.kind === 'preset' ? `<i class="ti ti-movie"></i> ${esc(s.preset?.template || '')} · <b>${esc(s.label || s.preset?.text || '')}</b>` : `<i class="ti ti-photo-search"></i> ${esc(s.query)}`}</div>
-            ${s.why ? `<div class="why">${esc(s.why)}</div>` : ''}</div></label>`).join('')}</div>` : '<div class="empty"><b>Claude không đề xuất mục nào</b></div>' : ''}`;
+            ${s.why ? `<div class="why">${esc(s.why)}</div>` : ''}</div></label>`).join('')}</div>` : '<div class="ui-state ui-state--empty"><b class="ui-state__title">Claude không đề xuất mục nào</b></div>' : ''}`;
     } else {
       const has = KEYS && (KEYS.openai || KEYS.gemini);
       h = has ? `<div class="help">Tạo ảnh bằng key của bạn (${[KEYS.openai && 'OpenAI gpt-image-1', KEYS.gemini && 'Google Imagen 4'].filter(Boolean).join(', ')}). Ảnh lưu vào media/ và chèn tại playhead 3 s. Có tính phí theo tài khoản của bạn.</div>
           <textarea id="abgen" rows="4" placeholder="Mô tả ảnh, VD: robot trợ lý đang làm việc trong văn phòng hiện đại, ánh sáng điện ảnh, dọc 9:16">${esc(GEN)}</textarea>
           ${KEYS.openai && KEYS.gemini ? `<select id="abprov"><option value="openai">OpenAI</option><option value="gemini">Google Gemini (Imagen)</option></select>` : ''}
           <div class="acts"><button class="primary" data-abact="gen"><i class="ti ti-photo-ai"></i> Tạo ảnh</button></div>`
-        : `<div class="empty"><i class="ti ti-photo-ai"></i><b>Cần API key tạo ảnh</b><span>Studio không tự tạo ảnh khi chưa có key. Dán <b>OpenAI API key</b> (platform.openai.com → API keys) hoặc <b>Google Gemini API key</b> (aistudio.google.com → Get API key) trong ⚙ Key. Key lưu trên máy ở ~/.ai-video-studio/config.json (chỉ bạn đọc được).</span><button data-abact="keys"><i class="ti ti-key"></i> Dán key</button></div>`;
+        : `<div class="ui-state ui-state--empty"><i class="ti ti-photo-ai ui-state__icon"></i><b class="ui-state__title">Cần API key tạo ảnh</b><span>Studio không tự tạo ảnh khi chưa có key. Dán <b>OpenAI API key</b> (platform.openai.com → API keys) hoặc <b>Google Gemini API key</b> (aistudio.google.com → Get API key) trong ⚙ Key. Key lưu trên máy ở ~/.ai-video-studio/config.json (chỉ bạn đọc được).</span><button data-abact="keys"><i class="ti ti-key"></i> Dán key</button></div>`;
     }
     $('#libbody').innerHTML = `<div id="abpanel">${seg}${h}</div>`;
+    $('#libbody').querySelectorAll('.abcell .th[data-thumb]').forEach(el => { if (el.dataset.thumb) el.style.backgroundImage = 'url(' + JSON.stringify(el.dataset.thumb) + ')'; });
     const q = $('#abq'); if (q) q.onkeydown = e => { if (e.key === 'Enter') search(); };
   }
   async function search() {
@@ -150,28 +151,28 @@
   Studio.addPanel('aibroll', 'ti-wand', 'B-roll AI', render);
   const st = document.createElement('style');
   st.textContent = `
-#abpanel .abq { display:flex; gap:6px; margin-bottom:8px; } #abpanel .abq input { flex:1; height:32px; } #abpanel .abq button { height:32px; }
-#abpanel .chips { margin-bottom:8px; }
-#abpanel .abnote { display:flex; gap:8px; background:var(--bg2); border:1px solid var(--line2); border-radius:8px; padding:8px 10px; font-size:11px; color:var(--tx2); margin-bottom:10px; line-height:1.45; }
-#abpanel .abnote .ti { color:var(--warn); font-size:15px; }
-#abpanel .abgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+#abpanel .abq { display:flex; gap:var(--space-2); margin-bottom:var(--space-2); } #abpanel .abq input { flex:1; height:var(--h-md); } #abpanel .abq button { height:var(--h-md); }
+#abpanel .chips { margin-bottom:var(--space-2); } #abpanel .chips.ab-ins { margin:var(--space-2) 0 0; }
+#abpanel .abnote { display:flex; gap:var(--space-2); background:rgb(var(--color-surface-raised)); border:1px solid rgb(var(--color-line-strong)); border-radius:var(--radius-control); padding:var(--space-2) var(--space-3); font-size:var(--text-2xs); color:rgb(var(--color-fg-muted)); margin-bottom:var(--space-3); line-height:1.45; }
+#abpanel .abnote .ti { color:rgb(var(--color-warning)); font-size:var(--text-md); }
+#abpanel .abgrid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-2); }
 #abpanel .abcell { cursor:pointer; } #abpanel .abcell.busy { opacity:.45; pointer-events:none; }
-#abpanel .abcell .th { position:relative; aspect-ratio:4/3; border-radius:8px; background:var(--bg3) center/cover no-repeat; border:1px solid var(--line); overflow:hidden; transition:border-color .15s; }
-#abpanel .abcell:hover .th { border-color:var(--acc); }
+#abpanel .abcell .th { position:relative; aspect-ratio:4/3; border-radius:var(--radius-control); background:rgb(var(--color-surface-muted)) center/cover no-repeat; border:1px solid rgb(var(--color-line)); overflow:hidden; transition:border-color var(--duration-fast) var(--ease-standard); }
+#abpanel .abcell:hover .th { border-color:rgb(var(--color-accent-text)); }
 #abpanel .abcell video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-#abpanel .abcell .du, #abpanel .abcell .pv { position:absolute; bottom:4px; font-size:10px; background:rgba(0,0,0,.65); color:#fff; border-radius:4px; padding:1px 5px; z-index:1; }
-#abpanel .abcell .du { right:4px; } #abpanel .abcell .pv { left:4px; text-transform:capitalize; }
-#abpanel .abcell .nm { font-size:10.5px; color:var(--tx3); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#abpanel .ablist { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
-#abpanel .absug { display:flex; gap:8px; background:var(--bg2); border:1px solid var(--line); border-radius:8px; padding:8px; cursor:pointer; font-size:11.5px; }
-#abpanel .absug.on { border-color:var(--acc-line); background:var(--acc-soft); }
-#abpanel .absug input { width:auto; margin-top:2px; }
-#abpanel .absug .t a { color:var(--acc); cursor:pointer; font-variant-numeric:tabular-nums; }
-#abpanel .absug .kd { font-size:10px; border-radius:4px; padding:1px 5px; margin-left:4px; background:var(--t-broll); color:#fff; } #abpanel .absug .kd.stock { background:var(--t-audio); }
-#abpanel .absug .q { color:var(--tx); margin:3px 0; font-style:italic; }
-#abpanel .absug .w { color:var(--tx2); } #abpanel .absug .why { color:var(--tx3); margin-top:2px; }
-#abpanel textarea { width:100%; margin:8px 0; } #abpanel select { margin-bottom:8px; }
-#abpanel .empty button { margin-top:10px; }
-.abspin { animation:abspin 1s linear infinite; } @keyframes abspin { to { transform:rotate(360deg); } }`;
+#abpanel .abcell .du, #abpanel .abcell .pv { position:absolute; bottom:var(--space-1); font-size:var(--text-2xs); background:rgb(var(--color-black) / .65); color:rgb(var(--color-fg-on-media)); border-radius:var(--radius-xs); padding:0 var(--space-1); z-index:1; }
+#abpanel .abcell .du { right:var(--space-1); } #abpanel .abcell .pv { left:var(--space-1); text-transform:capitalize; }
+#abpanel .abcell .nm { font-size:var(--text-2xs); color:rgb(var(--color-fg-subtle)); margin-top:var(--space-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#abpanel .ablist { display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-3); }
+#abpanel .absug { display:flex; gap:var(--space-2); background:rgb(var(--color-surface-raised)); border:1px solid rgb(var(--color-line)); border-radius:var(--radius-control); padding:var(--space-2); cursor:pointer; font-size:var(--text-xs); }
+#abpanel .absug.on { border-color:rgb(var(--color-accent-text) / .5); background:rgb(var(--color-accent-soft) / .24); }
+#abpanel .absug input { width:auto; margin-top:var(--space-050); }
+#abpanel .absug .t a { color:rgb(var(--color-accent-text)); cursor:pointer; font-variant-numeric:tabular-nums; }
+#abpanel .absug .kd { font-size:var(--text-2xs); border-radius:var(--radius-xs); padding:0 var(--space-1); margin-left:var(--space-1); background:rgb(var(--track-7)); color:rgb(var(--color-fg-on-media)); } #abpanel .absug .kd.stock { background:rgb(var(--track-8)); }
+#abpanel .absug .q { color:rgb(var(--color-fg)); margin:var(--space-1) 0; font-style:italic; }
+#abpanel .absug .w { color:rgb(var(--color-fg-muted)); } #abpanel .absug .why { color:rgb(var(--color-fg-subtle)); margin-top:var(--space-050); }
+#abpanel textarea { width:100%; margin:var(--space-2) 0; } #abpanel select { margin-bottom:var(--space-2); }
+#abpanel .ui-state button { margin-top:var(--space-2); }
+#abpanel .ui-state > span { color:rgb(var(--color-fg-subtle)); }`;
   document.head.appendChild(st);
 })();

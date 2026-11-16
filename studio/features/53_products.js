@@ -9,23 +9,27 @@
   let LIST = null, EDIT = null;
   const css = document.createElement('style');
   css.textContent = `
-  .pb-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
-  .pb-card.cur { border-color: var(--acc-line); box-shadow: 0 0 0 1px var(--acc-line) inset; }
-  .pb-top { display: flex; gap: 8px; align-items: flex-start; } .pb-top > div { min-width: 0; flex: 1; }
-  .pb-top b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pb-top small { color: var(--tx3); font-size: 10.5px; }
-  .pb-n { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 10.5px; }
-  .pb-n span { border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; color: var(--tx2); }
-  .pb-n .ok { color: var(--ok); } .pb-n .bad { color: var(--bad); } .pb-n .warn { color: var(--warn); }
-  .pb-act { display: flex; gap: 4px; margin-top: 8px; } .pb-act button { padding: 4px 8px; font-size: 11px; } .pb-act .grow { flex: 1; }
-  .pb-form label { display: block; font-size: 10.5px; color: var(--tx3); margin: 8px 0 3px; }
+  .pb-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .pb-card.cur { border-color: rgb(var(--color-accent-text)); box-shadow: inset 0 0 0 1px rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .14); }
+  .pb-title { font-size: var(--text-sm); }
+  .pb-intro { margin-top: var(--space-1); }
+  .pb-top { display: flex; gap: var(--space-2); align-items: flex-start; } .pb-top > div { min-width: 0; flex: 1; }
+  .pb-top b { display: block; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pb-top small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .pb-n { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); font-size: var(--text-2xs); }
+  .pb-n span { border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-xs); padding: 0 var(--space-1); color: rgb(var(--color-fg-muted)); }
+  .pb-n .ok { color: rgb(var(--color-success)); } .pb-n .bad { color: rgb(var(--color-danger)); } .pb-n .warn { color: rgb(var(--color-warning)); }
+  .pb-act { display: flex; gap: var(--space-1); margin-top: var(--space-2); } .pb-act button { padding: var(--space-1) var(--space-2); font-size: var(--text-2xs); } .pb-act .grow { flex: 1; }
+  .pb-form label { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-1); }
   .pb-form input, .pb-form select, .pb-form textarea { width: 100%; min-width: 0; box-sizing: border-box; }
-  .pb-cl { border: 1px solid var(--line); border-radius: var(--rs); padding: 6px; margin: 6px 0; background: var(--bg1); display: grid; gap: 4px; }
-  .pb-cl .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; gap: 4px; align-items: center; }
+  .pb-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); }
+  .pb-cl { border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-2); margin: var(--space-2) 0; background: rgb(var(--color-surface)); display: grid; gap: var(--space-1); }
+  .pb-cl .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--h-sm); gap: var(--space-1); align-items: center; }
   .pb-cl textarea { resize: vertical; } .pb-form input[type=date] { color-scheme: dark; }
-  .pb-cl[data-st="approved"] { border-left: 3px solid var(--ok); } .pb-cl[data-st="prohibited"], .pb-cl[data-st="expired"] { border-left: 3px solid var(--bad); }
-  .pb-cl[data-st="pending"] { border-left: 3px solid var(--warn); }
-  .pb-faq { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 4px; margin: 4px 0; }`;
+  .pb-cl[data-st="approved"] { border-left: 4px solid rgb(var(--color-success)); } .pb-cl[data-st="prohibited"], .pb-cl[data-st="expired"] { border-left: 4px solid rgb(var(--color-danger)); }
+  .pb-cl[data-st="pending"] { border-left: 4px solid rgb(var(--color-warning)); }
+  .pb-faq { display: grid; grid-template-columns: minmax(0, 1fr) var(--h-sm); gap: var(--space-1); margin: var(--space-1) 0; }
+  .pb-faq-qa { display: grid; gap: var(--space-1); }`;
   document.head.appendChild(css);
 
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'products';
@@ -58,13 +62,13 @@
       <button class="icon danger" data-pbdel title="Xoá claim"><i class="ti ti-x"></i></button></div>
     <input data-f="evidence" value="${esc(c.evidence || '')}" placeholder="Bằng chứng (bắt buộc khi đã duyệt): số giấy chứng nhận, báo cáo…">
     <input data-f="source" value="${esc(c.source || '')}" placeholder="Nguồn / link tài liệu (tuỳ chọn)"></div>`;
-  const faqRow = f => `<div class="pb-faq"><div style="display:grid;gap:4px"><input data-f="q" value="${esc(f.q || '')}" placeholder="Câu hỏi khách hay hỏi"><textarea data-f="a" rows="2" placeholder="Câu trả lời đúng">${esc(f.a || '')}</textarea></div>
+  const faqRow = f => `<div class="pb-faq"><div class="pb-faq-qa"><input data-f="q" value="${esc(f.q || '')}" placeholder="Câu hỏi khách hay hỏi"><textarea data-f="a" rows="2" placeholder="Câu trả lời đúng">${esc(f.a || '')}</textarea></div>
     <button class="icon danger" data-pbdel title="Xoá"><i class="ti ti-x"></i></button></div>`;
   function form() {
     const p = EDIT;
-    return `<div class="pb-card pb-form"><b style="font-size:12.5px">${p.id ? 'Sửa hồ sơ sản phẩm' : 'Hồ sơ sản phẩm mới'}</b>
+    return `<div class="pb-card pb-form"><b class="pb-title">${p.id ? 'Sửa hồ sơ sản phẩm' : 'Hồ sơ sản phẩm mới'}</b>
       <label>Tên sản phẩm</label><input id="pb-name" value="${esc(p.name || '')}" placeholder="VD: Serum B5 đầu nhỏ giọt">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px"><div><label>Thương hiệu</label><input id="pb-brand" value="${esc(p.brand || '')}"></div>
+      <div class="pb-g2"><div><label>Thương hiệu</label><input id="pb-brand" value="${esc(p.brand || '')}"></div>
         <div><label>Ngành</label><select id="pb-ind">${Object.entries(IND).map(([k, v]) => `<option value="${k}" ${(p.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
       <label>Claim <span class="muted">· claim “Đã duyệt” phải có bằng chứng; quá ngày hết hạn thì tính là hết hạn</span></label>
       <div id="pb-claims">${(p.claims || []).map(claimRow).join('')}</div><button class="mini" id="pb-addc"><i class="ti ti-plus"></i> Thêm claim</button>
@@ -87,7 +91,7 @@
     $('#pb-new').onclick = () => { EDIT = { claims: [{ status: 'approved' }] }; render(); };
     if (!LIST) { $('#libbody').innerHTML = '<div class="help">Đang tải…</div>'; return; }
     const legacy = !cur() && (S.TL.ads?.claims?.length || S.TL.ads?.blocked?.length);
-    $('#libbody').innerHTML = `<div class="help" style="margin-top:4px">Hồ sơ sản phẩm dùng chung cho mọi dự án: claim kèm bằng chứng và trạng thái duyệt, cụm từ cấm, FAQ. Dự án trỏ tới một hồ sơ thì “Kiểm tra quảng cáo” đối chiếu theo hồ sơ, không cần nhập claim lại. Lưu ở <code>~/.ai-video-studio/products/</code>.</div>
+    $('#libbody').innerHTML = `<div class="help pb-intro">Hồ sơ sản phẩm dùng chung cho mọi dự án: claim kèm bằng chứng và trạng thái duyệt, cụm từ cấm, FAQ. Dự án trỏ tới một hồ sơ thì “Kiểm tra quảng cáo” đối chiếu theo hồ sơ, không cần nhập claim lại. Lưu ở <code>~/.ai-video-studio/products/</code>.</div>
       ${EDIT ? form() : ''}
       ${LIST.map(card).join('') || (EDIT ? '' : '<div class="help">Chưa có hồ sơ nào.</div>')}
       <div class="pb-act"><button id="pb-new2"><i class="ti ti-plus"></i> Hồ sơ mới</button>${legacy ? '<button id="pb-fromproj" title="Lấy claim và cụm từ cấm đang nhập tay trong dự án này"><i class="ti ti-download"></i> Tạo từ claim của dự án</button>' : ''}</div>`;

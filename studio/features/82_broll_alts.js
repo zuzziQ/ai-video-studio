@@ -7,12 +7,18 @@
   const sceneOf = c => (c?.kind === 'scene' ? c.obj : c?.scene) || null;
   const SRC = { preset: 'B-roll động', hf: 'Khối HyperFrames', text: 'Chữ nổi', emoji: 'Emoji 3D', logo: 'Logo công cụ', media: 'Media dự án', lib: 'Thư viện của tôi', stock: 'Ảnh stock', stockvid: 'Video stock', aiimg: 'Ảnh AI' };
   const ROLE = { hook: 'câu mở / gây tò mò', number: 'con số', money: 'giá / tiền', list: 'liệt kê', compare: 'so sánh', proof: 'bằng chứng / đánh giá', tool: 'nhắc tên công cụ', place: 'cảnh thật', time: 'thời gian', emotion: 'cảm xúc', cta: 'kêu gọi', general: 'ý chung' };
+  // Local classes (tokens only): the inspector tab has no CSS of its own besides these two rules.
+  const css = document.createElement('style');
+  css.textContent = `
+  .help.balt-cur { margin: 0 0 var(--space-2); }
+  button.balt { width: 100%; justify-content: flex-start; margin: 0 0 var(--space-2); padding: var(--space-2) var(--space-3); text-align: left; } button.balt small { font-size: var(--text-2xs); }`;
+  document.head.appendChild(css);
   const what = s => s.type === 'text' ? `“${s.lines?.[0]?.text || ''}”` : s.type === 'emoji_pop' ? s.src : s.type === 'hf' ? s.block : s.type === 'photo' ? (s.credit ? 'ảnh/clip · ' + s.credit.split('·')[0] : 'ảnh/clip') : (s.template || s.screen?.broll?.template || s.type) + (s.text || s.screen?.broll?.text ? ` “${s.text || s.screen.broll.text}”` : '');
   S.addInspectorTab(c => {
     const o = sceneOf(c);
     if (!o?._alts?.length) return null;
-    const cur = `<div class="help" style="margin:0 0 8px">Đang dùng: <b>${esc(SRC[o._src] || o._src || 'b-roll')}</b> — ${esc(what(o))}${o._role ? `<br>Câu này: ${esc(ROLE[o._role] || o._role)}` : ''}</div>`;
-    const list = o._alts.map((a, i) => `<button data-balt="${i}" style="width:100%;justify-content:flex-start;margin:0 0 6px;padding:8px 10px;text-align:left"><i class="ti ti-switch-horizontal"></i>
+    const cur = `<div class="help balt-cur">Đang dùng: <b>${esc(SRC[o._src] || o._src || 'b-roll')}</b> — ${esc(what(o))}${o._role ? `<br>Câu này: ${esc(ROLE[o._role] || o._role)}` : ''}</div>`;
+    const list = o._alts.map((a, i) => `<button class="balt" data-balt="${i}"><i class="ti ti-switch-horizontal"></i>
       <span><b>${esc(a.label)}</b><br><small class="muted">${esc(what(a.scene))}</small></span></button>`).join('');
     return ['alts', 'Phương án khác', S.sect('Đổi b-roll này', cur + list + '<div class="help">Bấm để thay; phương án đang dùng chuyển xuống danh sách để đổi lại được. ⌘Z để hoàn tác.</div>', 'ti-arrows-shuffle')];
   });

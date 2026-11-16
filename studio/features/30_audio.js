@@ -4,7 +4,7 @@
 (() => {
   const S = Studio, { $, esc, fmt } = S;
   const PRESETS = [['off', 'Tắt'], ['nhe', 'Nhẹ'], ['vua', 'Vừa'], ['manh', 'Mạnh']];
-  const COLORS = ['#7A4E9C', '#2F7A5B', '#8C5A2B', '#2B6C8C', '#8C2B4E'];
+  const COLORS = ['rgb(var(--track-4))', 'rgb(var(--track-7))', 'rgb(var(--track-3))', 'rgb(var(--track-8))', 'rgb(var(--track-5))']; // màu track phụ trên timeline
   const DUCK0 = { on: true, amount_db: -10, attack: 60, release: 400 };
   const A = () => { const t = S.TL; t.audio = t.audio || {}; return t.audio; };
   const tracks = () => A().tracks || (A().tracks = []);
@@ -12,19 +12,23 @@
   const itemLen = it => Math.max(.1, (it.out ?? (it.in || 0) + (it.src_dur || 5)) - (it.in || 0));
   const css = document.createElement('style');
   css.textContent = `
-  .ap section { padding: 12px 0; border-bottom: 1px solid var(--line); } .ap section:last-child { border-bottom: 0; }
-  .ap .sh { font-size: 12px; font-weight: 700; color: var(--tx); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; } .ap .sh .ti { color: var(--acc); font-size: 15px; }
-  .ap .sh .badge { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--tx3); background: var(--bg3); border-radius: 4px; padding: 1px 6px; }
-  .ap .ab { display: flex; gap: 6px; margin-top: 8px; } .ap .ab button { flex: 1; justify-content: center; }
-  .ap .ab button.on { background: var(--acc-soft); border-color: var(--acc-line); color: #D9D3FF; }
-  .ap .sw { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--tx2); margin-bottom: 6px; cursor: pointer; }
-  .ap .trk { background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
-  .ap .trk .top { display: flex; gap: 4px; align-items: center; } .ap .trk .top input[type=text] { flex: 1; min-width: 0; padding: 4px 6px; }
-  .ap .trk .ms { padding: 3px 7px; font-weight: 700; font-size: 11px; } .ap .trk .ms.on.m { background: #5b2330; border-color: var(--bad); color: #fff; } .ap .trk .ms.on.s { background: #5b4a14; border-color: var(--warn); color: #fff; }
-  .ap .trk .items { margin: 6px 0 0; font-size: 11.5px; color: var(--tx2); } .ap .trk .items div { display: flex; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 5px; cursor: pointer; }
-  .ap .trk .items div:hover { background: var(--bg3); } .ap .trk .items span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap .trk .items small { color: var(--tx3); }
-  .ap .pick { max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; } .ap .pick div { padding: 5px 8px; font-size: 11.5px; cursor: pointer; display: flex; gap: 6px; align-items: center; } .ap .pick div:hover { background: var(--acc-soft); }
-  .ap audio { width: 100%; height: 30px; margin-top: 6px; }`;
+  .ap section { padding: var(--space-3) 0; border-bottom: 1px solid rgb(var(--color-line)); } .ap section:last-child { border-bottom: 0; }
+  .ap .sh { font-size: var(--text-xs); font-weight: 700; color: rgb(var(--color-fg)); margin-bottom: var(--space-2); display: flex; align-items: center; gap: var(--space-2); } .ap .sh .ti { color: rgb(var(--color-accent-text)); font-size: var(--text-md); }
+  .ap .sh .badge { margin-left: auto; font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-fg-subtle)); background: rgb(var(--color-surface-muted)); border-radius: var(--radius-xs); padding: var(--space-050) var(--space-2); }
+  .ap .ab { display: flex; gap: var(--space-2); margin-top: var(--space-2); } .ap .ab button { flex: 1; justify-content: center; }
+  .ap .ab button.on { background: rgb(var(--color-accent-soft) / .24); border-color: rgb(var(--color-accent-text) / .5); color: rgb(var(--color-accent-text-strong)); }
+  .ap .sw { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); margin-bottom: var(--space-2); cursor: pointer; }
+  .ap .trk { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-left: 4px solid var(--c, rgb(var(--color-line-strong))); border-radius: var(--radius-control); padding: var(--space-2); margin-bottom: var(--space-2); }
+  .ap .trk .top { display: flex; gap: var(--space-1); align-items: center; } .ap .trk .top input[type=text] { flex: 1; min-width: 0; padding: var(--space-1) var(--space-2); }
+  .ap .trk .ms { padding: var(--space-1) var(--space-2); font-weight: 700; font-size: var(--text-2xs); }
+  .ap .trk .ms.on.m { background: rgb(var(--color-danger) / .3); border-color: rgb(var(--color-danger)); color: rgb(var(--color-fg)); } .ap .trk .ms.on.s { background: rgb(var(--color-warning) / .3); border-color: rgb(var(--color-warning)); color: rgb(var(--color-fg)); }
+  .ap .trk .items { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); } .ap .trk .items div { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-1); border-radius: var(--radius-xs); cursor: pointer; }
+  .ap .trk .items div:hover { background: rgb(var(--color-surface-muted)); } .ap .trk .items span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap .trk .items small { color: rgb(var(--color-fg-subtle)); }
+  .ap .pick { max-height: 180px; overflow: auto; border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); margin-top: var(--space-2); } .ap .pick div { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); cursor: pointer; display: flex; gap: var(--space-2); align-items: center; } .ap .pick div:hover { background: rgb(var(--color-accent-soft) / .24); }
+  .ap .trk .items .nocur, .ap .pick .nocur { cursor: default; } .ap .trk .items .nocur:hover, .ap .pick .nocur:hover { background: none; }
+  .ap .acts.ap-gap { padding-top: var(--space-2); } .ap .acts.ap-gap-xs { padding-top: var(--space-050); } .ap .acts.ap-flush { padding-top: 0; }
+  .help.ap-top0 { margin-top: 0; }
+  .ap audio { width: 100%; height: var(--h-md); margin-top: var(--space-2); }`;
   document.head.appendChild(css);
   KIND_IC.aitem = 'ti-wave-square';
 
@@ -61,7 +65,7 @@
   function itemTabs(c) {
     const it = c.obj, t = c.trk, eq = it.eq || {};
     return [
-      ['basic', 'Cơ bản', S.sect('File âm thanh', `<div class="help" style="margin-top:0">${esc(it.file || '')} · track <b>${esc(t.name || '')}</b>${it.src_dur ? ` · dài ${fmt(it.src_dur)}` : ''}</div>
+      ['basic', 'Cơ bản', S.sect('File âm thanh', `<div class="help ap-top0">${esc(it.file || '')} · track <b>${esc(t.name || '')}</b>${it.src_dur ? ` · dài ${fmt(it.src_dur)}` : ''}</div>
         <div class="row"><div><span class="lbl">Bắt đầu (s)</span>${n('t0', rr(it.t0 || 0), .01)}</div><div><span class="lbl">Điểm vào</span>${n('in', rr(it.in || 0), .01)}</div><div><span class="lbl">Điểm ra</span>${n('out', rr(it.out ?? itemLen(it)), .01)}</div></div>
         <div class="acts"><button data-xact="here"><i class="ti ti-arrow-bar-to-right"></i> Bắt đầu tại playhead</button></div>
         ${sl('gain', 'Âm lượng', it.gain ?? 0, -40, 12, 1, ' dB')}`, 'ti-wave-square')],
@@ -148,25 +152,26 @@
         <div class="slrow"><span>Nhả (release)</span><input type="range" data-dk="release" min="100" max="1500" step="50" value="${d.release}"><b>${d.release} ms</b></div>
       </section>
       <section><div class="sh"><i class="ti ti-playlist"></i>Track âm thanh<span class="badge">${tracks().length}</span></div>
-        ${tracks().map((t, i) => `<div class="trk" style="--c:${COLORS[i % COLORS.length]}"><div class="top">
+        ${tracks().map((t, i) => `<div class="trk" data-ci="${i % COLORS.length}"><div class="top">
             <input type="text" data-tn="${i}" value="${esc(t.name || '')}">
             <button class="ms m ${t.mute ? 'on' : ''}" data-tm="${i}" title="Tắt tiếng">M</button><button class="ms s ${t.solo ? 'on' : ''}" data-ts="${i}" title="Solo">S</button>
             <button class="icon" data-tdel="${i}" title="Xoá track"><i class="ti ti-trash"></i></button></div>
           <div class="slrow"><span>Âm lượng</span><input type="range" data-tg="${i}" min="-30" max="12" step="1" value="${t.gain || 0}"><b>${t.gain || 0} dB</b></div>
           <label class="sw"><input type="checkbox" data-tdk="${i}" ${t.duck ? 'checked' : ''}> Tự hạ khi có giọng</label>
-          <div class="items">${(t.items || []).map((it, j) => `<div data-tsel="${i}:${j}"><i class="ti ti-wave-square"></i><span>${esc(it.file?.split('/').pop() || '')}</span><small>${fmt(it.t0 || 0)} · ${rr(itemLen(it))}s</small></div>`).join('') || '<div class="help" style="cursor:default">Chưa có file.</div>'}</div>
-          <div class="acts" style="padding-top:6px"><button data-tadd="${i}"><i class="ti ti-plus"></i> Thêm file tại ${fmt(S.T)}</button></div>
-          ${picking === i ? `<div class="pick">${media.map(m => `<div data-tpick="${esc(m.path)}"><i class="ti ${m.kind === 'video' ? 'ti-movie' : 'ti-music'}"></i>${esc(m.name)}</div>`).join('') || '<div style="cursor:default">Chưa có file âm thanh trong Media.</div>'}
+          <div class="items">${(t.items || []).map((it, j) => `<div data-tsel="${i}:${j}"><i class="ti ti-wave-square"></i><span>${esc(it.file?.split('/').pop() || '')}</span><small>${fmt(it.t0 || 0)} · ${rr(itemLen(it))}s</small></div>`).join('') || '<div class="help nocur">Chưa có file.</div>'}</div>
+          <div class="acts ap-gap"><button data-tadd="${i}"><i class="ti ti-plus"></i> Thêm file tại ${fmt(S.T)}</button></div>
+          ${picking === i ? `<div class="pick">${media.map(m => `<div data-tpick="${esc(m.path)}"><i class="ti ${m.kind === 'video' ? 'ti-movie' : 'ti-music'}"></i>${esc(m.name)}</div>`).join('') || '<div class="nocur">Chưa có file âm thanh trong Media.</div>'}
             <div data-tup="1"><i class="ti ti-cloud-upload"></i><b>Tải file lên…</b></div></div>` : ''}
         </div>`).join('')}
-        <div class="acts" style="padding-top:2px"><button data-tnew="1" class="primary"><i class="ti ti-plus"></i> Thêm track</button></div>
+        <div class="acts ap-gap-xs"><button data-tnew="1" class="primary"><i class="ti ti-plus"></i> Thêm track</button></div>
         <div class="help">Lồng tiếng, nhạc phụ, tiếng môi trường… Mỗi file là một khối trên timeline: kéo để dời, kéo mép để cắt; fade/EQ trong inspector.</div>
       </section>
       <section><div class="sh"><i class="ti ti-player-play"></i>Trộn thử</div>
-        <div class="acts" style="padding-top:0"><button data-mix="1"><i class="ti ti-adjustments-alt"></i> Lưu & trộn (-14 LUFS)</button></div>
+        <div class="acts ap-flush"><button data-mix="1"><i class="ti ti-adjustments-alt"></i> Lưu & trộn (-14 LUFS)</button></div>
         ${S.META.mixed ? `<audio controls src="/project/${esc(S.META.mixed)}"></audio>` : '<div class="help">Trộn đúng như khi xuất (giọng sạch, hạ nhạc, track phụ) để nghe trước.</div>'}
       </section></div>
       <input type="file" id="xaup" hidden accept="audio/*,video/*">`;
+    $('#libbody').querySelectorAll('.trk[data-ci]').forEach(el => el.style.setProperty('--c', COLORS[+el.dataset.ci]));
   }
   S.addPanel('audioplus', 'ti-adjustments-alt', 'Âm thanh+', render);
   const rerender = () => { if ($('#libbody .ap')) render(); };
