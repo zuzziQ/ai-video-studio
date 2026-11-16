@@ -514,7 +514,7 @@ function setFilter(i, preset, all) {
 }
 
 // ---------- panel events ----------
-$('#libact').addEventListener('click', e => { const b = e.target.closest('[data-tplact]'); if (!b) return; if (b.dataset.tplact === 'gallery') { TP.cat = tplCat; TP.q = query; TP.back = false; $('#tplpop')?.remove(); return openTplGallery(); } saveAsTemplate(); });
+$('#libact').addEventListener('click', e => { if (e.target.closest('[data-kreload]')) { KHOM = null; return renderPanel(); } const b = e.target.closest('[data-tplact]'); if (!b) return; if (b.dataset.tplact === 'gallery') { TP.cat = tplCat; TP.q = query; TP.back = false; $('#tplpop')?.remove(); return openTplGallery(); } saveAsTemplate(); });
 $('#libbody').addEventListener('click', async e => {
   const t = e.target, q = s => t.closest(s);
   let b;
@@ -530,7 +530,6 @@ $('#libbody').addEventListener('click', async e => {
   if ((b = q('[data-mtab]'))) { mediaTab = b.dataset.mtab; return renderPanel(); }
   if ((b = q('[data-atab]'))) { audioTab = b.dataset.atab; return renderPanel(); }
   if ((b = q('[data-kg]'))) { khoGroup = b.dataset.kg; return renderPanel(); }
-  if (q('[data-kreload]')) { KHOM = null; return renderPanel(); }
   if ((b = q('[data-k]'))) { const how = q('[data-kadd]')?.dataset.kadd; return useKho(KHOM?.items?.[+b.dataset.k], how || 'clip'); }
   if ((b = q('[data-m]'))) {
     const m = MEDIA[+b.dataset.m], how = q('[data-madd]')?.dataset.madd;

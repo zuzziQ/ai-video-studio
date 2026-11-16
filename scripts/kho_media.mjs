@@ -74,11 +74,12 @@ export function resolveRel(ws, rel) {
 
 // Tên trong media/: kho_<tên gọn>, trùng thì _2, _3… (không dùng freeName "x (2)": ngoặc tròn làm hỏng url() CSS của engine,
 // và <tên>_frames của video phải trống nên kiểm cả thư mục khung).
-export function mediaName(md, src) {
+export function mediaName(md, src, taken = new Set()) {
   const ext = path.extname(src).toLowerCase();
   const stem = path.basename(src, path.extname(src)).normalize('NFC').replace(/[^\w.\-À-ỹ]+/g, '_').replace(/^[._]+|_+$/g, '').slice(0, 60) || 'file';
   const base = PREFIX + stem; let n = base;
-  for (let i = 2; fs.existsSync(path.join(md, n + ext)) || fs.existsSync(path.join(md, n + '_frames')); i++) n = `${base}_${i}`;
+  // taken: tên đã ghi trong sổ (file có thể đã bị xoá khỏi media/): không cấp lại cho file Kho khác
+  for (let i = 2; fs.existsSync(path.join(md, n + ext)) || fs.existsSync(path.join(md, n + '_frames')) || taken.has(n + ext); i++) n = `${base}_${i}`;
   return n + ext;
 }
 
@@ -140,7 +141,8 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0 } = {}) {
   withFileLock(lock, () => {
     had = usedName(dir, relN);
     if (had) return;
-    name = mediaName(md, src); linked = linkOrCopy(src, path.join(md, name)); // EEXIST/COPYFILE_EXCL: không bao giờ ghi đè đích
+    const map = readMap(dir); delete map[relN];
+    name = mediaName(md, src, new Set(Object.values(map))); linked = linkOrCopy(src, path.join(md, name)); // EEXIST/COPYFILE_EXCL: không bao giờ ghi đè đích
   });
   if (had) {
     const it = mediaItem(dir, had);

@@ -54,9 +54,14 @@ test('useFromKho: liên kết vào media/kho_*, tên trùng → _2, dùng lại 
   // thư mục con lồng nhau vẫn theo nhóm của thư mục cấp 1: video thô trong Nguon/Tha vao day không thành b-roll
   assert.equal(list.find(x => x.rel === 'Nguon/Tha vao day/ca phe tho.mp4').group, 'source');
   assert.deepEqual(K.searchKho(list, 'uống cà phê thô').map(x => x.rel).filter(r => r.startsWith('Nguon/')), []);
-  // file đã có trong dự án bị xoá → dùng lại thì liên kết lần nữa
+  // file đã có trong dự án bị xoá → dùng lại thì liên kết lần nữa; file Kho khác cùng tên không lấy lại tên đã ghi sổ
   fs.rmSync(media('kho_logo_2.png'));
-  assert.equal((await K.useFromKho(PROJ, ws, 'BRoll/logo.png')).linked !== 'reuse', true);
+  put('Anh/2025/logo.png', 'png-3');
+  const c3 = await K.useFromKho(PROJ, ws, 'Anh/2025/logo.png');
+  assert.equal(c3.name, 'kho_logo_3.png');
+  const back = await K.useFromKho(PROJ, ws, 'BRoll/logo.png');
+  assert.notEqual(back.linked, 'reuse'); assert.equal(fs.readFileSync(media(back.name), 'utf8'), 'png-2');
+  assert.equal(K.usedName(PROJ, 'Anh/2025/logo.png'), 'kho_logo_3.png');
 });
 
 test('hai lần dùng cùng lúc (kể cả viết \\ và /) ra cùng một file', async () => {
