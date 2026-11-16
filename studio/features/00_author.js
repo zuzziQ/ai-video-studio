@@ -7,22 +7,22 @@
   const AUTHOR = 'Nguyễn Tất Kiểm', COURSE = 'https://nguyentatkiem.com.vn/aiplusntk/', SITE = 'https://taki.vn';
   const css = document.createElement('style');
   css.textContent = `
-  #author { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(5,6,9,.62); backdrop-filter: blur(4px); animation: au-in .25s ease; }
+  #author { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgb(var(--color-scrim) / .66); backdrop-filter: blur(4px); animation: au-in .25s ease; }
   #author.out { opacity: 0; transition: opacity .25s; }
   @keyframes au-in { from { opacity: 0; } }
   #author .card { width: min(440px, calc(100vw - 32px)); background: linear-gradient(160deg, var(--bg2), var(--bg1)); border: 1px solid var(--line2); border-radius: 14px;
-    box-shadow: 0 24px 80px rgba(0,0,0,.55); padding: 26px 26px 20px; text-align: center; position: relative; overflow: hidden; }
-  #author .card::before { content: ''; position: absolute; inset: -40% -20% auto; height: 220px; background: radial-gradient(closest-side, rgba(139,123,255,.28), transparent); pointer-events: none; }
-  #author .mk { width: 46px; height: 46px; border-radius: 13px; margin: 0 auto 12px; background: conic-gradient(from 210deg, #8B7BFF, #2DD4BF, #8B7BFF); box-shadow: 0 6px 24px rgba(139,123,255,.5); position: relative; }
-  #author .mk i { position: absolute; background: #0B0C0F; border-radius: 3px; }
+    box-shadow: var(--shadow-overlay); padding: 26px 26px 20px; text-align: center; position: relative; overflow: hidden; }
+  #author .card::before { content: ''; position: absolute; inset: -40% -20% auto; height: 220px; background: radial-gradient(closest-side, rgb(var(--color-accent) / .45), transparent); pointer-events: none; }
+  #author .mk { width: 46px; height: 46px; border-radius: 13px; margin: 0 auto 12px; background: conic-gradient(from 210deg, rgb(var(--navy-400)), rgb(var(--color-audio)), rgb(var(--navy-400))); box-shadow: var(--shadow-accent); position: relative; }
+  #author .mk i { position: absolute; background: rgb(var(--color-canvas)); border-radius: 3px; }
   #author .mk i:nth-child(1) { left: 12px; top: 12px; width: 5px; height: 22px; } #author .mk i:nth-child(2) { left: 20.5px; top: 18px; width: 5px; height: 16px; } #author .mk i:nth-child(3) { left: 29px; top: 14px; width: 5px; height: 20px; }
   #author h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
   #author .by { margin: 6px 0 0; color: var(--tx2); font-size: 13px; }
   #author .by b { color: var(--tx); }
   #author .tag { margin: 10px 0 16px; color: var(--tx3); font-size: 12px; line-height: 1.5; }
   #author .gift { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 13.5px;
-    color: #fff; background: linear-gradient(135deg, #8B7BFF, #6C5CF0); box-shadow: 0 6px 22px rgba(108,92,240,.45); }
-  #author .gift:hover { filter: brightness(1.08); }
+    color: rgb(var(--color-accent-fg)); background: rgb(var(--color-accent)); box-shadow: var(--shadow-accent); }
+  #author .gift:hover { background: rgb(var(--color-accent-hover)); }
   #author .row { display: flex; gap: 8px; margin-top: 10px; }
   #author .row a, #author .row button { flex: 1; justify-content: center; padding: 9px; border-radius: 9px; border: 1px solid var(--line2); background: var(--bg3); color: var(--tx2); text-decoration: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; }
   #author .row button { color: var(--tx); font-weight: 600; }
