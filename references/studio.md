@@ -11,6 +11,11 @@ Cần Node ≥ 18, ffmpeg, Chrome (để xuất video), và `scripts/.venv` (whi
 
 ## Màn hình (v2 — giao diện tối kiểu editor chuyên nghiệp)
 Code: `studio/index.html`, `studio.css` (theme tối, accent tím), `clips.js` (track chính + ripple), `library.js` (thanh icon trái + thư viện), `studio.js` (preview, inspector, timeline, phát, lưu/xuất). Icon: tabler-icons webfont (jsdelivr).
+- **Lần đầu mở** (`02_onboarding`, M83): sau màn tác giả (`00_author.js` luôn hiện trước), khi `$AVS_HOME/onboarding.json` chưa `done`/`skipped`, hiện hướng dẫn 3 bước (thanh tiến độ, Bỏ qua, Quay lại, Tiếp; mở lại ở đúng bước đã lưu):
+  1. **Thương hiệu**: tên + logo bắt buộc (kéo thả), 2 màu chủ đạo tự lấy từ logo bằng canvas (đổi được), SĐT/website/tên kênh tuỳ chọn → `POST /api/brands/save` + `/api/brands/logo` (`51_brands`), id kit ghi vào `onboarding.json` (`brand`); đang mở dự án thì áp luôn kit cho dự án (hoàn tác được).
+  2. **Tài nguyên** (tuỳ chọn): ảnh/video sản phẩm và nhạc riêng → `/api/upload` (Media › Của tôi, cần dự án đang mở); một sản phẩm (tên, giá, điểm mạnh) → `POST /api/products/save` (`53_products`): giá vào `notes`, mỗi điểm mạnh là một claim `pending`.
+  3. **Mục đích**: lĩnh vực (BĐS, Khoá học, Bán hàng, Review, Chia sẻ, Tin tức, Doanh nghiệp, Khác) → gợi ý số mẫu và gói style hay dùng theo `category` của `GET /api/templates`; khổ 9:16/16:9/1:1; nền tảng đăng. Kết nối YouTube/Telegram và chọn Claude/Ollama để sau (nút Mô hình & giọng, Lịch đăng). Xong mà có dự án thì mở mục Mẫu lọc sẵn theo lĩnh vực.
+- **Trang chủ** (`#onb-home`): tự hiện khi chưa mở dự án (thay hộp “Chưa mở dự án”), mở lại bằng nút nhà trên thanh trên (Esc / Đóng khi có dự án). 4 thẻ: **Thả video → video hoàn chỉnh** (panel Tự lái), **Dựng theo mẫu** (mục Mẫu lọc theo lĩnh vực; chưa có dự án thì mở Video mới, tải lại xong tự mở Mẫu), **Video dài → clip ngắn** (panel Video dài), **Làm hàng loạt** (panel Hàng loạt); **Dự án gần đây** (8 dự án đã mở, mở bằng `POST /api/onboarding/open`); **Xem lại hướng dẫn**. Hàm: `Studio.openOnboarding()`, `Studio.openHome()`.
 - **Thanh trên** (M82, `features/01_workflow.js`): logo + tên dự án + trạng thái Đã lưu / Chưa lưu, hoàn tác ↶ / làm lại ↷, **thanh 5 bước** ở giữa (1 Chuẩn bị · 2 Nguồn · 3 Dựng · 4 Kiểm tra · 5 Xuất và đăng), menu **⋯**, **Lưu** (⌘S), **Xuất** (nút chính duy nhất). Màn dưới 1180 px chỉ bước đang mở hiện chữ.
   - Bấm một bước: thanh icon trái chỉ hiện công cụ của bước đó (tối đa 7, phần còn lại trong **Thêm…**) và tự mở công cụ đầu. Bước đang mở lưu theo máy (`localStorage` `avs.step`). Mở một panel từ chỗ khác (liên kết, nút) thì thanh bước tự chuyển theo.
   - Bước: ① Thương hiệu, Sản phẩm, Media · ② Video mới, Video dài, Lời thoại, AI (cắt lỗi nói) · ③ Tự lái, AI dựng, Mẫu, Chữ, Âm thanh, Hiệu ứng, Sticker, Thêm… (Chuyển cảnh, Bộ lọc, B-roll AI, Tự động, Âm thanh+, Lồng tiếng) · ④ Kiểm tra (thẻ Kiểm tra chất lượng + Nhiều phiên bản của `16_qc`), Thành phần · ⑤ Xuất, Đăng, Lịch đăng, Hàng loạt.
@@ -77,6 +82,9 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/job`, `POST /api/job/cancel` | tiến độ / huỷ tác vụ |
 | `POST /api/open` | `{path}` → đổi dự án. Chỉ thư mục có `timeline.json` (hoặc file timeline); từ chối (403) thư mục cấu hình `$AVS_HOME`, thư mục cha của nó, mọi thư mục con trừ `autopilot/`, `longform/`, `footage/`, và thư mục ẩn trong home (`~/.ssh`, `~/.claude`…) |
 | `GET /api/media`, `POST /api/upload?name=` | thư viện media (body = file) |
+| `GET /api/onboarding` | trạng thái hướng dẫn lần đầu `{done, skipped, step, purpose, aspect, platforms, brand, updated, isNew, project, recent:[{i, name, parent, t, current}]}` từ `$AVS_HOME/onboarding.json` (chưa có/hỏng → mặc định); có dự án đang mở thì ghi nó lên đầu `recent` (tối đa 8). Không trả đường dẫn đầy đủ (`02_onboarding`, M83) |
+| `POST /api/onboarding` | gộp khoá `done`, `skipped` (bool), `step` (0–3), `purpose` (`bds\|khoahoc\|banhang\|review\|chiase\|tintuc\|doanhnghiep\|khac`), `aspect` (`9:16\|16:9\|1:1`), `platforms` (`tiktok, youtube, facebook, instagram, zalo`), `brand` (id kit); khoá lạ/sai kiểu → 400, body > 8 KB → 413; ghi file tạm rồi đổi tên. Không chứa token |
+| `POST /api/onboarding/open` | `{i}` → mở dự án thứ `i` của `recent` (đường dẫn lấy từ file, cùng luật `/api/open`); không còn trên máy → 404 và bỏ khỏi danh sách |
 | `POST /api/still` | `{t}` → ảnh bìa `out/cover_*.jpg` |
 | `POST /api/srt` | phụ đề → `out/<tên>.srt` |
 | `GET /api/templates` | danh sách mẫu: `templates/*.json` + `templates/user/*.json`, kèm `preview:{mp4,jpg}` và `user` |
@@ -109,6 +117,7 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
 - `addPanel(id, icon, tên, fn, opts)` và `addTopButton(html, fn, opts)` nhận `opts = { step, level }` không bắt buộc (M82): `step` là `prep | source | build | check | ship | settings`, `level` là `basic | pro` (`pro` ẩn ở chế độ Cơ bản). Panel không có `opts` và không có trong bảng `PANELS` của `01_workflow.js` rơi vào **Thêm…** của bước Dựng. Nút trên header không có `opts.step` vào menu ⋯; có `opts.step` thì thành một mục trên thanh trái của bước đó (thẻ giải thích + nút bấm hộ). Hook nội bộ: `Studio._popts`, `Studio._top` (gọi sau `addTopButton`), `Studio._rail` (gọi sau `renderRail`).
 - Tính năng có sẵn:
   - `01_workflow`: bố cục theo 5 bước, menu ⋯, trang Cài đặt, chế độ Cơ bản / Chuyên nghiệp (xem mục Màn hình).
+  - `02_onboarding`: hướng dẫn lần đầu 3 bước + trang chủ khi chưa mở dự án (mục Màn hình ở trên).
   - `18_schedule`: Lịch đăng + Kết nối YouTube (`references/publish-schedule.md`).
   - `20_ai`: AI dựng giúp, Cắt lỗi nói, Lời thoại.
   - `28_engines`: nút **Mô hình & giọng**: nhà cung cấp LLM cho việc chỉ có chữ (Claude/Ollama, `references/llm.md`) và giọng VieNeu (`references/voice.md`).
