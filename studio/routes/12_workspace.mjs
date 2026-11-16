@@ -16,7 +16,7 @@ import { openPath } from '../../scripts/platform.mjs';
 
 const fail = (msg, status) => Object.assign(new Error(msg), { status });
 const BRAND_ID = /^[A-Za-z0-9_-]{1,60}$/;
-function brandOf(v) {
+export function brandOf(v) { // dùng chung với 13_kho_migrate.mjs
   if (v == null || v === '') return '';
   if (typeof v !== 'string' || !BRAND_ID.test(v)) throw fail('Mã thương hiệu không hợp lệ', 400);
   let list = [];

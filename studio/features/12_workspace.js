@@ -33,7 +33,14 @@
   .kho-t .pv { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--bg3); color: var(--tx3); font-size: 22px; }
   .kho-t .pv img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .kho-t .nm { padding: 2px 4px 0; font-size: 11px; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .kho-t small { display: block; padding: 0 4px 4px; font-size: 10px; color: var(--tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kho-more { font-size: 11px; color: var(--tx3); margin: 4px 0; }`;
+  .kho-more { font-size: 11px; color: var(--tx3); margin: 4px 0; }
+  .kho-link { font-size: 11px; padding: 2px 8px; flex: none; }
+  .kho-mhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 4px; font-size: 12px; }
+  .kho-mlist { max-height: 34vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg1); }
+  .kho-mrow { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 12px; cursor: pointer; }
+  .kho-mrow:last-child { border-bottom: 0; } .kho-mrow.off { opacity: .6; cursor: default; }
+  .kho-mrow .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tx); }
+  .kho-mrow small { grid-column: 2; color: var(--tx3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .kho-mrow small.bad { color: var(--bad); }`;
   document.head.appendChild(css);
 
   const fmt = n => (n >= 1 << 30 ? (n / (1 << 30)).toFixed(1) + ' GB' : n >= 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
@@ -57,6 +64,70 @@
     if (want !== brand) return; // đã chọn thương hiệu khác trong lúc chờ: bỏ kết quả cũ
     DATA = r.error ? { error: r.error } : r;
     if (active()) render();
+    if (DATA.ws?.exists && active()) loadMig(); // quét chỗ cũ chỉ khi panel Kho đang mở
+  }
+
+  // ---------- M101: file và dự án ở chỗ cũ (trước khi có Kho) ----------
+  // Chỉ liệt kê; người dùng tích rồi bấm "Chuyển vào Kho". Dự án cũ giữ chỗ, chỉ ghi vào Kho để mở lại từ đây.
+  let MIG = null;
+  async function loadMig() {
+    const want = brand, r = await api('/api/kho-migrate?' + qs({ brand })).catch(() => null);
+    if (want !== brand) return;
+    MIG = r && !r.error ? r : null;
+    const box = document.getElementById('kho-mig'); if (box && active()) { box.innerHTML = migBox(); bindMig(); }
+  }
+  const migTodo = () => (MIG ? { f: MIG.files.length, p: MIG.projects.filter(x => !x.linked).length } : { f: 0, p: 0 });
+  function migBox() {
+    if (!MIG) return '';
+    const { f, p } = migTodo(), L = MIG.linked || [];
+    const ask = f || p ? `<div class="kho-box"><b>Có ${[f && `${f} video`, p && `${p} dự án`].filter(Boolean).join(' và ')} ở chỗ cũ</b> (trước khi có Kho).
+      Đưa vào Kho để mọi bước lấy chung một chỗ; không chuyển gì khi bạn chưa đồng ý.
+      <div class="kho-acts"><button class="primary" id="kho-mig-open"><i class="ti ti-transfer-in"></i> Xem và chuyển</button></div></div>` : '';
+    const lst = L.length ? `<div class="kho-g"><h4><i class="ti ti-history"></i>Dự án ở chỗ cũ <small>${L.length}</small></h4>
+      <ul class="kho-up">${L.map(x => `<li><i class="ti ti-folder"></i><span class="nm" title="${esc(x.from)}">${esc(x.name)}</span><button class="kho-link" data-li="${esc(x.id)}">Mở</button></li>`).join('')}</ul></div>` : '';
+    return ask + lst;
+  }
+  function bindMig() {
+    document.getElementById('kho-mig-open')?.addEventListener('click', migDialog);
+    document.querySelectorAll('#kho-mig [data-li]').forEach(b => (b.onclick = async () => {
+      const r = await api('/api/kho-migrate/open', { brand, id: b.dataset.li }).catch(e => ({ error: e.message }));
+      if (r.error) return toast(r.error);
+      location.reload();
+    }));
+  }
+  function migDialog() {
+    const F = MIG.files, P = MIG.projects.filter(x => !x.linked), when = t => new Date(t).toLocaleDateString('vi-VN');
+    const row = (k, x, on, extra) => `<label class="kho-mrow${x.busy ? ' off' : ''}"><input type="checkbox" data-${k}="${x.id}" ${on ? 'checked' : ''} ${x.busy ? 'disabled' : ''}><span class="nm" title="${esc(x.name)}">${esc(x.name)}</span>${extra}</label>`;
+    S.modal(`<h3><i class="ti ti-transfer-in"></i> Đưa file cũ vào Kho</h3>
+      <p class="muted">Video được <b>chuyển</b> (không chép thêm) vào Kho “${esc(DATA.ws.title)}”; tên trùng thì thêm “(2)”. Dự án cũ giữ nguyên chỗ, chỉ hiện trong Kho để mở lại.</p>
+      ${F.length ? `<div class="kho-mhead"><b>Video (${F.length}${MIG.more ? ` + ${MIG.more} nữa` : ''})</b><button class="kho-link" data-all="f">Chọn hết / bỏ hết</button></div>
+        <div class="kho-mlist">${F.map(x => row('f', x, x.checked, `<small>${esc(x.from)} → ${esc(x.dest)}</small><small>${fmt(x.size)} · ${when(x.mtime)}</small>${x.busy ? `<small class="bad">${esc(x.busy)}</small>` : x.note ? `<small>${esc(x.note)}: tích để chuyển vào Tha vao day của Kho</small>` : ''}`)).join('')}</div>
+        ${MIG.more ? `<p class="muted">Danh sách chỉ hiện ${F.length} video mới nhất: chuyển xong mở lại để chuyển phần còn lại.</p>` : ''}` : ''}
+      ${P.length ? `<div class="kho-mhead"><b>Dự án (${P.length})</b><button class="kho-link" data-all="p">Chọn hết / bỏ hết</button></div>
+        <div class="kho-mlist">${P.map(x => row('p', x, true, `<small>${esc(x.from)}</small>`)).join('')}</div>` : ''}
+      <div class="actions"><button onclick="closeModal()">Để sau</button><button class="primary" id="kho-mig-go"><i class="ti ti-check"></i> Chuyển vào Kho</button></div>`);
+    const box = document.getElementById('modalbox');
+    box.querySelectorAll('[data-all]').forEach(b => (b.onclick = () => {
+      const cs = [...box.querySelectorAll(`input[data-${b.dataset.all}]:not(:disabled)`)], on = !cs.every(c => c.checked);
+      cs.forEach(c => (c.checked = on));
+    }));
+    box.querySelector('#kho-mig-go').onclick = async e => {
+      const pick = k => [...box.querySelectorAll(`input[data-${k}]:checked`)].map(c => c.dataset[k]);
+      const files = pick('f'), projects = pick('p');
+      if (!files.length && !projects.length) return toast('Chưa chọn mục nào');
+      e.currentTarget.disabled = true;
+      const s = await api('/api/kho-migrate', { brand, files, projects }).catch(err => ({ error: err.message }));
+      if (s.error) { e.currentTarget.disabled = false; return toast(s.error); }
+      S.modal('<h3><i class="ti ti-transfer-in"></i> Đang chuyển file cũ vào Kho…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>');
+      S.pollJob(async j => {
+        S.closeModal();
+        const r = j.out;
+        if (j.state !== 'done' || !r) return toast(j.step || 'Chưa chuyển xong');
+        const msg = [r.moved.length && `đã chuyển ${r.moved.length} video`, r.linked && `ghi ${r.linked} dự án`].filter(Boolean).join(', ');
+        toast((msg ? msg[0].toUpperCase() + msg.slice(1) : 'Không có gì thay đổi') + (r.failed.length ? ` · ${r.failed.length} file chưa chuyển được: ${r.failed[0].error}` : '') + (r.warn?.length ? ` · ${r.warn[0]}` : ''));
+        MIG = null; await load();
+      });
+    };
   }
 
   function render() {
@@ -85,7 +156,7 @@
     const items = DATA.items || [];
     const st = { up: '<i class="ti ti-loader-2 spin"></i>', ok: '<i class="ti ti-circle-check ok"></i>', bad: '<i class="ti ti-alert-circle bad"></i>' };
     const count = id => items.filter(it => groupOf(it) === id).length;
-    return `<div class="kho-drop" id="kho-drop" role="button" tabindex="0"><i class="ti ti-cloud-upload"></i><div><b>Kéo thả file vào Kho</b>hoặc bấm để chọn nhiều file (video, ảnh, nhạc, phông chữ)</div><input type="file" multiple hidden></div>
+    return `<div id="kho-mig">${migBox()}</div><div class="kho-drop" id="kho-drop" role="button" tabindex="0"><i class="ti ti-cloud-upload"></i><div><b>Kéo thả file vào Kho</b>hoặc bấm để chọn nhiều file (video, ảnh, nhạc, phông chữ)</div><input type="file" multiple hidden></div>
       <label class="kho-to">Vào thư mục <select id="kho-to">${TARGETS.map(([v, t]) => `<option value="${v}" ${v === to ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       ${files.length ? `<ul class="kho-up">${files.map(f => `<li>${st[f.st]}<span class="nm">${esc(f.name)}</span>${f.msg ? `<small class="bad">${esc(f.msg)}</small>` : f.rel ? `<small>${esc(f.rel.split('/')[0])}</small>` : ''}</li>`).join('')}</ul>` : ''}
       <div class="kho-row"><input id="kho-q" type="search" placeholder="Tìm theo tên file" value="${esc(q)}" aria-label="Tìm trong Kho"></div>
@@ -109,7 +180,7 @@
 
   function bind() {
     const B = $('#libbody');
-    B.querySelector('#kho-brand').onchange = e => { brand = e.target.value; editing = false; files = []; q = ''; tab = 'all'; DATA = null; render(); load(); };
+    B.querySelector('#kho-brand').onchange = e => { brand = e.target.value; editing = false; files = []; MIG = null; q = ''; tab = 'all'; DATA = null; render(); load(); };
     const ed = () => { editing = true; render(); B.querySelector('#kho-dir')?.focus(); };
     B.querySelector('#kho-edit')?.addEventListener('click', ed);
     B.querySelector('#kho-edit2')?.addEventListener('click', ed);
@@ -138,6 +209,7 @@
     B.querySelector('#kho-to').onchange = e => (to = e.target.value);
     B.querySelector('#kho-q').oninput = e => { q = e.target.value; B.querySelector('#kho-list').innerHTML = list(); };
     B.querySelectorAll('[data-kt]').forEach(b => (b.onclick = () => { tab = b.dataset.kt; render(); }));
+    bindMig();
   }
   async function run(fn, ok) {
     busy = true; render();
