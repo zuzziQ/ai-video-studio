@@ -431,7 +431,8 @@ function candidates(s) {
     if (hit) {
       const real = C.filter(c => ['media', 'lib', 'stock', 'stockvid', 'aiimg'].includes(c.kind)).reduce((m, c) => Math.max(m, c.score), -Infinity);
       add('kho', Math.min(3, hit.score) + 1.5, { kho: hit });
-      const k = C.at(-1); if (k?.kind === 'kho' && k.score <= real) k.score = real + .5;
+      // chỉ ép lên trên khi khớp chắc (cụm hai từ hoặc ≥ 2 từ): một âm tiết trùng ("ca", "sang") không đủ
+      const k = C.at(-1); if (k?.kind === 'kho' && hit.score >= 2 && k.score <= real) k.score = real + .5;
     }
   }
   return C.sort((a, b) => b.score - a.score);

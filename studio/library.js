@@ -273,7 +273,7 @@ const SRC_PREFIX = [['kho_', 'Từ Kho', 'ti-building-warehouse'], ['brand_', 'T
 const srcOf = name => SRC_PREFIX.find(([p]) => p && name.startsWith(p)) || SRC_PREFIX.at(-1);
 const hovBtns = (kind, attr) => kind === 'audio' ? `<button data-${attr}="music"><i class="ti ti-plus"></i> Nhạc nền</button>`
   : `<button data-${attr}="clip" title="Thêm vào track chính tại playhead"><i class="ti ti-plus"></i> Track chính</button><button data-${attr}="overlay" class="sub" title="Chèn làm lớp phủ (ảnh phủ lên video)"><i class="ti ti-stack-push"></i> Lớp phủ</button>`;
-const fsize = b => (b >= 1 << 30 ? (b / (1 << 30)).toFixed(1) + ' GB' : b >= 1 << 20 ? Math.round(b / (1 << 20)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+const fsize = b => (!(b >= 0) ? '' : b >= 1 << 30 ? (b / (1 << 30)).toFixed(1) + ' GB' : b >= 1 << 20 ? Math.round(b / (1 << 20)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 function mediaCell(m) {
   return `<div class="mcell" data-m="${MEDIA.indexOf(m)}" draggable="true" title="${esc(m.name)}">
       <div class="th" data-dbg="${m.thumb ? esc('/project/' + encodeURI(m.thumb)) : ''}">${m.thumb ? '' : `<i class="ti ${m.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}

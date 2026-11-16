@@ -1,10 +1,11 @@
 // "Tự động" (references/autofill.md): auto b-roll (scripts/auto_broll.mjs) + richer auto sound (scripts/auto_sfx.py --level).
 //   POST /api/autofill {mode:'all'|'broll'|'sfx'|'clear', goal, variety 0..1, density,
-//        src:[preset,hf,text,emoji,logo,aroll,media,lib,stock,stockvid,aiimg], claude, level, music}
+//        src:[preset,hf,text,emoji,logo,aroll,media,kho,lib,stock,stockvid,aiimg], claude, level, music}
+//        (Kho của thương hiệu đi cùng "media"; "kho" riêng = chỉ Kho, không lấy ảnh/clip của dự án)
 //        -> job "autofill"; rewrites timeline.json in place (history snapshot + timeline.json.bak first); job.out = summary
 import fs from 'node:fs'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
 
-const DENS = ['thua', 'vua', 'day', 'ratday'], LEVELS = ['nhe', 'vua', 'phongphu'], SRCS = ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'lib', 'stock', 'stockvid', 'aiimg'];
+const DENS = ['thua', 'vua', 'day', 'ratday'], LEVELS = ['nhe', 'vua', 'phongphu'], SRCS = ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'kho', 'lib', 'stock', 'stockvid', 'aiimg'];
 const GOALS = ['auto', 'banhang', 'bds', 'khoahoc', 'review', 'tintuc', 'kechuyen', 'doanhnghiep', 'amthuc', 'giaitri'];
 
 export default ctx => {

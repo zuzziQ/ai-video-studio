@@ -7,17 +7,19 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import * as K from '../kho_media.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TMP = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'avs-khom-')));
 const HOME = path.join(TMP, 'home'), KHO = path.join(TMP, 'Kho Nha Dep'), OUT = path.join(TMP, 'ngoai');
 const PROJ = path.join(KHO, 'Du an', 'clip 1');
+// thư mục cấu hình tạm: không đọc ~/.ai-video-studio thật (workspaceFor đọc brands.json/workspace.json)
+process.env.AVS_HOME = HOME;
+const K = await import('../kho_media.mjs');
 const put = (rel, data = 'x') => { const f = path.join(KHO, ...rel.split('/')); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data); return f; };
 fs.mkdirSync(HOME, { recursive: true }); fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(PROJ, { recursive: true });
 fs.writeFileSync(path.join(KHO, '.kho.json'), JSON.stringify({ version: 1, brand: '', title: 'Nhà Đẹp' }));
 put('Anh/logo.png', 'png-1'); put('BRoll/logo.png', 'png-2'); put('Anh/ca phe sang.jpg', 'jpg'); put('Nhac/hype_soi_dong.mp3', 'mp3');
-put('Du an/clip 1/media/x.jpg', 'no'); fs.writeFileSync(path.join(OUT, 'bi-mat.jpg'), 'secret');
+put('Du an/clip 1/media/x.jpg', 'no'); put('Nguon/Tha vao day/ca phe tho.mp4', 'raw'); put('Thanh pham/2026-11/ca phe.mp4', 'out'); fs.writeFileSync(path.join(OUT, 'bi-mat.jpg'), 'secret');
 const CAPS = [
   { t0: .5, t1: 4, words: [['Sáng', .5], ['nay', .8], ['tôi', 1.1], ['uống', 1.4], ['cà', 1.8], ['phê', 2.1], ['ở', 2.5], ['quán', 2.8], ['quen', 3.2]] },
   { t0: 4.2, t1: 8, words: [['Ly', 4.2], ['cà', 4.6], ['phê', 5], ['sáng', 5.4], ['thật', 5.9], ['thơm', 6.4], ['và', 6.9], ['đậm', 7.3]] },
@@ -48,10 +50,20 @@ test('useFromKho: liên kết vào media/kho_*, tên trùng → _2, dùng lại 
   assert.equal(list.find(x => x.rel === 'Anh/logo.png').used, 'media/kho_logo.png');
   assert.equal(list.find(x => x.rel === 'Nhac/hype_soi_dong.mp3').used, null);
   assert.equal(list.find(x => x.rel === 'Nhac/hype_soi_dong.mp3').group, 'music');
-  assert.ok(!list.some(x => x.rel.startsWith('Du an/')));
+  assert.ok(!list.some(x => x.rel.startsWith('Du an/') || x.rel.startsWith('Thanh pham/')));
+  // thư mục con lồng nhau vẫn theo nhóm của thư mục cấp 1: video thô trong Nguon/Tha vao day không thành b-roll
+  assert.equal(list.find(x => x.rel === 'Nguon/Tha vao day/ca phe tho.mp4').group, 'source');
+  assert.deepEqual(K.searchKho(list, 'uống cà phê thô').map(x => x.rel).filter(r => r.startsWith('Nguon/')), []);
   // file đã có trong dự án bị xoá → dùng lại thì liên kết lần nữa
   fs.rmSync(media('kho_logo_2.png'));
   assert.equal((await K.useFromKho(PROJ, ws, 'BRoll/logo.png')).linked !== 'reuse', true);
+});
+
+test('hai lần dùng cùng lúc (kể cả viết \\ và /) ra cùng một file', async () => {
+  put('BRoll/song.png', 'p');
+  const [a, b] = await Promise.all([K.useFromKho(PROJ, ws, 'BRoll/song.png'), K.useFromKho(PROJ, ws, 'BRoll\\song.png')]);
+  assert.equal(a.name, 'kho_song.png'); assert.equal(b.name, 'kho_song.png');
+  assert.ok(!fs.existsSync(media('kho_song_2.png')));
 });
 
 test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, file lạ → 400; không thấy → 404', async () => {
@@ -102,10 +114,12 @@ test('route /api/kho/*: liệt kê kèm đã dùng, rel thoát Kho → 400, dùn
   const u = await call('POST', '/api/kho/use', { rel: 'Anh/logo.png' });
   assert.equal(u.code, 200); assert.equal(u.o.path, 'media/kho_logo.png'); assert.equal(u.o.thumb, 'media/kho_logo.png');
   assert.equal(await h({ method: 'GET' }, {}, '/api/khac', new URL('http://x/api/khac')), false);
+  assert.equal(await h({ method: 'GET' }, {}, '/api/kho/status', new URL('http://x/api/kho/status')), false); // của 12_workspace
 });
 
 test('nhạc nền: bài trong Nhac/ hợp mood → media/kho_*, không hợp → null; khoMusicBeds đổi đúng đoạn', async () => {
   assert.equal((await K.khoMusic(PROJ, null, 'sad')), null);
+  assert.ok(!K.moodWords('hype').includes('dong')); // âm tiết lẻ không đủ để khớp mood
   const m = await K.khoMusic(PROJ, null, 'hype');
   assert.deepEqual(m, { file: 'media/kho_hype_soi_dong.mp3', kho: 'Nhac/hype_soi_dong.mp3', title: 'hype_soi_dong.mp3' });
   assert.equal(JSON.parse(fs.readFileSync(media('credits.json'), 'utf8')).find(x => x.file === 'kho_hype_soi_dong.mp3').provider, 'Kho · Nhac');

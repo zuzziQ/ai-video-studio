@@ -9,7 +9,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { KHO_DIRS, kindOf, inWorkspace, linkOrCopy, listWorkspace, workspaceOfProject } from './workspace.mjs';
-import { retryBusy } from './file_lock.mjs';
+import { retryBusy, withFileLock } from './file_lock.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PREFIX = 'kho_';
@@ -96,12 +96,17 @@ export function mediaItem(dir, name) {
 
 const ff = (args, run) => (run ? run('ffmpeg', args) : new Promise((ok, no) => execFile('ffmpeg', args, { maxBuffer: 1 << 24 }, e => (e ? no(e) : ok()))));
 /** Chuỗi khung 30 fps (≤ 1280 px) + audio.m4a cho một video trong media/, như upload() của server. Ghi vào thư mục mới. */
+// Tách vào thư mục tạm rồi đổi tên: ffmpeg bị ngắt giữa chừng không để lại <tên>_frames dở (bị coi là đủ mãi).
 export async function expandVideo(src, fr, { run } = {}) {
-  fs.mkdirSync(fr, { recursive: true });
-  await ff(['-v', 'error', '-y', '-i', src, '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease', '-q:v', '3', path.join(fr, '%05d.jpg')], run);
-  const tmp = path.join(fr, '.audio.tmp.m4a');
-  try { await ff(['-v', 'error', '-y', '-i', src, '-map', '0:a:0?', '-vn', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', tmp], run); } catch {}
-  if (fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, path.join(fr, 'audio.m4a')); else fs.rmSync(tmp, { force: true });
+  const work = `${fr}.${process.pid}.tmp`;
+  fs.rmSync(work, { recursive: true, force: true }); fs.mkdirSync(work, { recursive: true });
+  try {
+    await ff(['-v', 'error', '-y', '-i', src, '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease', '-q:v', '3', path.join(work, '%05d.jpg')], run);
+    const tmp = path.join(work, '.audio.tmp.m4a');
+    try { await ff(['-v', 'error', '-y', '-i', src, '-map', '0:a:0?', '-vn', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', tmp], run); } catch {}
+    if (fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, path.join(work, 'audio.m4a')); else fs.rmSync(tmp, { force: true });
+    fs.rmSync(fr, { recursive: true, force: true }); retryBusy(() => fs.renameSync(work, fr));
+  } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw e; }
 }
 
 function addCredit(dir, rec) {
@@ -118,7 +123,7 @@ const pending = new Map();
  * Đã dùng rồi thì trả lại file cũ (không tạo kho_x_2). Lỗi .status 400/404 như resolveRel; ffmpeg lỗi → dọn file vừa tạo.
  */
 export function useFromKho(projectDir, ws, rel, o = {}) {
-  const k = `${key(path.resolve(projectDir))}|${key(String(rel))}`;
+  const k = `${key(path.resolve(projectDir))}|${key(typeof rel === 'string' ? rel.split(/[\\/]+/).filter(Boolean).join('/') : String(rel))}`;
   if (pending.has(k)) return pending.get(k);
   const p = useOnce(projectDir, ws, rel, o).finally(() => pending.delete(k));
   pending.set(k, p); return p;
@@ -138,8 +143,11 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho' } = {}) {
   const linked = linkOrCopy(src, dst);
   try { if (kindOf(name) === 'video') await expandVideo(dst, fr, { run }); }
   catch (e) { fs.rmSync(dst, { force: true }); fs.rmSync(fr, { recursive: true, force: true }); throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
-  const now = readMap(dir); now[relN] = name; writeJson(mapFile(dir), { version: 1, items: now });
-  addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) });
+  fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+  withFileLock(mapFile(dir) + '.lock', () => {
+    const now = readMap(dir); now[relN] = name; writeJson(mapFile(dir), { version: 1, items: now });
+    addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) });
+  });
   return { ...mediaItem(dir, name), kho: relN, linked };
 }
 
@@ -181,16 +189,17 @@ export function searchKho(items, text, { n = 3, exclude = new Set(), groups = ['
 }
 
 // Từ của một mood nhạc: tên mood (hype, real_estate_luxury…) + vài từ tiếng Việt hay đặt tên file + cụm "use" của catalog.
+// Cụm (phân cách bằng dấu phẩy), không tách âm tiết lẻ: "dong" một mình không được tính là "sôi động".
 const MOOD_VI = {
-  hype: 'soi dong manh edm sung', tech: 'cong nghe dien tu', sad: 'buon tram', happy: 'vui tuoi vui ve', mellow: 'nhe nhang thu gian',
-  lofi: 'lofi chill', epic: 'hung trang hoanh trang', suspense: 'cang thang hoi hop', corporate: 'doanh nghiep cong ty', inspire: 'truyen cam hung',
-  lofi_hiphop: 'lofi hiphop chill', cinematic_epic: 'dien anh hoanh trang trailer', corporate_upbeat: 'doanh nghiep tuoi sang',
-  real_estate_luxury: 'bat dong san sang trong', tiktok_trap: 'tiktok trap', acoustic_warm: 'acoustic guitar moc', ambient_calm: 'thien spa yen binh',
-  news_bg: 'ban tin tin tuc', kids_playful: 'tre em vui nhon', piano_minimal: 'piano tam su',
+  hype: 'soi dong, edm', tech: 'cong nghe, dien tu', sad: 'buon, tram buon', happy: 'vui tuoi, vui ve', mellow: 'nhe nhang, thu gian',
+  lofi: 'lofi, chill', epic: 'hung trang, hoanh trang', suspense: 'cang thang, hoi hop', corporate: 'doanh nghiep, cong ty', inspire: 'truyen cam hung',
+  lofi_hiphop: 'lofi, hiphop, chill', cinematic_epic: 'dien anh, hoanh trang, trailer', corporate_upbeat: 'doanh nghiep, tuoi sang',
+  real_estate_luxury: 'bat dong san, sang trong', tiktok_trap: 'tiktok, trap', acoustic_warm: 'acoustic, guitar moc', ambient_calm: 'thien, spa, yen binh',
+  news_bg: 'ban tin, tin tuc', kids_playful: 'tre em, vui nhon', piano_minimal: 'piano, tam su',
 };
 export function moodWords(mood) {
   let use = ''; try { use = (JSON.parse(fs.readFileSync(path.join(SKILL, 'assets/music/catalog.json'), 'utf8')).find(x => x.mood === mood)?.use) || ''; } catch {}
-  const ws = new Set([...words(String(mood).replace(/_/g, ' ')), ...words(MOOD_VI[mood] || '')]);
+  const ws = new Set([...words(String(mood).replace(/_/g, ' ')), ...(MOOD_VI[mood] || '').split(',').map(p => words(p).join(' ')).filter(Boolean)]);
   for (const ph of use.split(/[,—–-]/)) { const w = words(ph); if (w.length >= 2 && w.length <= 3) ws.add(w.join(' ')); }
   return [...ws];
 }

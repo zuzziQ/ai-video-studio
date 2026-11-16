@@ -14,7 +14,7 @@ export default ctx => {
   const km = async () => (KM ||= await import(pathToFileURL(path.join(ctx.SKILL, 'scripts/kho_media.mjs')).href));
   const tl = () => { try { return JSON.parse(fs.readFileSync(ctx.project.tlFile, 'utf8')); } catch { return null; } };
   return async (req, res, p, u) => {
-    if (!p.startsWith('/api/kho/')) return false;
+    if (!['/api/kho/media', '/api/kho/file', '/api/kho/use'].includes(p)) return false; // /api/kho/* khác là của 12_workspace (M97)
     if (!ctx.project) return ctx.json(res, { error: 'Chưa mở dự án' }, 400), true;
     const K = await km();
     try {
