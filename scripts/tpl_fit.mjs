@@ -103,6 +103,16 @@ function phrase(text, ex) {
   if (ex === ex.toUpperCase() && /\p{Lu}/u.test(ex)) return s.toUpperCase();
   return s[0].toUpperCase() + s.slice(1);
 }
+// Graphics are laid out for the sample text: longer text is cut by the box (tpl_text_audit.mjs: at 1.4× the sample 41/90
+// templates clip). Short fields get a few spare characters, longer ones ~15 %.
+export const maxLen = ex => { const n = [...String(ex)].length; return n <= 12 ? n + 4 : Math.ceil(n * 1.15); };
+// Cut at a word boundary (per line for multi-line fields), dropping a dangling joiner word / punctuation.
+export function clampLen(v, max) {
+  if ([...v].length <= max) return v;
+  let s = [...v].slice(0, max + 1).join('');
+  s = s.includes(' ') ? s.replace(/\s+\S*$/, '') : [...s].slice(0, max).join('');
+  return s.replace(/[\s,;:–-]+$/, '').replace(/\s+(và|của|cho|với|là|để|thì|mà|các|những)$/i, '') || [...v].slice(0, max).join('');
+}
 const NUM = /\d+(?:[.,]\d+)?\s*(?:%|tỷ|triệu|nghìn|k|đ|m²|năm|ngày|giờ|phút)?/i;
 
 // ---------- timing ----------
@@ -132,7 +142,7 @@ export async function fitProject(src, { claude = false, model = 'sonnet', images
     const list = info.map(({ i, s, texts, imgs }) => {
       const b = s.type === 'hf' ? hfCatalog()[s.block] : null;
       return `S${i} type=${s.type}${b ? ` (${b.label})` : ''} hiện tại ${s.t0.toFixed(1)}–${s.t1.toFixed(1)}s, dài ${(s.t1 - s.t0).toFixed(1)}s${fixedOf(i) ? ' (khung/kết cố định — chỉ viết chữ, bỏ qua c/w)' : ''}\n` +
-        texts.map(t => `  - "${key(t.path)}": ${JSON.stringify(t.ex)} (${t.emoji ? 'một emoji, đổi cho hợp nội dung' : t.ex.length + ' ký tự'}${t.label ? ', ' + t.label : ''})`).join('\n') +
+        texts.map(t => `  - "${key(t.path)}": ${JSON.stringify(t.ex)} (${t.emoji ? 'một emoji, đổi cho hợp nội dung' : `${t.ex.length} ký tự, TỐI ĐA ${maxLen(t.ex)}`}${t.label ? ', ' + t.label : ''})`).join('\n') +
         (imgs.length ? '\n' + imgs.map(m => `  - ẢNH "${key(m.path)}": ${m.ex}`).join('\n') : '');
     }).join('\n');
     const prompt = `Bạn là editor video tiếng Việt. Người dùng vừa chọn một mẫu dựng sẵn cho clip người nói dài ${dur}s. Các cảnh của mẫu đang chứa chữ và ảnh GIỮ CHỖ. Hãy làm cho TOÀN BỘ graphic khớp với lời thoại thật của clip.
@@ -145,7 +155,7 @@ ${list}
 
 # Việc cần làm
 1. Mỗi cảnh S<i>: chọn thời điểm bắt đầu "c","w" = dòng/từ mà người nói bắt đầu nói tới nội dung của cảnh (cảnh mở đầu đặt ở câu đầu, cảnh kêu gọi/kết ở câu cuối). Giữ đúng thứ tự cảnh, không chồng nhau, "dur" 1.5–8 giây (gợi ý giữ gần độ dài hiện tại, cảnh cuối có thể kéo tới hết video).
-2. "texts": viết lại MỌI trường chữ bằng nội dung lấy từ lời thoại (tên sản phẩm, con số, ưu/nhược điểm, giá, lời kêu gọi… đúng như người nói nói; sửa lỗi chính tả). Độ dài xấp xỉ chữ mẫu (graphic thiết kế cho độ dài đó), giữ kiểu viết HOA nếu mẫu viết hoa, giữ định dạng (dấu phẩy ngăn các mục, *nhấn*, \\n xuống dòng). Nếu lời thoại không nhắc tới thông tin đó thì viết nội dung chung hợp với chủ đề clip — KHÔNG để lại chữ mẫu như "Tên sản phẩm", "ví dụ", "mẫu".
+2. "texts": viết lại MỌI trường chữ bằng nội dung lấy từ lời thoại (tên sản phẩm, con số, ưu/nhược điểm, giá, lời kêu gọi… đúng như người nói nói; sửa lỗi chính tả). KHÔNG vượt số ký tự TỐI ĐA của trường (graphic thiết kế cho độ dài chữ mẫu, dài hơn sẽ bị cắt mất chữ) — thà viết gọn hơn mẫu, giữ kiểu viết HOA nếu mẫu viết hoa, giữ định dạng (dấu phẩy ngăn các mục, *nhấn*, \\n xuống dòng). Nếu lời thoại không nhắc tới thông tin đó thì viết nội dung chung hợp với chủ đề clip — KHÔNG để lại chữ mẫu như "Tên sản phẩm", "ví dụ", "mẫu".
 3. "images": với mỗi ẢNH, cho 2–4 từ khoá TIẾNG ANH để tìm ảnh stock minh hoạ đúng câu đang nói lúc đó. Từ khoá phải tả thứ CHỤP ĐƯỢC: người đang làm gì, đồ vật, nơi chốn (vd "woman editing video laptop", "hands typing keyboard", "office desk clock"); KHÔNG dùng từ trừu tượng hay khái niệm ("AI", "artificial intelligence", "success", "productivity", "growth") — muốn nói về AI thì tả cảnh như "robot hand laptop"; từ quan trọng nhất đặt trước. Ảnh không khớp sẽ bị bỏ, giữ ảnh mẫu.
 4. "hl": với các dòng phụ đề có từ khoá quan trọng, chỉ số 1–2 từ cần nhấn (không phải dòng nào cũng cần).
 
@@ -227,8 +237,7 @@ Chỉ trả về DUY NHẤT một object JSON:
         if (!v) { sum.missing.push(t.ex); continue; }
       }
       v = String(v).trim();
-      const cap = Math.max(30, Math.ceil(t.ex.length * 2.5));
-      if (v.length > cap) v = v.slice(0, cap).replace(/\s+\S*$/, '') || v.slice(0, cap);
+      v = clampLen(v, maxLen(t.ex));
       if (t.path[0] === 'vars' && s.type === 'hf') { s.vars = s.vars || {}; s.vars[t.path[1]] = v; }
       else if (t.path[0] === 'texts' && s.type === 'hf') { s.texts = s.texts || {}; s.texts[t.path[1]] = v; }
       else setP(s, t.path, v);

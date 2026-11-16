@@ -10,6 +10,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pyBin } from './platform.mjs';
 import { projectFix, fixArgs, fixWords } from './dict.mjs';
+import { faceTrack } from './face_track_project.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PY = pyBin(SKILL);
@@ -63,6 +64,8 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
   onStep('Tìm vị trí mặt', .75);
   let face = orient === 'horizontal' ? { x: 640, y: 300 } : { x: 360, y: 520 };
   await run(PY, ['-I', '-X', 'utf8', S('find_face.py'), path.join(d, 'work/frames'), '--design', `${FW}x${FH}`], l => { try { const f = JSON.parse(l); if (f.x != null) face = f; } catch {} }).catch(() => {});
+  // face over time for bubble / PIP (engine/vertical.js faceAt); none → the fixed face above
+  const faceTr = await faceTrack(d, 'work/frames/%05d.jpg', { py: PY }).catch(() => null);
   onStep('Tạo phụ đề', .85);
   const fix = projectFix({ dir: d }), keep = fixWords(fix); // M89: dictionary of the default brand kit
   await run(PY, ['-I', '-X', 'utf8', S('captions.py'), path.join(d, 'work/words.json'), path.join(d, 'work/captions.json'), '--max', '4', ...fixArgs(fix)]);
@@ -73,7 +76,7 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
   const tl = {
     width: orient === 'horizontal' ? 1920 : 1080, height: orient === 'horizontal' ? 1080 : 1920, fps: 30, duration: +(dur + 2.5).toFixed(2),
     pack, _starter: { pack, title, dur: +(dur + 2.5).toFixed(2) },
-    aroll: { frames: 'work/frames/%05d.jpg' }, face,
+    aroll: { frames: 'work/frames/%05d.jpg' }, face, ...(faceTr ? { face_track: faceTr } : {}),
     caption_style: 'slate', captions: 'work/captions.json',
     scenes: [
       // slate's card / title positions are laid out for 720x1280; a 1280x720 design needs its own (else they spill off the bottom)

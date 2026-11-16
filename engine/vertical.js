@@ -109,12 +109,36 @@ function facePlaced(t, { cx, cy, z, fx, fy, cut = false, filter = '' }) {
   return `<img src="${src}" ${src !== raw ? `onerror="this.onerror=null;this.src='${raw}'"` : ''} style="position:absolute;left:${l.toFixed(1)}px;top:${tp.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;filter:${GRADES.normal} ${filter}">`;
 }
 const FACE = () => TL.face || { x: 360, y: 520 };
+// Face at time t in design px {x, y, h}. TL.face_track = {seq, keys:[{t, ox, oy, fs}]} (scripts/face_track_project.mjs, YuNet:
+// centre of the hairline→chin box and its height, % of the frame) is keyed by time in that frame sequence: the clip's source
+// time when a clip plays it, else the timeline time. Without a track: the fixed TL.face (head centre from find_face.py), h unknown.
+function faceAt(t) {
+  const ft = TL.face_track, keys = ft?.keys;
+  if (keys?.length) {
+    let st = t;
+    if (typeof CLIPS !== 'undefined' && CLIPS.length) { const k = clipAt(t); st = k && k.c.src?.seq === ft.seq ? k.src : null; }
+    if (st != null) {
+      const i = keys.findIndex(q => q.t > st), a = keys[i <= 0 ? (i < 0 ? keys.length - 1 : 0) : i - 1], b = i <= 0 ? a : keys[i];
+      const m = b === a ? 0 : clamp((st - a.t) / (b.t - a.t || 1)), [FW, FH] = typeof DIMS === 'function' ? DIMS() : [VW, VH];
+      const fs = lerp(a.fs, b.fs, m) / 100 * FH;
+      // head centre sits ~10 % of the face box above the box centre (hair above the hairline, chin is the box bottom)
+      return { x: lerp(a.ox, b.ox, m) / 100 * FW, y: lerp(a.oy, b.oy, m) / 100 * FH - fs * .1, h: fs };
+    }
+  }
+  return FACE();
+}
 // Circle cam. kind "bubble" = cutout on yellow disc (screen-share layout); "pip" = raw crop over blur (spotlight layout).
+// The whole head (≈ 1.2 × face box) fills `fill` of the circle, centred; zoom never drops below what still covers the circle,
+// and the frame is kept over the whole circle by sliding it (the head moves a little off-centre instead of showing an empty edge).
+// s.bubble / s.pip: {cx, cy, d, z (fixed zoom), fill, bg}.
 function faceCircle(t, s, kind) {
-  const b = { ...(kind === 'bubble' ? { cx: 360, cy: 315, d: 275, z: .55, bg: V.bubble } : { cx: 360, cy: 330, d: 310, z: .62, bg: '#000' }), ...(s[kind] || {}) };
-  const f = FACE();
+  const b = { ...(kind === 'bubble' ? { cx: 360, cy: 315, d: 275, bg: V.bubble } : { cx: 360, cy: 330, d: 310, bg: '#000' }), fill: .66, ...(s[kind] || {}) };
+  const f = faceAt(t), [FW, FH] = typeof DIMS === 'function' ? DIMS() : [VW, VH];
+  const head = (f.h || FH * .32) * 1.2;
+  const z = b.z ?? Math.max(b.fill * b.d / head, b.d / FW * 1.01, b.d / FH * 1.01);
+  const l = clamp(b.d / 2 - f.x * z, b.d - FW * z, 0), tp = clamp(b.d * .48 - f.y * z, b.d - FH * z, 0);
   const pt = s[kind + '_t'] ?? s.t0, k = E.outBack(prog(t, pt, .3), 1.7);
-  const inner = facePlaced(t, { cx: b.d / 2, cy: b.d / 2 + b.d * .08, z: b.z, fx: f.x, fy: f.y, cut: kind === 'bubble' });
+  const inner = facePlaced(t, { cx: l + f.x * z, cy: tp + f.y * z, z, fx: f.x, fy: f.y, cut: kind === 'bubble' });
   return `<div class="abs" style="left:${b.cx - b.d / 2}px;top:${b.cy - b.d / 2}px;width:${b.d}px;height:${b.d}px;border-radius:50%;overflow:hidden;background:${b.bg};
     border:${kind === 'bubble' ? `3px solid #E3A53A` : '0'};box-shadow:0 10px 30px rgba(0,0,0,.25);transform:scale(${clamp(k, 0, 2).toFixed(3)});opacity:${clamp((t - pt) / .08).toFixed(2)}">${inner}</div>`;
 }
