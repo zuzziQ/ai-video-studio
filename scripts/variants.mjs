@@ -325,7 +325,8 @@ export async function makeMatrix(src, o = {}) {
   } finally { await E.browser.close().catch(() => {}); saveLib(lib); }
   const g2 = o.export ? readGate(dir) : null;
   if (g2?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(g2)})`);
-  if (o.export && !g2?.blocked) { await exportAll(out, o.quality, 'Xuất bản'); deliverVariants(dir, base.tl, out, o); }
+  // giao cả khi một bản lỗi: những bản đã xuất xong (có v.video) vẫn vào Thanh pham/, như hàng loạt giao theo từng dòng
+  if (o.export && !g2?.blocked) { try { await exportAll(out, o.quality, 'Xuất bản'); } finally { deliverVariants(dir, base.tl, out, o); } }
   const oldHook = (base.tl.scenes || []).filter(s => !s.hidden && !isBase(s, base.tl) && s.t0 < 1.5).map(s => s.text || s.lines?.map(L => L.text).join(' ') || s.value || '').filter(Boolean)[0] || '';
   const res = { base: dir, created: new Date().toISOString(), kind: 'matrix', kind_vi: 'ma trận khán giả × góc × kết cấu × thời lượng × bố cục', n: out.length,
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', size: `${DW}x${DH}`, hook_library: lib.file,
@@ -393,7 +394,7 @@ export async function makeVariants(src, o = {}) {
   // 4. optional export of every variant (not while the base project's QC blocks export: the variants share its words)
   const gate = o.export ? readGate(dir) : null;
   if (gate?.blocked) console.error(`[variants] không xuất video: QC của dự án gốc đang chặn xuất (${gateText(gate)})`);
-  if (o.export && !gate?.blocked) { await exportAll(out, o.quality, 'Xuất phiên bản'); deliverVariants(dir, base.tl, out, o); }
+  if (o.export && !gate?.blocked) { try { await exportAll(out, o.quality, 'Xuất phiên bản'); } finally { deliverVariants(dir, base.tl, out, o); } }
   const baseVid = fs.existsSync(path.join(dir, 'out')) ? fs.readdirSync(path.join(dir, 'out')).filter(f => f.endsWith('.mp4')).map(f => `out/${f}`).sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs)[0] : null;
   const res = { base: dir, created: new Date().toISOString(), kind, kind_vi: { hook: 'khác hook mở đầu', style: 'khác gói style', both: 'khác hook + gói style' }[kind], n: out.length,
     ab_test: true, base_hook: oldHook || base.tl.title || '', base_still: '.studio/hook.jpg', base_video: baseVid || undefined, size: `${DW}x${DH}`, variants: out };

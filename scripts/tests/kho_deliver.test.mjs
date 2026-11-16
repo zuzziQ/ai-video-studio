@@ -283,4 +283,11 @@ test('Lịch đăng: thấy video trong Thanh pham của mọi Kho đã đăng k
   assert.equal(r2.data.find(v => v.file === a).hasCaptions, true);
   const cap = await call(route, '/api/schedule/captions?platform=tiktok&file=' + encodeURIComponent(a));
   assert.equal(cap.data.caption, 'Caption của Lịch');
+  // lên lịch bản trong Thành phẩm → dòng out/ (liên kết cứng của nó) cũng hiện "đã lên lịch"
+  const add = await call(route, '/api/schedule/add', { method: 'POST', body: { file: a, platforms: ['youtube'], when: '2099-01-01T08:00:00Z' } });
+  assert.equal(add.data.ok, true, JSON.stringify(add.data));
+  const route2 = (await import('../../studio/routes/18_schedule.mjs')).default(fakeCtx(d).ctx);
+  const r3 = await call(route2, '/api/schedule/videos');
+  const twin = r3.data.find(v => v.file === path.join(d, 'out', 'l.mp4') || v.file === a);
+  assert.deepEqual(twin.scheduled, ['youtube']);
 });

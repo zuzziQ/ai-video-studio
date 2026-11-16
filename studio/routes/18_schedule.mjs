@@ -60,7 +60,9 @@ export default ctx => {
     } catch (e) { console.error('schedule: Thanh pham:', e.message); }
     for (const it of PUB.loadSchedule().items) add(it.file, 'Lịch');
     const list = [...seen.values()].sort((a, b) => b.mtime - a.mtime).slice(0, 80);
-    for (const v of list) { v.info = await probe(v.file); v.scheduled = [...new Set(PUB.loadSchedule().items.filter(x => x.file === v.file && x.state !== 'error').map(x => x.platform))]; v.hasCaptions = !!(v.project && fs.existsSync(path.join(v.project, 'publish/publish.json'))); }
+    // "already scheduled" by inode too: an item scheduled from the Thanh pham/ copy also marks its out/ twin (S12 M100)
+    const sched = PUB.loadSchedule().items.filter(x => x.state !== 'error' && x.file).map(x => ({ file: x.file, key: fileKey(x.file), platform: x.platform }));
+    for (const v of list) { v.info = await probe(v.file); const vk = fileKey(v.file); v.scheduled = [...new Set(sched.filter(x => x.file === v.file || x.key === vk).map(x => x.platform))]; v.hasCaptions = !!(v.project && fs.existsSync(path.join(v.project, 'publish/publish.json'))); }
     return list;
   }
   // Caption AI of a delivered copy in Thanh pham/: look it up through the project's own file (S12 M100, .giao.json index).
