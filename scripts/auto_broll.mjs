@@ -7,7 +7,8 @@
 // variety (no source twice in a row, no template within 3–5), the best wins and up to 3 cheap runners-up are kept on the scene
 // as _alts (Studio: "Phương án khác"). Sources: catalog presets (9 000+, 55 templates), HyperFrames blocks with vars from the
 // speech, keyword text, 3D emoji, brand logos of tools named, effects on the speaker (push / punch / mono, in TL.fx), the
-// project's media/, the personal library (scripts/broll_lib.mjs), stock video / photos, AI images (own OpenAI/Gemini key).
+// project's media/, the brand's Kho (BRoll/, Anh/ — matched by file/folder name, ranked above library and stock; S12 · M99),
+// the personal library (scripts/broll_lib.mjs), stock video / photos, AI images (own OpenAI/Gemini key).
 // Layouts rotate (card / right / left / pip / full / person-behind) and never cover TL.face; full 9:16 presets use fit:"portrait".
 // Skips 0–1.5 s, the outro/title card and existing non-auto big scenes. Every inserted scene has _auto:true -> a re-run replaces
 // only those (scenes you edited — _orig — are kept). Writes the timeline in place (timeline.json.bak first). Progress: "@@ p step".
@@ -329,6 +330,12 @@ const HF_SPEC = {
 // ---------- personal library + AI image availability ----------
 let LIB = null;
 if (SRC.has('lib')) { try { LIB = await import('./broll_lib.mjs'); if (!LIB.load().length) LIB = null; } catch { LIB = null; } }
+// Kho của thương hiệu (S12 · M99): đi cùng nguồn "media" (Ảnh/clip của tôi); file dùng được liên kết vào media/kho_* (kho_media.mjs)
+let KHO = null, KHO_WS = null, KHO_ITEMS = [];
+if (SRC.has('media') || SRC.has('kho')) {
+  try { KHO = await import('./kho_media.mjs'); KHO_WS = KHO.khoOf(DIR, TL); KHO_ITEMS = KHO.khoItems(DIR, KHO_WS).filter(it => ['broll', 'image'].includes(it.group) && it.kind !== 'audio'); }
+  catch { KHO = null; KHO_ITEMS = []; }
+}
 let KEYS = {}; try { KEYS = (await import('./ai_broll.mjs')).readKeys(); } catch {}
 const AIKEY = !!(KEYS.openai || KEYS.gemini);
 const STOCK_SRC = ['pexels', 'pixabay'].filter(k => KEYS[k]).concat(['openverse', 'commons']).join(',');
@@ -389,15 +396,16 @@ function presetFor(s, pal, avoid) {
   const mine = own.filter(o => !avoid.has(o.template)).map(o => ({ ...o, pal, topic: 'speech', seed: s.i + 3, own: true }));
   return [...mine, ...c];
 }
-const lastKinds = [], recentTpl = [], usedLib = new Set(), usedHF = [];
-const quota = { stock: 3, stockvid: 4, aiimg: 2, aroll: Math.max(1, Math.round(DUR / 9)), logo: 4, lib: 99, media: 99 };
+const lastKinds = [], recentTpl = [], usedLib = new Set(), usedKho = new Set(), usedHF = [];
+const quota = { stock: 3, stockvid: 4, aiimg: 2, aroll: Math.max(1, Math.round(DUR / 9)), logo: 4, lib: 99, media: 99, kho: 99 };
 const used = { stock: 0, stockvid: 0, aiimg: 0, aroll: 0, logo: 0 };
 let lastAroll = -99, lastEmojiI = -9, lastTextI = -9, fullN = 0, mediaI = 0;
 function candidates(s) {
   const C = [], mix = G.mix || {}, pref = G.roles?.[s.role] || G.roles?.general || [];
   const base = k => (mix[k] ?? 1) + (pref.indexOf(k) >= 0 ? 3 - pref.indexOf(k) : 0)
     - (lastKinds.at(-1) === k ? 3 * VARIETY : 0) - (lastKinds.at(-2) === k ? 1.5 * VARIETY : 0) - lastKinds.slice(-5).filter(x => x === k).length * .4 * VARIETY + rnd() * VARIETY;
-  const add = (kind, extra, data) => { if (!SRC.has(kind) || (mix[kind] ?? 1) <= 0) return; C.push({ kind, score: base(kind) + extra, ...data }); };
+  const on = kind => SRC.has(kind) || (kind === 'kho' && SRC.has('media'));
+  const add = (kind, extra, data) => { if (!on(kind) || (mix[kind] ?? 1) <= 0) return; C.push({ kind, score: base(kind) + extra, ...data }); };
   if (s.logo && used.logo < quota.logo) add('logo', s.role === 'tool' ? 3 : 1.5, { logo: s.logo });
   { const avoid = new Set(recentTpl.slice(-Math.round(2 + VARIETY * 3))); const pal = s.i % 4 === 3 ? PAL2b : PAL; const c = presetFor(s, pal, avoid);
     if (c.length) add('preset', s.num ? 1 : 0, { preset: c[0], cands: c, pal }); }
@@ -417,6 +425,16 @@ function candidates(s) {
     if (used.stock < quota.stock) add('stock', -.5, { q: s.conc });
   }
   if (AIKEY && used.aiimg < quota.aiimg && ['place', 'general', 'emotion', 'hook'].includes(s.role)) add('aiimg', -1, { q: s.conc || { en: (s.kw || '').toLowerCase() } });
+  // Kho khớp câu nói: luôn xếp trên ảnh/clip dự án, thư viện, stock và ảnh AI của cùng chỗ (ưu tiên tài nguyên có quyền của thương hiệu)
+  if (KHO_ITEMS.length) {
+    const hit = KHO.searchKho(KHO_ITEMS, s.text, { n: 1, exclude: usedKho })[0];
+    if (hit) {
+      const real = C.filter(c => ['media', 'lib', 'stock', 'stockvid', 'aiimg'].includes(c.kind)).reduce((m, c) => Math.max(m, c.score), -Infinity);
+      add('kho', Math.min(3, hit.score) + 1.5, { kho: hit });
+      // chỉ ép lên trên khi khớp chắc (cụm hai từ hoặc ≥ 2 từ): một âm tiết trùng ("ca", "sang") không đủ
+      const k = C.at(-1); if (k?.kind === 'kho' && hit.score >= 2 && k.score <= real) k.score = real + .5;
+    }
+  }
   return C.sort((a, b) => b.score - a.score);
 }
 const CHEAP = new Set(['preset', 'hf', 'text', 'emoji', 'logo']);
@@ -432,6 +450,7 @@ for (const s of slots) {
   if (s.pick.kind === 'emoji') lastEmojiI = s.i;
   if (s.pick.kind === 'text') lastTextI = s.i;
   if (s.pick.kind === 'lib') usedLib.add(s.pick.lib.id);
+  if (s.pick.kind === 'kho') usedKho.add(s.pick.kho.rel);
   if (s.pick.kind in used && s.pick.kind !== 'aroll') used[s.pick.kind]++;
 }
 
@@ -468,7 +487,7 @@ ${JSON.stringify(req)}`;
     // keep the variety rules even when Claude ignored them: the same kind / template / block never twice in a row
     for (let i = 1; i < live.length; i++) {
       const a = live[i - 1].pick, s = live[i], b = s.pick;
-      const same = a.kind === b.kind && (b.kind !== 'preset' || a.preset?.template === b.preset?.template) && (b.kind !== 'hf' || a.block === b.block) && !['stock', 'stockvid', 'media', 'lib'].includes(b.kind);
+      const same = a.kind === b.kind && (b.kind !== 'preset' || a.preset?.template === b.preset?.template) && (b.kind !== 'hf' || a.block === b.block) && !['stock', 'stockvid', 'media', 'lib', 'kho'].includes(b.kind);
       if (!same) continue;
       const alt = s.C.find(c => c.kind !== a.kind && (c.kind !== 'aroll' || used.aroll < quota.aroll));
       if (alt) { s.alts = [b, ...s.alts.filter(x => x !== alt && x.kind !== b.kind)].filter(x => CHEAP.has(x.kind)).slice(0, 3); s.pick = alt; if (alt.kind === 'aroll') used.aroll++; }
@@ -528,7 +547,7 @@ function sceneFor(s, c, lay) {
       lines: [{ text: txt, t: s.t0, style: TEXT_STY[styI++ % TEXT_STY.length], size: fitSize(txt, VERT ? 84 : 92), x: DW / 2, y: textY(), anim: ['pop', 'blur_zoom', 'slide_l', 'drop', 'tumble'][styI % 5] }] };
   }
   if (c.kind === 'emoji') { const size = VERT ? 150 : 130, [x, y] = emojiXY(size); return { ...base, t1: r2(Math.min(s.t1, s.t0 + Math.min(1.4, density * .6))), type: 'emoji_pop', src: c.emoji, x, y, size }; }
-  if (['media', 'lib', 'stock', 'stockvid', 'aiimg'].includes(c.kind)) {
+  if (['media', 'kho', 'lib', 'stock', 'stockvid', 'aiimg'].includes(c.kind)) {
     const m = c.media; if (!m) return null;
     const media = m.seq ? { ...m.seq, t0: s.t0 } : m.path, credit = m.credit ? { credit: m.credit } : {};
     if (full) return { ...base, t1: r2(Math.min(s.t1, s.t0 + (m.seq ? 2.2 : 1.6))), type: 'photo', mode: 'full', media, kb: m.seq ? .04 : .12, kb_dir: s.i % 2 ? -1 : 1, ...credit };
@@ -584,6 +603,10 @@ for (const s of slots) {
   const c = s.pick;
   if (c.kind === 'aroll') { fxAdded.push({ ...fxPick(s), _auto: true }); continue; }
   if (c.kind === 'media') { const m = MEDIA[mediaI++ % MEDIA.length]; c.media = m.seq ? { seq: m.seq } : { path: m.path }; }
+  if (c.kind === 'kho') {
+    try { const it = await KHO.useFromKho(DIR, KHO_WS, c.kho.rel, { credit: 'Kho · b-roll tự động', maxDur: 30 }); c.media = it.seq ? { seq: it.seq, credit: 'Kho' } : { path: it.path, credit: 'Kho' }; }
+    catch (e) { console.log(`Kho: bỏ ${c.kho.rel} (${e.message})`); continue; }
+  }
   if (c.kind === 'lib') c.media = (() => { const r = LIB.useIn(c.lib, DIR); return typeof r === 'string' ? { path: r, credit: 'Thư viện của tôi' } : { seq: r, credit: 'Thư viện của tôi' }; })();
   const isSmall = c.kind === 'text' || c.kind === 'emoji';
   let lay = isSmall ? 'card' : nextLayout(wantFull());
