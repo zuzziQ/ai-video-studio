@@ -313,6 +313,11 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
       else if (prof.music && prof.music !== 'auto') { tl.audio.music = [{ t0: 0, t1: tl.duration, mood: prof.music, gain: -20, _auto: true }]; notes.push('nhạc ' + prof.music); }
       if (prof.music_gain && tl.audio.music?.length) { for (const m of tl.audio.music) m.gain = r2((m.gain ?? -20) + prof.music_gain); notes.push(`nhạc ${prof.music_gain > 0 ? '+' : ''}${prof.music_gain} dB (đã học)`); }
       saveTL(dir, tl, caps, capFile);
+      // S12 M99: đoạn nhạc tự chọn (_auto, theo mood) có bài hợp trong Nhac/ của Kho thì dùng bài đó (media/kho_*), như nút "Tự động"
+      if (prof.music !== 'off' && tl.audio.music?.some(m => m._auto && !m.file)) {
+        try { const { khoMusicBeds } = await import('./kho_media.mjs'); const n = await khoMusicBeds(dir); if (n) { notes.push(`${n} đoạn nhạc lấy từ Kho`); tl.audio = loadTL(dir).tl.audio || tl.audio; } }
+        catch (e) { console.log(`! nhạc Kho: ${e.message}`); }
+      }
       res.sfx = { sfx: tl.audio.sfx?.length || 0, music: (tl.audio.music || []).map(m => m.mood || path.basename(m.file || '')).filter(Boolean) };
       return notes.length ? `${notes.join(' · ')} · ${res.sfx.sfx} SFX, nhạc: ${res.sfx.music.join(', ') || '—'}` : { skip: 'tắt trong hồ sơ' };
     },
