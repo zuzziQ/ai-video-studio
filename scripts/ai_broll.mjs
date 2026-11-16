@@ -56,7 +56,7 @@ const P = {
       }).filter(Boolean);
     }
     const d = await getJson(`https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=${n}`, { Authorization: key });
-    return (d?.photos || []).map(p => ({ provider: 'pexels', kind, thumb: p.src.medium, url: p.src.large2x, w: p.width, h: p.height, title: p.alt || q, author: p.photographer, license: 'Pexels License', page: p.url }));
+    return (d?.photos || []).map(p => ({ provider: 'pexels', kind, thumb: p.src.medium, url: p.src.large2x, w: p.width, h: p.height, title: p.alt || q, untitled: !p.alt, author: p.photographer, license: 'Pexels License', page: p.url }));
   },
   async pixabay(q, kind, n, key) {
     if (!key) return [];
@@ -85,7 +85,7 @@ const P = {
   async openverse(q, kind, n) { // thumb = the image itself: Openverse's /thumb proxy is often too slow for a grid
     if (kind === 'video') return [];
     const d = await getJson(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&license_type=commercial&page_size=${n}`);
-    return (d?.results || []).map(r => ({ provider: 'openverse', kind, thumb: r.url, url: r.url, w: r.width, h: r.height, title: r.title || q, author: r.creator || 'unknown',
+    return (d?.results || []).map(r => ({ provider: 'openverse', kind, thumb: r.url, url: r.url, w: r.width, h: r.height, title: r.title || q, untitled: !r.title, tags: (r.tags || []).filter(t => t.accuracy == null || t.accuracy >= .9).map(t => t.name).filter(Boolean).slice(0, 12), author: r.creator || 'unknown',
       license: `CC ${(r.license || '').toUpperCase()} ${r.license_version || ''}`.trim(), page: r.foreign_landing_url }));
   },
 };
