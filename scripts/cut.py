@@ -49,7 +49,7 @@ for _, w in kept:
     while not (spans[si][0] <= w["s"] + 1e-6 <= spans[si][1]):
         si += 1
     off = starts[si] - spans[si][0]
-    out_words.append({"w": w["w"], "s": round(w["s"] + off, 3), "e": round(w["e"] + off, 3)})
+    out_words.append({"w": w["w"], "s": round(w["s"] + off, 3), "e": round(w["e"] + off, 3), **({"p": w["p"]} if "p" in w else {})})
 
 def probe(entries, sel=None):
     cmd = ["ffprobe", "-v", "error", *(["-select_streams", sel] if sel else []), "-show_entries", entries, "-of", "csv=p=0", a.src]

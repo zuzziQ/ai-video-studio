@@ -109,6 +109,37 @@ test('JSON hỏng → hỏi lại một lần rồi lùi về đề xuất theo 
   assert.match(r.warnings.join(' '), /từ điển/);
 });
 
+test('uncertain (M96): chỗ AI nghi nhưng không chắc sửa — kiểm chặt vị trí, không chồng đề xuất, thiếu thì rỗng', async () => {
+  const ws = words('thời gian 15 đến 3 phút là có thuyết tiền hóa');
+  const input = A.check('transcript', { ...BASE, words: ws });
+  const seen = fake([J({
+    edits: [{ start: 9, end: 10, old: 'tiền hóa', new: 'tiến hoá', kind: 'nhận dạng', reason: 'nghe nhầm' }],
+    uncertain: [
+      { start: 2, end: 4, old: '15 đến 3', reason: 'khoảng số lạ' },
+      { start: 4, end: 4, old: '3', reason: 'chồng chỗ nghi trước' },
+      { start: 10, end: 10, old: 'hóa', reason: 'chồng đề xuất sửa' },
+      { start: 5, end: 5, old: 'giây', reason: 'chép sai chữ' },
+      { start: 0, end: 7, old: 'thời gian 15 đến 3 phút là có', reason: 'quá 6 từ' },
+      'rác',
+    ],
+  })]);
+  const r = await A.runAssist('transcript', input);
+  assert.match(seen()[0].prompt, /"uncertain"/);
+  assert.deepEqual(r.uncertain, [{ start: 2, end: 4, old: '15 đến 3', reason: 'khoảng số lạ' }]);
+  assert.equal(r.dropped.unsure, 3, 'sai chữ, quá dài, không phải object');
+  assert.equal(r.suggestions.length, 1);
+  // CLI cũ chỉ trả edits, hoặc trả mảng: uncertain rỗng, đề xuất vẫn chạy
+  fake([J({ edits: [] })]);
+  assert.deepEqual((await A.runAssist('transcript', input)).uncertain, []);
+  fake([J([{ start: 9, end: 10, old: 'tiền hóa', new: 'tiến hoá' }])]);
+  const arr = await A.runAssist('transcript', input);
+  assert.deepEqual(arr.uncertain, []); assert.equal(arr.suggestions.length, 1);
+  // AI hỏng → theo từ điển, không có chỗ nghi
+  fake(['hỏng', 'hỏng']);
+  assert.deepEqual((await A.runAssist('transcript', input)).uncertain, []);
+  assert.equal(A.txCheckSpot({ start: 2, end: 2, old: '15' }, ws, { a: 3, b: 9 }).why, 'bad', 'ngoài cửa sổ');
+});
+
 test('thiếu claude → báo nguyên văn, không lùi về im lặng', async () => {
   const { LlmError, MSG } = await import('../llm.mjs');
   const run = async () => { throw new LlmError(MSG.missing, { kind: 'missing' }); };

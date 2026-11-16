@@ -13,6 +13,7 @@ export const PAD = 1; // giây nghe thêm mỗi bên
 // "Hẹn gặp lại các bạn…"; đoạn ngắn được nới đều hai bên cho đủ dài.
 export const MIN_WIN = 5;
 export const MAX_SPAN = 30; // giây: nghe lại là cho một chỗ ngắn, không phải tạo lại cả lời thoại
+export const MAX_SPANS = 20; // M96 "Soát kỹ": số đoạn tối đa một lượt nghe lại nhiều đoạn (panel mặc định 12)
 const NEXT = { small: 'large-v3-turbo', medium: 'large-v3-turbo', 'large-v3-turbo': 'large-v3', 'large-v3': 'large-v3' };
 
 /** Model nghe lại: model người dùng chọn, không thì bậc lớn hơn model đã tạo lời thoại (tl.asr.model, mặc định turbo). */
@@ -37,6 +38,12 @@ export function checkSpan(b, duration) {
   if (from < 0) { to -= from; from = 0; } // chạm đầu/cuối video: dồn phần thiếu sang bên kia
   if (to > D) { from = Math.max(0, from - (to - D)); to = D; }
   return { s, e, from, to };
+}
+
+/** Danh sách đoạn [{s, e}] (M96) → các khoảng nghe như checkSpan; 1–MAX_SPANS đoạn. */
+export function checkSpans(list, duration) {
+  if (!Array.isArray(list) || !list.length || list.length > MAX_SPANS) { const x = new Error(`Cần 1–${MAX_SPANS} đoạn {s, e}`); x.status = 400; throw x; }
+  return list.map(b => checkSpan(b, duration));
 }
 
 /** Initial prompt cho Whisper: từ khoá (từ điển, thương hiệu, sản phẩm), câu sau, rồi câu trước sát đoạn nghe (≤ ~700 ký tự).
@@ -101,6 +108,9 @@ export async function voiceSource({ dir, tl, skill, py, run, onLine, onProc }) {
   throw new Error('Video chưa có tiếng nói để nghe lại (không có clip nào có tiếng).');
 }
 
+const cleanWords = list => (Array.isArray(list) ? list : []).filter(w => w && typeof w.w === 'string' && Number.isFinite(+w.s) && Number.isFinite(+w.e))
+  .map(w => ({ w: w.w.slice(0, 80), s: +w.s, e: +w.e }));
+
 /**
  * Nghe lại [s, e] của dự án. o: {dir, tl, words (lời thoại hiện có, [{w,s,e}]), terms, s, e, model?, lang?, skill, py}
  * env: {run (mặc định spawnRun), onProgress(p, bước), onProc(child), cancelled()}
@@ -124,9 +134,36 @@ export async function rehear(o, env = {}) {
       onLine: l => { const m = /^@step ([\d.]+) (.*)$/.exec(l); if (m) say(0.1 + 0.85 * Math.min(1, +m[1]), m[2]); },
     });
     const r = JSON.parse(fs.readFileSync(outF, 'utf8'));
-    const words = (Array.isArray(r.words) ? r.words : []).filter(w => w && typeof w.w === 'string' && Number.isFinite(+w.s) && Number.isFinite(+w.e))
-      .map(w => ({ w: w.w.slice(0, 80), s: +w.s, e: +w.e }));
+    const words = cleanWords(r.words);
     return { model: r.model || model, device: r.device || '', from: span.from, to: span.to, s: span.s, e: span.e, prompt, words, text: words.map(w => w.w).join(' '),
       ms: Date.now() - t, load_ms: r.load_ms | 0, run_ms: r.run_ms | 0, stem_ms, cached: src.cached };
   } finally { fs.rmSync(outF, { force: true }); }
+}
+
+/**
+ * Nghe lại nhiều đoạn một lượt (M96 "Soát kỹ"): cùng tiếng nói (cache của rehear), cùng cách chọn model và prompt, nhưng
+ * rehear.py nạp model MỘT lần rồi nghe lần lượt (--spans). o: như rehear nhưng spans [{s, e}] thay cho s, e.
+ * env.onProgress(p, "Đoạn 3/9: …"). → {model, device, spans: [{s, e, from, to, prompt, words, text}], ms, load_ms, run_ms, stem_ms, cached}
+ */
+export async function rehearMany(o, env = {}) {
+  const run = env.run || spawnRun, say = (p, st) => env.onProgress?.(p, st);
+  const spans = checkSpans(o.spans, o.tl?.duration);
+  const model = pickModel(o.tl?.asr?.model, o.model);
+  const t = Date.now();
+  say(0.03, 'Lấy tiếng nói trên timeline');
+  const src = await voiceSource({ dir: o.dir, tl: o.tl, skill: o.skill, py: o.py, run, onProc: env.onProc });
+  const stem_ms = Date.now() - t;
+  if (env.cancelled?.()) throw Object.assign(new Error('Đã huỷ theo yêu cầu'), { kind: 'cancel' });
+  const list = spans.map(sp => ({ ...sp, prompt: buildPrompt({ words: o.words || [], from: sp.from, to: sp.to, terms: o.terms || [] }) }));
+  const tag = `${process.pid}_${Date.now()}`, inF = path.join(o.dir, '.studio', `rehear_spans_${tag}.json`), outF = path.join(o.dir, '.studio', `rehear_${tag}.json`);
+  try {
+    fs.writeFileSync(inF, JSON.stringify(list.map(x => ({ from: +x.from.toFixed(3), to: +x.to.toFixed(3), prompt: x.prompt }))));
+    await run(o.py, ['-I', '-X', 'utf8', path.join(o.skill, 'scripts', 'rehear.py'), src.file, outF, '--spans', inF, '--model', model, '--lang', o.lang === 'auto' ? 'auto' : 'vi'], {
+      cwd: o.dir, onProc: env.onProc,
+      onLine: l => { const m = /^@step ([\d.]+) (.*)$/.exec(l); if (m) say(0.06 + 0.92 * Math.min(1, +m[1]), m[2]); },
+    });
+    const r = JSON.parse(fs.readFileSync(outF, 'utf8')), res = Array.isArray(r.results) ? r.results : [];
+    const out = list.map((x, k) => { const words = cleanWords(res[k]?.words); return { s: x.s, e: x.e, from: x.from, to: x.to, prompt: x.prompt, words, text: words.map(w => w.w).join(' ') }; });
+    return { model: r.model || model, device: r.device || '', spans: out, ms: Date.now() - t, load_ms: r.load_ms | 0, run_ms: r.run_ms | 0, stem_ms, cached: src.cached };
+  } finally { fs.rmSync(inF, { force: true }); fs.rmSync(outF, { force: true }); }
 }

@@ -88,3 +88,52 @@ Kết luận:
 - Đoạn quá ngắn (≈ 2 s) làm Whisper đoán sai và bịa câu ở mép, nên Studio nới đoạn cho đủ 5 s.
   Prompt không chứa chữ của chính đoạn nghe: đưa "15 đến 3" vào prompt làm Whisper lặp lại lỗi và bỏ mất đầu câu.
 - Lần đầu dùng large-v3 tải ~3 GB; mỗi lượt nạp lại model (11–15 s trên GTX 1660 Ti) là phần tốn nhất.
+
+## Soát kỹ hai lớp (`M96`, "Soát kỹ (nghe lại chỗ nghi)")
+
+Lớp 1 dò chỗ nghi cho cả bài (độ tự tin từng từ `p` của Whisper, con số, từ lặp, độ dài lạ, chỗ AI soát chữ sửa hoặc
+đánh dấu nghi), lớp 2 chỉ nghe lại các chỗ đó bằng large-v3 trong một lượt, rồi so ba nguồn (gốc, AI chữ, nghe lại)
+và xếp đề xuất theo độ tin. Không tự sửa (`references/studio.md`, mục Lời thoại).
+
+Đo ngày 16/11/2026 trên `clip-mau` tạo lại bằng turbo (133 từ, có `p`), GTX 1660 Ti, CUDA int8_float16, Claude thật.
+So với đáp án (bản sửa tay, "15 đến 30 phút"), turbo sai **4 chỗ**: "tiền hóa" (tiến hoá), "nghe" (để), "3" (30),
+"phong chữ" (phông chữ).
+
+**Ngưỡng `p`.** Bốn từ sai có `p` 0,62–0,83: turbo sai mà vẫn khá chắc, nên ngưỡng 0,5 không bắt được chỗ nào.
+
+| Ngưỡng | Từ sai bắt được | Từ đúng bị nghi |
+|---|---|---|
+| p < 0,5 | 0/4 | 1/129 |
+| p < 0,7 | 1/4 | 3/129 |
+| **p < 0,85** (2 điểm, đủ thành chỗ nghi) | **4/4** | 12/129 |
+
+Với ngưỡng này lớp tín hiệu ra 5 đoạn nghi (4 khi có AI), phủ cả 4 lỗi. Từ có p < 0,6 được 3 điểm.
+
+**So hai cách soát** (mỗi dòng một lượt; "đúng" = sửa thành chữ của đáp án hoặc cùng nghĩa, "font chữ" tính là đúng):
+
+| Cách | Đề xuất | Đúng / sai | Lỗi thật sửa đúng | Nhận tất cả (mặc định) | Đoạn nghe lại | Tổng thời gian |
+|---|---|---|---|---|---|---|
+| (a) AI soát chữ một mình (M90), lượt 1 | 3 | 2 / 1 ("15 đến 3" → "1 đến 3") | 2/4 | áp cả chỗ sai | 0 | 4,9 s |
+| (a) lượt 2 | 5 | 2 / 3 (đoán số, "nghe" → "nếu", "từ đấy" → "từ đó") | 2/4 | áp cả 3 chỗ sai | 0 | 6,5 s |
+| (b) Soát kỹ, lượt 1 | 4 | 3 / 1 | 3/4 | 1 đúng, 0 sai | 4 | 39,6 s |
+| (b) lượt 2 | 5 | 3 / 2 | 3/4 | 1 đúng, 0 sai | 5 | 42,1 s |
+| (b) lượt 3 | 5 | 3 / 2 | 3/4 | 1 đúng, 0 sai | 4 | 34,9 s |
+| (b) thiếu `claude` (chỉ tín hiệu + nghe lại) | 3 | 2 / 1 | 2/4 | (không có nhóm cao) | 5 | 29,2 s |
+
+Lượt (b) 1–2 chạy trước khi chốt luật cuối; bảng ghi theo luật cuối (lượt 1 thật sự đã bỏ "tiền hóa → tiến hoá",
+xem dưới). Ở (b), nhóm **2 nguồn đồng ý** luôn là "phong chữ → phông chữ" (đúng 3/3); "15 đến 3 phút → 15 đến 30" ở
+nhóm Một nguồn (đúng 3/3, lượt 2–3 AI đoán "1 đến 3" và bị bản nghe lại thay); "tiến hoá" ở nhóm Cần nghe. Hai đề
+xuất sai của (b) đều do large-v3 nghe nhầm ("xong được" → "sau", "nghe" → "nghề"), xếp ở Cần nghe hoặc Một nguồn.
+"nghe" (để) chưa cách nào sửa đúng. Thời gian (b): Claude 5–7 s + trộn tiếng nói (lượt đầu) + nạp large-v3 11–15 s +
+2–4 s mỗi đoạn.
+
+Luật rút ra từ số đo:
+
+- **Nghe lại = gốc không có nghĩa là AI sai.** large-v3 cũng nghe "tiền hóa" như turbo; AI sửa đúng theo nghĩa câu
+  ("thuyết tiến hoá"). Luật ban đầu "bỏ đề xuất AI" làm mất chỗ đúng này, nên chỉ bỏ khi AI đoán **số** (AI không
+  nghe được âm thanh, ở M90 đoán số sai 6/41 lần); sửa chữ khác thì hạ xuống Cần nghe.
+- **Chỉ nghe lại thấy khác, AI đọc thấy ổn → Cần nghe.** large-v3 có lỗi riêng ("mới sau một clip" đã thấy ở M95);
+  chỉ tin hơn khi chỗ đó có số hoặc AI cũng nghi.
+- Chỗ có số mà ba nguồn khác nhau: tin bản nghe lại (Một nguồn), giữ bản AI ở nút "Dùng bản AI".
+- Mặc định "Nhận tất cả" chỉ nhận nhóm 2 nguồn đồng ý: trên clip mẫu là 1 chỗ đúng, 0 chỗ sai, so với (a) áp luôn
+  1–3 chỗ sai.

@@ -165,7 +165,152 @@
     return out;
   }
 
-  const T = { fold, tokenize, splitTimes, retime, distribute, planEdit, findMatches, cleanSide, normalizeEntries, parseDict, dictString, dictLines, heardTokens, rehearDiff };
+  // ---------- soát kỹ hai lớp (M96) ----------
+  // Lớp 1 (suspectSpans): tìm chỗ đáng nghe lại cho cả bài bằng tín hiệu rẻ: độ tự tin từng từ của Whisper (`p`, có từ
+  // M96), con số, từ lặp liền nhau, độ dài lạ, chỗ AI soát chữ (M90) đề xuất sửa hoặc đánh dấu "nghi". Gom chỗ gần nhau
+  // thành đoạn, nới mỗi đoạn đủ minWin giây như scripts/rehear.mjs checkSpan, giữ tối đa `limit` đoạn điểm cao nhất.
+  // Lớp 2 chạy ở server (/api/rehear/batch); triage() so ba nguồn (gốc, AI chữ, nghe lại) rồi xếp đề xuất.
+  // pLow / pMid đo trên sample/clip-mau (references/captions-accuracy.md, mục M96). minWin, maxSpan, pad = scripts/rehear.mjs.
+  // Đo 2026-11-16: 4 lỗi của turbo có p 0,62–0,83 (sai mà vẫn khá chắc); p < 0,85 bắt cả 4, nghi nhầm 12/129 từ đúng.
+  const SUSPECT = { pLow: 0.6, pMid: 0.85, gap: 2.5, maxCore: 20, minWin: 5, maxSpan: 30, pad: 1, limit: 12, min: 2 };
+  const letters = w => String(w || '').replace(/[^\p{L}\p{N}]/gu, '');
+  /** Điểm nghi từng từ: [{score, why: [...]}]. words [{w, s, e, p?, ed?}]; aiEdits / uncertain: [{start, end}] (chỉ số từ).
+   *  Từ người dùng đã sửa tay (ed) không bao giờ nghi. */
+  function suspectScores(words, { aiEdits = [], uncertain = [], ...o } = {}) {
+    const K = { ...SUSPECT, ...o }, out = words.map(() => ({ score: 0, why: [] }));
+    const add = (k, n, why) => { const x = out[k]; if (!x || words[k].ed) return; x.score += n; if (!x.why.includes(why)) x.why.push(why); };
+    const mark = (list, n, why) => { for (const r of list) for (let k = Math.max(0, r.start | 0); k <= Math.min(words.length - 1, r.end ?? r.start); k++) add(k, n, why); };
+    for (const [k, x] of words.entries()) {
+      const p = x.p == null ? NaN : +x.p, L = letters(x.w), d = x.e - x.s;
+      if (Number.isFinite(p)) { if (p < K.pLow) add(k, 3, 'Whisper không chắc'); else if (p < K.pMid) add(k, 2, 'Whisper không chắc'); }
+      if (/\d/.test(x.w)) add(k, 2, 'con số');
+      if (/^(đến|tới)$/i.test(L) && /\d/.test(words[k - 1]?.w || '') && /\d/.test(words[k + 1]?.w || '')) add(k, 2, 'con số');
+      if (k && L && fold(x.w) === fold(words[k - 1].w)) { add(k, 1, 'từ lặp'); add(k - 1, 1, 'từ lặp'); }
+      if (L.length > 12 || d > 1.6 || (d < 0.05 && L.length > 3)) add(k, 1, 'độ dài lạ');
+    }
+    mark(uncertain, 3, 'AI nghi');
+    mark(aiEdits, 4, 'AI đề xuất sửa');
+    return out;
+  }
+  /** Khoảng nghe [from, to] cho đoạn [s, e]: thêm pad, nới đều cho đủ minWin, chạm đầu/cuối thì dồn sang bên kia (= checkSpan). */
+  function hearWindow(s, e, duration, o) {
+    const K = { ...SUSPECT, ...o }, D = Number.isFinite(+duration) && +duration > 0 ? +duration : Infinity;
+    const pad = Math.max(K.pad, (K.minWin - (e - s)) / 2);
+    let from = s - pad, to = e + pad;
+    if (from < 0) { to -= from; from = 0; }
+    if (to > D) { from = Math.max(0, from - (to - D)); to = D; }
+    return { from: r3(from), to: r3(to) };
+  }
+  /** Đoạn nghi: {spans: [{a, b (chỉ số từ), s, e, from, to, score, why}] theo thời gian, total, cut (số đoạn bỏ vì quá limit)}.
+   *  o: ngưỡng (SUSPECT) + aiEdits, uncertain, duration. Mỗi đoạn ≤ maxCore giây; giữ `limit` đoạn điểm cao nhất. */
+  function suspectSpans(words, o = {}) {
+    const K = { ...SUSPECT, ...o }, sc = suspectScores(words, o), groups = [];
+    let g = null;
+    for (const [k, x] of words.entries()) {
+      if (sc[k].score < K.min) continue;
+      if (g && x.s - words[g.b].e <= K.gap && x.e - words[g.a].s <= K.maxCore) { g.b = k; g.score += sc[k].score; for (const y of sc[k].why) if (!g.why.includes(y)) g.why.push(y); continue; }
+      if (g) groups.push(g);
+      g = { a: k, b: k, score: sc[k].score, why: [...sc[k].why] };
+    }
+    if (g) groups.push(g);
+    const keep = groups.map((x, i) => ({ x, i })).sort((p, q) => q.x.score - p.x.score || p.i - q.i).slice(0, K.limit).sort((p, q) => p.i - q.i).map(({ x }) => x);
+    const spans = keep.map(x => { const s = words[x.a].s, e = Math.min(words[x.b].e, s + K.maxSpan); return { ...x, s: r3(s), e: r3(e), ...hearWindow(s, e, K.duration, K) }; });
+    return { spans, total: groups.length, cut: groups.length - spans.length };
+  }
+
+  /** Whisper bịa: nghe ra nhiều chữ hơn hẳn lời thoại cùng khoảng, hoặc lặp một từ / một cụm (lỗi quen của Whisper khi đoạn ngắn). */
+  function madeUp(heard, old) {
+    const H = heard.map(heardKey).filter(Boolean);
+    if (H.length > old.length * 1.6 + 4) return true;
+    let run = 1;
+    for (let i = 1; i < H.length; i++) { run = H[i] === H[i - 1] ? run + 1 : 1; if (run >= 4) return true; }
+    const seen = new Map();
+    for (let i = 0; i + 3 <= H.length; i++) { const k = H.slice(i, i + 3).join(' '); seen.set(k, (seen.get(k) || 0) + 1); if (seen.get(k) >= 3) return true; }
+    return false;
+  }
+  const sameKeys = (a, b) => a.length === b.length && a.every((x, i) => heardKey(x) === heardKey(b[i]));
+  const RANK = { cao: 0, 'vừa': 1, nghe: 2 };
+  /**
+   * So ba nguồn cho từng đoạn nghi. words [{w, s, e}] (lời thoại lúc soát), spans = suspectSpans().spans,
+   * aiEdits [{start, end, old, new, kind, reason}] (trợ lý transcript), heard[j] = chữ Whisper nghe lại đoạn j ([{w, s, e}],
+   * null = chưa nghe), uncertain [{start, end}] (chỗ AI nghi), aiRan (AI soát chữ đã đọc cả bài).
+   * Luật: nghe lại = AI → "cao" (2 nguồn đồng ý). Nghe lại = gốc: AI đoán số → bỏ (AI không nghe được âm thanh); sửa chữ khác →
+   * hạ xuống "nghe" (đo trên clip mẫu: large-v3 cũng nghe "tiền hóa" như turbo, AI sửa đúng "tiến hoá" theo nghĩa câu).
+   * Ba nguồn khác nhau → "nghe" (to = bản nghe lại, alt = bản AI), trừ chỗ có con số → "vừa" (AI đoán số sai 6/41 lần ở M90). Chỉ nghe lại thấy khác: "vừa" nếu chạm con số hoặc chỗ AI
+   * nghi (hoặc AI không chạy và từ đó nghi), không thì "nghe" (AI đã đọc câu và thấy đúng). Nghe lại bịa (madeUp) hoặc đổi quá
+   * 3 từ → bỏ. Không sửa gì: trả {suggestions: [{start, end, from, to, alt?, kind, conf, src, reason}] xếp cao → vừa → nghe,
+   * dropped (đề xuất AI bị bỏ), counts}.
+   */
+  function triage({ words, spans = [], aiEdits = [], heard = [], uncertain = [], aiRan = aiEdits.length > 0 || uncertain.length > 0, scores = null }) {
+    const sc = scores || suspectScores(words, { aiEdits, uncertain }), out = [], dropped = [];
+    const unsure = new Set(); for (const u of uncertain) for (let k = u.start; k <= (u.end ?? u.start); k++) unsure.add(k);
+    const hasNum = t => /\d/.test(t);
+    const st = { agree: 0, dropAi: 0, listen: 0, heardOnly: 0, madeUp: 0, wild: 0, aiOnly: 0, reheard: 0 };
+    const quote = t => (t.length > 60 ? t.slice(0, 60) + '…' : t);
+    const runs = spans.map((sp, j) => {
+      const h = heard[j];
+      if (!Array.isArray(h)) return null;
+      st.reheard++;
+      const ks = []; for (const [k, x] of words.entries()) if (x.e > sp.from + .05 && x.s < sp.to - .05) ks.push(k);
+      if (!ks.length) return null;
+      const toks = heardTokens(h), old = ks.map(k => words[k].w);
+      if (madeUp(toks.map(x => x.w), old)) { st.madeUp++; return { sp, bad: true }; }
+      const sa = ks.indexOf(sp.a), sb = ks.indexOf(sp.b);
+      const diffs = (sa >= 0 && sb >= sa ? rehearDiff(old, toks.map(x => x.w), sa, sb) : []).map(d => ({ ...d, i: ks[0] + d.i, used: false }))
+        .filter(d => { const ok = Math.abs(tokenize(d.to).length - d.n) <= 3; if (!ok) st.wild++; return ok; });
+      const said = toks.filter(x => x.e > sp.s - 1.5 && x.s < sp.e + 1.5).map(x => x.w).join(' ');
+      return { sp, diffs, said };
+    });
+    const runOf = (a, b) => runs.find(r => r && r.sp.a <= a && b <= r.sp.b);
+    const apply = (lo, hi, chs) => { // chữ của words[lo..hi] sau khi áp các thay đổi {i, n, to}
+      const res = []; let k = lo;
+      for (const c of [...chs].sort((x, y) => x.i - y.i)) { while (k < c.i && k <= hi) res.push(words[k++].w); res.push(...tokenize(c.to)); k = Math.max(k, c.i + c.n); }
+      while (k <= hi) res.push(words[k++].w);
+      return res;
+    };
+    for (const ed of aiEdits) {
+      const r = runOf(ed.start, ed.end), kind = ed.kind || 'nhận dạng';
+      const oldT = words.slice(ed.start, ed.end + 1).map(x => x.w), newT = tokenize(ed.new);
+      if (!r || r.bad || sameKeys(oldT, newT)) { // chưa nghe lại được, hoặc chỉ khác hoa thường / dấu câu (tai không phân biệt)
+        st.aiOnly++;
+        out.push({ kind, start: ed.start, end: ed.end, from: oldT.join(' '), to: ed.new, conf: 'vừa', src: 'AI soát chữ', reason: [ed.reason, r?.bad ? 'nghe lại ra câu lạ, không dùng' : ''].filter(Boolean).join(' · ') });
+        continue;
+      }
+      const D = r.diffs.filter(d => d.i <= ed.end && d.i + d.n - 1 >= ed.start);
+      if (!D.length) { // nghe lại vẫn ra chữ gốc
+        if (hasNum(oldT.join(' ') + ' ' + ed.new)) { st.dropAi++; dropped.push({ start: ed.start, end: ed.end, from: oldT.join(' '), to: ed.new, said: r.said }); continue; }
+        st.listen++;
+        out.push({ kind, start: ed.start, end: ed.end, from: oldT.join(' '), to: ed.new, conf: 'nghe', src: 'AI soát chữ, nghe lại ra chữ gốc',
+          reason: `Cần nghe: nghe lại vẫn ra “${oldT.join(' ')}”; AI sửa theo nghĩa câu${ed.reason ? ' (' + ed.reason + ')' : ''}` });
+        continue;
+      }
+      D.forEach(d => { d.used = true; });
+      const lo = Math.min(ed.start, ...D.map(d => d.i)), hi = Math.max(ed.end, ...D.map(d => d.i + d.n - 1));
+      const heardV = apply(lo, hi, D), aiV = apply(lo, hi, [{ i: ed.start, n: ed.end - ed.start + 1, to: ed.new }]);
+      const from = words.slice(lo, hi + 1).map(x => x.w).join(' ');
+      if (sameKeys(heardV, aiV)) { st.agree++; out.push({ kind, start: lo, end: hi, from, to: aiV.join(' '), conf: 'cao', src: 'AI soát chữ + nghe lại', reason: `2 nguồn đồng ý${ed.reason ? ' · ' + ed.reason : ''} · nghe được: “${quote(r.said)}”` }); }
+      else if (hasNum(from + ' ' + aiV.join(' ') + ' ' + heardV.join(' '))) { // AI đoán số mà không nghe được: tin bản nghe lại hơn
+        st.heardOnly++;
+        out.push({ kind: 'nhận dạng', start: lo, end: hi, from, to: heardV.join(' '), alt: aiV.join(' '), conf: 'vừa', src: 'nghe lại (AI đoán số khác)', reason: `Con số: nghe lại ra “${heardV.join(' ')}”; AI chỉ đọc chữ, đoán “${aiV.join(' ')}”` });
+      } else { st.listen++; out.push({ kind: 'nhận dạng', start: lo, end: hi, from, to: heardV.join(' '), alt: aiV.join(' '), conf: 'nghe', src: 'ba nguồn khác nhau', reason: `Cần nghe: nghe lại ra “${heardV.join(' ')}”, AI soát chữ đề xuất “${aiV.join(' ')}”` }); }
+    }
+    for (const r of runs) {
+      if (!r || r.bad) continue;
+      for (const d of r.diffs) {
+        if (d.used) continue;
+        const ks = Array.from({ length: d.n }, (_, x) => d.i + x);
+        const sus = hasNum(d.from) || hasNum(d.to) || ks.some(k => unsure.has(k)) || (!aiRan && ks.some(k => sc[k].score >= SUSPECT.min));
+        st[sus ? 'heardOnly' : 'listen']++;
+        out.push({ kind: 'nhận dạng', start: d.i, end: d.i + d.n - 1, from: d.from, to: d.to, conf: sus ? 'vừa' : 'nghe', src: 'nghe lại',
+          reason: `${sus ? 'Chỗ nghi, nghe lại' : aiRan ? 'Cần nghe: AI đọc thấy chữ gốc ổn, nghe lại' : 'Cần nghe: chỉ nghe lại'} thấy khác · nghe được: “${quote(r.said)}”` });
+      }
+    }
+    out.sort((x, y) => RANK[x.conf] - RANK[y.conf] || x.start - y.start);
+    return { suggestions: out, dropped, counts: st };
+  }
+
+  const T = { fold, tokenize, splitTimes, retime, distribute, planEdit, findMatches, cleanSide, normalizeEntries, parseDict, dictString, dictLines, heardTokens, rehearDiff,
+    SUSPECT, suspectScores, suspectSpans, hearWindow, madeUp, triage };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.TranscriptCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

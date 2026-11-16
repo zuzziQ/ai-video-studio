@@ -46,5 +46,23 @@ class CaptionsFix(unittest.TestCase):
         self.assertEqual(len(out), len(W))
 
 
+class CaptionsProbability(unittest.TestCase):
+    """M96: Whisper word probability `p` survives chunking; old words.json without `p` still works."""
+    P = [{**w, "p": p} for w, p in zip(W, [0.99, 0.41, 0.62, 0.95, 0.3])]
+
+    def test_p_is_kept(self):
+        out = run(self.P)
+        self.assertEqual([w.get("p") for w in out], [0.99, 0.41, 0.62, 0.95, 0.3])
+
+    def test_old_words_without_p(self):
+        self.assertTrue(all("p" not in w for w in run(W)))
+
+    def test_fixed_word_drops_p_and_glue_takes_min(self):
+        out = run(self.P, "--fix=tiền hóa=tiến hóa")
+        self.assertEqual([w.get("p") for w in out[1:3]], [None, 0.62])  # "tiền" changed, "hóa" kept as is
+        glued = run([{"w": "giảm", "s": 0, "e": .3, "p": .9}, {"w": "50", "s": .3, "e": .6, "p": .8}, {"w": "%", "s": .6, "e": .7, "p": .4}])
+        self.assertEqual(glued[-1], {"w": "50%", "s": .3, "e": .7, "p": .4})
+
+
 if __name__ == "__main__":
     unittest.main()

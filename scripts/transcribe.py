@@ -1,7 +1,8 @@
 """Word-level Vietnamese transcript with faster-whisper.
 
 usage: python transcribe.py <video_or_audio> <out_words.json> [--model large-v3-turbo|small|medium|large-v3]
-Output: [{"w": "Video", "s": 0.00, "e": 0.32}, ...]  (flat list of words, seconds)
+Output: [{"w": "Video", "s": 0.00, "e": 0.32, "p": 0.97}, ...]  (flat list of words, seconds; p = Whisper word probability,
+        used by the Studio's "Soát kỹ" to pick spots worth re-hearing, ROADMAP M96)
 """
 import argparse
 import json
@@ -49,6 +50,6 @@ words = []
 for s in segs:
     print(f"[{s.start:6.2f}-{s.end:6.2f}] {s.text}", flush=True)
     for x in s.words:
-        words.append({"w": x.word.strip(), "s": round(x.start, 3), "e": round(x.end, 3)})
+        words.append({"w": x.word.strip(), "s": round(x.start, 3), "e": round(x.end, 3), "p": round(float(x.probability), 2)})
 json.dump(words, open(a.out, "w"), ensure_ascii=False, indent=1)
 print(f"{len(words)} words -> {a.out}")

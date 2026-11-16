@@ -616,11 +616,14 @@ export function adGates(texts, industry, { py, adGatesScript = path.join(SKILL, 
 // ---------------------------------------------------------------- trợ lý Soát lời thoại (M90)
 // Đầu vào: các từ có mốc thời gian (chỉ số = vị trí trong mảng) + từ điển, tên thương hiệu/sản phẩm, lĩnh vực.
 // Chia cửa sổ ~60–90 s hoặc ≤ 400 từ, hỏi AI từng cửa sổ (run → runTurns), kiểm chặt từng đề xuất rồi gộp:
-//   { suggestions: [{ id, start, end (chỉ số từ), old, new, reason, kind }], counts, windows, dropped, warnings }
+//   { suggestions: [{ id, start, end (chỉ số từ), old, new, reason, kind }], uncertain: [{ start, end, old, reason }],
+//     counts, windows, dropped, warnings }
+// `uncertain` (M96 "Soát kỹ"): chỗ AI nghi máy nghe nhầm nhưng không chắc sửa thế nào (con số lạ, cụm vô nghĩa); không phải
+// đề xuất, chỉ để panel chọn chỗ cho Whisper nghe lại. Kiểm chặt như đề xuất: old khớp đúng vị trí, ≤ 6 từ, ≤ 10 chỗ mỗi đoạn.
 // Cửa sổ AI trả JSON hỏng (sau một lần hỏi lại) → đề xuất theo từ điển cho cửa sổ đó.
 const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
 export const TX_KINDS = ['nhận dạng', 'tên riêng', 'chính tả', 'dấu câu'];
-export const TX_LIMITS = { words: 30000, perWindow: 20, span: 6, newChars: 80, dWords: 3, dist: 0.45 };
+export const TX_LIMITS = { words: 30000, perWindow: 20, span: 6, newChars: 80, dWords: 3, dist: 0.45, unsure: 10 };
 const keepLetters = s => String(s).normalize('NFC').toLocaleLowerCase('vi').replace(/[^\p{L}\p{N}]+/gu, '');
 const baseLetters = s => keepLetters(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
 function editDist(a, b) {
@@ -673,6 +676,15 @@ export function txCheckEdit(it, words, win, terms = []) {
   }
   return { ok: true, edit: { start, end, old: actual, new: neu, kind, reason: str(it.reason, 160) } };
 }
+/** Kiểm một chỗ "nghi" của AI (M96) → { ok: true, spot: {start, end, old, reason} } hoặc { ok: false, why }. Cùng luật vị trí với txCheckEdit. */
+export function txCheckSpot(it, words, win) {
+  if (!it || typeof it !== 'object') return { ok: false, why: 'bad' };
+  const start = Number(it.start), end = it.end == null ? start : Number(it.end);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < win.a || end > win.b || end < start || end - start + 1 > TX_LIMITS.span) return { ok: false, why: 'bad' };
+  const toks = words.slice(start, end + 1).map(w => w.w), oldToks = TC.tokenize(typeof it.old === 'string' ? it.old : '');
+  if (oldToks.join(' ') !== toks.join(' ') && (oldToks.length !== toks.length || oldToks.some((t, i) => TC.fold(t) !== TC.fold(toks[i])))) return { ok: false, why: 'mismatch' };
+  return { ok: true, spot: { start, end, old: toks.join(' '), reason: str(it.reason, 160) } };
+}
 function pickEdits(list, cap = Infinity) { // bỏ đề xuất chồng lên đề xuất trước, giữ tối đa cap
   const out = [];
   for (const e of list) if (out.length < cap && !out.some(o => e.start <= o.end && e.end >= o.start)) out.push(e);
@@ -714,8 +726,10 @@ const transcript = {
       'Lỗi nhận dạng là chỗ máy nghe nhầm: chữ đúng phải ĐỌC GẦN GIỐNG chữ cũ và hợp với câu trước sau. Chữ đã đúng thì KHÔNG đưa vào danh sách. Bạn không nghe được âm thanh: KHÔNG đoán lại con số, giá, ngày giờ chỉ vì thấy lạ.',
       'KHÔNG viết lại câu, không đổi nghĩa hay văn phong, không thêm bớt ý, không sửa khẩu ngữ hay từ địa phương đúng. Không chắc thì bỏ qua.',
       'Trả về DUY NHẤT một JSON, không lời dẫn:',
-      '{"edits":[{"start":<chỉ số từ đầu>,"end":<chỉ số từ cuối>,"old":"<chép ĐÚNG các từ từ start đến end>","new":"<chữ đúng>","kind":"nhận dạng|tên riêng|chính tả|dấu câu","reason":"<lý do ≤ 12 từ>"}]}',
-      `Mỗi sửa tối đa ${TX_LIMITS.span} từ liền nhau; tối đa ${TX_LIMITS.perWindow} sửa; không có lỗi thì {"edits":[]}. Lý do viết tiếng Việt có dấu.`,
+      'Chỗ bạn NGHI máy nghe nhầm nhưng KHÔNG chắc chữ đúng (con số hay cụm từ lạ, câu vô nghĩa) thì không sửa: đưa vào "uncertain" để máy nghe lại âm thanh.',
+      '{"edits":[{"start":<chỉ số từ đầu>,"end":<chỉ số từ cuối>,"old":"<chép ĐÚNG các từ từ start đến end>","new":"<chữ đúng>","kind":"nhận dạng|tên riêng|chính tả|dấu câu","reason":"<lý do ≤ 12 từ>"}],',
+      ' "uncertain":[{"start":<chỉ số từ đầu>,"end":<chỉ số từ cuối>,"old":"<chép ĐÚNG các từ>","reason":"<vì sao nghi ≤ 12 từ>"}]}',
+      `Mỗi sửa hay chỗ nghi tối đa ${TX_LIMITS.span} từ liền nhau; tối đa ${TX_LIMITS.perWindow} sửa và ${TX_LIMITS.unsure} chỗ nghi; không có thì {"edits":[],"uncertain":[]}. Lý do viết tiếng Việt có dấu.`,
     ].filter(Boolean).join('\n\n');
   },
   /** Một cửa sổ: kiểm từng đề xuất, đếm số bị bỏ theo lý do. Ném lỗi khi không phải {"edits":[…]} (askJSON hỏi lại). */
@@ -726,10 +740,17 @@ const transcript = {
     for (const it of list.slice(0, TX_LIMITS.perWindow * 2)) { const r = txCheckEdit(it, input.words, win, terms); if (r.ok) ok.push(r.edit); else dropped[r.why]++; }
     const items = pickEdits(ok.sort((x, y) => x.start - y.start), TX_LIMITS.perWindow);
     dropped.dup += ok.length - items.length;
-    return { items, dropped };
+    // chỗ nghi (M96): không chồng lên đề xuất sửa, không chồng nhau; thiếu hoặc sai kiểu thì coi như không có
+    const spots = [];
+    for (const it of (v && !Array.isArray(v) && Array.isArray(v.uncertain) ? v.uncertain : []).slice(0, TX_LIMITS.unsure * 2)) {
+      const r = txCheckSpot(it, input.words, win);
+      if (!r.ok) { dropped.unsure = (dropped.unsure || 0) + 1; continue; }
+      if (spots.length < TX_LIMITS.unsure && ![...items, ...spots].some(o => r.spot.start <= o.end && r.spot.end >= o.start)) spots.push(r.spot);
+    }
+    return { items, uncertain: spots.sort((x, y) => x.start - y.start), dropped };
   },
   async run(input, prep, env, ask) {
-    const n = prep.windows.length, all = [], dropped = { mismatch: 0, rewrite: 0, noop: 0, bad: 0, dup: 0 }, warnings = [];
+    const n = prep.windows.length, all = [], unsure = [], dropped = { mismatch: 0, rewrite: 0, noop: 0, bad: 0, dup: 0, unsure: 0 }, warnings = [];
     let provider = 'rules', fb = 0, why = '';
     for (const [k, win] of prep.windows.entries()) {
       if (env.cancelled?.()) throw new LlmError('Đã huỷ', { kind: 'cancel' });
@@ -742,9 +763,9 @@ const transcript = {
         provider = r.provider; got = r.value;
       } catch (e) {
         if (!(e instanceof LlmError) || e.kind !== 'parse') throw e; // thiếu claude, chưa đăng nhập, quá giờ, huỷ: báo nguyên văn
-        got = { items: txDictEdits(input, win), dropped: {} }; fb++; why ||= e.message.slice(0, 120);
+        got = { items: txDictEdits(input, win), uncertain: [], dropped: {} }; fb++; why ||= e.message.slice(0, 120);
       }
-      all.push(...got.items);
+      all.push(...got.items); unsure.push(...(got.uncertain || []));
       for (const [key, v] of Object.entries(got.dropped)) dropped[key] += v;
     }
     if (fb) warnings.push((fb === n ? 'AI trả kết quả không đọc được' : `${fb}/${n} đoạn AI trả kết quả không đọc được`) + ` (${why}): ${fb === n ? 'chỉ còn' : 'các đoạn đó chỉ có'} đề xuất theo từ điển.`);
@@ -752,7 +773,7 @@ const transcript = {
     if (dropped.rewrite) warnings.push(`Bỏ ${dropped.rewrite} đề xuất viết lại câu hoặc đổi quá nhiều chữ.`);
     const suggestions = all.map((e, i) => ({ id: `tx-${i}`, ...e }));
     const counts = Object.fromEntries(TX_KINDS.map(x => [x, suggestions.filter(s => s.kind === x).length]));
-    return { suggestions, counts, windows: n, dropped, fallbackWindows: fb, warnings, provider: fb === n ? 'rules' : provider };
+    return { suggestions, uncertain: unsure, counts, windows: n, dropped, fallbackWindows: fb, warnings, provider: fb === n ? 'rules' : provider };
   },
 };
 
