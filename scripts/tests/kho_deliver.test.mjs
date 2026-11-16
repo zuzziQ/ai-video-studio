@@ -85,6 +85,18 @@ test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file t�
   } finally { m2.mock.restore(); }
 });
 
+test('bản giao bị xoá rồi dự án khác giao trùng tên: sổ của dự án cũ không nhận file đó', () => {
+  const ws = chung(), a = project(ws, 'Trung Sau Xoa'), b = path.join(TMP, 'khac', 'Trung Sau Xoa');
+  W(path.join(b, 'timeline.json'), { width: 1080, height: 1920 });
+  const ra = K.deliverExports(a, [{ src: W(path.join(a, 'out', 'a.mp4'), 'A'), w: 1080, h: 1920 }], { date: DATE }).items[0].dst;
+  fs.rmSync(ra);
+  const rb = K.deliverExports(b, [{ src: W(path.join(b, 'out', 'b.mp4'), 'B khac co'), w: 1080, h: 1920 }], { date: DATE, ws }).items[0].dst;
+  assert.equal(rb, ra, 'cùng tên do freeName');
+  assert.equal(K.deliveredOf(a, 'out/a.mp4'), null);
+  assert.ok(!K.deliveredKeys(a).has(K.fileKey(rb)));
+  assert.ok(K.deliveredKeys(b).has(K.fileKey(rb)));
+});
+
 test('trùng tên: lần giao sau thành "(2)", không ghi đè bản đã giao', () => {
   const ws = chung(), d = project(ws, 'Trung Ten');
   const a = W(path.join(d, 'out', 'a.mp4'), '1'), b = W(path.join(d, 'out', 'b.mp4'), '2');

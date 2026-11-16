@@ -107,11 +107,18 @@ const relOf = (dir, f) => path.relative(dir, path.resolve(dir, f)).split(path.se
 export function deliveredOf(dir, src) {
   const rel = relOf(dir, src), now = stamp(path.resolve(dir, src));
   if (!now) return null;
-  const hit = readLedger(dir).filter(r => r.src === rel && r.dst && fs.existsSync(r.dst) && (!r.from || (r.from.key === now.key && r.from.size === now.size && r.from.mtime === now.mtime))).pop();
+  const hit = readLedger(dir).filter(r => r.src === rel && stillThere(r) && (!r.from || (r.from.key === now.key && r.from.size === now.size && r.from.mtime === now.mtime))).pop();
   return hit ? hit.dst : null;
 }
-/** Mọi bản giao còn trên đĩa của dự án (để biết một file trong Thanh pham/ có phải của dự án này). → Set khoá */
-export function deliveredKeys(dir) { return new Set(readLedger(dir).filter(r => r.dst && fs.existsSync(r.dst)).map(r => fileKey(r.dst))); }
+// Bản giao còn đúng là file đã giao: người dùng xoá rồi một dự án khác giao trùng tên thì đó là file khác (khác inode / cỡ)
+function stillThere(r) {
+  if (!r.dst || !fs.existsSync(r.dst)) return false;
+  if (!r.to) return true; // sổ cũ (chưa có dấu vân tay đích)
+  const s = stamp(r.dst);
+  return !!s && s.key === r.to.key && s.size === r.to.size;
+}
+/** Mọi bản giao còn đúng của dự án (để biết một file trong Thanh pham/ có phải của dự án này). → Set khoá */
+export function deliveredKeys(dir) { return new Set(readLedger(dir).filter(stillThere).map(r => fileKey(r.dst))); }
 
 function prepare(dir, items, { tl = null, folder = '', date = new Date(), home, ws = null } = {}) {
   const w = ws || workspaceOfProject(dir, tl, home ? { home } : {});
@@ -119,7 +126,7 @@ function prepare(dir, items, { tl = null, folder = '', date = new Date(), home, 
 }
 function finish(dir, w, d, done) {
   const at = new Date().toISOString();
-  const recs = done.filter(r => r.dst).map(r => ({ src: relOf(dir, r.src), dst: r.dst, how: r.how, at, from: r.from }));
+  const recs = done.filter(r => r.dst).map(r => ({ src: relOf(dir, r.src), dst: r.dst, how: r.how, at, from: r.from, to: stamp(r.dst) }));
   if (recs.length) try { appendLedger(dir, recs); } catch (e) { console.error('[kho] không ghi được delivered.json:', e.message); }
   return { ws: w.root, dir: d, items: done.map(({ from, ...r }) => r) };
 }
