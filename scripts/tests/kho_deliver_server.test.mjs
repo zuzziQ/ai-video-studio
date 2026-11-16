@@ -73,6 +73,11 @@ test('/api/srt: deliver → Thanh pham/<tháng>/<dự án>.srt; ghi lại không
   assert.equal(path.basename(r3.json.delivered[0]), 'Clip Thu (2).srt');
   assert.match(fs.readFileSync(r3.json.delivered[0], 'utf8'), /hai/);
 
+  const r4 = await api('/api/srt', { deliver: 'true' });
+  assert.equal(r4.json.delivered, undefined, 'chỉ đúng boolean true mới giao');
+  const ex = await api('/api/export', { deliver: 'false' });
+  assert.equal(ex.status, 400);
+
   const th = await api('/api/thanhpham');
   assert.equal(th.json.root, path.join(KHO, 'Thanh pham'));
   assert.equal(th.json.found, 'kho');

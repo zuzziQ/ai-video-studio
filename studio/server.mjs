@@ -331,14 +331,15 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
   // S12 M100: bản giao vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng). Lỗi giao không làm hỏng bản đã xuất trong out/.
   if (give !== false) {
     job.step = 'Giao vào Thành phẩm';
-    await deliverFiles(job, (job.outs || [{ out }]).map((o, i) => ({ src: P(o.out), ...(i ? { aspect: o.aspect } : { w: vert ? W : H, h: vert ? H : W }) })), tl, { range: { from, to } });
+    await deliverFiles(job, () => (job.outs || [{ out }]).map((o, i) => ({ src: P(o.out), ...(i ? { aspect: o.aspect } : { w: vert ? W : H, h: vert ? H : W }) })), tl, { range: { from, to } });
   }
 }
 // async: copying to a Kho on another drive must not block the server (job polling, preview)
 async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
   try {
     const K = await import(pathToFileURL(path.join(SKILL, 'scripts/kho_deliver.mjs')).href);
-    const r = files ? await K.deliverProjectAsync(project.dir, outs, { tl }) : await K.deliverExportsAsync(project.dir, outs, { tl, range });
+    const list = typeof outs === 'function' ? outs() : outs; // built inside the try: a bad entry fails the delivery, not the export
+    const r = files ? await K.deliverProjectAsync(project.dir, list, { tl }) : await K.deliverExportsAsync(project.dir, list, { tl, range });
     into.delivered = r.items.filter(x => x.dst).map(x => x.dst); into.deliveredDir = r.dir;
     const bad = r.items.find(x => x.error); if (bad) into.deliverError = bad.error;
   } catch (e) { into.deliverError = e.message; console.error('deliver:', e.message); }
@@ -484,6 +485,7 @@ const server = http.createServer(async (req, res) => {
       if (b.quality != null && !['720', '1080', '4k'].includes(String(b.quality))) return json(res, { ok: false, error: 'Chất lượng phải là 720, 1080 hoặc 4k' }, 400);
       if (!num(b.from) || !num(b.to) || (b.from != null && b.to != null && b.to <= b.from)) return json(res, { ok: false, error: 'Đoạn xuất (from/to) không hợp lệ' }, 400);
       if (b.aspects != null && !Array.isArray(b.aspects)) return json(res, { ok: false, error: 'aspects phải là danh sách' }, 400);
+      if (b.deliver != null && typeof b.deliver !== 'boolean') return json(res, { ok: false, error: 'deliver phải là true/false' }, 400);
       const ok = startJob('export', exportVideo, { ...b, quality: b.quality == null ? undefined : String(b.quality) });
       return json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409);
     }
@@ -503,14 +505,14 @@ const server = http.createServer(async (req, res) => {
     // b.deliver: giao kèm vào Thanh pham/ của Kho (S12 M100)
     if (p === '/api/still' && req.method === 'POST') {
       const b = await body(req), t = Math.max(0, +b.t || 0);
-      return still(t).then(async out => json(res, b.deliver ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, { files: true }) : { out }))
+      return still(t).then(async out => json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, { files: true }) : { out }))
         .catch(e => json(res, { error: e.message }, e.status || 500));
     }
     if (p === '/api/srt' && req.method === 'POST') {
       const b = await body(req), { captions, timeline } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
       // a delivered .srt is a hard link to this file: write a new file (rm, then write), never in place
       const out = `out/${path.basename(project.dir)}.srt`; fs.rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
-      return json(res, b.deliver ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)}.srt` }], timeline, { files: true }) : { out });
+      return json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)}.srt` }], timeline, { files: true }) : { out });
     }
     if (p === '/api/job') return json(res, job ? { ...job, proc: undefined } : null);
     if (p === '/api/job/cancel' && req.method === 'POST') { if (job?.state === 'running') job.cancelled = true; killTree(job?.proc); return json(res, { ok: true }); }
