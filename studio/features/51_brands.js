@@ -12,7 +12,7 @@
     if (el.dataset.bkbg) el.style.setProperty('--bk-bg', el.dataset.bkbg);
     if (el.dataset.bkfg) el.style.setProperty('--bk-fg', el.dataset.bkfg);
   });
-  let LIST = null, EDIT = null;
+  let LIST = null, EDIT = null, AI = null, AI_FOR = null; // AI: ô Gợi ý bằng AI (05_assist.js) của bản đang sửa
   const css = document.createElement('style');
   css.textContent = `
   .bk-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; transition: border-color var(--duration-fast) var(--ease-standard); }
@@ -74,9 +74,12 @@
       <div class="bk-g2">${sel('font', 'Font chữ', FONTS)}${sel('disp', 'Font tiêu đề', FONTS)}</div>
       <label>Logo (PNG nền trong là đẹp nhất)</label><div class="bk-up"><div class="bk-logo">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : '<i class="ti ti-photo"></i>'}</div>
         <button id="bk-logo" ${b.id ? '' : 'disabled title="Lưu trước rồi tải logo"'}><i class="ti ti-upload"></i> Tải logo</button><input type="file" id="bk-file" accept="image/*" hidden></div>
+      ${Studio.assistPanel ? '<div id="bk-ai"></div>' : ''}
       <div class="bk-g2">${inp('name', 'Tên hiển thị trong video', 'Kiệm AI')}${inp('handle', 'Kênh / handle', '@kiem.ai')}${inp('phone', 'Điện thoại', '09xx xxx xxx')}${inp('website', 'Website', 'vidu.vn')}</div>
       ${sel('pack', 'Gói style mặc định', [['', '— không đổi gói —'], ...packs()])}
       ${inp('outro', 'Câu kết / CTA (dùng {{brand.outro}} trong mẫu)', 'Follow để xem thêm!')}
+      <div class="bk-g2">${inp('slogan', 'Slogan', 'Nhà đẹp, giá thật')}${inp('cta', 'Lời kêu gọi ngắn', 'Gọi ngay')}</div>
+      ${inp('voice', 'Giọng văn (AI dùng khi viết lời)', 'thân thiện, rõ ràng, tin cậy')}
       <div class="acts"><button class="primary" id="bk-save"><i class="ti ti-device-floppy"></i> Lưu</button><button id="bk-cancel">Huỷ</button></div></div>`;
   }
   function render() {
@@ -99,10 +102,11 @@
     B.querySelectorAll('[data-bkd]').forEach(b => (b.onclick = async () => { const r = await Studio.api('/api/brands/duplicate', { id: b.dataset.bkd }); if (r.error) return Studio.toast(r.error); await load(); Studio.toast('Đã nhân bản'); }));
     B.querySelectorAll('[data-bkx]').forEach(b => (b.onclick = async () => { const x = LIST.find(y => y.id === b.dataset.bkx); if (!confirm(`Xoá thương hiệu “${x.title || x.name}”? (dự án đã áp vẫn giữ màu)`)) return; await Studio.api('/api/brands/delete', { id: x.id }); await load(); }));
     if (!EDIT) return;
+    mountAi();
     B.querySelectorAll('[data-bk]').forEach(i => (i.oninput = i.onchange = () => (EDIT[i.dataset.bk] = i.value)));
     $('#bk-cancel').onclick = () => { EDIT = null; render(); };
     $('#bk-save').onclick = async () => {
-      const { logoUrl, ...brand } = EDIT;
+      const { logoUrl, ...brand } = EDIT; // ô AI giữ ngoài EDIT (AI, AI_FOR) nên không lọt vào dữ liệu lưu
       const r = await Studio.api('/api/brands/save', { brand });
       if (r.error) return Studio.toast(r.error);
       EDIT = null; await load(); Studio.toast('Đã lưu thương hiệu “' + (r.title || r.name) + '”');
@@ -115,6 +119,31 @@
       if (r.error) return Studio.toast(r.error);
       EDIT.logo = r.logo; EDIT.logoUrl = r.logoUrl; await load(); Studio.toast('Đã tải logo');
     };
+  }
+  // ---- Gợi ý bằng AI (M91): logo đã tải + màu đo bằng canvas + website + tên → đề xuất từng trường, Nhận mới ghi vào form ----
+  const fontName = v => (FONTS.find(f => f[0] === v) || [])[1] || v;
+  function mountAi() {
+    const host = document.getElementById('bk-ai'); if (!host) return;
+    if (AI_FOR !== EDIT) {
+      AI_FOR = EDIT;
+      AI = Studio.assistPanel({
+        name: 'brand', label: 'Gợi ý bằng AI', hint: 'Từ logo, tên và website: vai trò 4 màu, cặp font tiếng Việt, giọng văn, slogan, CTA, chữ màn kết.',
+        async input() {
+          const b = AI_FOR, inp = { name: b.name || b.title || '', website: b.website || '', colors: [] };
+          if (b.logoUrl) {
+            const blob = await fetch(avsUrl(b.logoUrl)).then(r => r.blob());
+            inp.image = await Studio.imagePayload(blob);
+            if (Studio.logoColors) inp.colors = (await Studio.logoColors(blob).catch(() => [])).filter(Boolean);
+          }
+          inp.industry = (await Studio.onboardingPurpose?.().catch(() => '')) || '';
+          if (!inp.image && !inp.website && !inp.name) throw new Error('Tải logo, nhập tên hoặc website trước khi hỏi AI.');
+          return inp;
+        },
+        current: f => (AI_FOR[f.key] ? (f.kind === 'font' ? fontName(AI_FOR[f.key]) : AI_FOR[f.key]) : ''),
+        onAccept: f => { AI_FOR[f.key] = f.value; if (AI_FOR === EDIT) render(); },
+      });
+    }
+    AI.mount(host);
   }
   // ---- quick switcher (top bar) ----
   let sw = null;
@@ -135,7 +164,7 @@
     m.onclick = e => { const b = e.target.closest('[data-bkm]'); if (!b) return; m.remove(); if (b.dataset.bkm) apply(b.dataset.bkm); else document.querySelector('#rail [data-p="brands"]')?.click(); };
     setTimeout(() => document.addEventListener('mousedown', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', off); } }), 0);
   }
-  Studio.addPanel('brands', 'ti-palette', 'Thương hiệu', () => { render(); if (!LIST) load(); });
+  Studio.addPanel('brands', 'ti-palette', 'Thương hiệu', () => { render(); load(); }); // nạp lại: hướng dẫn lần đầu có thể vừa lưu thương hiệu
   Studio.onReady(() => {
     sw = Studio.addTopButton('<button class="ghost" id="bk-sw" title="Đổi nhanh thương hiệu"><span class="sw"></span><b>Thương hiệu</b><i class="ti ti-chevron-down"></i></button>', menu);
     load();

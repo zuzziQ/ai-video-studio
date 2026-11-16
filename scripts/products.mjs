@@ -2,7 +2,7 @@
 // `$AVS_HOME/products/<id>.json` (mặc định ~/.ai-video-studio/products). Spec: references/products.md.
 // Dự án trỏ tới hồ sơ bằng `timeline.ads.product = "<id>"`; scripts/ad_gates.py tự giải hồ sơ khi soát quảng cáo.
 //
-// Hồ sơ: {version, id, name, brand, industry, claims:[{id, text, status, evidence, source, expires}],
+// Hồ sơ: {version, id, name, brand, industry, price (chuỗi giữ nguyên như người dùng/trang ghi, M91), claims:[{id, text, status, evidence, source, expires}],
 //         blocked:[cụm từ], faq:[{q, a}], notes, created, updated}
 // claims[].status: approved (phải có evidence) | pending | prohibited | expired. `expires` (YYYY-MM-DD) đã qua
 // thì claim approved được coi là expired.
@@ -16,7 +16,7 @@ export const STATUSES = ['approved', 'pending', 'prohibited', 'expired'];
 // Một đoạn chữ thường, số, gạch ngang/dưới; không dấu chấm, không gạch chéo: không thể thoát khỏi thư mục products/.
 export const ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
-const LIM = { name: 120, brand: 120, text: 400, evidence: 600, source: 300, phrase: 120, q: 300, a: 1200, notes: 4000 };
+const LIM = { name: 120, brand: 120, price: 60, text: 400, evidence: 600, source: 300, phrase: 120, q: 300, a: 1200, notes: 4000 };
 const MAX = { claims: 200, blocked: 200, faq: 100 };
 
 export const productsDir = (home = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio')) => path.join(home, 'products');
@@ -73,7 +73,7 @@ export function normalizeProduct(raw, { strict = true } = {}) {
   const faq = (Array.isArray(raw.faq) ? raw.faq : []).filter(x => x && typeof x === 'object')
     .map(x => ({ q: str(x.q, LIM.q), a: str(x.a, LIM.a) })).filter(x => x.q).slice(0, MAX.faq);
   return {
-    version: 1, id: raw.id, name, brand: str(raw.brand, LIM.brand),
+    version: 1, id: raw.id, name, brand: str(raw.brand, LIM.brand), price: str(raw.price, LIM.price),
     industry: INDUSTRIES.includes(raw.industry) ? raw.industry : '',
     claims, blocked, faq, notes: String(raw.notes || '').slice(0, LIM.notes),
     created: raw.created, updated: raw.updated,

@@ -9,7 +9,7 @@ Một sản phẩm có thể xuất hiện trong nhiều video. Thay vì nhập 
 
 ```json
 {
-  "version": 1, "id": "serum-b5-3f2a", "name": "Serum B5 đầu nhỏ giọt", "brand": "Lychee", "industry": "cosmetics",
+  "version": 1, "id": "serum-b5-3f2a", "name": "Serum B5 đầu nhỏ giọt", "brand": "Lychee", "industry": "cosmetics", "price": "350.000đ",
   "claims": [
     {"id": "c1", "text": "Đầu nhỏ giọt giúp kiểm soát lượng dùng", "status": "approved",
      "evidence": "Thử nghiệm nội bộ 03/2026", "source": "https://…", "expires": "2027-03-01"},
@@ -24,6 +24,7 @@ Một sản phẩm có thể xuất hiện trong nhiều video. Thay vì nhập 
 - `id`: chỉ chữ thường không dấu, số, `-`, `_` (1–64 ký tự), sinh từ tên khi tạo. Không có dấu chấm hay gạch chéo nên không trỏ được ra ngoài `products/`; file là symlink ra ngoài thư mục cũng bị từ chối (403).
 - `claims[].status`: `approved` (đã duyệt, **bắt buộc có `evidence`**: thiếu thì API từ chối lưu), `pending` (chờ duyệt, không tính là claim đã duyệt), `prohibited` (cấm nói), `expired`. Claim `approved` có `expires` (YYYY-MM-DD) đã qua được coi là `expired`.
 - `industry`: như `ads.industry` của cổng quảng cáo (`references/ad-gates.md`).
+- `price` (M91): chuỗi giá giữ nguyên như người dùng hoặc trang bán ghi (≤ 60 ký tự), không đổi định dạng; trống nếu chưa có.
 
 ## Dự án dùng hồ sơ
 `timeline.json`:
@@ -41,6 +42,7 @@ Dự án cũ không có `ads.product` chạy y như trước. Hồ sơ không t�
 
 ## Studio
 - Panel **Sản phẩm** (thanh trái): danh sách hồ sơ, tạo/sửa (claim kèm trạng thái, bằng chứng, nguồn, ngày hết hạn; cụm từ cấm; FAQ; ghi chú), xoá, **Dùng cho dự án** (đặt `ads.product`, bật kiểm tra quảng cáo; hoàn tác được), **Tạo từ claim của dự án** khi dự án còn claim nhập tay (claim đã duyệt cũ chuyển thành "Chờ duyệt" cho tới khi điền bằng chứng).
+- **Điền bằng AI** (M91, trợ lý `product` của `references/assist.md`): ở panel Sản phẩm (nút dưới danh sách, và ô cuối form) và bước Tài nguyên của hướng dẫn lần đầu. Từ ảnh sản phẩm và/hoặc link trang bán (tải qua `net_guard`, chặn mạng nội bộ): đề xuất tên, giá (chỉ giữ khi có nguyên văn trên trang; đọc từ ảnh thì ghi chú phải kiểm lại), ngành, điểm mạnh và claim (**luôn Chờ duyệt**, AI không đánh dấu duyệt hay điền bằng chứng được; mỗi câu kèm cờ rủi ro từ `ad_gates.py --script`), FAQ chỉ dựa trên nguồn. Nhận từng mục mới thêm vào form; bấm Lưu mới ghi hồ sơ.
 - Hộp thoại **Kiểm tra quảng cáo** (panel AI → Kiểm tra chất lượng → Thiết lập): ô **Sản phẩm** chọn hồ sơ; khi đã chọn, ô claim bên dưới là "claim thêm riêng dự án này".
 
 ## API

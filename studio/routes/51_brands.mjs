@@ -10,6 +10,8 @@ const KEYS = ['title', 'name', 'primary', 'accent', 'dark', 'light', 'font', 'di
 const load = () => { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')).brands || []; } catch { return []; } };
 const store = list => { fs.mkdirSync(AVS_HOME, { recursive: true }); fs.writeFileSync(FILE, JSON.stringify({ version: 1, brands: list }, null, 1)); };
 const newId = name => (String(name || 'brand').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'brand') + '-' + crypto.randomBytes(2).toString('hex');
+// M91: trợ lý Thương hiệu đề xuất thêm slogan, CTA và giọng văn (dòng riêng để không đụng dòng KEYS ở trên)
+KEYS.push('slogan', 'cta', 'voice');
 const pub = b => ({ ...b, logoUrl: b.logo && fs.existsSync(path.join(DIR, b.id, b.logo)) ? `/api/brands/logo/${b.id}?v=${Math.round(fs.statSync(path.join(DIR, b.id, b.logo)).mtimeMs)}` : null });
 
 export default ctx => async (req, res, p, u) => {
