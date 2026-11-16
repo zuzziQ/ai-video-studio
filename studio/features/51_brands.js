@@ -24,6 +24,9 @@
   .bk-sw { display: flex; gap: var(--space-1); margin-top: var(--space-2); } .bk-sw i { flex: 1; height: 16px; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-white) / .08); background: var(--bk-c); }
   .bk-act { display: flex; gap: var(--space-1); margin-top: var(--space-2); } .bk-act button { padding: var(--space-1) var(--space-2); font-size: var(--text-2xs); } .bk-act .grow { flex: 1; }
   .bk-title { font-size: var(--text-sm); }
+  .bk-kho { display: flex; width: 100%; min-width: 0; gap: var(--space-1); align-items: center; justify-content: flex-start; margin-top: var(--space-2); padding: var(--space-1) var(--space-2); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); background: transparent; border-color: transparent; }
+  .bk-kho:hover { color: rgb(var(--color-fg)); background: rgb(var(--color-surface-hover)); }
+  .bk-kho span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; } .bk-kho small { color: rgb(var(--color-warning-text)); }
   .bk-form label { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-1); }
   .bk-intro { margin-top: var(--space-1); }
   .bk-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); } .bk-g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 var(--space-2); }
@@ -63,6 +66,7 @@
     return `<div class="bk-card ${cur() === b.id ? 'cur' : ''}"><div class="bk-top"><div class="bk-logo" data-bkbg="${esc(b.primary || '')}" data-bkfg="${esc(b.light || '')}">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : esc(ini)}</div>
       <div class="bk-nm"><b>${esc(b.title || b.name)}</b><small>${esc([b.name, b.handle, b.phone].filter(Boolean).join(' · ') || 'chưa có thông tin')}</small></div>${cur() === b.id ? '<span class="pill">đang dùng</span>' : ''}</div>
       <div class="bk-sw">${['primary', 'accent', 'dark', 'light'].map(k => `<i title="${k} ${esc(b[k] || DEF[k])}" data-bkc="${esc(b[k] || DEF[k])}"></i>`).join('')}</div>
+      ${b.ws ? `<button type="button" class="bk-kho" data-bkk="${esc(b.id)}" title="${esc(b.ws.root)}"><i class="ti ti-folder"></i><span>${esc(b.ws.root)}</span>${b.ws.exists ? '' : '<small>chưa tạo</small>'}</button>` : ''}
       <div class="bk-act"><button class="primary" data-bka="${esc(b.id)}"><i class="ti ti-check"></i> Áp dụng cho dự án</button><span class="grow"></span>
         <button class="icon" title="Sửa" data-bke="${esc(b.id)}"><i class="ti ti-pencil"></i></button><button class="icon" title="Nhân bản" data-bkd="${esc(b.id)}"><i class="ti ti-copy"></i></button><button class="icon danger" title="Xoá" data-bkx="${esc(b.id)}"><i class="ti ti-trash"></i></button></div></div>`;
   }
@@ -100,6 +104,7 @@
     $('#bk-new2').onclick = () => { EDIT = { ...DEF }; render(); };
     $('#bk-fromproj').onclick = () => { const t = Studio.TL.brand || {}; EDIT = { ...DEF, ...Object.fromEntries(['primary', 'accent', 'dark', 'light', 'font', 'disp', 'name', 'handle', 'phone', 'website'].filter(k => t[k]).map(k => [k, t[k]])), title: t.name || Studio.META.name, pack: Studio.TL.pack || '' }; render(); };
     B.querySelectorAll('[data-bka]').forEach(b => (b.onclick = () => apply(b.dataset.bka)));
+    B.querySelectorAll('[data-bkk]').forEach(b => (b.onclick = () => (Studio.kho ? Studio.kho.open(b.dataset.bkk) : null)));
     B.querySelectorAll('[data-bke]').forEach(b => (b.onclick = () => { EDIT = { ...LIST.find(x => x.id === b.dataset.bke) }; render(); B.scrollTop = 0; }));
     B.querySelectorAll('[data-bkd]').forEach(b => (b.onclick = async () => { const r = await Studio.api('/api/brands/duplicate', { id: b.dataset.bkd }); if (r.error) return Studio.toast(r.error); await load(); Studio.toast('Đã nhân bản'); }));
     B.querySelectorAll('[data-bkx]').forEach(b => (b.onclick = async () => { const x = LIST.find(y => y.id === b.dataset.bkx); if (!confirm(`Xoá thương hiệu “${x.title || x.name}”? (dự án đã áp vẫn giữ màu)`)) return; await Studio.api('/api/brands/delete', { id: x.id }); await load(); }));
@@ -108,7 +113,7 @@
     B.querySelectorAll('[data-bk]').forEach(i => (i.oninput = i.onchange = () => (EDIT[i.dataset.bk] = i.value)));
     $('#bk-cancel').onclick = () => { EDIT = null; render(); };
     $('#bk-save').onclick = async () => {
-      const { logoUrl, ...brand } = EDIT; // ô AI giữ ngoài EDIT (AI, AI_FOR) nên không lọt vào dữ liệu lưu
+      const { logoUrl, ws, workspace, ...brand } = EDIT; // ws/workspace: Kho do /api/kho ghi. Ô AI giữ ngoài EDIT (AI, AI_FOR) nên không lọt vào dữ liệu lưu
       const r = await Studio.api('/api/brands/save', { brand });
       if (r.error) return Studio.toast(r.error);
       EDIT = null; await load(); Studio.toast('Đã lưu thương hiệu “' + (r.title || r.name) + '”');
@@ -120,14 +125,14 @@
     $('#bk-file').onchange = async e => {
       const f = e.target.files[0]; e.target.value = ''; if (!f) return;
       if (!EDIT.id) {
-        const { logoUrl, ...brand } = EDIT;
+        const { logoUrl, ws, workspace, ...brand } = EDIT;
         const s = await Studio.api('/api/brands/save', { brand });
         if (s.error) return Studio.toast(s.error === 'Đặt tên thương hiệu trước khi lưu' ? 'Đặt tên thương hiệu trước, rồi chọn logo' : s.error);
         EDIT.id = s.id;
       }
       const r = await fetch(`/api/brands/logo?id=${encodeURIComponent(EDIT.id)}&name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f }).then(x => x.json()).catch(() => ({ error: 'Không tải được logo, thử lại' }));
       if (r.error) { await load(); return Studio.toast(r.error); }
-      EDIT.logo = r.logo; EDIT.logoUrl = r.logoUrl; await load(); Studio.toast('Đã tải logo');
+      EDIT.logo = r.logo; EDIT.logoUrl = r.logoUrl; await load(); Studio.toast(r.khoWarning || 'Đã tải logo (bản gốc cũng lưu trong Kho › Thuong hieu)');
     };
   }
   // ---- Gợi ý bằng AI (M91): logo đã tải + màu đo bằng canvas + website + tên → đề xuất từng trường, Nhận mới ghi vào form ----

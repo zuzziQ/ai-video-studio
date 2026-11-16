@@ -25,6 +25,8 @@ import { batchGate, batchPlan, batchPixels, holdBatchSlot, otherRenders, paralle
 import { retryBusy } from './file_lock.mjs';
 import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { defaultEngine } from './tts_config.mjs';
+import { workspaceOfProject } from './workspace.mjs';
+import { deliverProject, fileName } from './kho_deliver.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
@@ -384,6 +386,8 @@ async function renderRow(dir, tl, onProgress, { workers = null, env = null } = {
   if (tl.audio && (tl.audio.voice || tl.audio.music?.length || tl.audio.sfx?.length || tl.clips?.some(c => c.audio))) {
     onProgress(0, 'trộn âm thanh'); await sh(PY, ['-I', '-X', 'utf8', path.join(HERE, 'mix_audio.py'), tlFile]);
   }
+  // render vào .part rồi rename: bản cũ có thể đã liên kết cứng sang Thanh pham/ (S12 M100); rename chỉ thay mục thư mục,
+  // không ghi vào inode của bản đã giao (ffmpeg -y trên chính file đó thì sẽ ghi đè tại chỗ)
   const out = path.join(dir, 'out', `${path.basename(dir)}.mp4`), part = out.replace(/\.mp4$/, '.part.mp4');
   onProgress(0, 'render');
   await sh('node', [path.join(HERE, 'render.mjs'), tlFile, part, ...(workers ? ['--workers', String(workers)] : [])], { env, onLine: l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onProgress(Math.min(.99, +m[1] / +m[2]), 'render'); } });
@@ -425,6 +429,17 @@ export async function runJob(jobFile, deps = {}) {
     save();
   };
   const live = new Set(); // rows building or rendering
+  // S12 M100: mỗi dòng xong → <Kho>/Thanh pham/<YYYY-MM>/<tên lô>/<tiêu đề dòng>.mp4 (liên kết cứng). job.deliver === false: không giao.
+  // Kho: thư mục cha có .kho.json của lô (<Kho>/Du an/<dự án>/batch/<lô>), không có thì theo thương hiệu của lô / Kho Chung.
+  let ws = null;
+  const give = (r, out) => {
+    if (job.deliver === false) return;
+    try {
+      ws ||= workspaceOfProject(job.out, job.brand ? { brand: { kit: job.brand } } : null);
+      const d = deliverProject(r.dir, [{ src: out, name: fileName(r.title || r.name, path.extname(out) || '.mp4') }], { ws, folder: job.name || path.basename(job.out) }).items[0];
+      if (d?.dst) { r.delivered = d.dst; delete r.deliverError; } else if (d?.error) r.deliverError = d.error;
+    } catch (e) { r.deliverError = e.message; console.error(`dòng ${r.i + 1}: không giao được vào Thanh pham: ${e.message}`); }
+  };
   let hold = null;
   // Cancel (CLI Ctrl+C / SIGTERM on POSIX): stop every child tree (render.mjs + its Chrome/ffmpeg — killTree, never
   // process.kill(-pid): a no-op on Windows), mark the live rows. On Windows the queue/route kill this whole tree with
@@ -464,7 +479,7 @@ export async function runJob(jobFile, deps = {}) {
         return built;
       },
       render: (r, { dir, tl }) => render(dir, tl, (p, s) => { r.progress = p; r.step = s; emit(r); }, { workers: plan.parallel > 1 ? plan.workersEach : null, env: childEnv }),
-      onDone: (r, out) => { if (stopping) return; live.delete(r); r.out = out; Object.assign(r, { state: 'done', step: 'xong', progress: 1 }); emit(r); },
+      onDone: (r, out) => { if (stopping) return; live.delete(r); r.out = out; give(r, out); Object.assign(r, { state: 'done', step: 'xong', progress: 1 }); emit(r); },
       onError: (r, e) => { if (stopping) return; live.delete(r); Object.assign(r, { state: 'error', error: e.message }); console.error(`dòng ${r.i + 1}: ${e.message}`); emit(r); },
     }));
   } finally { hold?.release(); hold = null; }

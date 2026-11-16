@@ -36,6 +36,9 @@
   const copy = async (txt, what) => { try { await navigator.clipboard.writeText(txt); } catch { const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); } Studio.toast('Đã chép ' + what); };
   const LIM = { tiktok: 4000, youtube: 5000, facebook: 2200, instagram: 2200, zalo: 2000 };
 
+  // S12 M100: video ở out/ của dự án hoặc trong Thanh pham/ của Kho (src 'kho', đường dẫn tuyệt đối)
+  const vlabel = v => v.src === 'kho' ? `Thành phẩm · ${v.name || v.path}${v.own ? '' : ' · dự án khác'}` : `${v.path}${v.delivered ? ' · đã giao Thành phẩm' : ''}`;
+  const other = () => S.videos.some(v => v.path === S.video && v.src === 'kho' && !v.own);
   async function open(video) {
     const [plats, videos, data] = await Promise.all([Studio.api('/api/publish/platforms'), Studio.api('/api/publish/videos'), Studio.api('/api/publish/data')]);
     S.plats = plats; S.videos = Array.isArray(videos) ? videos : []; S.data = data;
@@ -68,8 +71,8 @@
   function render() {
     const P = S.plats || {}, d = S.data?.platforms?.[S.tab], chk = S.check?.checks?.[S.tab] || [];
     Studio.modal(`<div class="pub"><h3><i class="ti ti-send"></i> Đăng mạng xã hội</h3>
-      <div class="pub-top"><div><label class="lbl pub-mt0">Video đã xuất</label><select id="pub-vid">${S.videos.length ? S.videos.map(v => `<option ${v.path === S.video ? 'selected' : ''}>${esc(v.path)}</option>`).join('') : '<option value="">— chưa có video, bấm Xuất trước —</option>'}</select></div>
-        <button class="primary" id="pub-gen" ${S.busy || !S.video ? 'disabled' : ''}>${S.busy ? '<i class="ti ti-loader-2 spin"></i> Đang viết…' : `<i class="ti ti-sparkles"></i> ${S.data ? 'Viết lại' : 'Viết nội dung'} bằng AI`}</button></div>
+      <div class="pub-top"><div><label class="lbl pub-mt0">Video đã xuất</label><select id="pub-vid">${S.videos.length ? S.videos.map(v => `<option value="${esc(v.path)}" ${v.path === S.video ? 'selected' : ''}>${esc(vlabel(v))}</option>`).join('') : '<option value="">— chưa có video, bấm Xuất trước —</option>'}</select></div>
+        <button class="primary" id="pub-gen" ${S.busy || !S.video || other() ? 'disabled' : ''} ${other() ? 'title="Video của dự án khác: mở dự án đó để AI viết nội dung"' : ''}>${S.busy ? '<i class="ti ti-loader-2 spin"></i> Đang viết…' : `<i class="ti ti-sparkles"></i> ${S.data ? 'Viết lại' : 'Viết nội dung'} bằng AI`}</button></div>
       <label class="lbl">Ghi chú cho AI (tuỳ chọn)</label><input id="pub-notes" placeholder="VD: nhấn mạnh ưu đãi tháng này, giọng vui vẻ, kêu gọi inbox" value="${esc(S.notes)}">
       <div class="pub-honest"><i class="ti ti-info-circle"></i> Studio <b>không tự đăng</b> lên TikTok/Facebook/Instagram/Zalo — việc đó cần ứng dụng OAuth được từng nền tảng duyệt. Bấm <b>Chép</b> từng phần, <b>Mở trang đăng</b> rồi kéo file MP4 vào, hoặc <b>Lên lịch</b> để Studio nhắc đúng giờ (YouTube: tự tải lên nếu đã <b>Kết nối YouTube</b> ở mục Lịch đăng). Thông số kiểm tra là tham khảo (nền tảng đổi thường xuyên).</div>
       ${S.busy ? `<div class="muted" id="pub-busy"><i class="ti ti-loader-2 spin"></i> ${esc(S.busy)}</div><div class="bar"><i class="pub-ind"></i></div>` : ''}
@@ -80,8 +83,8 @@
           ${field('hashtags', 'Hashtag', (d.hashtags || []).join(' '), { copyAs: 'hashtag' })}
           ${field('first_comment', 'Bình luận đầu tiên (ghim)', d.first_comment, { area: 2, copyAs: 'bình luận' })}
           <div class="acts pub-acts-xs"><button id="pub-all"><i class="ti ti-clipboard-text"></i> Chép tất cả (caption + hashtag)</button><button id="pub-save"><i class="ti ti-device-floppy"></i> Lưu chỉnh sửa</button></div>
-          <div class="help">Lưu tại <code>publish/${S.tab}.txt</code> trong thư mục dự án.</div>`
-        : `<div class="ui-state ui-state--empty"><i class="ti ti-sparkles ui-state__icon"></i><div>${S.video ? 'Bấm <b>Viết nội dung bằng AI</b>: Claude đọc lời thoại và viết tiêu đề, caption, hashtag, bình luận đầu và gợi ý ảnh bìa cho từng nền tảng.' : 'Chưa có video đã xuất trong <code>out/</code>.'}</div></div>`}
+          <div class="help">Lưu tại <code>publish/${S.tab}.txt</code> trong thư mục dự án${S.videos.find(v => v.path === S.video && (v.src === 'kho' || v.delivered)) ? ', và bản ghép mọi nền tảng cạnh video trong Thành phẩm (<code>… - nội dung đăng.txt</code>)' : ''}.</div>`
+        : `<div class="ui-state ui-state--empty"><i class="ti ti-sparkles ui-state__icon"></i><div>${S.video ? 'Bấm <b>Viết nội dung bằng AI</b>: Claude đọc lời thoại và viết tiêu đề, caption, hashtag, bình luận đầu và gợi ý ảnh bìa cho từng nền tảng.' : 'Chưa có video đã xuất trong <code>out/</code> hay Thành phẩm của Kho.'}</div></div>`}
       </div><div class="pub-side">
         <div class="lbl pub-mt0">Kiểm tra cho ${esc(P[S.tab]?.name || '')}</div>
         <div class="pub-chk">${chk.length ? chk.map(c => `<div class="${c.level}"><i class="ti ${c.level === 'ok' ? 'ti-circle-check' : c.level === 'warn' ? 'ti-alert-triangle' : 'ti-circle-x'}"></i><span>${esc(c.msg)}</span></div>`).join('') : '<span class="muted">—</span>'}</div>
@@ -114,13 +117,13 @@
     document.querySelectorAll('.pub [data-psel]').forEach(c => (c.onchange = () => (S.sel[c.dataset.psel] = c.checked)));
     document.querySelectorAll('.pub [data-pcopy]').forEach(b => (b.onclick = () => copy(document.querySelector(`.pub [data-pf="${b.dataset.pcopy}"]`).value, b.dataset.pwhat)));
     if ($('#pub-all')) $('#pub-all').onclick = () => { const o = collect(); copy([o.title, o.caption, '', (o.hashtags || []).join(' ')].filter(x => x != null).join('\n').trim(), 'caption + hashtag'); };
-    if ($('#pub-save')) $('#pub-save').onclick = async () => { const r = await Studio.api('/api/publish/save', { platform: S.tab, data: collect() }); if (r.error) return Studio.toast(r.error); Object.assign(S.data.platforms[S.tab], collect()); Studio.toast('Đã lưu ' + r.file); };
+    if ($('#pub-save')) $('#pub-save').onclick = async () => { const r = await Studio.api('/api/publish/save', { platform: S.tab, data: collect() }); if (r.error) return Studio.toast(r.error); Object.assign(S.data.platforms[S.tab], collect()); Studio.toast('Đã lưu ' + r.file + (r.delivered ? ' · kèm Thành phẩm' : '')); };
     $('#pub-ct').onchange = e => (S.coverT = +e.target.value);
     $('#pub-cover').onclick = exportCover;
     if ($('#pub-ai-cover')) coverAI.mount($('#pub-ai-cover'));
     document.querySelectorAll('.pub [data-preveal]').forEach(b => (b.onclick = () => Studio.api('/api/reveal', { path: b.dataset.preveal })));
     $('#pub-open').onclick = async () => { const r = await Studio.api('/api/publish/open', { platform: S.tab }); Studio.toast(r.error || 'Đã mở ' + r.url + ' trong trình duyệt'); };
-    $('#pub-reveal').onclick = () => Studio.api('/api/reveal', { path: S.video });
+    $('#pub-reveal').onclick = () => Studio.api('/api/publish/reveal', { video: S.video });
     // 18_schedule.js: schedule this video for the current tab (other platforms selectable) with the AI captions above
     if ($('#pub-sched')) $('#pub-sched').onclick = () => { if (S.data?.platforms?.[S.tab]) Object.assign(S.data.platforms[S.tab], collect()); window.openScheduleFor({ platform: S.tab, video: S.video, all: S.data?.platforms || {}, thumb: S.cover?.out }); };
   }

@@ -141,13 +141,15 @@
   function renderWatch() {
     const st = S.st, w = st.settings.watch, ag = st.runner.agent || {};
     $('#ap-watch').innerHTML = `<div class="ap-card"><h4><i class="ti ti-folder-bolt"></i>Thư mục tự động</h4>
-      <label class="ap-tog"><input type="checkbox" id="ap-won" ${w.on ? 'checked' : ''}><span>Tự dựng mọi video thả vào thư mục<small>Video đứng yên 5 giây (đã chép xong) mới được nhận. Bản gốc chuyển sang “Đã xử lý”.</small></span></label>
-      ${w.folders.map((f, i) => `<div class="${i ? 'ap-sep' : ''}">
+      <label class="ap-tog"><input type="checkbox" id="ap-won" ${w.on ? 'checked' : ''}><span>Tự dựng mọi video thả vào thư mục<small>Video đứng yên 5 giây (đã chép xong) mới được nhận. Mỗi Kho có sẵn thư mục “Tha vao day”: bản gốc chuyển sang Nguon, dự án vào Du an, thành phẩm vào Thanh pham.</small></span></label>
+      ${(st.kho || []).map(k => `<div class="ap-sep"><label class="ap-lbl">Kho ${esc(k.kho)}${k.profile ? ` · hồ sơ ${esc((profiles().find(p => p.id === k.profile) || {}).name || k.profile)}` : ' · hồ sơ mặc định'}</label><div class="ap-fold"><input value="${esc(k.in)}" readonly><button class="icon" title="Mở thư mục" data-wopen="${esc(k.in)}"><i class="ti ti-external-link"></i></button></div></div>`).join('')}
+      ${w.folders.length ? '<label class="ap-lbl ap-t1">Thư mục riêng (kiểu cũ)</label>' : ''}
+      ${w.folders.map((f, i) => `<div class="ap-sep">
         <label class="ap-lbl">Thả video vào</label><div class="ap-fold"><input data-wf="${i}" data-k="in" value="${esc(f.in)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.in)}"><i class="ti ti-external-link"></i></button></div>
         <label class="ap-lbl">Kết quả (MP4, ảnh bìa, nội dung đăng)</label><div class="ap-fold"><input data-wf="${i}" data-k="done" value="${esc(f.done)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.done)}"><i class="ti ti-external-link"></i></button></div>
         <label class="ap-lbl">Bản gốc đã xử lý</label><div class="ap-fold"><input data-wf="${i}" data-k="processed" value="${esc(f.processed)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.processed)}"><i class="ti ti-external-link"></i></button></div>
         <div class="ap-row2 ap-t1"><select data-wf="${i}" data-k="profile"><option value="">Hồ sơ mặc định</option>${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === f.profile ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
-          ${w.folders.length > 1 ? `<button class="icon" title="Bỏ thư mục này" data-wdel="${i}"><i class="ti ti-trash"></i></button>` : '<span></span>'}</div></div>`).join('')}
+          <button class="icon" title="Bỏ thư mục này" data-wdel="${i}"><i class="ti ti-trash"></i></button></div></div>`).join('')}
       <div class="acts"><button id="ap-wadd"><i class="ti ti-folder-plus"></i> Thêm thư mục (cho hồ sơ khác)</button><button class="primary" id="ap-wsave"><i class="ti ti-device-floppy"></i> Lưu</button></div>
       ${st.runner.watchError ? `<div class="help ap-bad">${esc(st.runner.watchError)}</div>` : ''}
       <label class="ap-tog ap-t3"><input type="checkbox" id="ap-agent" ${st.settings.agent || ag.installed ? 'checked' : ''}><span>Chạy cả khi tắt app<small>Cài một tác vụ nền macOS (LaunchAgent ${ag.installed ? '— đã cài' : ''}). Bỏ chọn để gỡ.</small></span></label>
@@ -159,7 +161,9 @@
     const saveW = async (patch) => { const r = await api('/api/autopilot/settings', patch); if (r.error) return Studio.toast(r.error); S.st.settings = r.settings; return r; };
     $('#ap-won').onchange = async e => { await saveW({ watch: { on: e.target.checked, folders: folders() } }); Studio.toast(e.target.checked ? 'Đã bật thư mục tự động' : 'Đã tắt thư mục tự động'); };
     $('#ap-wsave').onclick = async () => { await saveW({ watch: { folders: folders() } }); Studio.toast('Đã lưu thư mục'); renderWatch(); };
-    $('#ap-wadd').onclick = async () => { const f = folders(); const base = f[0].in.replace(/\/[^/]+$/, ''); f.push({ in: base + `/Thả video ${f.length + 1}`, done: f[0].done, processed: f[0].processed, profile: '' }); await saveW({ watch: { folders: f } }); renderWatch(); };
+    $('#ap-wadd').onclick = async () => { const f = folders(); const up = (p, n) => { for (let i = 0; i < n; i++) p = p.replace(/[\\/][^\\/]+$/, ''); return p; }; // f[0].in → thư mục cha; Kho/Nguon/Tha vao day → thư mục chứa các Kho
+      const base = f[0]?.in ? up(f[0].in, 1) : (S.st.kho || [])[0]?.in ? up(S.st.kho[0].in, 4) : '';
+      if (!/[\\/]/.test(base) || /^[A-Za-z]:$/.test(base)) return Studio.toast('Chưa biết đặt thư mục ở đâu: tạo Kho ở bước Chuẩn bị trước'); f.push({ in: base + `/Thả video ${f.length + 1}`, done: f[0]?.done || base + '/Đã xong', processed: f[0]?.processed || base + '/Đã xử lý', profile: '' }); await saveW({ watch: { folders: f } }); renderWatch(); };
     W.querySelectorAll('[data-wdel]').forEach(b => (b.onclick = async () => { const f = folders(); f.splice(+b.dataset.wdel, 1); await saveW({ watch: { folders: f } }); renderWatch(); }));
     W.querySelectorAll('[data-wopen]').forEach(b => (b.onclick = async () => { const r = await api('/api/autopilot/reveal', { path: b.previousElementSibling.value, create: true }); if (r.error) Studio.toast(r.error); }));
     $('#ap-notify').onchange = e => saveW({ notify: e.target.checked });
@@ -200,6 +204,12 @@
   async function editProfile(p) {
     [BRANDS, TPLS] = await Promise.all([BRANDS || api('/api/brands').catch(() => []), TPLS || api('/api/templates').catch(() => [])]);
     const d = p || { name: 'Kênh mới', pack: 'auto', template: '', caption_style: '', goal: 'Chia sẻ', tone: 'Tự nhiên, gần gũi', ai: true, ai_density: 'vua', broll_density: 'vua', broll_goal: 'auto', broll_src: ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'lib'], sound: 'vua', music: 'auto', clean: 'vua', fillers: true, fillers_claude: false, whisper: 'large-v3-turbo', lang: 'vi', orient: 'auto', aspects: ['9:16'], quality: '1080', qc: true, cta: '', platforms: ['tiktok', 'youtube', 'facebook'], slot: '19:00', learn: true, extra: '', brand: '' };
+    if (!p) { // hồ sơ mới: lấy sẵn thương hiệu, khổ hình và nơi đăng đã chọn ở hướng dẫn đầu (02_onboarding), không bắt chọn lại
+      const o = await api('/api/onboarding').catch(() => null), kit = (BRANDS || []).find(b => b.id === o?.brand);
+      if (kit) { d.brand = kit.id; if (kit.pack) d.pack = kit.pack; }
+      if (o?.aspect) d.aspects = [o.aspect];
+      if (o?.platforms?.length) d.platforms = o.platforms;
+    }
     const packs = (Studio.win?.PACKS || []).filter(x => x.recipe || x.items);
     const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(v) === String(k) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
     const chk = (name, opts, vals) => `<div class="chk">${opts.map(([k, l]) => `<label><input type="checkbox" name="${name}" value="${esc(k)}" ${(vals || []).includes(k) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;

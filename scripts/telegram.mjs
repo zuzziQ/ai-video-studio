@@ -12,11 +12,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { AVS_HOME, loadQueue, addItem, retryItem, Runner, KINDS, FAILED, isFailed, loadSettings } from './queue.mjs';
+import { AVS_HOME, loadQueue, addItem, retryItem, Runner, KINDS, FAILED, isFailed, loadSettings, khoInboxes } from './queue.mjs';
+import { Readable } from 'node:stream';
+import { workspaceFor, ensureWorkspace, sub, saveUpload } from './workspace.mjs';
 import { loadStore } from './profile.mjs';
 import { TAGS, addFeedback, patchFeedback, improve, refreshSuggestions, loadSuggestions, actSuggestion, askClaudeJSON, listFeedback } from './feedback.mjs';
 
+// INBOX: video nhận trước S12 (vẫn cho xếp hàng theo đường dẫn). Video mới → <Kho>/Nguon/ (khoDrop).
 const CFG = path.join(AVS_HOME, 'telegram.json'), INBOX = path.join(AVS_HOME, 'telegram', 'inbox');
+// Kho nhận video gửi qua bot: Kho của thương hiệu trong hồ sơ của bot, không có thì Kho Chung. Vào Nguon/ (không vào
+// Nguon/Tha vao day/: bot tự xếp hàng, thư mục canh sẽ nhận trùng).
+export function khoDrop(profileId) {
+  let brand = '';
+  try { const s = loadStore(); brand = (s.profiles.find(p => p.id === (profileId || s.default)) || {}).brand || ''; } catch {}
+  const ws = ensureWorkspace(workspaceFor(brand));
+  return { brand: ws.brand, dir: sub(ws, 'source', { mkdir: true }) };
+}
 const API = process.env.AVS_TG_API || 'https://api.telegram.org'; // override = local fake server in tests
 const VIDEO = /\.(mp4|mov|m4v|mkv|webm)$/i, MAX_DL = 20 * 1024 * 1024, MAX_UP = 49 * 1024 * 1024;
 export const DEFAULTS = { token: '', on: false, allowed: [], pair: null, pairTries: 0, pairLock: null, roots: [], profile: '', digest: '08:00', autoImprove: true, offset: 0, notified: [], fbmap: {}, pending: {}, lastDigest: '', lastImproveN: 0 };
@@ -51,7 +62,8 @@ export function checkPairCode(code) {
 // the watch folders (in / done / processed), the bot's inbox and telegram.json `roots`. Symlinks and `..` are resolved first.
 export function allowedRoots(c = loadCfg()) {
   const st = loadSettings();
-  return [INBOX, ...st.watch.folders.flatMap(f => [f.in, f.done, f.processed]), ...(Array.isArray(c.roots) ? c.roots : [])].filter(r => typeof r === 'string' && r);
+  let kho = []; try { kho = khoInboxes(); } catch {}
+  return [INBOX, ...[...kho, ...st.watch.folders].flatMap(f => [f.in, f.done, f.processed]), ...(Array.isArray(c.roots) ? c.roots : [])].filter(r => typeof r === 'string' && r);
 }
 export function safeVideoPath(p, roots = allowedRoots()) {
   const f = String(p || '').trim().replace(/^["']|["']$/g, '');
@@ -179,11 +191,10 @@ export class TelegramBot {
     const f = await this.api('getFile', { file_id: v.file_id });
     const r = await fetch(`${API}/file/bot${this.cfg.token}/${f.file_path}`);
     if (!r.ok) throw new Error('tải video lỗi ' + r.status);
-    fs.mkdirSync(INBOX, { recursive: true });
-    const name = (v.file_name || path.basename(f.file_path) || 'video.mp4').replace(/[^\p{L}\p{N}._-]+/gu, '_');
-    const dst = path.join(INBOX, `${Date.now().toString(36)}_${VIDEO.test(name) ? name : name + '.mp4'}`);
-    fs.writeFileSync(dst, Buffer.from(await r.arrayBuffer()));
-    const it = addItem({ kind: 'autopilot', input: dst, opts: { ...(this.cfg.profile ? { profile: this.cfg.profile } : {}), telegram: { chat: chat.id } }, source: 'telegram' });
+    const kd = khoDrop(this.cfg.profile);
+    const name = (v.file_name || path.basename(f.file_path) || 'video.mp4').replace(/[^\p{L}\p{N}._ -]+/gu, '_');
+    const dst = await saveUpload(Readable.from([Buffer.from(await r.arrayBuffer())]), kd.dir, VIDEO.test(name) ? name : name + '.mp4');
+    const it = addItem({ kind: 'autopilot', input: dst, opts: { ...(this.cfg.profile ? { profile: this.cfg.profile } : {}), brand: kd.brand, telegram: { chat: chat.id } }, source: 'telegram' });
     return this.send(chat.id, `🎬 Đã nhận video, đang dựng (#${it.id}). Thường mất 2–4 phút, xong mình gửi lại ngay.`);
   }
   queueTopic(chat, topic) {

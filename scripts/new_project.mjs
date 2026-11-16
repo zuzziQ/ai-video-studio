@@ -1,6 +1,7 @@
 // "Video mới": raw talking-head video → starter project (shared by studio/server.mjs /api/new and scripts/autopilot.mjs).
 // usage: node scripts/new_project.mjs <video> [project_dir] [--model large-v3-turbo] [--lang vi|auto] [--pack slate] [--title "…"]
-//                                     [--orient vertical|horizontal|auto]
+//                                     [--orient vertical|horizontal|auto] [--brand <id>]
+// Không có project_dir: kèm --brand → <Kho của thương hiệu>/Du an/<tên>; không kèm → cạnh video (như bản cũ).
 // Steps: whisper (transcribe.py) → cut silences (cut.py) → 30 fps frames → face position (find_face.py) → captions (captions.py)
 // → timeline.json (frame_grid + title_card, music bed). Progress lines "@@ <0..1> <step>" on stdout; exit ≠ 0 + Vietnamese error.
 import fs from 'node:fs';
@@ -11,6 +12,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pyBin } from './platform.mjs';
 import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { faceTrack } from './face_track_project.mjs';
+import { forbiddenDir, AVS_HOME } from '../studio/security.mjs';
+import { freeName, workspaceFor, ensureWorkspace, projectDirFor, workspaceOfProject, writeSource, hashFile, sub } from './workspace.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PY = pyBin(SKILL);
@@ -40,15 +43,42 @@ export function videoOrient(src) {
 
 /**
  * Build the starter project. Returns the project dir.
- * o: { video, dir?, model='large-v3-turbo', pack='slate', title='', orient='vertical'|'horizontal'|'auto', lang? }
+ * o: { video, dir?, model='large-v3-turbo', pack='slate', title='', orient='vertical'|'horizontal'|'auto', lang?, brand? (brand kit id),
+ *      kho=true (không có dir → <Kho>/Du an/<tên>; false = cạnh video như bản cũ) }
  * env: { run(cmd, argv, onLine) → Promise, onStep(text, progress) }
  */
-export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 'slate', title = '', orient = 'vertical', lang }, { run = runCmd, onStep = () => {} } = {}) {
+export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 'slate', title = '', orient = 'vertical', lang, brand, kho = true },{ run = runCmd, onStep = () => {} } = {}) {
   const src = path.resolve(String(video).trim().replace(/^["']|["']$/g, '').replace(/^~(?=[\\/]|$)/, os.homedir()));
   if (!fs.existsSync(src)) throw new Error(`không thấy video ${src}`);
   if (orient === 'auto') orient = videoOrient(src);
-  const d = path.resolve(dir || path.join(path.dirname(src), path.basename(src, path.extname(src)) + '_studio'));
+  let kit = null;
+  if (brand) {
+    const { loadBrand } = await import('./batch.mjs');
+    kit = /^[a-z0-9][a-z0-9-]{0,39}$/.test(String(brand)) ? loadBrand(String(brand)) : null;
+    if (!kit) throw new Error(`không thấy thương hiệu "${String(brand).slice(0, 40)}"`);
+  }
+  // S12 M98: không có `dir` → <Kho của thương hiệu>/Du an/<tiêu đề hoặc tên video> (Kho Chung khi không có thương hiệu).
+  // kho:false (CLI cũ gọi không kèm --brand) giữ đường cũ: cạnh video, video trong thư mục cấu hình → ~/.ai-video-studio/footage/.
+  let ws = null, d;
+  if (dir) d = path.resolve(dir);
+  else if (kho) { ws = ensureWorkspace(workspaceFor(brand || '')); d = projectDirFor(ws, String(title || '').trim() || path.basename(src, path.extname(src))); }
+  else {
+    const base = path.basename(src, path.extname(src)) + '_studio';
+    const foot = path.join(AVS_HOME(), 'footage'); // two uploads with the same name must not overwrite each other's project
+    d = path.resolve(forbiddenDir(path.dirname(src)) ? path.join(foot, fs.existsSync(foot) ? freeName(foot, base) : base) : path.join(path.dirname(src), base));
+  }
+  const why = forbiddenDir(d); // check before whisper runs, not after minutes of work
+  if (why) throw new Error(`Không tạo dự án ở ${d}: ${why} — chọn thư mục dự án khác`);
   fs.mkdirSync(path.join(d, 'work/frames'), { recursive: true });
+  try { return await build(d, ws, { src, model, pack, title, orient, lang, kit }, { run, onStep }); }
+  catch (e) {
+    // thư mục Studio tự đặt trong Du an/: lỗi giữa chừng thì không để lại thư mục rỗng (chỉ đúng một cấp dưới Du an/, chưa có timeline)
+    if (ws && path.dirname(d) === sub(ws, 'projects') && !['', '.', '..'].includes(path.basename(d)) && !fs.existsSync(path.join(d, 'timeline.json'))) fs.rmSync(d, { recursive: true, force: true });
+    throw e;
+  }
+}
+async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { run, onStep }) {
+  const sha = hashFile(src).catch(() => null); // song song với whisper: video vài GB không làm chậm thêm
   const S = f => path.join(SKILL, 'scripts', f);
   onStep('Nhận dạng giọng nói (whisper)', .05);
   await run(PY, ['-I', '-X', 'utf8', S('transcribe.py'), src, path.join(d, 'work/words_raw.json'), '--model', model, ...(lang && lang !== 'vi' ? ['--lang', lang] : [])]);
@@ -85,7 +115,11 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
     ],
     audio: { voice: 'work/aroll.mp4', mix: 'work/mix.wav', music: [{ t0: 0, t1: +(dur + 2.5).toFixed(2), mood: 'tech', gain: -20 }], sfx: [] },
   };
+  // Brand kit chosen in the onboarding / "Video mới" dialog: applied here so the project does not ask for it again.
+  if (kit) { const { brandFields } = await import('./batch.mjs'); tl.brand = { ...brandFields(kit, d), kit: kit.id }; }
   fs.writeFileSync(path.join(d, 'timeline.json'), JSON.stringify(tl, null, 1));
+  // source.json (S12 mục 2.2): video gốc theo đường dẫn tương đối với Kho + dung lượng + sha256
+  writeSource(d, ws || workspaceOfProject(d, tl), src, { size: fs.statSync(src).size, sha256: await sha });
   return d;
 }
 
@@ -95,7 +129,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
   const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
   const pos = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--')));
   if (!pos[0]) { console.error('usage: node scripts/new_project.mjs <video> [project_dir] [--model large-v3-turbo] [--lang vi|auto] [--pack slate] [--title …] [--orient vertical|horizontal|auto]'); process.exit(2); }
-  newProject({ video: pos[0], dir: pos[1], model: opt('--model', 'large-v3-turbo'), pack: opt('--pack', 'slate'), title: opt('--title', ''), orient: opt('--orient', 'vertical'), lang: opt('--lang') },
+  newProject({ video: pos[0], dir: pos[1], model: opt('--model', 'large-v3-turbo'), pack: opt('--pack', 'slate'), title: opt('--title', ''), orient: opt('--orient', 'vertical'), lang: opt('--lang'), brand: opt('--brand'), kho: !!opt('--brand') },
     { onStep: (s, p) => console.log(`@@ ${p.toFixed(2)} ${s}`) })
     .then(d => { console.log(`@@ 1.00 Xong`); console.log(JSON.stringify({ dir: d })); })
     .catch(e => { console.error('LỖI: ' + e.message + (e.log ? '\n' + e.log.slice(-600) : '')); process.exit(1); });

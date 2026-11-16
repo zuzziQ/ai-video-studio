@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readGate, gateText } from './export_gate.mjs';
+import { deliveredOf } from './kho_deliver.mjs';
 
 // Spec theo tài liệu công bố của Meta và TikTok đến 2025: kiểm lại trên Ads Manager trước khi chạy tiền lớn.
 // hard: sai là nền tảng từ chối file (bản bị loại khỏi gói). soft: khuyến nghị (giữ bản, ghi cảnh báo).
@@ -200,7 +201,7 @@ export function buildPack(input, o = {}) {
         if (spec.errors.length) { excluded.push({ code: it.code, dir: it.dir, file, reason: `sai spec ${platform}: ${spec.errors.join('; ')}` }); continue; }
         let name = adName, k = 2; while (names.has(name)) name = `${adName}-${k++}`; names.add(name);
         const landing = landingOk ? withUtm(landingOk, { source: P.utm_source, campaign, content: it.code, term: it.factors.angle || undefined }) : '';
-        rows.push({ ad_name: name, file: `${name}.mp4`, code: it.code, src: file, aspect: spec.aspect, duration_s: r1(info.dur), size_mb: r1(info.mb),
+        rows.push({ ad_name: name, file: `${name}.mp4`, code: it.code, src: file, delivered: deliveredOf(it.dir, file) || undefined, aspect: spec.aspect, duration_s: r1(info.dur), size_mb: r1(info.mb),
           primary_text: texts.primary_text, headline: platform === 'tiktok' ? '' : texts.headline, cta, landing_url: landing, ...it.factors, text_from: texts.from,
           warnings: [...itWarn, ...spec.warnings] });
       }
@@ -223,7 +224,9 @@ function writePack(pack, B, P) {
   for (const r of pack.rows) byCode[r.code] ||= { dir: path.relative(B.base, B.items.find(i => i.code === r.code).dir) || '.', ...Object.fromEntries(FACTORS.concat(['hook_text', 'pack']).map(f => [f, r[f]])), ads: [] };
   for (const r of pack.rows) byCode[r.code].ads.push(r.ad_name);
   fs.writeFileSync(path.join(pack.dir, 'manifest.json'), JSON.stringify({ kind: 'ads_pack', version: 1, platform: pack.platform, campaign: pack.campaign, batch: pack.batch,
-    base: B.base, created: new Date().toISOString(), factors: FACTORS, variants: byCode, excluded: pack.excluded.map(e => ({ ...e, file: e.file ? path.basename(e.file) : undefined })) }, null, 1));
+    base: B.base, created: new Date().toISOString(), factors: FACTORS, variants: byCode,
+    // S12 M100: bản giao trong <Kho>/Thanh pham/ (nếu có) của từng quảng cáo; gói vẫn chép file vào out/ads/
+    delivered: Object.fromEntries(pack.rows.filter(r => r.delivered).map(r => [r.ad_name, r.delivered])), excluded: pack.excluded.map(e => ({ ...e, file: e.file ? path.basename(e.file) : undefined })) }, null, 1));
   fs.writeFileSync(path.join(pack.dir, 'README.txt'), readme(pack, P).replace(/\n/g, '\r\n'));
 }
 function readme(pack, P) {

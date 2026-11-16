@@ -2,7 +2,8 @@
 // watch folders, channel profiles, "Học từ chỉnh sửa".
 //   GET  /api/autopilot/state                → {items, runner, settings, profiles, steps, kinds, learn}
 //   POST /api/autopilot/enqueue {input, kind?, profile?, out?, opts?}
-//   POST /api/autopilot/upload?name=&profile= (raw body = the video) → saved in AVS_HOME/autopilot/inbox, queued
+//   POST /api/autopilot/upload?name=&profile= (raw body = the video) → saved in <Kho của thương hiệu trong hồ sơ>/Nguon/, queued
+//        (vào Nguon/ chứ không vào Nguon/Tha vao day/: thư mục canh sẽ nhận lại chính file này lần nữa)
 //   POST /api/autopilot/item {id, action: cancel|retry|remove|up|down|reveal|open}
 //   POST /api/autopilot/clear · /settings {…} · /agent {on} · /profile {action: save|duplicate|delete|default|reset, …} · /learn
 // Env AVS_NO_QUEUE=1 → no runner in this server (UI still edits the queue; `node scripts/queue.mjs run` executes it).
@@ -10,10 +11,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { Runner, AVS_HOME, KINDS, loadQueue, addItem, cancelItem, retryItem, removeItem, moveItem, clearDone, clearFailed, loadSettings, saveSettings, agentInstall, agentUninstall } from '../../scripts/queue.mjs';
-import { loadStore, upsertProfile, duplicateProfile, deleteProfile, setDefault, resetLearned, deriveRules, effectiveProfile, learnFromProject } from '../../scripts/profile.mjs';
+import { Runner, AVS_HOME, KINDS, khoInboxes, loadQueue, addItem, cancelItem, retryItem, removeItem, moveItem, clearDone, clearFailed, loadSettings, saveSettings, agentInstall, agentUninstall } from '../../scripts/queue.mjs';
+import { loadStore, getProfile, upsertProfile, duplicateProfile, deleteProfile, setDefault, resetLearned, deriveRules, effectiveProfile, learnFromProject } from '../../scripts/profile.mjs';
 import { STEPS } from '../../scripts/autopilot.mjs';
 import { openPath, revealPath } from '../../scripts/platform.mjs';
+import { uploadVideo } from './26_pick.mjs';
 
 const VIDEO = /\.(mp4|mov|m4v|mkv|webm)$/i;
 const rd = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
@@ -55,16 +57,16 @@ export default ctx => {
         return J({ items: q.items.map(it => (it.state === 'running' || u.searchParams.get('id') === it.id ? detail(it) : it)), runner: runner ? runner.status() : { active: false, disabled: true },
           settings: loadSettings(), profiles: profilesOut(), steps: STEPS.map(([id, label, , req]) => ({ id, label, required: !!req })),
           kinds: Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, { name: v.name, ok: fs.existsSync(path.join(ctx.SKILL, 'scripts', v.script)) }])),
-          learn, project: ctx.project ? { dir: ctx.project.dir, autopilot: !!rd(path.join(ctx.project.dir, '.studio/autopilot.json')) } : null, home: AVS_HOME });
+          learn, project: ctx.project ? { dir: ctx.project.dir, autopilot: !!rd(path.join(ctx.project.dir, '.studio/autopilot.json')) } : null, home: AVS_HOME,
+          kho: (() => { try { return khoInboxes().map(f => ({ in: f.in, kho: f.kho, brand: f.brand, profile: f.profile })); } catch { return []; } })() });
       }
       if (req.method !== 'POST') return false;
       if (p === '/api/autopilot/upload') {
-        const name = path.basename(u.searchParams.get('name') || 'video.mp4').replace(/[^\w.\-À-ỹ ()]+/g, '_');
+        const profile = u.searchParams.get('profile') || undefined, name = path.basename(u.searchParams.get('name') || 'video.mp4');
         if (!VIDEO.test(name)) return J({ error: 'Chỉ nhận tệp video (mp4, mov, m4v, mkv)' }, 400);
-        const dir = path.join(AVS_HOME, 'autopilot/inbox'); fs.mkdirSync(dir, { recursive: true });
-        const dst = path.join(dir, `${Date.now().toString(36)}_${name}`);
-        await new Promise((ok, bad) => { const w = fs.createWriteStream(dst); req.pipe(w); w.on('finish', ok); w.on('error', bad); });
-        const it = addItem({ kind: 'autopilot', input: dst, opts: { profile: u.searchParams.get('profile') || undefined }, source: 'upload' });
+        let brand; try { brand = getProfile(profile).brand || ''; } catch (e) { return J({ error: e.message }, 404); } // hồ sơ lạ: báo trước khi chép
+        const r = await uploadVideo(req, brand, name);
+        const it = addItem({ kind: 'autopilot', input: r.path, opts: { profile, brand }, source: 'upload' });
         it.title = name; return J({ ok: true, item: it });
       }
       const b = await ctx.body(req);

@@ -1048,6 +1048,11 @@ function stoppedNotice(j) {
   for (const o of document.querySelectorAll('.toast')) o.remove();
   modal(`<h3><i class="ti ${s[0]} ui-text-warn"></i> ${s[1]}</h3><p>${esc(j.step || s[1])}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
 }
+// S12 M100: "Giao vào Thành phẩm" (bản xong vào <Kho>/Thanh pham/<YYYY-MM>/), nhớ theo máy; localStorage có thể bị chặn → mặc định bật.
+const GIVE_KEY = 'avs.export.deliver';
+const giveOn = () => { try { return localStorage.getItem(GIVE_KEY) !== '0'; } catch { return true; } };
+const giveSet = on => { try { localStorage.setItem(GIVE_KEY, on ? '1' : '0'); } catch { /* chỉ là tiện ích */ } };
+const giveNote = r => (r.delivered?.length ? ' · đã giao vào Thành phẩm' : r.deliverError ? ' · chưa giao được vào Thành phẩm: ' + r.deliverError : '');
 $('#export').addEventListener('click', () => {
   const v = DH > DW, q = (a, b) => (v ? `${a}×${b}` : `${b}×${a}`);
   modal(`<h3><i class="ti ti-upload"></i> Xuất video</h3>
@@ -1057,51 +1062,136 @@ $('#export').addEventListener('click', () => {
       <label><input type="radio" name="xq" value="4k"><b>4K</b><small>${q(2160, 3840)}</small></label></div>
     <div class="row2"><div><label class="lbl">Từ (giây)</label><input id="xfrom" type="number" placeholder="0"></div><div><label class="lbl">Đến (giây)</label><input id="xto" type="number" placeholder="${TL.duration}"></div></div>
     <label class="lbl">Xuất thêm khổ khác (cùng lúc)</label><div class="xasp">${(v ? [['1:1', 'Vuông 1:1', 'cắt bám mặt'], ['16:9', 'Ngang 16:9', 'video giữa, nền mờ']] : [['9:16', 'Dọc 9:16', 'cắt bám mặt'], ['1:1', 'Vuông 1:1', 'cắt bám mặt']]).map(([k, l, d]) => `<label><input type="checkbox" name="xasp" value="${k}"> <b>${l}</b> <small>${d}</small></label>`).join('')}</div>
+    <label class="lbl">Thành phẩm</label><div class="xasp"><label title="Bản xuất xong (kèm ảnh bìa, .srt khi bấm) được liên kết sang Thanh pham/<tháng> của Kho thương hiệu, không tốn thêm dung lượng"><input type="checkbox" id="xgive" ${giveOn() ? 'checked' : ''}> <b>Giao vào Thành phẩm</b> <small>Thanh pham/&lt;tháng&gt; của Kho</small></label></div>
     <div class="acts acts--spaced"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
     <p class="muted">Âm thanh được trộn lại (giọng + nhạc + SFX, chuẩn −14 LUFS) rồi render từng khung bằng đúng engine của preview.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="xgo"><i class="ti ti-upload"></i> Xuất</button></div>`);
-  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); } else toast('Lỗi: ' + r.error); };
-  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', {}); toast('Đã lưu ' + r.out); api('/api/reveal', { path: r.out }); };
+  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T, deliver: $('#xgive').checked }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); if (giveNote(r)) toast('Ảnh bìa' + giveNote(r)); } else toast('Lỗi: ' + r.error); };
+  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', { deliver: $('#xgive').checked }); toast('Đã lưu ' + r.out + giveNote(r)); api('/api/reveal', { path: r.out }); };
+  $('#xgive').onchange = e => giveSet(e.target.checked);
   $('#xgo').onclick = async () => {
     if (dirty) await saveNow();
     const from = $('#xfrom').value, to = $('#xto').value;
-    const r = await api('/api/export', { quality: document.querySelector('[name=xq]:checked').value, from: from === '' ? undefined : +from, to: to === '' ? undefined : +to, aspects: [...document.querySelectorAll('[name=xasp]:checked')].map(i => i.value) });
+    const r = await api('/api/export', { quality: document.querySelector('[name=xq]:checked').value, from: from === '' ? undefined : +from, to: to === '' ? undefined : +to, aspects: [...document.querySelectorAll('[name=xasp]:checked')].map(i => i.value), deliver: $('#xgive').checked });
     if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
     modal(`<h3>Đang xuất video…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="xcancel">Dừng</button></div>`);
     $('#xcancel').onclick = () => api('/api/job/cancel', {});
     pollJob(j => {
-      if (j.state === 'done') modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> Hiện trong Finder</button><a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
-      else modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      if (j.state !== 'done') return modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}${j.delivered?.length ? `<p class="muted"><i class="ti ti-package"></i> Đã giao ${j.delivered.length} file vào Thành phẩm: ${j.delivered.map(f => esc(f.split(/[\\/]/).pop())).join(', ')}</p>` : j.deliverError ? `<p class="ui-text-warn"><i class="ti ti-alert-triangle"></i> Chưa giao được vào Thành phẩm: ${esc(j.deliverError)}</p>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> Hiện trong Finder</button>${j.delivered?.length ? `<button id="xkho"><i class="ti ti-package"></i> Mở Thành phẩm</button>` : ''}<a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
+      if ($('#xkho')) $('#xkho').onclick = () => api('/api/thanhpham/open', { path: j.delivered[0] }).then(r => r.ok || toast(r.error || 'Không mở được Thành phẩm'));
     });
   };
 });
-$('#newproj').addEventListener('click', () => {
-  modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3><label class="lbl">Video</label><div class="row pickrow"><button id="npick" class="primary"><i class="ti ti-folder-open"></i> Chọn video từ máy…</button><input type="file" id="nfile" accept="video/*,.mov,.mkv,.m4v" hidden>
-    <input id="npath" placeholder="${/Win/.test(navigator.platform) ? 'hoặc dán đường dẫn: C:\\Users\\ban\\Videos\\clip.mp4' : 'hoặc dán đường dẫn: /Users/ban/Movies/clip.mp4'}"></div>
-    <label class="lbl">Thư mục dự án (để trống = cạnh video)</label><input id="ndir" placeholder="">
-    <label class="lbl">Gói style</label><div class="packs">${packs().filter(p => p.recipe).map((p, i) => `<label><input type="radio" name="npack" value="${p.id}" ${i === 0 ? 'checked' : ''}><b>${p.icon} ${esc(p.name)}</b><span class="muted">${esc(p.desc || '')}</span></label>`).join('')}</div>
+// ---------- bộ chọn video dùng chung của bước Nguồn (S12 M98): Video mới, Video dài ----------
+// Trên cùng: video trong Kho của thương hiệu (Nguon/ trước, có ô tìm, bấm để chọn) · "Chọn từ máy…" (chép vào <Kho>/Nguon/) ·
+// ô dán đường dẫn; thả file video vào cũng được. videoPicker(host, { brand, value, onChange(path, name) }) → { setBrand(id), value, focus() }.
+function videoPicker(host, o = {}) {
+  if (!document.getElementById('vp-css')) {
+    const st = document.createElement('style'); st.id = 'vp-css';
+    st.textContent = `.vp-head { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin-bottom: var(--space-1); min-width: 0; }
+    .vp-head .vp-kho { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vp-q { width: 100%; margin-bottom: var(--space-1); }
+    .vp-list { max-height: 184px; overflow-y: auto; border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); margin-bottom: var(--space-2); }
+    .vp-it { display: flex; gap: var(--space-2); align-items: center; width: 100%; padding: var(--space-1) var(--space-2); background: none; border: 0; border-bottom: 1px solid rgb(var(--color-line)); border-radius: 0; text-align: left; color: rgb(var(--color-fg)); font-size: var(--text-xs); cursor: pointer; min-width: 0; }
+    .vp-it:last-child { border-bottom: 0; } .vp-it:hover { background: rgb(var(--color-surface-hover)); }
+    .vp-it.on { background: rgb(var(--color-accent-soft) / .24); }
+    .vp-it .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vp-it small { flex: none; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+    .vp-empty { padding: var(--space-3); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); text-align: center; line-height: 1.5; }
+    .vp-row { display: flex; gap: var(--space-2); min-width: 0; } .vp-row > button { flex: none; } .vp-row > input { flex: 1; min-width: 0; }`;
+    document.head.appendChild(st);
+  }
+  const ph = /Win/.test(navigator.platform) ? 'hoặc dán đường dẫn: C:\\Users\\ban\\Videos\\clip.mp4' : 'hoặc dán đường dẫn: /Users/ban/Movies/clip.mp4';
+  host.innerHTML = `<div class="vp-head"><i class="ti ti-building-warehouse"></i><span class="vp-kho">Đang đọc Kho…</span></div>
+    <input class="vp-q" placeholder="Tìm video trong Kho"><div class="vp-list" role="listbox"></div>
+    <div class="vp-row"><button class="vp-pick primary" type="button"><i class="ti ti-folder-open"></i> Chọn từ máy…</button><input type="file" accept="video/*,.mov,.mkv,.m4v" hidden>
+    <input class="vp-path" placeholder="${esc(ph)}" value="${esc(o.value || '')}"></div>`;
+  const q = host.querySelector('.vp-q'), list = host.querySelector('.vp-list'), pathIn = host.querySelector('.vp-path'), pick = host.querySelector('.vp-pick'), file = host.querySelector('[type=file]');
+  let brand = o.brand || '', items = [], seq = 0;
+  const size = b => b >= 1 << 30 ? (b / (1 << 30)).toFixed(1) + ' GB' : b >= 1 << 20 ? Math.round(b / (1 << 20)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+  const fold = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+  const set = (p, name) => { pathIn.value = p; draw(); o.onChange?.(p, name); };
+  function draw() {
+    const f = fold(q.value.trim()), shown = items.filter(x => !f || fold(x.rel).includes(f)), cur = pathIn.value.trim();
+    list.innerHTML = shown.length ? shown.slice(0, 200).map(x => `<button type="button" role="option" class="vp-it ${x.path === cur ? 'on' : ''}" data-i="${items.indexOf(x)}" title="${esc(x.rel)}"><i class="ti ti-movie"></i><span class="n">${esc(x.dir && x.dir !== 'Nguon' ? x.rel : x.name)}</span><small>${size(x.size)} · ${new Date(x.mtime).toLocaleDateString('vi-VN')}</small></button>`).join('')
+      : `<div class="vp-empty">${items.length ? 'Không có video khớp' : 'Kho chưa có video. Bấm “Chọn từ máy…” để chép video vào thư mục Nguon của Kho, hoặc chép thẳng vào thư mục đó.'}</div>`;
+    list.querySelectorAll('[data-i]').forEach(b => (b.onclick = () => { const x = items[+b.dataset.i]; set(x.path, x.name); }));
+  }
+  async function load() {
+    const my = ++seq; list.innerHTML = '<div class="vp-empty"><i class="ti ti-loader-2 spin"></i></div>';
+    const r = await api('/api/pick/sources?brand=' + encodeURIComponent(brand)).catch(e => ({ error: e.message }));
+    if (my !== seq) return; // đổi thương hiệu nhanh: bỏ kết quả cũ
+    items = r.items || [];
+    const k = host.querySelector('.vp-kho'); k.textContent = r.kho ? `Kho ${r.kho.title}: ${r.kho.root}` : (r.error || 'Không đọc được Kho'); k.title = r.kho?.warning || r.kho?.root || '';
+    draw();
+  }
+  q.oninput = draw;
+  pathIn.onchange = () => { draw(); o.onChange?.(pathIn.value.trim(), pathIn.value.trim().split(/[\\/]/).pop()); };
+  pick.onclick = () => file.click();
+  file.onchange = () => { const f = file.files[0]; file.value = ''; if (f) upload(f); };
+  // kéo thả file video vào bộ chọn = "Chọn từ máy" (stopPropagation: không để editor chép vào media/ của dự án đang mở)
+  host.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+  host.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f) upload(f); });
+  function upload(f) {
+    if (!/\.(mp4|mov|m4v|mkv|webm|avi|mts)$/i.test(f.name)) return toast('Chỉ nhận file video');
+    if (pick.disabled) return toast('Đang chép một video khác');
+    const x = new XMLHttpRequest(), label = pick.innerHTML; pick.disabled = true;
+    pick.innerHTML = '<i class="ti ti-loader-2 spin"></i> Đang chép…';
+    x.open('POST', `/api/pick/upload?brand=${encodeURIComponent(brand)}&name=${encodeURIComponent(f.name)}`);
+    x.upload.onprogress = e => { if (e.lengthComputable) pick.innerHTML = `<i class="ti ti-loader-2 spin"></i> Đang chép ${Math.round(e.loaded / e.total * 100)}%`; };
+    const done = () => { pick.disabled = false; pick.innerHTML = label; };
+    x.onload = async () => { done(); let r = {}; try { r = JSON.parse(x.responseText); } catch {} if (!r.path) return toast('Không chép được video: ' + (r.error || x.status)); await load(); set(r.path, f.name); toast('Đã chép vào Kho: ' + r.rel); };
+    x.onerror = () => { done(); toast('Không chép được video'); };
+    x.send(f);
+  }
+  load();
+  return { setBrand(b) { if ((b || '') !== brand) { brand = b || ''; load(); } }, get value() { return pathIn.value.trim(); }, focus: () => q.focus() };
+}
+let newOpening = false; // two quick clicks must not open two dialogs (the dialog waits for /api/onboarding + /api/brands)
+$('#newproj').addEventListener('click', async () => {
+  if (newOpening) return; newOpening = true;
+  try { await openNewProject(); } finally { newOpening = false; }
+});
+async function openNewProject() {
+  // Thương hiệu, gói style và khổ hình đã chọn ở hướng dẫn đầu / brand kit: lấy sẵn, không hỏi lại. Muốn khác thì mở "Đổi".
+  const ls = { get: (k, d) => { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('avs.' + k, v); } catch {} } };
+  const [onb, brands] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => [])]);
+  const BR = Array.isArray(brands) ? brands : [], PK = packs().filter(p => p.recipe);
+  const brand0 = BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : '');
+  const packFor = id => { const b = BR.find(x => x.id === id); return [b?.pack, ls.get('newPack', '')].find(x => x && PK.some(p => p.id === x)) || PK[0]?.id || 'slate'; };
+  const orient0 = { '16:9': 'horizontal', '9:16': 'vertical' }[onb?.aspect] || 'auto';
+  const OR = [['auto', 'Theo video'], ['vertical', 'Dọc 9:16 (Reels, TikTok, Shorts)'], ['horizontal', 'Ngang 16:9 (YouTube)']];
+  modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3><label class="lbl">Video</label><div id="nvp"></div>
     <label class="lbl">Tiêu đề / chủ đề (dùng cho intro)</label><input id="ntitle" placeholder="VD: 3 mẹo dùng ChatGPT">
-    <div class="row2"><div><label class="lbl">Khổ hình</label><select id="norient"><option value="vertical">Dọc 9:16 (Reels, TikTok, Shorts)</option><option value="horizontal">Ngang 16:9 (YouTube)</option></select></div>
-    <div><label class="lbl">Độ chính xác nhận giọng</label><select id="nmodel"><option value="large-v3-turbo">large-v3-turbo (chính xác, khuyên dùng)</option><option value="small">small (nhanh, sai nhiều hơn)</option><option value="large-v3">large-v3 (chậm nhất)</option></select></div></div>
+    <details id="nopts"><summary><span class="muted">Dùng thiết lập sẵn:</span> <b id="nsum"></b> <span class="muted">· Đổi</span></summary>
+    <label class="lbl">Thương hiệu</label><select id="nbrand"><option value="">— không gắn —</option>${BR.map(b => `<option value="${esc(b.id)}" ${b.id === brand0 ? 'selected' : ''}>${esc(b.title || b.name || b.id)}</option>`).join('')}</select>
+    <label class="lbl">Gói style</label><div class="packs">${PK.map(p => `<label><input type="radio" name="npack" value="${p.id}" ${p.id === packFor(brand0) ? 'checked' : ''}><b>${p.icon} ${esc(p.name)}</b><span class="muted">${esc(p.desc || '')}</span></label>`).join('')}</div>
+    <div class="row2"><div><label class="lbl">Khổ hình</label><select id="norient">${OR.map(([v, l]) => `<option value="${v}" ${v === orient0 ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div><label class="lbl">Độ chính xác nhận giọng</label><select id="nmodel">${[['large-v3-turbo', 'large-v3-turbo (chính xác, khuyên dùng)'], ['small', 'small (nhanh, sai nhiều hơn)'], ['large-v3', 'large-v3 (chậm nhất)']].map(([v, l]) => `<option value="${v}" ${v === ls.get('newModel', 'large-v3-turbo') ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+    <label class="lbl">Thư mục dự án (để trống = Kho của thương hiệu, thư mục Du an)</label><input id="ndir" placeholder=""></details>
     <p class="muted">Tự làm: nhận giọng → cắt khoảng lặng → cắt khung → phụ đề → bản dựng theo gói (intro, graphic theo từ khoá, CTA, nhạc). Sau đó bạn (hoặc Claude) chỉnh tiếp.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="ngo">Tạo</button></div>`);
-  $('#npick').onclick = () => $('#nfile').click();
-  $('#nfile').onchange = async e => {
-    const f = e.target.files[0]; if (!f) return;
-    const b = $('#npick'); b.disabled = true; b.innerHTML = `<i class="ti ti-loader-2 spin"></i> Đang chép ${esc(f.name)}…`;
-    try { const r = await (await fetch('/api/pick/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f })).json(); $('#npath').value = r.path; if (!$('#ntitle').value) $('#ntitle').value = f.name.replace(/\.\w+$/, ''); }
-    catch (err) { toast('Không chép được video: ' + err.message); }
-    b.disabled = false; b.innerHTML = `<i class="ti ti-circle-check"></i> ${esc(f.name)}`;
+  const sum = () => {
+    const b = BR.find(x => x.id === $('#nbrand').value), pv = document.querySelector('[name=npack]:checked')?.value, p = PK.find(x => x.id === pv);
+    $('#nsum').textContent = [b ? (b.title || b.name) : 'không thương hiệu', p ? p.name : pv, OR.find(o => o[0] === $('#norient').value)?.[1].replace(/ \(.*/, '')].filter(Boolean).join(' · ');
   };
+  const vp = videoPicker($('#nvp'), { brand: brand0, onChange: (p, name) => { if (p && !$('#ntitle').value) { $('#ntitle').value = String(name || '').replace(/\.\w+$/, ''); dirPh(); } } });
+  const dirPh = () => { const b = BR.find(x => x.id === $('#nbrand').value); $('#ndir').placeholder = `Kho ${b ? (b.title || b.name) : 'Chung'} › Du an › ${$('#ntitle').value.trim() || 'tên video'}`; };
+  $('#ntitle').oninput = dirPh; dirPh();
+  $('#nbrand').onchange = () => { const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; vp.setBrand($('#nbrand').value); dirPh(); sum(); };
+  $('#nopts').onchange = sum; sum();
   $('#ngo').onclick = async () => {
-    if (!$('#npath').value.trim()) return toast('Chọn video trước');
-    const r = await api('/api/new', { video: $('#npath').value.trim(), dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
-      pack: document.querySelector('[name=npack]:checked')?.value || 'slate', title: $('#ntitle').value.trim(), orient: $('#norient').value });
+    if (!vp.value) return toast('Chọn video trước');
+    const pack = document.querySelector('[name=npack]:checked')?.value || 'slate';
+    ls.set('newPack', pack); ls.set('newModel', $('#nmodel').value);
+    const r = await api('/api/new', { video: vp.value, dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
+      pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined });
     if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
     modal(`<h3>Đang tạo dự án…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
     pollJob(j => { if (j.state === 'done') location.reload(); else modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`); });
   };
-});
+}
 function toast(m) {
   for (const o of document.querySelectorAll('.toast')) o.remove();
   const d = document.createElement('div'); d.className = 'toast'; d.innerHTML = `<i class="ti ti-info-circle"></i>${esc(m)}`; document.body.appendChild(d); setTimeout(() => d.remove(), 2400);
@@ -1116,7 +1206,7 @@ window.addEventListener('resize', fit);
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
-  $, esc, fmt, api, toast, modal, closeModal, pollJob, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
+  $, esc, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),
   _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback

@@ -292,6 +292,8 @@ async function main() {
     onRaw: res => fs.writeFileSync(path.join(dir, '.studio/ai_raw.txt'), res) });
   say(.92, 'Kiểm tra và sửa kết quả');
   const plan = validate(raw, ctx);
+  // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
+  try { const k = await (await import('./kho_media.mjs')).khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
   const out = path.resolve(dir, opt('--out', '.studio/ai_plan.json'));
   fs.writeFileSync(out, JSON.stringify(plan, null, 1));
   console.log(`plan: ${plan.pack} · ${plan.scenes.length} cảnh · ${plan.captions.length} dòng phụ đề sửa · ${plan.sfx.length} sfx · bỏ ${plan.dropped.length}`);

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { askJSON } from './llm.mjs';
 import { safeFetch } from './net_guard.mjs';
 import { videoArgs } from './encoder_cli.mjs';
+import { retryBusy, withFileLock } from './file_lock.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
@@ -104,7 +105,9 @@ const run = (cmd, a) => { const r = spawnSync(cmd, a, { encoding: 'utf8' }); if 
 const slug = s => fold(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'broll';
 export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur = 3, vertical = true, meta = {} } = {}) {
   const md = path.join(dir, 'media'); fs.mkdirSync(md, { recursive: true });
-  let base = `${slug(name)}`; for (let i = 1; fs.existsSync(path.join(md, base + (kind === 'video' ? '.mp4' : '.jpg'))); i++) base = `${slug(name)}_${i}`;
+  // S12 mục 2.2: file tải từ kho stock mang tiền tố nguồn stock_ (tab "Dự án này" gom theo tiền tố; nguồn/giấy phép ở credits.json)
+  const stem = `stock_${slug(name)}`; let base = stem;
+  for (let i = 1; fs.existsSync(path.join(md, base + (kind === 'video' ? '.mp4' : '.jpg'))) || fs.existsSync(path.join(md, base + '_frames')); i++) base = `${stem}_${i}`;
   const r = await safeFetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(120000) });
   if (!r.ok) throw new Error(`tải thất bại (${r.status})`);
   const tmp = path.join(os.tmpdir(), `avs_dl_${process.pid}_${Date.now()}`); fs.writeFileSync(tmp, Buffer.from(await r.arrayBuffer()));
@@ -131,9 +134,17 @@ export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur =
     return { name: base + '.jpg', path: `media/${base}.jpg`, kind: 'image', thumb: `media/${base}.jpg` };
   } finally { fs.rmSync(tmp, { force: true }); }
 }
-function credit(md, rec) {
-  const f = path.join(md, 'credits.json'); let c = []; try { c = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
-  c.push({ ...rec, at: new Date().toISOString() }); fs.writeFileSync(f, JSON.stringify(c, null, 1));
+// media/credits.json: dùng chung với scripts/kho_media.mjs (cùng khoá credits.json.lock: route và job chạy ở hai tiến trình);
+// ghi file mới rồi đổi tên (M54: dự án biến thể có thể liên kết cứng file của dự án gốc).
+export function credit(md, rec) {
+  const f = path.join(md, 'credits.json');
+  withFileLock(f + '.lock', () => {
+    let c = []; try { c = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+    if (!Array.isArray(c)) c = [];
+    if (rec.kho && c.some(x => x?.file === rec.file)) return;
+    c.push({ ...rec, at: new Date().toISOString() });
+    const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(c, null, 1)); retryBusy(() => fs.renameSync(t, f));
+  });
 }
 
 // ---------- AI suggestions (claude -p) ----------

@@ -4,7 +4,7 @@
 const RAIL = [['tpl', 'ti-layout-grid', 'Mẫu'], ['media', 'ti-photo-video', 'Media'], ['audio', 'ti-music', 'Âm thanh'], ['text', 'ti-letter-t', 'Chữ'],
   ['sticker', 'ti-mood-smile-beam', 'Sticker'], ['fx', 'ti-sparkles', 'Hiệu ứng'], ['trans', 'ti-transition-right', 'Chuyển cảnh'], ['filter', 'ti-color-filter', 'Bộ lọc'],
   ['comp', 'ti-stack-2', 'Thành phần']];
-let panel = 'media', mediaTab = 'mine', audioTab = 'music', tplCat = 'Tất cả', TEMPLATES = null, THUMBS = null, transDur = .4;
+let panel = 'media', mediaTab = 'kho', audioTab = 'music', tplCat = 'Tất cả', TEMPLATES = null, THUMBS = null, transDur = .4;
 const qOf = {};
 const TPL_CATS = ['Tất cả', 'Doanh nghiệp', 'BĐS', 'Khoá học', 'Review', 'Chia sẻ', 'Tin tức', 'Bán hàng', 'AI', 'Khác'];
 const STICKERS = '🔥 💯 🚀 ✨ ⭐ 🌟 💡 ❤️ 🧡 💙 💚 💜 😂 🤣 😍 🥰 🤩 🤯 😱 😎 🤔 🫣 😅 🥳 😭 😡 😴 🤑 👏 👍 👎 🙏 💪 🤝 👉 👀 🫶 👑 💎 🎉 🎯 🏆 🥇 📈 📉 💰 💸 🪙 🏠 🏡 🏢 🔑 📍 🗺️ 🛒 🛍️ 🎁 📦 🏷️ 📱 💻 🖥️ 🤖 🧠 ⚡ ✅ ❌ ⚠️ ❓ ❗ 💬 🗣️ 📣 🔔 🎬 🎵 🎤 📸 ⏰ 📅 📝 📚 🎓 ✍️ 📌 🔍 🔒 🧩 🎮 ☀️ 🌙 🌈 ☕ 🍀 🌸 🍕 🍔 🧋 ✈️ 🚗 🏖️ 💄 👗 🏋️ 🧘 🐶 🐱'.split(' ');
@@ -257,25 +257,87 @@ async function saveAsTemplate() {
   };
 }
 
-// ---------- Media ----------
-let MEDIA = [], BRES = [];
-async function MEDIA_LOAD() { MEDIA = await api('/api/media'); if (panel === 'media') renderPanel(); }
+// ---------- Media: tab Kho (tài nguyên của thương hiệu, S12 · M99) · Dự án này (media/) · B-roll động ----------
+let MEDIA = [], BRES = [], KHOM = null, khoGroup = '', khoBusy = '';
+// Mới mở dự án (hoặc dự án khác): đọc lại cả Kho, vì Kho đi theo thương hiệu của dự án
+async function MEDIA_LOAD() { MEDIA = await api('/api/media'); KHOM = null; if (panel === 'media') renderPanel(); }
+async function KHO_LOAD() {
+  try { KHOM = await api('/api/media/kho'); } catch { KHOM = { error: 'Không đọc được Kho' }; }
+  if (!KHOM || typeof KHOM !== 'object') KHOM = { error: 'Không đọc được Kho' };
+  if (panel === 'media' && mediaTab === 'kho') renderPanel();
+}
+const KHO_GROUPS = [['', 'Tất cả'], ['image', 'Ảnh'], ['broll', 'B-roll'], ['music', 'Nhạc'], ['source', 'Nguồn']];
+// Tiền tố nguồn của file trong media/ (docs/plans/S12-kho-du-an.md mục 2.2)
+const SRC_PREFIX = [['kho_', 'Từ Kho', 'ti-building-warehouse'], ['brand_', 'Thương hiệu', 'ti-badge'], ['lib_', 'Thư viện b-roll', 'ti-folder-heart'], ['stock_', 'Ảnh / video stock', 'ti-world-download'],
+  ['ai_', 'Ảnh AI', 'ti-sparkles'], ['sticker_', 'Sticker', 'ti-sticker'], ['', 'Tải thẳng vào dự án', 'ti-upload']];
+const srcOf = name => SRC_PREFIX.find(([p]) => p && name.startsWith(p)) || SRC_PREFIX.at(-1);
+const hovBtns = (kind, attr) => kind === 'audio' ? `<button data-${attr}="music"><i class="ti ti-plus"></i> Nhạc nền</button>`
+  : `<button data-${attr}="clip" title="Thêm vào track chính tại playhead"><i class="ti ti-plus"></i> Track chính</button><button data-${attr}="overlay" class="sub" title="Chèn làm lớp phủ (ảnh phủ lên video)"><i class="ti ti-stack-push"></i> Lớp phủ</button>`;
+const fsize = b => (!(b >= 0) ? '' : b >= 1 << 30 ? (b / (1 << 30)).toFixed(1) + ' GB' : b >= 1 << 20 ? Math.round(b / (1 << 20)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+function mediaCell(m) {
+  return `<div class="mcell" data-m="${MEDIA.indexOf(m)}" draggable="true" title="${esc(m.name)}">
+      <div class="th" data-dbg="${m.thumb ? esc('/project/' + encodeURI(m.thumb)) : ''}">${m.thumb ? '' : `<i class="ti ${m.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
+        ${m.dur ? `<span class="du">${fmt(m.dur).replace(/\.\d+$/, '')}</span>` : ''}${m.kind === 'image' ? '<span class="du"><i class="ti ti-photo"></i></span>' : ''}
+        <div class="hov">${hovBtns(m.kind, 'madd')}</div></div>
+      <div class="nm">${esc(m.name)}</div></div>`;
+}
+function khoCell(it, i) {
+  const th = it.kind === 'image' ? avsUrl('/api/media/kho/file?rel=' + encodeURIComponent(it.rel)) : '';
+  const ic = it.kind === 'image' ? 'ti-photo' : it.kind === 'video' ? 'ti-video' : 'ti-music';
+  return `<div class="mcell" data-k="${i}" draggable="true" title="${esc(it.rel)}">
+      <div class="th" data-dbg="${esc(th)}">${th ? '' : `<i class="ti ${it.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
+        ${it.used ? '<span class="kused" title="Đã có trong dự án (media/kho_*)"><i class="ti ti-check"></i></span>' : ''}
+        <span class="du"><i class="ti ${ic}"></i> ${fsize(it.size)}</span>
+        ${khoBusy === it.rel ? '<div class="kwait"><i class="ti ti-loader-2 spin"></i></div>' : `<div class="hov">${hovBtns(it.kind, 'kadd')}</div>`}</div>
+      <div class="nm">${esc(it.name)}</div></div>`;
+}
+const khoList = () => {
+  const q = query.toLowerCase().trim();
+  return (KHOM?.items || []).filter(it => (!khoGroup || it.group === khoGroup) && (!q || it.rel.toLowerCase().includes(q)));
+};
 function panelMedia() {
-  const seg = `<div class="seg">${[['mine', 'Của tôi'], ['broll', 'B-roll động']].map(([k, l]) => `<button data-mtab="${k}" class="${mediaTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const seg = `<div class="seg">${[['kho', 'Kho'], ['here', 'Dự án này'], ['broll', 'B-roll động']].map(([k, l]) => `<button data-mtab="${k}" class="${mediaTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (mediaTab === 'broll') {
     $('#libbody').innerHTML = seg + `<div class="help">Gõ chủ đề vào ô tìm rồi Enter (VD: “tiền”, “AI”, “nhà đẹp”). 9.080 b-roll động — bấm để chèn tại playhead.</div>
       <div class="bres">${BRES.map((b, i) => `<div data-b="${i}"><i class="ti ti-movie"></i><div><b>${esc(b.text || b.id)}</b><small>${esc(b.template)} · ${esc(b.id)}</small></div><i class="ti ti-plus add"></i></div>`).join('')}</div>`;
     return;
   }
-  const q = query.toLowerCase();
+  if (mediaTab === 'kho') {
+    $('#libact').innerHTML = '<button class="mini icon" data-kreload title="Đọc lại Kho"><i class="ti ti-refresh"></i></button>';
+    if (!KHOM) { $('#libbody').innerHTML = seg + '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang đọc Kho…</div>'; KHOM = { loading: true }; KHO_LOAD(); return; }
+    if (KHOM.loading) { $('#libbody').innerHTML = seg + '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang đọc Kho…</div>'; return; }
+    if (KHOM.error) { $('#libbody').innerHTML = seg + empty('ti-alert-triangle', 'Không đọc được Kho', esc(KHOM.error)); return; }
+    const k = KHOM.kho || {}, list = khoList(), all = KHOM.items || [];
+    const n = g => (g ? all.filter(it => it.group === g).length : all.length);
+    $('#libbody').innerHTML = seg + `<div class="khohead" title="${esc(k.root || '')}"><i class="ti ti-building-warehouse"></i><span>Kho <b>${esc(k.title || 'Chung')}</b></span><small>${all.length} file</small></div>
+      ${k.warning ? `<div class="help">${esc(k.warning)}</div>` : ''}
+      <div class="chips">${KHO_GROUPS.map(([g, l]) => `<button class="chip ${khoGroup === g ? 'on' : ''}" data-kg="${g}">${l} <span>${n(g)}</span></button>`).join('')}</div>
+      ${list.length ? `<div class="mgrid">${list.map(it => khoCell(it, all.indexOf(it))).join('')}</div><div class="help">Bấm hoặc kéo vào timeline: file được liên kết vào <b>media/</b> của dự án (không tốn thêm dung lượng).</div>`
+        : all.length ? empty('ti-filter-off', 'Không có file phù hợp', 'Chọn nhóm khác hoặc xoá ô tìm.')
+          : empty('ti-building-warehouse', 'Kho chưa có file', 'Thêm ảnh, b-roll, nhạc vào Kho ở bước 1 Chuẩn bị (hoặc chép thẳng vào thư mục Kho) rồi bấm làm mới.')}`;
+    return;
+  }
+  const q = query.toLowerCase(), list = MEDIA.filter(m => !q || m.name.toLowerCase().includes(q));
+  const groups = SRC_PREFIX.map(([p, l, ic]) => [l, ic, list.filter(m => srcOf(m.name)[0] === p)]).filter(g => g[2].length);
   $('#libbody').innerHTML = seg + `<label class="upl"><i class="ti ti-cloud-upload"></i><span><b>Nhập media</b><small>Ảnh, video, nhạc · hoặc kéo thả vào cửa sổ</small></span><input type="file" id="upl" multiple hidden accept="image/*,video/*,audio/*"></label>
-    <div class="mgrid">${MEDIA.filter(m => !q || m.name.toLowerCase().includes(q)).map((m, i) => `<div class="mcell" data-m="${MEDIA.indexOf(m)}" title="${esc(m.name)}">
-      <div class="th" data-dbg="${m.thumb ? esc('/project/' + encodeURI(m.thumb)) : ''}">${m.thumb ? '' : `<i class="ti ${m.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
-        ${m.dur ? `<span class="du">${fmt(m.dur).replace(/\.\d+$/, '')}</span>` : ''}${m.kind === 'image' ? '<span class="du"><i class="ti ti-photo"></i></span>' : ''}
-        <div class="hov">${m.kind === 'audio' ? '<button data-madd="music"><i class="ti ti-plus"></i> Nhạc nền</button>'
-          : '<button data-madd="clip" title="Thêm vào track chính tại playhead"><i class="ti ti-plus"></i> Track chính</button><button data-madd="overlay" class="sub" title="Chèn làm lớp phủ (ảnh phủ lên video)"><i class="ti ti-stack-push"></i> Lớp phủ</button>'}</div></div>
-      <div class="nm">${esc(m.name)}</div></div>`).join('') || ''}</div>${MEDIA.length ? '' : empty('ti-photo-plus', 'Chưa có media', 'Nhập ảnh hoặc video. Bấm vào một file để thêm vào track chính tại playhead.')}`;
+    ${groups.map(([l, ic, ms]) => `<div class="mgh"><i class="ti ${ic}"></i>${l}<span>${ms.length}</span></div><div class="mgrid">${ms.map(mediaCell).join('')}</div>`).join('')}
+    ${MEDIA.length ? (groups.length ? '' : empty('ti-filter-off', 'Không có file phù hợp', 'Xoá ô tìm.')) : empty('ti-photo-plus', 'Chưa có media', 'Nhập ảnh hoặc video, hoặc chèn từ tab Kho. Bấm vào một file để thêm vào track chính tại playhead.')}`;
   $('#upl').onchange = e => uploadFiles([...e.target.files]);
+}
+// Kho → media/kho_* (POST /api/media/kho/use) rồi chèn như file media thường. how: clip | overlay | music; at: giây (thả lên timeline)
+async function useKho(it, how, at) {
+  if (!it || khoBusy) return;
+  khoBusy = it.rel; if (panel === 'media') renderPanel();
+  if (it.kind === 'video' && !it.used) toast('Đang tách khung hình video…');
+  let m = null;
+  try { m = await api('/api/media/kho/use', { rel: it.rel }); } catch (e) { m = { error: e.message }; }
+  khoBusy = '';
+  if (!m || m.error) { if (panel === 'media') renderPanel(); return toast('Không chèn được: ' + (m?.error || 'lỗi')); }
+  it.used = m.path;
+  try { MEDIA = await api('/api/media'); } catch {}
+  if (at != null) setTime(at);
+  if (how === 'overlay' || how === 'music' || m.kind === 'audio') insertMedia(m); else insertMediaClip(m);
+  if (panel === 'media') renderPanel();
 }
 // Media → main track clip (default) or → overlay photo scene (old behaviour).
 function insertMediaClip(m) {
@@ -297,8 +359,26 @@ function insertMedia(m) {
 }
 async function uploadFiles(files) {
   for (const f of files) { toast('Đang tải ' + f.name + '…'); MEDIA = await (await fetch('/api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f })).json(); }
-  mediaTab = 'mine'; openPanel('media'); toast('Đã thêm ' + files.length + ' file');
+  mediaTab = 'here'; openPanel('media'); toast('Đã thêm ' + files.length + ' file');
 }
+// Kéo một ô của tab Kho / Dự án này thả lên timeline: chèn tại chỗ thả (ảnh/video vào track chính, nhạc vào nhạc nền)
+(() => {
+  const T_MED = 'text/x-avs-media';
+  $('#libbody').addEventListener('dragstart', e => {
+    const b = e.target.closest?.('.mcell[data-k],.mcell[data-m]'); if (!b) return;
+    e.dataTransfer.setData(T_MED, JSON.stringify(b.dataset.k != null ? { k: +b.dataset.k } : { m: +b.dataset.m })); e.dataTransfer.effectAllowed = 'copy';
+  });
+  $('#tlinner').addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes(T_MED)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  $('#tlinner').addEventListener('drop', e => {
+    if (![...e.dataTransfer.types].includes(T_MED)) return;
+    e.preventDefault(); e.stopPropagation();
+    let d; try { d = JSON.parse(e.dataTransfer.getData(T_MED)); } catch { return; }
+    const at = clamp((e.clientX - $('#tlinner').getBoundingClientRect().left) / PPS, 0, TL.duration);
+    if (d.k != null) return useKho(KHOM?.items?.[d.k], 'clip', at);
+    const m = MEDIA[d.m]; if (!m) return;
+    setTime(at); insertMediaClip(m);
+  });
+})();
 (() => {
   let dz = null;
   window.addEventListener('dragover', e => { if (![...e.dataTransfer.types].includes('Files')) return; e.preventDefault(); if (!dz) { dz = document.createElement('div'); dz.id = 'drop'; dz.innerHTML = '<i class="ti ti-cloud-upload"></i>Thả để thêm vào Media'; document.body.appendChild(dz); } });
@@ -434,7 +514,7 @@ function setFilter(i, preset, all) {
 }
 
 // ---------- panel events ----------
-$('#libact').addEventListener('click', e => { const b = e.target.closest('[data-tplact]'); if (!b) return; if (b.dataset.tplact === 'gallery') { TP.cat = tplCat; TP.q = query; TP.back = false; $('#tplpop')?.remove(); return openTplGallery(); } saveAsTemplate(); });
+$('#libact').addEventListener('click', e => { if (e.target.closest('[data-kreload]')) { KHOM = null; return renderPanel(); } const b = e.target.closest('[data-tplact]'); if (!b) return; if (b.dataset.tplact === 'gallery') { TP.cat = tplCat; TP.q = query; TP.back = false; $('#tplpop')?.remove(); return openTplGallery(); } saveAsTemplate(); });
 $('#libbody').addEventListener('click', async e => {
   const t = e.target, q = s => t.closest(s);
   let b;
@@ -449,6 +529,8 @@ $('#libbody').addEventListener('click', async e => {
   if ((b = q('[data-tpl]'))) { TP.back = false; return openTplDetail(b.dataset.tpl, tplFilter(tplCat, query)); }
   if ((b = q('[data-mtab]'))) { mediaTab = b.dataset.mtab; return renderPanel(); }
   if ((b = q('[data-atab]'))) { audioTab = b.dataset.atab; return renderPanel(); }
+  if ((b = q('[data-kg]'))) { khoGroup = b.dataset.kg; return renderPanel(); }
+  if ((b = q('[data-k]'))) { const how = q('[data-kadd]')?.dataset.kadd; return useKho(KHOM?.items?.[+b.dataset.k], how || 'clip'); }
   if ((b = q('[data-m]'))) {
     const m = MEDIA[+b.dataset.m], how = q('[data-madd]')?.dataset.madd;
     return how === 'overlay' || how === 'music' ? insertMedia(m) : insertMediaClip(m);
@@ -487,7 +569,7 @@ $('#libbody').addEventListener('input', e => {
 $('#libbody').addEventListener('dragstart', e => { const b = e.target.closest('[data-tr]'); if (b) { e.dataTransfer.setData('text/x-trans', b.dataset.tr); e.dataTransfer.effectAllowed = 'copy'; } });
 $('#search').addEventListener('input', e => { query = e.target.value; if (!(panel === 'media' && mediaTab === 'broll')) renderPanel(); });
 $('#search').addEventListener('keydown', async e => {
-  if (e.key !== 'Enter' || panel !== 'media') return;
+  if (e.key !== 'Enter' || panel !== 'media' || mediaTab === 'kho') return;
   mediaTab = 'broll'; $('#libbody').innerHTML = '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang tìm…</div>';
   BRES = await api('/api/broll?q=' + encodeURIComponent(query)); renderPanel();
 });

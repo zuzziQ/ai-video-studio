@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { openPath } from '../../scripts/platform.mjs';
+import { workspaceOfProject } from '../../scripts/workspace.mjs';
+import { deliveredKeys, deliveredOf, fileKey, inDelivered, listDelivered, writeBeside } from '../../scripts/kho_deliver.mjs';
 
 // Thông số tham khảo (11/2026) — nền tảng đổi thường xuyên, chỉ dùng để cảnh báo.
 export const PLATFORMS = {
@@ -52,14 +54,38 @@ export default ctx => async (req, res, p, u) => {
   if (!ctx.project) return J({ error: 'Chưa mở dự án' }, 400);
   const PUB = ctx.P('publish');
   // A rendered video file inside the project (an empty or folder path must not count: it would send the project folder to claude -p).
+  // S12 M100: Kho của dự án; video trong <Kho>/Thanh pham/ (đường dẫn tuyệt đối) cũng chọn được.
+  const kho = () => { try { return workspaceOfProject(ctx.project.dir, ctx.readProject().timeline); } catch { return null; } };
   const vid = rel => {
     if (typeof rel !== 'string' || !/\.(mp4|mov|m4v|webm)$/i.test(rel)) return null;
-    const f = ctx.under(ctx.project.dir, rel);
+    const ws = path.isAbsolute(rel) ? kho() : null;
+    const f = ws && inDelivered(ws, rel) ? path.resolve(rel) : ctx.under(ctx.project.dir, rel);
     try { return f && fs.statSync(f).isFile() ? f : null; } catch { return null; }
   };
+  // Video trong Thanh pham/ là của dự án này (sổ .studio/delivered.json) hay của dự án khác: AI chỉ viết nội dung từ lời
+  // thoại của dự án đang mở, nên video của dự án khác chỉ xem/kiểm/lên lịch được, không viết nội dung, không giao chữ.
+  const ownVideo = f => { const ws = kho(); return !ws || !inDelivered(ws, f) || deliveredKeys(ctx.project.dir).has(fileKey(f)); };
+  // S12 M100: nội dung đăng (mọi nền tảng, ghép từ publish/<nền tảng>.txt) đặt cạnh video trong Thanh pham/: "<tên> - nội dung đăng.txt".
+  // Video ở out/ chưa giao (tắt "Giao vào Thành phẩm") → không giao chữ. → đường dẫn hoặc null; lỗi chỉ ghi log.
+  function giveText(video) {
+    try {
+      const ws = kho(); if (!ws || typeof video !== 'string') return null;
+      const at = path.isAbsolute(video) ? (inDelivered(ws, video) && ownVideo(video) ? video : null) : deliveredOf(ctx.project.dir, video);
+      const doc = JSON.parse(fs.readFileSync(path.join(PUB, 'publish.json'), 'utf8'));
+      const txt = Object.keys(doc.platforms || {}).filter(k => PLATFORMS[k]).map(k => asText(PLATFORMS[k], doc.platforms[k])).join('\n\n');
+      if (!at || !txt) return null;
+      // Kho của chính bản giao (thư mục cha có .kho.json): brand kit đổi sau khi giao, hay lô giao theo Kho của thư mục lô
+      const own = workspaceOfProject(path.dirname(at)), home = own.found === 'kho' && inDelivered(own, at) ? own : ws;
+      return writeBeside(home, at, ' - nội dung đăng.txt', txt.replace(/\r?\n/g, '\r\n'));
+    } catch (e) { console.error('publish → Thanh pham:', e.message); return null; }
+  }
   if (p === '/api/publish/platforms') return J(Object.fromEntries(Object.entries(PLATFORMS).map(([k, v]) => [k, { name: v.name, note: v.note, maxDur: v.maxDur }])));
   if (p === '/api/publish/videos') {
-    const d = ctx.P('out'); const list = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.mp4') && !f.includes('.part.')).map(f => ({ path: `out/${f}`, mtime: fs.statSync(path.join(d, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime) : [];
+    // out/ của dự án (src 'out', kèm bản giao nếu có) + Thanh pham/ của Kho (src 'kho', đường dẫn tuyệt đối); bỏ trùng theo inode (liên kết cứng)
+    const d = ctx.P('out'); const list = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.mp4') && !f.includes('.part.')).map(f => ({ path: `out/${f}`, src: 'out', mtime: fs.statSync(path.join(d, f)).mtimeMs, delivered: deliveredOf(ctx.project.dir, `out/${f}`) || undefined })).sort((a, b) => b.mtime - a.mtime) : [];
+    const ws = kho(), seen = new Set(list.map(v => fileKey(ctx.P(v.path))));
+    const mine = deliveredKeys(ctx.project.dir);
+    if (ws) for (const v of listDelivered(ws, { max: 100 })) { const k = fileKey(v.file); if (!seen.has(k)) { seen.add(k); list.push({ path: v.file, src: 'kho', name: v.rel, mtime: v.mtime, own: mine.has(k) }); } }
     return J(list);
   }
   if (p === '/api/publish/check') {
@@ -75,6 +101,7 @@ export default ctx => async (req, res, p, u) => {
   const b = await ctx.body(req);
   if (p === '/api/publish/gen') {
     const f = vid(b.video); if (!f) return J({ error: 'Chọn video đã xuất trước' }, 400);
+    if (!ownVideo(f)) return J({ error: 'Video này của dự án khác trong Thành phẩm: mở dự án đó để AI viết nội dung đăng' }, 400);
     const plats = (b.platforms || Object.keys(PLATFORMS)).filter(k => PLATFORMS[k]);
     const ok = ctx.startJob('publish', async () => {
       // prompt + claude -p + publish/*.txt live in scripts/publish_texts.mjs (shared with scripts/autopilot.mjs)
@@ -83,6 +110,7 @@ export default ctx => async (req, res, p, u) => {
       ctx.job.step = 'AI đang viết nội dung (claude -p)…'; ctx.job.progress = .15;
       await generatePublish({ dir: ctx.project.dir, tl, captions, videoAbs: f, videoRel: b.video, platforms: plats, notes: b.notes, model: b.model || 'sonnet', onProc: pr => { ctx.job.proc = pr; } });
       ctx.job.out = 'publish/publish.json';
+      ctx.job.delivered = giveText(b.video);
     });
     return J(ok ? { ok: true } : { error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409);
   }
@@ -93,7 +121,7 @@ export default ctx => async (req, res, p, u) => {
     if (!PLATFORMS[b.platform]) return J({ error: 'nền tảng lạ' }, 400);
     doc.platforms[b.platform] = { ...(doc.platforms[b.platform] || {}), ...b.data };
     fs.writeFileSync(f, JSON.stringify(doc, null, 1)); fs.writeFileSync(path.join(PUB, `${b.platform}.txt`), asText(PLATFORMS[b.platform], doc.platforms[b.platform]));
-    return J({ ok: true, file: `publish/${b.platform}.txt` });
+    return J({ ok: true, file: `publish/${b.platform}.txt`, delivered: giveText(doc.video) || undefined });
   }
   if (p === '/api/publish/cover') {
     // full-size still (render.mjs --still) → publish/cover_<t>s.jpg
@@ -111,6 +139,7 @@ export default ctx => async (req, res, p, u) => {
       ok(e ? J({ error: 'Không render được ảnh bìa: ' + shortErr(se, 'render lỗi') }, 500) : J({ out: path.relative(ctx.project.dir, out), url: '/project/' + path.relative(ctx.project.dir, out) + '?' + Date.now() }));
     }));
   }
+  if (p === '/api/publish/reveal') { const f = vid(b.video); if (f) (await import('../../scripts/platform.mjs')).revealPath(f); return J({ ok: !!f }); }
   if (p === '/api/publish/open') {
     const P = PLATFORMS[b.platform]; if (!P) return J({ error: 'nền tảng lạ' }, 400);
     openPath(P.url); return J({ ok: true, url: P.url });

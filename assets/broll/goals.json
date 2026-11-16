@@ -10,6 +10,7 @@
   "logo": "Logo công cụ được nhắc tên",
   "aroll": "Hiệu ứng trên chính clip (đẩy cận, nhấn, đen trắng)",
   "media": "Ảnh/clip của dự án",
+  "kho": "Kho của thương hiệu (BRoll/, Anh/; đi cùng nguồn Ảnh/clip của dự án)",
   "lib": "Thư viện b-roll của tôi",
   "aiimg": "Ảnh AI tự tạo (cần key OpenAI/Gemini)"
  },

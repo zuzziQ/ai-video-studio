@@ -216,8 +216,13 @@ function still(t, dest) {
     fs.mkdirSync(P('out'), { recursive: true });
     const out = dest || `out/cover_${String(t).replace('.', '_')}s.jpg`;
     const abs = path.isAbsolute(out) ? out : P(out);
-    execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, abs, '--still', String(t), abs], (e, so, se) => {
+    // Render to a temp name, then rename: the old file may be hard-linked into Thanh pham/ (M100) and ffmpeg -y would
+    // overwrite that delivered copy in place; a failed render also keeps the old cover.
+    const part = abs.replace(/(\.\w+)?$/, '.part$1');
+    execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, part, '--still', String(t), part], (e, so, se) => {
       fs.rmSync(tmp, { force: true });
+      if (!e) try { fs.renameSync(part, abs); } catch (er) { e = er; }
+      fs.rmSync(part, { force: true });
       // Short reason for the user (render.mjs's last stderr line), never the command line or a Node stack with machine paths.
       if (e) console.error('still:', e.message);
       e ? bad(Object.assign(new Error('Không chụp được khung hình: ' + shortErr(se, 'render lỗi')), { status: 500 })) : ok(out);
@@ -283,7 +288,7 @@ function run(cmd, argv, onLine) {
     });
   });
 }
-async function exportVideo({ quality = '1080', from, to, aspects, profile }) {
+async function exportVideo({ quality = '1080', from, to, aspects, profile, deliver: give }) {
   const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
   // Missing source files (project moved / work/ deleted): say which one instead of a python/node stack trace.
   for (const f of [tl.aroll?.frames && path.dirname(tl.aroll.frames), tl.audio?.voice]) if (f && !fs.existsSync(P(f))) throw new Error(`Thiếu file nguồn: ${f} — dự án bị di chuyển hoặc đã xoá thư mục work/`);
@@ -301,6 +306,7 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile }) {
   }
   fs.mkdirSync(P('out'), { recursive: true });
   const out = `out/${path.basename(project.dir)}_${stamp()}.mp4`;
+  fs.rmSync(P(out), { force: true }); // same minute, same name: never render over a copy already hard-linked into Thanh pham/ (M100)
   job.step = 'Render khung hình';
   const total = (to ?? tl.duration) - (from ?? 0);
   // render.mjs resolves media against the timeline's folder, so the temp copy lives next to it via a relative symlink-free path.
@@ -322,6 +328,22 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile }) {
     const r = await deriveAspects(P(out), aspects, { run, py: PY, onStep: s => { job.step = s; job.progress = 0; }, onProgress: k => { job.progress = Math.min(.99, k); } });
     job.outs = [{ aspect: r.native, out, note: 'Bản gốc (render thật)' }, ...r.outs.map(o => ({ ...o, out: path.relative(project.dir, o.out) }))];
   }
+  // S12 M100: bản giao vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng). Lỗi giao không làm hỏng bản đã xuất trong out/.
+  if (give !== false) {
+    job.step = 'Giao vào Thành phẩm';
+    await deliverFiles(job, () => (job.outs || [{ out }]).map((o, i) => ({ src: P(o.out), ...(i ? { aspect: o.aspect } : { w: vert ? W : H, h: vert ? H : W }) })), tl, { range: { from, to } });
+  }
+}
+// async: copying to a Kho on another drive must not block the server (job polling, preview)
+async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
+  try {
+    const K = await import(pathToFileURL(path.join(SKILL, 'scripts/kho_deliver.mjs')).href);
+    const list = typeof outs === 'function' ? outs() : outs; // built inside the try: a bad entry fails the delivery, not the export
+    const r = files ? await K.deliverProjectAsync(project.dir, list, { tl }) : await K.deliverExportsAsync(project.dir, list, { tl, range });
+    into.delivered = r.items.filter(x => x.dst).map(x => x.dst); into.deliveredDir = r.dir;
+    const bad = r.items.find(x => x.error); if (bad) into.deliverError = bad.error;
+  } catch (e) { into.deliverError = e.message; console.error('deliver:', e.message); }
+  return into;
 }
 // "Video mới" pipeline lives in scripts/new_project.mjs (shared with scripts/autopilot.mjs).
 async function newProject(o) {
@@ -463,6 +485,7 @@ const server = http.createServer(async (req, res) => {
       if (b.quality != null && !['720', '1080', '4k'].includes(String(b.quality))) return json(res, { ok: false, error: 'Chất lượng phải là 720, 1080 hoặc 4k' }, 400);
       if (!num(b.from) || !num(b.to) || (b.from != null && b.to != null && b.to <= b.from)) return json(res, { ok: false, error: 'Đoạn xuất (from/to) không hợp lệ' }, 400);
       if (b.aspects != null && !Array.isArray(b.aspects)) return json(res, { ok: false, error: 'aspects phải là danh sách' }, 400);
+      if (b.deliver != null && typeof b.deliver !== 'boolean') return json(res, { ok: false, error: 'deliver phải là true/false' }, 400);
       const ok = startJob('export', exportVideo, { ...b, quality: b.quality == null ? undefined : String(b.quality) });
       return json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409);
     }
@@ -479,10 +502,17 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/media') return json(res, mediaList());
     if (p === '/api/upload' && req.method === 'POST') { await upload(req, u.searchParams.get('name') || 'file.bin'); return json(res, mediaList()); }
     // Writing files: POST only (M37).
-    if (p === '/api/still' && req.method === 'POST') { const b = await body(req); return still(Math.max(0, +b.t || 0)).then(out => json(res, { out })).catch(e => json(res, { error: e.message }, e.status || 500)); }
+    // b.deliver: giao kèm vào Thanh pham/ của Kho (S12 M100)
+    if (p === '/api/still' && req.method === 'POST') {
+      const b = await body(req), t = Math.max(0, +b.t || 0);
+      return still(t).then(async out => json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, { files: true }) : { out }))
+        .catch(e => json(res, { error: e.message }, e.status || 500));
+    }
     if (p === '/api/srt' && req.method === 'POST') {
-      const { captions } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
-      const out = `out/${path.basename(project.dir)}.srt`; fs.writeFileSync(P(out), srt(captions)); return json(res, { out });
+      const b = await body(req), { captions, timeline } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
+      // a delivered .srt is a hard link to this file: write a new file (rm, then write), never in place
+      const out = `out/${path.basename(project.dir)}.srt`; fs.rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
+      return json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)}.srt` }], timeline, { files: true }) : { out });
     }
     if (p === '/api/job') return json(res, job ? { ...job, proc: undefined } : null);
     if (p === '/api/job/cancel' && req.method === 'POST') { if (job?.state === 'running') job.cancelled = true; killTree(job?.proc); return json(res, { ok: true }); }
