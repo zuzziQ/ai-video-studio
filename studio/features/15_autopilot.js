@@ -5,41 +5,45 @@
   const S = { st: null, profile: '', path: '', uploading: null, open: {}, sig: '' };
   const css = document.createElement('style');
   css.textContent = `
-  .ap-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
-  .ap-card h4 { margin: 0 0 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; color: var(--tx); }
+  .ap-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .ap-card h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); display: flex; align-items: center; gap: var(--space-2); color: rgb(var(--color-fg)); }
   .ap-card h4 .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ap-card h4 .r { flex: none; margin-left: auto; font-weight: 500; color: var(--tx3); font-size: 11px; }
-  .ap-drop { border: 1.5px dashed var(--line3); border-radius: 10px; padding: 22px 12px; text-align: center; color: var(--tx2); cursor: pointer; transition: .15s; }
-  .ap-drop i.big { font-size: 34px; color: var(--acc); display: block; margin-bottom: 6px; }
-  .ap-drop b { display: block; font-size: 13.5px; color: var(--tx); margin-bottom: 3px; }
-  .ap-drop small { font-size: 11px; color: var(--tx3); }
-  .ap-drop.over, .ap-drop:hover { border-color: var(--acc); background: var(--acc-soft); }
-  .ap-row2 { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; align-items: center; margin-top: 8px; }
-  .ap-lbl { font-size: 10.5px; color: var(--tx3); display: block; margin: 8px 0 3px; }
-  .ap-steps { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
-  .ap-step { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: 6px; align-items: start; font-size: 11.5px; color: var(--tx2); }
-  .ap-step small { display: block; color: var(--tx3); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ap-step .s { color: var(--tx3); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-  .ap-step.done i { color: var(--ok); } .ap-step.warn i { color: var(--warn); } .ap-step.error i { color: var(--bad); } .ap-step.running { color: var(--tx); } .ap-step.running i { color: var(--acc); }
+  .ap-card h4 .r { flex: none; margin-left: auto; font-weight: 500; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .ap-drop { border: 1.5px dashed rgb(var(--color-line-hover)); border-radius: var(--radius-card); padding: var(--space-5) var(--space-3); text-align: center; color: rgb(var(--color-fg-muted)); cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+  .ap-drop i.big { font-size: 32px; color: rgb(var(--color-accent-text)); display: block; margin-bottom: var(--space-2); }
+  .ap-drop b { display: block; font-size: var(--text-sm); color: rgb(var(--color-fg)); margin-bottom: var(--space-1); }
+  .ap-drop small { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+  .ap-drop.over, .ap-drop:hover { border-color: rgb(var(--color-accent-text)); background: rgb(var(--color-accent-soft) / .24); }
+  .ap-row2 { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--space-2); align-items: center; margin-top: var(--space-2); } .ap-row2.ap-t1 { margin-top: var(--space-1); }
+  .ap-lbl { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin: var(--space-2) 0 var(--space-1); }
+  .ap-min { min-width: 0; }
+  .help.ap-m0 { margin: 0; } .help.ap-t1 { margin-top: var(--space-1); } .help.ap-mt { margin: var(--space-2) 0 0; } .help.ap-mt1 { margin: var(--space-1) 0 0; } .help.ap-mb { margin: 0 0 var(--space-1); }
+  .ap-sep { border-top: 1px solid rgb(var(--color-line)); padding-top: var(--space-2); margin-top: var(--space-2); }
+  .ap-steps { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); }
+  .ap-step { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: var(--space-2); align-items: start; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
+  .ap-step small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ap-step .s { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+  .ap-step.done i { color: rgb(var(--color-success)); } .ap-step.warn i { color: rgb(var(--color-warning)); } .ap-step.error i { color: rgb(var(--color-danger)); } .ap-step.running { color: rgb(var(--color-fg)); } .ap-step.running i { color: rgb(var(--color-accent-text)); }
   .ap-step.skipped { opacity: .55; }
-  .ap-bar { height: 4px; background: var(--bg4); border-radius: 3px; overflow: hidden; margin-top: 6px; } .ap-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--acc2), var(--wave)); transition: width .4s; }
-  .ap-it { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; gap: 6px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 11.5px; }
+  .ap-bar { height: var(--space-1); background: rgb(var(--color-surface-hover)); border-radius: var(--radius-pill); overflow: hidden; margin-top: var(--space-2); } .ap-bar i { display: block; height: 100%; width: var(--w, 0%); background: linear-gradient(90deg, rgb(var(--color-accent-text)), rgb(var(--color-audio))); transition: width var(--duration-slow) var(--ease-standard); }
+  .ap-it { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); font-size: var(--text-xs); }
   .ap-it .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .ap-it .st { color: var(--tx3); font-size: 10.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap-it .st.err { color: var(--bad); }
-  .ap-it .b { display: flex; gap: 1px; } .ap-it .b button { width: 24px; height: 24px; padding: 0; justify-content: center; }
-  .ap-ok { color: var(--ok); } .ap-bad { color: var(--bad); } .ap-run { color: var(--acc); } .ap-warn { color: var(--warn); } .ap-it .st.stop { color: var(--warn); }
-  .ap-tog { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 6px 0; cursor: pointer; } .ap-tog input { width: auto; margin: 0; }
-  .ap-tog small { display: block; color: var(--tx3); font-size: 10.5px; }
-  .ap-fold { display: grid; grid-template-columns: minmax(0,1fr) 28px; gap: 4px; align-items: center; margin-bottom: 4px; } .ap-fold input { font-size: 11px; height: 28px; }
-  .ap-fold button { width: 28px; height: 28px; padding: 0; justify-content: center; }
-  .ap-prof { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
-  .ap-prof .nm { font-weight: 600; } .ap-prof small { display: block; color: var(--tx3); font-size: 10.5px; }
-  .ap-prof .b { display: flex; gap: 1px; } .ap-prof .b button { width: 24px; height: 24px; padding: 0; justify-content: center; }
-  .ap-learn { font-size: 11px; color: var(--tx2); margin: 4px 0 0 0; padding-left: 16px; } .ap-learn li { margin: 2px 0; }
-  .ap-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; } .ap-form label { font-size: 10.5px; color: var(--tx3); display: block; margin-bottom: 2px; }
-  .ap-form .full { grid-column: 1 / 3; } .ap-form .chk { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; } .ap-form .chk label { display: flex; gap: 4px; align-items: center; color: var(--tx2); font-size: 11.5px; margin: 0; }
+  .ap-it .st { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap-it .st.err { color: rgb(var(--color-danger)); }
+  .ap-it .b, .ap-prof .b { display: flex; gap: 1px; } .ap-it .b button, .ap-prof .b button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
+  .ap-ok { color: rgb(var(--color-success)); } .ap-bad { color: rgb(var(--color-danger)); } .ap-run { color: rgb(var(--color-accent-text)); } .ap-warn { color: rgb(var(--color-warning)); } .ap-it .st.stop { color: rgb(var(--color-warning)); }
+  .ap-tog { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); margin: var(--space-2) 0; cursor: pointer; } .ap-tog.ap-t3 { margin-top: var(--space-3); } .ap-tog input { width: auto; margin: 0; }
+  .ap-tog small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .ap-fold { display: grid; grid-template-columns: minmax(0,1fr) var(--h-sm); gap: var(--space-1); align-items: center; margin-bottom: var(--space-1); } .ap-fold input { font-size: var(--text-2xs); height: var(--h-sm); }
+  .ap-fold button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
+  .ap-prof { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); font-size: var(--text-xs); }
+  .ap-prof .nm { font-weight: 600; } .ap-prof small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .ap-learn { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); margin: var(--space-1) 0 0 0; padding-left: var(--space-4); } .ap-learn li { margin: var(--space-050) 0; }
+  .ap-form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); } .ap-form label { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin-bottom: var(--space-050); }
+  .ap-form .full { grid-column: 1 / 3; } .ap-form .chk { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); } .ap-form .chk label { display: flex; gap: var(--space-1); align-items: center; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); margin: 0; }
   .ap-form .chk input { width: auto; margin: 0; } .ap-form input[type=time] { color-scheme: dark; }
-  #ap-topbtn .pct { font-size: 10.5px; color: var(--acc); margin-left: 4px; font-variant-numeric: tabular-nums; }`;
+  #ap-topbtn .pct { font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); margin-left: var(--space-1); font-variant-numeric: tabular-nums; }`;
+  // Data-driven width of the progress bar arrives as data-v="--w:40%" and is set with style.setProperty after insert.
+  const applyVars = root => (root || document).querySelectorAll('[data-v]').forEach(el => el.dataset.v.split(';').forEach(p => { const i = p.indexOf(':'); if (i > 0) el.style.setProperty(p.slice(0, i).trim(), p.slice(i + 1).trim()); }));
   document.head.appendChild(css);
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'autopilot';
   const api = (u, b) => Studio.api(u, b);
@@ -73,7 +77,7 @@
     if (!S.st) { $('#libbody').innerHTML = '<div class="help">Đang tải…</div>'; return; }
     const st = S.st;
     $('#libbody').innerHTML = `
-    <div class="help" style="margin-top:4px">Thả video thô → Studio tự làm hết: phụ đề, cắt lỗi nói, AI dựng, b-roll, SFX + nhạc, xuất MP4, ảnh bìa, nội dung đăng. Chạy nền, bạn vẫn sửa video khác được.</div>
+    <div class="help ap-t1">Thả video thô → Studio tự làm hết: phụ đề, cắt lỗi nói, AI dựng, b-roll, SFX + nhạc, xuất MP4, ảnh bìa, nội dung đăng. Chạy nền, bạn vẫn sửa video khác được.</div>
     <div class="ap-drop" id="ap-drop"><i class="ti ti-rocket big"></i><b>Thả video vào đây để tự dựng</b><small>mp4 · mov · m4v · mkv — có thể thả nhiều file</small>
       <input type="file" id="ap-file" accept="video/*,.mov,.mkv,.m4v" multiple hidden></div>
     <div id="ap-upl"></div>
@@ -90,7 +94,7 @@
     const steps = S.st.steps, ss = it.steps || {};
     return `<div class="ap-steps">${steps.map(s => {
       const x = ss[s.id] || {}, state = x.state || 'queued';
-      return `<div class="ap-step ${state}"><i class="ti ${ICON[state] || ICON.queued}"></i><div style="min-width:0">${esc(s.label)}${x.msg || x.detail ? `<small title="${esc(x.msg || x.detail)}">${esc(x.msg || x.detail)}</small>` : ''}</div><span class="s">${x.sec != null ? (x.sec < 10 ? x.sec.toFixed(1) : Math.round(x.sec)) + 's' : ''}</span></div>`;
+      return `<div class="ap-step ${state}"><i class="ti ${ICON[state] || ICON.queued}"></i><div class="ap-min">${esc(s.label)}${x.msg || x.detail ? `<small title="${esc(x.msg || x.detail)}">${esc(x.msg || x.detail)}</small>` : ''}</div><span class="s">${x.sec != null ? (x.sec < 10 ? x.sec.toFixed(1) : Math.round(x.sec)) + 's' : ''}</span></div>`;
     }).join('')}</div>`;
   }
   // Live list is rebuilt (innerHTML) on every change, ~1.5 s while a job runs. A rebuild between mouse-down and mouse-up loses
@@ -110,14 +114,14 @@
       : r.active ? '' : r.lock ? `Hàng đợi đang do tiến trình khác chạy (${r.lock.role === 'agent' ? 'chạy nền khi tắt app' : r.lock.role}, pid ${r.lock.pid})` : 'Đang khởi động hàng đợi…';
     box.innerHTML = `
     ${run ? `<div class="ap-card"><h4><i class="ti ti-loader-2 spin ap-run"></i><span class="t" title="${esc(run.input)}">Đang làm: ${esc(run.title)}</span><span class="r">${Math.round((run.progress || 0) * 100)}%</span></h4>
-      <div class="help" style="margin:0" title="${esc(run.step)}">${esc((run.step || '').slice(0, 120))}</div><div class="ap-bar"><i style="width:${Math.round((run.progress || 0) * 100)}%"></i></div>
+      <div class="help ap-m0" title="${esc(run.step)}">${esc((run.step || '').slice(0, 120))}</div><div class="ap-bar"><i data-v="--w:${Math.round((run.progress || 0) * 100)}%"></i></div>
       ${run.kind === 'autopilot' ? stepList(run) : ''}
-      ${run.learnedApplied?.length ? `<div class="help" style="margin:6px 0 0"><i class="ti ti-school"></i> Đã áp điều học được: ${esc(run.learnedApplied.length)} điều chỉnh</div>` : ''}
+      ${run.learnedApplied?.length ? `<div class="help ap-mt"><i class="ti ti-school"></i> Đã áp điều học được: ${esc(run.learnedApplied.length)} điều chỉnh</div>` : ''}
       <div class="acts"><button class="danger" data-act="cancel" data-id="${run.id}"><i class="ti ti-player-stop"></i> Huỷ</button></div></div>` : ''}
     <div class="ap-card"><h4><i class="ti ti-list-details"></i>Hàng đợi<span class="r">${items.filter(i => i.state === 'queued').length} chờ · ${items.filter(i => i.state === 'done').length} xong</span></h4>
-      ${runnerNote ? `<div class="help" style="margin:0 0 4px">${esc(runnerNote)}</div>` : ''}
-      ${!items.length ? '<div class="help" style="margin:0">Chưa có việc nào. Thả video ở trên hoặc vào thư mục tự động.</div>' : items.map((it, k) => `<div class="ap-it"><i class="ti ${ICON[it.state] || ''}"></i>
-        <div style="min-width:0"><span class="nm" title="${esc(it.input)}">${esc(it.title)}</span>
+      ${runnerNote ? `<div class="help ap-mb">${esc(runnerNote)}</div>` : ''}
+      ${!items.length ? '<div class="help ap-m0">Chưa có việc nào. Thả video ở trên hoặc vào thư mục tự động.</div>' : items.map((it, k) => `<div class="ap-it"><i class="ti ${ICON[it.state] || ''}"></i>
+        <div class="ap-min"><span class="nm" title="${esc(it.input)}">${esc(it.title)}</span>
           <span class="st ${it.state === 'error' ? 'err' : ['cancelled', 'paused'].includes(it.state) ? 'stop' : ''}" title="${esc(it.error || it.step || '')}">${esc(KNAME[it.kind] || it.kind)} · ${esc(SRC[it.source] || '')}${it.state === 'error' ? ' — ' + esc(it.error || '') : it.state === 'running' ? ` · ${Math.round((it.progress || 0) * 100)}%` : it.state === 'done' && it.result?.seconds ? ` · xong trong ${it.result.seconds}s` : (it.state === 'queued' && it.attempt) || ['cancelled', 'paused'].includes(it.state) ? ' · ' + esc(it.step || (it.state === 'paused' ? 'Tạm dừng' : 'Đã huỷ')) : ''}</span></div>
         <div class="b">
           ${it.state === 'queued' ? `<button class="icon" title="Lên" data-act="up" data-id="${it.id}" ${k === 0 ? 'disabled' : ''}><i class="ti ti-arrow-up"></i></button><button class="icon" title="Xuống" data-act="down" data-id="${it.id}"><i class="ti ti-arrow-down"></i></button>` : ''}
@@ -128,6 +132,7 @@
           ${['queued', 'running'].includes(it.state) ? `<button class="icon" title="Huỷ" data-act="cancel" data-id="${it.id}"><i class="ti ti-x"></i></button>` : `<button class="icon" title="Xoá khỏi danh sách" data-act="remove" data-id="${it.id}"><i class="ti ti-trash"></i></button>`}
         </div></div>`).join('')}
       ${items.some(i => ['done', 'cancelled', 'error'].includes(i.state)) ? `<div class="acts">${items.some(i => ['done', 'cancelled'].includes(i.state)) ? '<button id="ap-clear"><i class="ti ti-clear-all"></i> Xoá việc đã xong</button>' : ''}${items.some(i => i.state === 'error') ? `<button class="danger" id="ap-clear-err"><i class="ti ti-trash-x"></i> Xoá mục lỗi (${items.filter(i => i.state === 'error').length})</button>` : ''}</div>` : ''}</div>`;
+    applyVars(box);
     box.querySelectorAll('[data-act]').forEach(b => (b.onclick = () => itemAct(b.dataset.id, b.dataset.act)));
     box.querySelectorAll('[data-play]').forEach(b => (b.onclick = () => b.dataset.play && api('/api/autopilot/reveal', { path: b.dataset.play })));
     if ($('#ap-clear')) $('#ap-clear').onclick = async () => { await api('/api/autopilot/clear', {}); refresh(true); };
@@ -137,18 +142,18 @@
     const st = S.st, w = st.settings.watch, ag = st.runner.agent || {};
     $('#ap-watch').innerHTML = `<div class="ap-card"><h4><i class="ti ti-folder-bolt"></i>Thư mục tự động</h4>
       <label class="ap-tog"><input type="checkbox" id="ap-won" ${w.on ? 'checked' : ''}><span>Tự dựng mọi video thả vào thư mục<small>Video đứng yên 5 giây (đã chép xong) mới được nhận. Bản gốc chuyển sang “Đã xử lý”.</small></span></label>
-      ${w.folders.map((f, i) => `<div style="${i ? 'border-top:1px solid var(--line);padding-top:6px;margin-top:6px' : ''}">
+      ${w.folders.map((f, i) => `<div class="${i ? 'ap-sep' : ''}">
         <label class="ap-lbl">Thả video vào</label><div class="ap-fold"><input data-wf="${i}" data-k="in" value="${esc(f.in)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.in)}"><i class="ti ti-external-link"></i></button></div>
         <label class="ap-lbl">Kết quả (MP4, ảnh bìa, nội dung đăng)</label><div class="ap-fold"><input data-wf="${i}" data-k="done" value="${esc(f.done)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.done)}"><i class="ti ti-external-link"></i></button></div>
         <label class="ap-lbl">Bản gốc đã xử lý</label><div class="ap-fold"><input data-wf="${i}" data-k="processed" value="${esc(f.processed)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.processed)}"><i class="ti ti-external-link"></i></button></div>
-        <div class="ap-row2" style="margin-top:4px"><select data-wf="${i}" data-k="profile"><option value="">Hồ sơ mặc định</option>${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === f.profile ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+        <div class="ap-row2 ap-t1"><select data-wf="${i}" data-k="profile"><option value="">Hồ sơ mặc định</option>${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === f.profile ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
           ${w.folders.length > 1 ? `<button class="icon" title="Bỏ thư mục này" data-wdel="${i}"><i class="ti ti-trash"></i></button>` : '<span></span>'}</div></div>`).join('')}
       <div class="acts"><button id="ap-wadd"><i class="ti ti-folder-plus"></i> Thêm thư mục (cho hồ sơ khác)</button><button class="primary" id="ap-wsave"><i class="ti ti-device-floppy"></i> Lưu</button></div>
       ${st.runner.watchError ? `<div class="help ap-bad">${esc(st.runner.watchError)}</div>` : ''}
-      <label class="ap-tog" style="margin-top:10px"><input type="checkbox" id="ap-agent" ${st.settings.agent || ag.installed ? 'checked' : ''}><span>Chạy cả khi tắt app<small>Cài một tác vụ nền macOS (LaunchAgent ${ag.installed ? '— đã cài' : ''}). Bỏ chọn để gỡ.</small></span></label>
+      <label class="ap-tog ap-t3"><input type="checkbox" id="ap-agent" ${st.settings.agent || ag.installed ? 'checked' : ''}><span>Chạy cả khi tắt app<small>Cài một tác vụ nền macOS (LaunchAgent ${ag.installed ? '— đã cài' : ''}). Bỏ chọn để gỡ.</small></span></label>
       <label class="ap-tog"><input type="checkbox" id="ap-notify" ${st.settings.notify ? 'checked' : ''}><span>Thông báo macOS khi xong / lỗi</span></label>
       <label class="ap-tog"><input type="checkbox" id="ap-appdrop" ${st.settings.appDrop ? 'checked' : ''}><span>Thả vào app = tự lái<small>Thả video vào biểu tượng AI Video Studio → đưa thẳng vào hàng đợi Tự lái (thay vì chỉ tạo dự án).</small></span></label>
-      ${st.runner.due ? `<div class="help" style="margin:4px 0 0">Lịch đăng: ${st.runner.due.skipped ? esc(st.runner.due.skipped) : `kiểm tra lúc ${new Date(st.runner.due.at).toLocaleTimeString('vi-VN')}${st.runner.due.msg ? ' — ' + esc(st.runner.due.msg) : ''}`}</div>` : ''}</div>`;
+      ${st.runner.due ? `<div class="help ap-mt1">Lịch đăng: ${st.runner.due.skipped ? esc(st.runner.due.skipped) : `kiểm tra lúc ${new Date(st.runner.due.at).toLocaleTimeString('vi-VN')}${st.runner.due.msg ? ' — ' + esc(st.runner.due.msg) : ''}`}</div>` : ''}</div>`;
     const W = $('#ap-watch');
     const folders = () => { const f = JSON.parse(JSON.stringify(S.st.settings.watch.folders)); W.querySelectorAll('[data-wf]').forEach(el => (f[+el.dataset.wf][el.dataset.k] = el.value.trim())); return f; };
     const saveW = async (patch) => { const r = await api('/api/autopilot/settings', patch); if (r.error) return Studio.toast(r.error); S.st.settings = r.settings; return r; };
@@ -169,7 +174,7 @@
   function renderProfiles() {
     const P = profiles(), learn = S.st.learn, proj = S.st.project;
     $('#ap-profiles').innerHTML = `<div class="ap-card"><h4><i class="ti ti-id-badge-2"></i>Hồ sơ kênh<span class="r">${P.length}</span></h4>
-      ${P.map(p => `<div class="ap-prof"><div style="min-width:0"><span class="nm">${p.id === defProfile() ? '<i class="ti ti-star-filled" style="color:var(--warn)"></i> ' : ''}${esc(p.name)}</span>
+      ${P.map(p => `<div class="ap-prof"><div class="ap-min"><span class="nm">${p.id === defProfile() ? '<i class="ti ti-star-filled ap-warn"></i> ' : ''}${esc(p.name)}</span>
         <small>${esc([p.pack === 'auto' ? 'AI chọn gói' : 'gói ' + p.pack, p.template ? 'mẫu ' + p.template : '', 'b-roll ' + p.broll_density, 'âm thanh ' + p.sound, (p.aspects || []).join('+'), p.whisper].filter(Boolean).join(' · '))}</small>
         ${p.learnedNotes?.length ? `<ul class="ap-learn">${p.learnedNotes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : p.learn ? `<small><i class="ti ti-school"></i> Đang học từ ${p.learnedN || 0} video bạn đã sửa${p.learnedN ? '' : ' (chưa có)'}</small>` : '<small>Không học từ chỉnh sửa</small>'}</div>
         <div class="b"><button class="icon" title="Sửa" data-pe="${esc(p.id)}"><i class="ti ti-pencil"></i></button><button class="icon" title="Nhân bản" data-pd="${esc(p.id)}"><i class="ti ti-copy"></i></button>
@@ -177,8 +182,8 @@
           ${p.learned ? `<button class="icon" title="Quên điều đã học" data-pr="${esc(p.id)}"><i class="ti ti-eraser"></i></button>` : ''}
           ${P.length > 1 ? `<button class="icon" title="Xoá hồ sơ" data-px="${esc(p.id)}"><i class="ti ti-trash"></i></button>` : ''}</div></div>`).join('')}
       <div class="acts"><button id="ap-pnew"><i class="ti ti-plus"></i> Hồ sơ mới</button>${proj?.autopilot ? '<button id="ap-learn" title="So dự án đang mở (do Tự lái làm) với bản Tự lái giao để học thói quen sửa của bạn"><i class="ti ti-school"></i> Học từ dự án này</button>' : ''}</div>
-      ${learn ? `<div class="help" style="margin:6px 0 0">${learn.ok ? `Lần học gần nhất: ${esc(learn.observation?.name || '')} (${new Date(learn.at).toLocaleTimeString('vi-VN')})` : `Chưa học: ${esc(learn.why || '')}`}</div>` : ''}
-      <div class="help" style="margin:6px 0 0">“Học từ chỉnh sửa”: khi bạn lưu một dự án do Tự lái làm, Studio so với bản Tự lái giao (cảnh tự động bị xoá, đổi kiểu phụ đề / gói, tắt nhạc…). Cần ít nhất 2 video có cùng thói quen mới điều chỉnh hồ sơ.</div></div>`;
+      ${learn ? `<div class="help ap-mt">${learn.ok ? `Lần học gần nhất: ${esc(learn.observation?.name || '')} (${new Date(learn.at).toLocaleTimeString('vi-VN')})` : `Chưa học: ${esc(learn.why || '')}`}</div>` : ''}
+      <div class="help ap-mt">“Học từ chỉnh sửa”: khi bạn lưu một dự án do Tự lái làm, Studio so với bản Tự lái giao (cảnh tự động bị xoá, đổi kiểu phụ đề / gói, tắt nhạc…). Cần ít nhất 2 video có cùng thói quen mới điều chỉnh hồ sơ.</div></div>`;
     const B = $('#ap-profiles');
     const act = async (action, id) => { const r = await api('/api/autopilot/profile', { action, id }); if (r.error) return Studio.toast(r.error); S.st.profiles = r.profiles; renderProfiles(); render(); };
     B.querySelectorAll('[data-pe]').forEach(b => (b.onclick = () => editProfile(P.find(p => p.id === b.dataset.pe))));

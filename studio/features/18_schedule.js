@@ -4,63 +4,72 @@
   const { $, esc } = Studio;
   const TZ = 'Asia/Ho_Chi_Minh';
   const ICON = { youtube: 'ti-brand-youtube', tiktok: 'ti-brand-tiktok', facebook: 'ti-brand-facebook', instagram: 'ti-brand-instagram', zalo: 'ti-message-circle' };
-  const COL = { youtube: '#E5484D', tiktok: '#2DD4BF', facebook: '#4C7DFF', instagram: '#D9468F', zalo: '#3B9EFF' };
+  const COL = { youtube: '#E5484D', tiktok: '#2DD4BF', facebook: '#4C7DFF', instagram: '#D9468F', zalo: '#3B9EFF' }; // design-token-ok: social platform identity colours (data, not UI theme)
   const ST = { planned: ['Đã lên lịch', 'ti-clock'], uploading: ['Đang tải lên', 'ti-loader-2 spin'], done: ['Đã đăng', 'ti-circle-check'], reminded: ['Đã nhắc', 'ti-bell-ringing'], error: ['Lỗi', 'ti-alert-triangle'] };
+  const H0 = 6, H1 = 24, PX = 34; // week view 06:00–24:00, px per hour
   const S = { v: null, videos: null, week: null, back: null, showOld: false, timer: null };
   const css = document.createElement('style');
   css.textContent = `
   #modalbox.sc-wide { width: min(1080px, 96vw); }
   #modalbox.sc-mid { width: min(640px, 94vw); }
-  .sc-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; margin: 8px 0; }
-  .sc-yt { display: flex; gap: 8px; align-items: center; } .sc-yt .ti-brand-youtube { color: #E5484D; font-size: 22px; }
-  .sc-yt b { display: block; font-size: 12.5px; } .sc-yt small { color: var(--tx3); font-size: 10.5px; display: block; }
-  .sc-q { height: 5px; background: var(--bg4); border-radius: 5px; overflow: hidden; margin: 8px 0 3px; } .sc-q i { display: block; height: 100%; background: linear-gradient(90deg, var(--ok), var(--warn)); }
-  .sc-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .sc-acts button { padding: 5px 9px; font-size: 11.5px; }
-  .sc-day { font-size: 10.5px; font-weight: 700; color: var(--tx2); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 4px; display: flex; gap: 6px; }
-  .sc-day.today { color: var(--acc); }
-  .sc-it { display: grid; grid-template-columns: 42px 30px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg2); margin: 4px 0; cursor: pointer; }
-  .sc-it:hover { border-color: var(--line3); }
-  .sc-it .tm { font: 600 12px ui-monospace, Menlo, monospace; color: var(--tx); }
-  .sc-it .pf { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; }
-  .sc-it .nm { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sc-it .sub { font-size: 10.5px; color: var(--tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sc-st { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--bg4); color: var(--tx2); white-space: nowrap; }
-  .sc-st.done { background: rgba(52,211,153,.14); color: var(--ok); } .sc-st.error { background: rgba(248,113,113,.14); color: var(--bad); }
-  .sc-st.reminded { background: rgba(251,191,36,.12); color: var(--warn); } .sc-st.uploading { background: var(--acc-soft); color: #CFC8FF; }
-  .sc-err { color: var(--bad); }
-  .sc-note { background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: #F5D58A; border-radius: 8px; padding: 8px 10px; font-size: 11.5px; line-height: 1.5; margin: 8px 0; }
-  .sc-note.info { background: var(--acc-soft); border-color: var(--acc-line); color: #D9D3FF; }
-  .sc-form label { display: block; font-size: 10.5px; color: var(--tx3); margin: 8px 0 3px; } .sc-form input, .sc-form select, .sc-form textarea { width: 100%; }
-  .sc-form input[type=date], .sc-form input[type=time] { background: var(--bg1); border: 1px solid var(--line2); border-radius: var(--rs); padding: 6px 8px; color: var(--tx); color-scheme: dark; outline: none; }
+  ${Object.entries(COL).map(([k, c]) => `.sc-pc-${k} { --pc: ${c}; }`).join(' ')}
+  .sc-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  .sc-yt { display: flex; gap: var(--space-2); align-items: center; } .sc-yt .ti-brand-youtube { color: var(--pc); font-size: var(--text-xl); }
+  .sc-yt b { display: block; font-size: var(--text-sm); } .sc-yt small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); display: block; }
+  .sc-q { height: var(--space-1); background: rgb(var(--color-surface-hover)); border-radius: var(--radius-pill); overflow: hidden; margin: var(--space-2) 0 var(--space-1); } .sc-q i { display: block; height: 100%; width: var(--w, 0%); background: linear-gradient(90deg, rgb(var(--color-success)), rgb(var(--color-warning))); }
+  .sc-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+  .sc-day { font-size: var(--text-2xs); font-weight: 700; color: rgb(var(--color-fg-muted)); text-transform: uppercase; letter-spacing: .04em; margin: var(--space-3) 0 var(--space-1); display: flex; gap: var(--space-2); }
+  .sc-day.today { color: rgb(var(--color-accent-text)); }
+  .sc-it { display: grid; grid-template-columns: 44px 32px minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2); border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-raised)); margin: var(--space-1) 0; cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard); }
+  .sc-it:hover { border-color: rgb(var(--color-line-hover)); }
+  .sc-it .tm { font: 600 var(--text-xs) var(--font-mono); color: rgb(var(--color-fg)); }
+  .sc-it .pf { width: var(--h-md); height: var(--h-md); border-radius: var(--radius-control); display: grid; place-items: center; color: rgb(var(--color-fg-on-media)); background: var(--pc); }
+  .sc-it .nm { font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sc-it .sub { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc-min { min-width: 0; } .sc-fill { min-width: 0; flex: 1; } .sc-st .ti { font-size: var(--text-2xs); }
+  .sc-err { color: rgb(var(--color-danger-text)); }
+  .sc-note { background: rgb(var(--color-warning) / .08); border: 1px solid rgb(var(--color-warning) / .3); color: rgb(var(--color-warning-text)); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); font-size: var(--text-xs); line-height: 1.5; margin: var(--space-2) 0; }
+  .sc-note.info { background: rgb(var(--color-accent-soft) / .24); border-color: rgb(var(--color-accent-text) / .5); color: rgb(var(--color-accent-text-strong)); }
+  .sc-note a { color: inherit; } .sc-steps a, .sc-link { color: rgb(var(--color-accent-text-strong)); }
+  h3.sc-h0 { margin: 0; } .sc-yt-ic { color: var(--pc); }
+  .sc-form label { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-1); } .sc-form input, .sc-form select, .sc-form textarea { width: 100%; }
+  .sc-form input[type=date], .sc-form input[type=time] { background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); padding: var(--space-2); color: rgb(var(--color-fg)); color-scheme: dark; outline: none; }
+  .sc-form textarea.sc-mono { font: var(--text-2xs) var(--font-mono); }
   .sc-form label.sc-v { display: grid; margin: 0; font-size: inherit; color: inherit; } .sc-form .sc-v input { width: auto; }
-  .sc-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; } .sc-g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 8px; }
-  .sc-plats { display: flex; gap: 6px; flex-wrap: wrap; } .sc-plats label { display: inline-flex !important; gap: 4px; align-items: center; border: 1px solid var(--line2); border-radius: 999px; padding: 4px 10px; margin: 0 !important; cursor: pointer; color: var(--tx2) !important; font-size: 11.5px !important; }
-  .sc-plats label:has(input:checked) { border-color: var(--acc-line); background: var(--acc-soft); color: var(--tx) !important; } .sc-plats input { width: auto !important; margin: 0; }
+  .sc-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); } .sc-g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 var(--space-2); }
+  .sc-end { display: flex; align-items: flex-end; } .sc-end button { width: 100%; justify-content: center; }
+  .sc-plats { display: flex; gap: var(--space-2); flex-wrap: wrap; } .sc-plats label { display: inline-flex !important; gap: var(--space-1); align-items: center; border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-pill); padding: var(--space-1) var(--space-3); margin: 0 !important; cursor: pointer; color: rgb(var(--color-fg-muted)) !important; font-size: var(--text-xs) !important; }
+  .sc-plats label:has(input:checked) { border-color: rgb(var(--color-accent-text) / .5); background: rgb(var(--color-accent-soft) / .24); color: rgb(var(--color-fg)) !important; } .sc-plats input { width: auto !important; margin: 0; }
+  .sect.sc-click { cursor: pointer; } .sc-acts.sc-top { margin-top: var(--space-1); } .help.sc-h0 { margin-top: 0; } .help.sc-pad { padding: var(--space-3); }
   /* week view */
-  .sc-wk-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; } .sc-wk-h b { font-size: 13px; }
-  .sc-wk { display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); border: 1px solid var(--line2); border-radius: 10px; overflow: hidden; background: var(--bg1); }
-  .sc-wk .dh { padding: 6px 4px; text-align: center; font-size: 11px; color: var(--tx2); border-bottom: 1px solid var(--line2); border-left: 1px solid var(--line); background: var(--bg2); }
-  .sc-wk .dh.today { color: var(--acc); font-weight: 700; } .sc-wk .dh b { display: block; font-size: 15px; color: var(--tx); } .sc-wk .dh.today b { color: var(--acc); }
-  .sc-wk .hours { position: relative; } .sc-wk .hours div { position: absolute; right: 6px; font-size: 10px; color: var(--tx3); transform: translateY(-6px); }
-  .sc-col { position: relative; border-left: 1px solid var(--line); cursor: copy; }
-  .sc-col.past { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,.015) 6px 12px); }
-  .sc-col .hl { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); pointer-events: none; }
-  .sc-col .slot { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--acc-line); pointer-events: none; }
-  .sc-col .slot span { position: absolute; right: 3px; top: -1px; font-size: 9px; color: var(--acc); opacity: .7; }
-  .sc-col .nowl { position: absolute; left: 0; right: 0; border-top: 2px solid var(--bad); pointer-events: none; z-index: 2; }
-  .sc-col.over { background: var(--acc-soft); }
-  .sc-ev { position: absolute; left: 3px; right: 3px; border-radius: 6px; padding: 3px 5px; font-size: 10.5px; line-height: 1.25; color: #fff; overflow: hidden; cursor: grab; z-index: 1; box-shadow: 0 2px 8px rgba(0,0,0,.35); border-left: 3px solid rgba(255,255,255,.5); }
-  .sc-ev .t { font-weight: 700; display: flex; gap: 3px; align-items: center; } .sc-ev .t .ti { font-size: 12px; }
+  .sc-wk-h { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); } .sc-wk-h b { font-size: var(--text-sm); }
+  .sc-wk { display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); overflow: hidden; background: rgb(var(--color-surface)); }
+  .sc-wk-body .sc-wk { border-top: 0; border-radius: 0 0 var(--radius-card) var(--radius-card); }
+  .sc-wk .dh { padding: var(--space-2) var(--space-1); text-align: center; font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); border-bottom: 1px solid rgb(var(--color-line-strong)); border-left: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-raised)); }
+  .sc-wk .dh.today { color: rgb(var(--color-accent-text)); font-weight: 700; } .sc-wk .dh b { display: block; font-size: var(--text-md); color: rgb(var(--color-fg)); } .sc-wk .dh.today b { color: rgb(var(--color-accent-text)); }
+  .sc-wk .hours { position: relative; height: ${(H1 - H0) * PX}px; } .sc-wk .hours div { position: absolute; top: var(--y); right: var(--space-2); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); transform: translateY(-6px); }
+  .sc-col { position: relative; height: ${(H1 - H0) * PX}px; border-left: 1px solid rgb(var(--color-line)); cursor: copy; }
+  .sc-col.past { background: repeating-linear-gradient(135deg, transparent 0 6px, rgb(var(--color-white) / .015) 6px 12px); }
+  .sc-col .hl { position: absolute; top: var(--y); left: 0; right: 0; border-top: 1px solid rgb(var(--color-line)); pointer-events: none; }
+  .sc-col .slot { position: absolute; top: var(--y); left: 0; right: 0; border-top: 1px dashed rgb(var(--color-accent-text) / .5); pointer-events: none; }
+  .sc-col .slot span { position: absolute; right: var(--space-1); top: -1px; font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); }
+  .sc-col .nowl { position: absolute; top: var(--y); left: 0; right: 0; border-top: 2px solid rgb(var(--color-danger)); pointer-events: none; z-index: 2; }
+  .sc-col.over { background: rgb(var(--color-accent-soft) / .24); }
+  .sc-ev { position: absolute; top: var(--y); left: calc(3px + (100% - 6px) * var(--j, 0)); width: calc((100% - 6px) / var(--n, 1) - 2px); min-height: 30px; border-radius: var(--radius-xs); padding: var(--space-050) var(--space-1); font-size: var(--text-2xs); line-height: 1.25; color: rgb(var(--color-fg-on-media)); background: var(--pc); overflow: hidden; cursor: grab; z-index: 1; box-shadow: var(--shadow-card); border-left: 3px solid rgb(var(--color-white) / .5); }
+  .sc-ev .t { font-weight: 700; display: flex; gap: var(--space-1); align-items: center; } .sc-ev .t .ti { font-size: var(--text-xs); }
   .sc-ev .n { opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sc-ev.done, .sc-ev.reminded { opacity: .55; } .sc-ev.error { outline: 2px solid var(--bad); }
+  .sc-ev.done, .sc-ev.reminded { opacity: .55; } .sc-ev.error { outline: 2px solid rgb(var(--color-danger)); }
   .sc-wk-body { max-height: 62vh; overflow-y: auto; }
-  .sc-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10.5px; color: var(--tx3); margin-top: 8px; } .sc-legend i.d { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 3px; }
+  .sc-legend { display: flex; gap: var(--space-3); flex-wrap: wrap; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin-top: var(--space-2); } .sc-legend i.d { width: 9px; height: 9px; border-radius: var(--radius-xs); display: inline-block; margin-right: var(--space-1); background: var(--pc); }
   /* auto */
-  .sc-vl { max-height: 300px; overflow-y: auto; border: 1px solid var(--line2); border-radius: 8px; }
-  .sc-v { display: grid; grid-template-columns: 22px 44px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; } .sc-v:last-child { border-bottom: 0; }
-  .sc-v img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: #000; } .sc-v .nm { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sc-v small { color: var(--tx3); font-size: 10.5px; }
-  .sc-steps { margin: 0; padding-left: 20px; line-height: 1.6; font-size: 12px; } .sc-steps li { margin: 5px 0; } .sc-steps code { font-size: 11px; background: var(--bg0); padding: 1px 5px; border-radius: 4px; }
-  .sc-steps a { color: #B9AEFF; }`;
+  .sc-vl { max-height: 300px; overflow-y: auto; border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); }
+  .sc-v { display: grid; grid-template-columns: 24px 44px minmax(0, 1fr); gap: var(--space-2); align-items: center; padding: var(--space-2); border-bottom: 1px solid rgb(var(--color-line)); cursor: pointer; } .sc-v:last-child { border-bottom: 0; }
+  .sc-v img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--radius-xs); background: rgb(var(--color-black)); } .sc-v .nm { font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sc-v small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .sc-steps { margin: 0; padding-left: var(--space-5); line-height: 1.6; font-size: var(--text-xs); } .sc-steps li { margin: var(--space-1) 0; } .sc-steps code { font-size: var(--text-2xs); background: rgb(var(--color-canvas)); padding: 1px var(--space-1); border-radius: var(--radius-xs); }`;
   document.head.appendChild(css);
+  // Data-driven geometry (week grid, quota bar) arrives as data-v="--y:34px;--n:2" and is set with style.setProperty after insert.
+  const applyVars = root => (root || document).querySelectorAll('[data-v]').forEach(el => el.dataset.v.split(';').forEach(p => { const i = p.indexOf(':'); if (i > 0) el.style.setProperty(p.slice(0, i).trim(), p.slice(i + 1).trim()); }));
+  const CHIP = { done: 'ui-chip--ok', error: 'ui-chip--bad', reminded: 'ui-chip--warn', uploading: 'is-active' };
+  const chip = (state, html) => `<span class="ui-chip sc-st ${CHIP[state] || ''}">${html}</span>`;
 
   // ---- time helpers (always Vietnam time) ----
   const parts = d => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).formatToParts(new Date(d)).map(x => [x.type, x.value]));
@@ -94,19 +103,19 @@
   // ---------- panel ----------
   function ytCard() {
     const y = S.v.youtube, q = y.quota, pct = Math.min(100, Math.round(q.used / q.daily * 100));
-    if (!y.connected) return `<div class="sc-card"><div class="sc-yt"><i class="ti ti-brand-youtube"></i><div><b>Chưa kết nối YouTube</b><small>${y.hasClient ? 'Đã có OAuth client · bấm Kết nối' : 'Mục YouTube sẽ chỉ được nhắc đăng tay'}</small></div></div>
+    if (!y.connected) return `<div class="sc-card"><div class="sc-yt"><i class="ti ti-brand-youtube sc-pc-youtube"></i><div><b>Chưa kết nối YouTube</b><small>${y.hasClient ? 'Đã có OAuth client · bấm Kết nối' : 'Mục YouTube sẽ chỉ được nhắc đăng tay'}</small></div></div>
       ${y.authError ? `<div class="help sc-err">${esc(y.authError)}</div>` : ''}
-      <div class="sc-acts"><button class="primary" id="sc-ytc"><i class="ti ti-plug-connected"></i> Kết nối YouTube</button></div></div>`;
-    return `<div class="sc-card"><div class="sc-yt"><i class="ti ti-brand-youtube"></i><div style="min-width:0;flex:1"><b>${esc(y.channel?.title || 'Đã kết nối')}</b><small>Tự tải lên + hẹn giờ công khai</small></div><span class="sc-st done">đã kết nối</span></div>
-      <div class="sc-q" title="Quota YouTube Data API hôm nay"><i style="width:${pct}%"></i></div>
+      <div class="sc-acts"><button class="ui-btn ui-btn--primary ui-btn--sm" id="sc-ytc"><i class="ti ti-plug-connected"></i> Kết nối YouTube</button></div></div>`;
+    return `<div class="sc-card"><div class="sc-yt"><i class="ti ti-brand-youtube sc-pc-youtube"></i><div class="sc-fill"><b>${esc(y.channel?.title || 'Đã kết nối')}</b><small>Tự tải lên + hẹn giờ công khai</small></div>${chip('done', 'đã kết nối')}</div>
+      <div class="sc-q" title="Quota YouTube Data API hôm nay"><i data-v="--w:${pct}%"></i></div>
       <small class="muted">Quota hôm nay: ~${q.used.toLocaleString('vi-VN')}/${q.daily.toLocaleString('vi-VN')} đơn vị · mỗi video ${q.upload.toLocaleString('vi-VN')} → còn ~${q.uploadsLeft} video</small>
-      <div class="sc-acts"><button id="sc-ytk"><i class="ti ti-refresh"></i> Kiểm tra</button><button id="sc-ytg"><i class="ti ti-help"></i> Hướng dẫn</button><span class="grow"></span><button class="danger" id="sc-ytd"><i class="ti ti-plug-x"></i> Ngắt</button></div></div>`;
+      <div class="sc-acts"><button class="ui-btn ui-btn--sm" id="sc-ytk"><i class="ti ti-refresh"></i> Kiểm tra</button><button class="ui-btn ui-btn--sm" id="sc-ytg"><i class="ti ti-help"></i> Hướng dẫn</button><span class="grow"></span><button class="ui-btn ui-btn--danger ui-btn--sm" id="sc-ytd"><i class="ti ti-plug-x"></i> Ngắt</button></div></div>`;
   }
   function itemRow(it) {
     const [stl, sti] = ST[it.state] || ['?', 'ti-help'];
-    return `<div class="sc-it" data-scid="${esc(it.id)}" title="${esc(it.error || '')}"><span class="tm">${vnTime(it.when)}</span><span class="pf" style="background:${COL[it.platform]}"><i class="ti ${ICON[it.platform]}"></i></span>
-      <div style="min-width:0"><div class="nm">${esc(it.title || it.caption || it.name)}</div><div class="sub ${it.error ? 'sc-err' : ''}">${esc(it.error || it.name + (it.exists ? '' : ' · (mất file!)'))}</div></div>
-      <span class="sc-st ${it.state}"><i class="ti ${sti}" style="font-size:11px"></i> ${stl}</span></div>`;
+    return `<div class="sc-it" data-scid="${esc(it.id)}" title="${esc(it.error || '')}"><span class="tm">${vnTime(it.when)}</span><span class="pf sc-pc-${esc(it.platform)}"><i class="ti ${ICON[it.platform]}"></i></span>
+      <div class="sc-min"><div class="nm">${esc(it.title || it.caption || it.name)}</div><div class="sub ${it.error ? 'sc-err' : ''}">${esc(it.error || it.name + (it.exists ? '' : ' · (mất file!)'))}</div></div>
+      ${chip(it.state, `<i class="ti ${sti}"></i> ${stl}`)}</div>`;
   }
   function render() {
     const B = $('#libbody'); if (!B) return;
@@ -117,21 +126,21 @@
     const byDay = {}; for (const it of up) (byDay[vnDate(it.when)] ||= []).push(it);
     const run = v.run;
     B.innerHTML = `${ytCard()}
-      <div class="sc-acts" style="margin-top:4px"><button class="primary" id="sc-week"><i class="ti ti-calendar-week"></i> Lịch tuần</button><button id="sc-auto"><i class="ti ti-wand"></i> Xếp lịch tự động</button><button id="sc-add" title="Thêm một mục"><i class="ti ti-plus"></i></button></div>
+      <div class="sc-acts sc-top"><button class="ui-btn ui-btn--primary ui-btn--sm" id="sc-week"><i class="ti ti-calendar-week"></i> Lịch tuần</button><button class="ui-btn ui-btn--sm" id="sc-auto"><i class="ti ti-wand"></i> Xếp lịch tự động</button><button class="ui-btn ui-btn--sm ui-btn--icon" id="sc-add" title="Thêm một mục" aria-label="Thêm một mục"><i class="ti ti-plus"></i></button></div>
       ${run.busy ? `<div class="help"><i class="ti ti-loader-2 spin"></i> ${esc(run.step || 'Đang chạy lịch…')}</div>` : ''}
       <div class="sect"><i class="ti ti-calendar-event"></i> Sắp đăng <span class="muted">${up.length}</span></div>
       ${up.length ? Object.entries(byDay).map(([d, list]) => `<div class="sc-day ${d === today ? 'today' : ''}">${d === today ? 'Hôm nay · ' : d === addDays(today, 1) ? 'Ngày mai · ' : ''}${dayLabel(d)}${d < today ? ' · quá hạn' : ''}</div>${list.map(itemRow).join('')}`).join('')
         : '<div class="help">Chưa có lịch. Bấm <b>Xếp lịch tự động</b> để rải các video đã xuất vào khung giờ đăng, hoặc <b>Lên lịch</b> trong hộp thoại <b>Đăng</b>.</div>'}
-      ${old.length ? `<div class="sect" style="cursor:pointer" id="sc-oldt"><i class="ti ti-chevron-${S.showOld ? 'down' : 'right'}"></i> Đã xong 7 ngày qua <span class="muted">${old.length}</span></div>${S.showOld ? old.map((it, i) => `${i && vnDate(old[i - 1].when) === vnDate(it.when) ? '' : `<div class="sc-day">${dayLabel(vnDate(it.when))}</div>`}${itemRow(it)}`).join('') : ''}` : ''}
+      ${old.length ? `<div class="sect sc-click" id="sc-oldt"><i class="ti ti-chevron-${S.showOld ? 'down' : 'right'}"></i> Đã xong 7 ngày qua <span class="muted">${old.length}</span></div>${S.showOld ? old.map((it, i) => `${i && vnDate(old[i - 1].when) === vnDate(it.when) ? '' : `<div class="sc-day">${dayLabel(vnDate(it.when))}</div>`}${itemRow(it)}`).join('') : ''}` : ''}
       <div class="sect"><i class="ti ti-settings"></i> Cài đặt lịch</div>
       <div class="sc-form"><label>Khung giờ đăng mặc định (giờ VN, cách nhau dấu phẩy)</label><input id="sc-slots" value="${esc(v.settings.slots.join(', '))}">
         <div class="sc-g2"><div><label>Nhắc trước (phút)</label><input id="sc-rem" type="number" min="0" value="${v.settings.remindMin}"></div><div><label>YouTube tải trước (phút)</label><input id="sc-lead" type="number" min="0" value="${v.settings.ytLeadMin}"></div></div>
         <div class="sc-g2"><div><label>YouTube mặc định</label><select id="sc-priv">${[['public', 'Công khai'], ['unlisted', 'Không công khai'], ['private', 'Riêng tư']].map(([k, l]) => `<option value="${k}" ${v.settings.privacy === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
           <div><label>Video cho trẻ em</label><select id="sc-kids"><option value="0" ${v.settings.madeForKids ? '' : 'selected'}>Không (mặc định)</option><option value="1" ${v.settings.madeForKids ? 'selected' : ''}>Có</option></select></div></div>
-        <div class="sc-acts"><button id="sc-sset"><i class="ti ti-device-floppy"></i> Lưu cài đặt</button><button id="sc-run" ${run.busy ? 'disabled' : ''} title="Bình thường Studio tự chạy mỗi phút"><i class="ti ti-player-play"></i> Chạy mục đến hạn</button></div>
+        <div class="sc-acts"><button class="ui-btn ui-btn--sm" id="sc-sset"><i class="ti ti-device-floppy"></i> Lưu cài đặt</button><button class="ui-btn ui-btn--sm" id="sc-run" ${run.busy ? 'disabled' : ''} title="Bình thường Studio tự chạy mỗi phút"><i class="ti ti-player-play"></i> Chạy mục đến hạn</button></div>
         <div class="help">Studio kiểm tra lịch mỗi phút khi đang mở (và hàng đợi Tự lái nếu có). YouTube: tải lên trước giờ đăng, YouTube tự công khai đúng giờ. Nền tảng khác: 10 phút trước có thông báo; đến giờ Studio mở trang đăng, hiện file và <b>chép sẵn caption</b> — bạn chỉ cần kéo file vào và dán.</div>
         ${run.last?.at ? `<div class="help">Lần chạy gần nhất ${vnTime(run.last.at)}: ${run.last.error ? `<span class="sc-err">${esc(run.last.error)}</span>` : run.last.skipped ? 'bỏ qua (tiến trình khác đang chạy)' : `nhắc ${run.last.reminded?.length || 0}, tải YouTube ${run.last.uploaded?.length || 0}, lỗi ${run.last.errors?.length || 0}`}</div>` : ''}</div>`;
-    bindPanel();
+    applyVars(B); bindPanel();
   }
   function bindPanel() {
     const B = $('#libbody'), on = (id, fn) => { const el = $('#' + id); if (el) el.onclick = fn; };
@@ -149,31 +158,29 @@
   }
 
   // ---------- week view (drag & drop) ----------
-  const H0 = 6, H1 = 24, PX = 34; // 06:00–24:00, px per hour
   function week(start) {
     if (start) S.week = start;
     if (!S.week) { const t = vnDate(NOW()), wd = parts(`${t}T12:00:00+07:00`).weekday; S.week = addDays(t, -['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(wd)); }
     const v = S.v, days = [...Array(7)].map((_, i) => addDays(S.week, i)), today = vnDate(NOW()), nowM = vnMin(NOW());
     const y = m => ((Math.max(H0 * 60, Math.min(H1 * 60 - 20, m)) - H0 * 60) / 60) * PX;
     const ev = days.map(d => v.items.filter(x => vnDate(x.when) === d).sort((a, b) => Date.parse(a.when) - Date.parse(b.when)));
-    const H = (H1 - H0) * PX;
-    Studio.modal(`<div class="sc-wkv"><div class="sc-wk-h"><h3 style="margin:0"><i class="ti ti-calendar-week"></i> Lịch đăng</h3><span class="grow"></span>
-        <button class="icon" id="sc-wp" title="Tuần trước"><i class="ti ti-chevron-left"></i></button><b>${dayLabel(days[0])} – ${dayLabel(days[6])}</b><button class="icon" id="sc-wn" title="Tuần sau"><i class="ti ti-chevron-right"></i></button>
+    Studio.modal(`<div class="sc-wkv"><div class="sc-wk-h"><h3 class="sc-h0"><i class="ti ti-calendar-week"></i> Lịch đăng</h3><span class="grow"></span>
+        <button class="icon" id="sc-wp" title="Tuần trước" aria-label="Tuần trước"><i class="ti ti-chevron-left"></i></button><b>${dayLabel(days[0])} – ${dayLabel(days[6])}</b><button class="icon" id="sc-wn" title="Tuần sau" aria-label="Tuần sau"><i class="ti ti-chevron-right"></i></button>
         <button id="sc-wt">Tuần này</button><button id="sc-wa"><i class="ti ti-wand"></i> Xếp tự động</button></div>
       <div class="sc-wk"><div></div>${days.map(d => `<div class="dh ${d === today ? 'today' : ''}">${dayLabel(d).split(' ')[0]}<b>${d.slice(8)}</b></div>`).join('')}</div>
-      <div class="sc-wk-body"><div class="sc-wk" style="border-top:0;border-radius:0 0 10px 10px">
-        <div class="hours" style="height:${H}px">${[...Array(H1 - H0)].map((_, i) => `<div style="top:${i * PX}px">${String(H0 + i).padStart(2, '0')}:00</div>`).join('')}</div>
-        ${days.map((d, i) => `<div class="sc-col ${d < today ? 'past' : ''}" data-day="${d}" style="height:${H}px">
-          ${[...Array(H1 - H0)].map((_, h) => `<div class="hl" style="top:${h * PX}px"></div>`).join('')}
-          ${v.settings.slots.map(s => { const m = +s.slice(0, 2) * 60 + +s.slice(3); return m >= H0 * 60 ? `<div class="slot" style="top:${y(m)}px"><span>${s}</span></div>` : ''; }).join('')}
-          ${d === today ? `<div class="nowl" style="top:${y(nowM)}px"></div>` : ''}
+      <div class="sc-wk-body"><div class="sc-wk">
+        <div class="hours">${[...Array(H1 - H0)].map((_, i) => `<div data-v="--y:${i * PX}px">${String(H0 + i).padStart(2, '0')}:00</div>`).join('')}</div>
+        ${days.map((d, i) => `<div class="sc-col ${d < today ? 'past' : ''}" data-day="${d}">
+          ${[...Array(H1 - H0)].map((_, h) => `<div class="hl" data-v="--y:${h * PX}px"></div>`).join('')}
+          ${v.settings.slots.map(s => { const m = +s.slice(0, 2) * 60 + +s.slice(3); return m >= H0 * 60 ? `<div class="slot" data-v="--y:${y(m)}px"><span>${s}</span></div>` : ''; }).join('')}
+          ${d === today ? `<div class="nowl" data-v="--y:${y(nowM)}px"></div>` : ''}
           ${ev[i].map((it, k) => { const near = ev[i].filter(o => Math.abs(Date.parse(o.when) - Date.parse(it.when)) < 50 * 60e3), n = near.length, j = near.indexOf(it); // overlapping → side by side
-            return `<div class="sc-ev ${it.state}" draggable="${it.state === 'planned' || it.state === 'error'}" data-scid="${esc(it.id)}" title="${esc((it.title || it.name) + ' · ' + ST[it.state][0] + (it.error ? ' · ' + it.error : ''))}"
-              style="top:${y(vnMin(it.when))}px;left:calc(3px + (100% - 6px) * ${j / n});width:calc((100% - 6px) / ${n} - 2px);right:auto;background:${COL[it.platform]};min-height:30px"><div class="t"><i class="ti ${ICON[it.platform]}"></i>${vnTime(it.when)}${it.state !== 'planned' ? ` <i class="ti ${ST[it.state][1]}"></i>` : ''}</div><div class="n">${esc(it.title || it.name)}</div></div>`; }).join('')}
+            return `<div class="sc-ev ${it.state} sc-pc-${esc(it.platform)}" draggable="${it.state === 'planned' || it.state === 'error'}" data-scid="${esc(it.id)}" title="${esc((it.title || it.name) + ' · ' + ST[it.state][0] + (it.error ? ' · ' + it.error : ''))}"
+              data-v="--y:${y(vnMin(it.when))}px;--j:${j / n};--n:${n}"><div class="t"><i class="ti ${ICON[it.platform]}"></i>${vnTime(it.when)}${it.state !== 'planned' ? ` <i class="ti ${ST[it.state][1]}"></i>` : ''}</div><div class="n">${esc(it.title || it.name)}</div></div>`; }).join('')}
         </div>`).join('')}</div></div>
-      <div class="sc-legend">${Object.entries(v.platforms).map(([k, n]) => `<span><i class="d" style="background:${COL[k]}"></i>${esc(n)}</span>`).join('')}<span>· Kéo thả để đổi ngày/giờ (bước 15 phút) · bấm vào ô trống để thêm · vạch tím = khung giờ đăng</span></div>
+      <div class="sc-legend">${Object.entries(v.platforms).map(([k, n]) => `<span><i class="d sc-pc-${esc(k)}"></i>${esc(n)}</span>`).join('')}<span>· Kéo thả để đổi ngày/giờ (bước 15 phút) · bấm vào ô trống để thêm · vạch nét đứt = khung giờ đăng</span></div>
       <div class="actions"><button onclick="closeModal()">Đóng</button></div></div>`);
-    wide('sc-wide');
+    wide('sc-wide'); applyVars(box());
     const body = $('.sc-wk-body'); if (body && !S.scrolled) { body.scrollTop = Math.max(0, y(Math.min(...v.settings.slots.map(s => +s.slice(0, 2) * 60)) - 90)); }
     $('#sc-wp').onclick = () => week(addDays(S.week, -7)); $('#sc-wn').onclick = () => week(addDays(S.week, 7));
     $('#sc-wt').onclick = () => { S.week = null; week(); }; $('#sc-wa').onclick = () => auto('week');
@@ -208,9 +215,9 @@
     const w = it?.when || when || nextSlot(plats);
     const vids = [...(S.videos || [])]; if (f && !vids.some(x => x.file === f)) vids.unshift({ file: f, name: f.split(/[\\/]/).pop(), src: '' });
     const P = it || per || {};
-    Studio.modal(`<div class="sc-ed sc-form"><h3><i class="ti ${isNew ? 'ti-calendar-plus' : ICON[it.platform]}"></i> ${isNew ? 'Thêm lịch đăng' : 'Sửa lịch đăng'}${it ? ` <span class="sc-st ${it.state}">${ST[it.state][0]}</span>` : ''}</h3>
+    Studio.modal(`<div class="sc-ed sc-form"><h3><i class="ti ${isNew ? 'ti-calendar-plus' : ICON[it.platform]}"></i> ${isNew ? 'Thêm lịch đăng' : 'Sửa lịch đăng'}${it ? ` ${chip(it.state, ST[it.state][0])}` : ''}</h3>
       ${it?.error ? `<div class="sc-note">${esc(it.error)}</div>` : ''}
-      ${it?.url && it.state === 'done' ? `<div class="sc-note info"><i class="ti ti-brand-youtube"></i> <a href="${esc(it.url)}" target="_blank" style="color:inherit">${esc(it.url)}</a>${it.publishAt ? ` · YouTube công khai lúc ${esc(vnTime(it.publishAt))} ${esc(dayLabel(vnDate(it.publishAt)))}` : ''}${(it.warnings || []).map(w => '<br>⚠ ' + esc(w)).join('')}</div>` : ''}
+      ${it?.url && it.state === 'done' ? `<div class="sc-note info"><i class="ti ti-brand-youtube"></i> <a href="${esc(it.url)}" target="_blank">${esc(it.url)}</a>${it.publishAt ? ` · YouTube công khai lúc ${esc(vnTime(it.publishAt))} ${esc(dayLabel(vnDate(it.publishAt)))}` : ''}${(it.warnings || []).map(w => '<br>⚠ ' + esc(w)).join('')}</div>` : ''}
       <label>Video</label><select id="sc-f">${vids.map(x => `<option value="${esc(x.file)}" ${x.file === f ? 'selected' : ''}>${esc(x.name)}${x.src ? ' · ' + esc(x.src) : ''}${x.info ? ` · ${x.info.dur}s ${x.info.w}×${x.info.h}` : ''}</option>`).join('') || '<option value="">— chưa có video đã xuất —</option>'}</select>
       <label>Nền tảng</label>${isNew ? `<div class="sc-plats">${Object.entries(v.platforms).map(([k, n]) => `<label><input type="checkbox" data-scp="${k}" ${plats.includes(k) ? 'checked' : ''}><i class="ti ${ICON[k]}"></i>${esc(n)}</label>`).join('')}</div>`
         : `<select id="sc-pl">${Object.entries(v.platforms).map(([k, n]) => `<option value="${k}" ${k === it.platform ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`}
@@ -220,7 +227,7 @@
       <label>Caption / mô tả</label><textarea id="sc-ca" rows="4">${esc(P.caption || '')}</textarea>
       <label>Hashtag</label><input id="sc-ha" value="${esc((P.hashtags || []).join(' '))}" placeholder="#edit #ai">
       <div class="sc-g2"><div><label>Quyền riêng tư YouTube</label><select id="sc-pr">${[['public', 'Công khai đúng giờ'], ['unlisted', 'Không công khai'], ['private', 'Riêng tư']].map(([k, l]) => `<option value="${k}" ${(P.privacy || v.settings.privacy) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div style="display:flex;align-items:flex-end"><button id="sc-cap" style="width:100%;justify-content:center" title="Lấy tiêu đề/caption/hashtag do AI viết trong hộp thoại Đăng"><i class="ti ti-sparkles"></i> Lấy caption AI</button></div></div>
+        <div class="sc-end"><button id="sc-cap" title="Lấy tiêu đề/caption/hashtag do AI viết trong hộp thoại Đăng"><i class="ti ti-sparkles"></i> Lấy caption AI</button></div></div>
       <div class="help">${!v.youtube.connected ? '<b>YouTube chưa kết nối</b> → mục YouTube cũng chỉ được nhắc đăng tay. ' : ''}Nền tảng khác: đến giờ Studio thông báo, mở trang đăng, hiện file và chép caption vào clipboard.</div>
       <div class="actions">${it ? `<button class="danger" id="sc-del"><i class="ti ti-trash"></i> Xoá</button><button id="sc-rv"><i class="ti ti-folder"></i></button><button id="sc-cp" title="Chép caption + hashtag"><i class="ti ti-copy"></i></button>` : ''}<span class="grow"></span>
         ${it && it.state !== 'planned' && it.state !== 'uploading' ? `<button id="sc-re"><i class="ti ti-rotate"></i> ${it.state === 'error' ? 'Thử lại' : 'Lên lịch lại'}</button>` : ''}
@@ -268,10 +275,10 @@
     S.videos = await Studio.api('/api/schedule/videos');
     const v = S.v, vids = Array.isArray(S.videos) ? S.videos : [];
     Studio.modal(`<div class="sc-form"><h3><i class="ti ti-wand"></i> Xếp lịch tự động</h3>
-      <div class="help" style="margin-top:0">Chọn các video đã xong và nền tảng — Studio rải mỗi video vào khung giờ trống kế tiếp (${esc(v.settings.slots.join(', '))} mỗi ngày), dùng caption AI của từng dự án nếu đã viết trong hộp thoại <b>Đăng</b>.</div>
+      <div class="help sc-h0">Chọn các video đã xong và nền tảng — Studio rải mỗi video vào khung giờ trống kế tiếp (${esc(v.settings.slots.join(', '))} mỗi ngày), dùng caption AI của từng dự án nếu đã viết trong hộp thoại <b>Đăng</b>.</div>
       <label>Video (${vids.length})</label>
       <div class="sc-vl">${vids.map((x, i) => `<label class="sc-v"><input type="checkbox" data-scv="${i}" ${!x.scheduled.length && i < 6 ? 'checked' : ''}><img loading="lazy" src="${avsUrl(`/api/schedule/poster?file=${encodeURIComponent(x.file)}`)}">
-        <div style="min-width:0"><div class="nm">${esc(x.name)}</div><small>${esc(x.src || '')}${x.info ? ` · ${x.info.dur}s · ${x.info.w}×${x.info.h}` : ''}${x.hasCaptions ? ' · <i class="ti ti-sparkles"></i> có caption AI' : ' · chưa có caption AI'}${x.scheduled.length ? ' · đã lên lịch: ' + esc(x.scheduled.join(', ')) : ''}</small></div></label>`).join('') || '<div class="help" style="padding:10px">Chưa có video nào trong <code>out/</code>. Xuất video trước.</div>'}</div>
+        <div class="sc-min"><div class="nm">${esc(x.name)}</div><small>${esc(x.src || '')}${x.info ? ` · ${x.info.dur}s · ${x.info.w}×${x.info.h}` : ''}${x.hasCaptions ? ' · <i class="ti ti-sparkles"></i> có caption AI' : ' · chưa có caption AI'}${x.scheduled.length ? ' · đã lên lịch: ' + esc(x.scheduled.join(', ')) : ''}</small></div></label>`).join('') || '<div class="help sc-pad">Chưa có video nào trong <code>out/</code>. Xuất video trước.</div>'}</div>
       <label>Nền tảng</label><div class="sc-plats">${Object.entries(v.platforms).map(([k, n]) => `<label><input type="checkbox" data-scp="${k}" ${k === 'youtube' || k === 'tiktok' ? 'checked' : ''}><i class="ti ${ICON[k]}"></i>${esc(n)}</label>`).join('')}</div>
       <div class="sc-g2"><div><label>Bắt đầu từ ngày</label><input type="date" id="sc-from" value="${vnDate(NOW())}"></div><div><label>Khung giờ (sửa trong Cài đặt lịch)</label><input disabled value="${esc(v.settings.slots.join(', '))}"></div></div>
       ${!v.youtube.connected ? '<div class="sc-note">YouTube chưa kết nối — mục YouTube sẽ chỉ được nhắc đăng tay cho tới khi bạn <b>Kết nối YouTube</b>.</div>' : ''}
@@ -292,7 +299,7 @@
   // ---------- YouTube connect wizard ----------
   function ytWizard() {
     const y = S.v.youtube;
-    Studio.modal(`<div class="sc-form"><h3><i class="ti ti-brand-youtube" style="color:#E5484D"></i> Kết nối YouTube (tự tải video lên kênh của bạn)</h3>
+    Studio.modal(`<div class="sc-form"><h3><i class="ti ti-brand-youtube sc-pc-youtube sc-yt-ic"></i> Kết nối YouTube (tự tải video lên kênh của bạn)</h3>
       <div class="sc-note info">Dùng <b>OAuth client của chính bạn</b> — miễn phí, không chia sẻ mật khẩu. Token chỉ lưu trên máy này (<code>~/.ai-video-studio/youtube_token.json</code>, quyền 600). Làm 1 lần, mất ~10 phút.</div>
       <ol class="sc-steps">
         <li>Mở <a href="https://console.cloud.google.com/projectcreate" target="_blank">Google Cloud Console → Tạo dự án</a> (tên tuỳ ý, VD “AI Video Studio”).</li>
@@ -303,14 +310,14 @@
         <li>Vào <a href="https://console.cloud.google.com/auth/clients" target="_blank">Clients</a> → <b>Create client</b> → Application type: <b>Desktop app</b> → Create → <b>Download JSON</b>.</li>
         <li>Dán nội dung file JSON vào ô dưới (hoặc chọn file) → <b>Lưu client</b> → <b>Kết nối</b>: trình duyệt mở trang Google, chọn tài khoản có kênh, tick đủ quyền, bấm <b>Cho phép</b>.</li>
       </ol>
-      <label>OAuth client (JSON loại Desktop app) ${y.hasClient ? `<span class="sc-st done">đã lưu: ${esc(y.client_id)}</span>` : ''}</label>
-      <textarea id="sc-cj" rows="3" placeholder='{"installed":{"client_id":"….apps.googleusercontent.com","client_secret":"…", …}}' style="font:11px ui-monospace,Menlo,monospace"></textarea>
+      <label>OAuth client (JSON loại Desktop app) ${y.hasClient ? chip('done', `đã lưu: ${esc(y.client_id)}`) : ''}</label>
+      <textarea id="sc-cj" class="sc-mono" rows="3" placeholder='{"installed":{"client_id":"….apps.googleusercontent.com","client_secret":"…", …}}'></textarea>
       <div class="sc-acts"><button id="sc-cf"><i class="ti ti-file-upload"></i> Chọn file JSON…</button><input type="file" id="sc-cfi" accept=".json,application/json" hidden><button id="sc-cs"><i class="ti ti-device-floppy"></i> Lưu client</button>
         <span class="grow"></span><button class="primary" id="sc-cn" ${y.hasClient ? '' : 'disabled'}><i class="ti ti-plug-connected"></i> ${y.connected ? 'Kết nối lại' : 'Kết nối'}</button></div>
       <div id="sc-cst" class="help">${y.connected ? `Đang kết nối với kênh <b>${esc(y.channel?.title || '?')}</b>.` : y.authError ? `<span class="sc-err">${esc(y.authError)}</span>` : ''}</div>
       <div class="sc-note"><b>Lưu ý quan trọng:</b> YouTube khoá ở chế độ <b>Riêng tư</b> mọi video tải lên qua API từ dự án Google Cloud <b>chưa được kiểm duyệt</b> (tạo sau 28/07/2020) — kể cả video hẹn giờ công khai.
-        Muốn video tự công khai, gửi đơn kiểm duyệt miễn phí: <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" style="color:inherit">YouTube API Services – Audit and Quota Extension Form</a>. Trong lúc chờ, hãy thử với 1 video ở chế độ Riêng tư.<br>
-        Quota mặc định 10 000 đơn vị/ngày, mỗi video ~1 600 → khoảng 6 video/ngày. Ảnh bìa tuỳ chỉnh cần kênh đã <a href="https://www.youtube.com/verify" target="_blank" style="color:inherit">xác minh số điện thoại</a>.</div>
+        Muốn video tự công khai, gửi đơn kiểm duyệt miễn phí: <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank">YouTube API Services – Audit and Quota Extension Form</a>. Trong lúc chờ, hãy thử với 1 video ở chế độ Riêng tư.<br>
+        Quota mặc định 10 000 đơn vị/ngày, mỗi video ~1 600 → khoảng 6 video/ngày. Ảnh bìa tuỳ chỉnh cần kênh đã <a href="https://www.youtube.com/verify" target="_blank">xác minh số điện thoại</a>.</div>
       <div class="actions">${y.connected || y.hasClient ? '<button class="danger" id="sc-forget">Xoá client + token</button><span class="grow"></span>' : ''}<button onclick="closeModal()">Đóng</button></div></div>`);
     wide('sc-mid');
     $('#sc-cf').onclick = () => $('#sc-cfi').click();
@@ -323,7 +330,7 @@
     $('#sc-cn').onclick = async () => {
       const r = await Studio.api('/api/youtube/connect', {});
       if (r.error) { $('#sc-cst').innerHTML = `<span class="sc-err">${esc(r.error)}</span>`; return; }
-      $('#sc-cst').innerHTML = `<i class="ti ti-loader-2 spin"></i> Đã mở trang đăng nhập Google trong trình duyệt — chọn tài khoản và bấm Cho phép. Không thấy tab? <a href="${esc(r.url)}" target="_blank" style="color:#B9AEFF">Mở lại link</a> (chờ tối đa 5 phút).`;
+      $('#sc-cst').innerHTML = `<i class="ti ti-loader-2 spin"></i> Đã mở trang đăng nhập Google trong trình duyệt — chọn tài khoản và bấm Cho phép. Không thấy tab? <a href="${esc(r.url)}" target="_blank" class="sc-link">Mở lại link</a> (chờ tối đa 5 phút).`;
       const t0 = Date.now(), iv = setInterval(async () => {
         const s = await Studio.api('/api/youtube/status');
         if (s.connected && !s.pending) { clearInterval(iv); Studio.toast('Đã kết nối YouTube · ' + (s.channel?.title || '')); await load(); if ($('#sc-cst')) ytWizard(); }

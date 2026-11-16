@@ -6,45 +6,57 @@
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc;
   const css = document.createElement('style');
   css.textContent = `
-  .qc-score { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
-  .qc-ring { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-weight: 800; flex: none;
-    background: conic-gradient(var(--c) calc(var(--v) * 1%), var(--bg4) 0); position: relative; }
-  .qc-ring::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--bg1); }
+  .qc-score { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-2) 0 var(--space-3); } .qc-score.qc-tight { margin: var(--space-2) 0; }
+  .qc-ring { --c: var(--color-danger); width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-xl); font-weight: 800; flex: none;
+    background: conic-gradient(rgb(var(--c)) calc(var(--v, 0) * 1%), rgb(var(--color-surface-hover)) 0); position: relative; }
+  .qc-ring.ok { --c: var(--color-success); } .qc-ring.warn { --c: var(--color-warning); }
+  .qc-ring::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: rgb(var(--color-surface)); }
   .qc-ring b { position: relative; z-index: 1; }
-  .qc-sum { color: var(--tx2); line-height: 1.5; font-size: 12.5px; }
-  .qc-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow: auto; margin: 6px 0; }
-  .qc-it { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--rs); background: var(--bg1); cursor: pointer; }
-  .qc-it:hover { border-color: var(--line3); }
+  .qc-sum { color: rgb(var(--color-fg-muted)); line-height: 1.5; font-size: var(--text-sm); }
+  .qc-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 46vh; overflow: auto; margin: var(--space-2) 0; }
+  .qc-it { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); background: rgb(var(--color-surface)); cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard); }
+  .qc-it:hover { border-color: rgb(var(--color-line-hover)); }
   .qc-it.fixed { opacity: .62; }
-  .qc-it input.qc-pick { flex: none; width: auto; margin: 2px 0 0; cursor: pointer; }
-  .qc-it .sg { display: block; color: var(--acc); font-size: 11.5px; margin-top: 2px; }
-  .qc-it .nw { color: var(--warn); font-size: 10px; border: 1px solid var(--warn); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
-  .qc-bulk { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--tx2); margin: 4px 0 0; } .qc-bulk a { color: var(--acc); cursor: pointer; }
-  .qc-it .tm { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--tx3); width: 42px; flex: none; padding-top: 1px; }
-  .qc-it .sv { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--tx3); }
-  .qc-it .sv.high { background: var(--bad); } .qc-it .sv.med { background: var(--warn); } .qc-it .sv.low { background: var(--wave); }
-  .qc-it .bd { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.45; }
-  .qc-it .bd small { color: var(--tx3); font-size: 10.5px; margin-left: 4px; }
-  .qc-it .ok { color: var(--ok); font-size: 11px; flex: none; }
-  .qc-it .src { font-size: 9.5px; text-transform: uppercase; color: var(--tx3); border: 1px solid var(--line2); border-radius: 4px; padding: 0 4px; margin-right: 4px; }
-  .qc-imgs { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; } .qc-imgs a { color: var(--acc); font-size: 12px; }
-  .qc-cmp { width: 100%; border-radius: 6px; border: 1px solid var(--line2); margin-top: 6px; }
-  label.qcx { display: flex; gap: 8px; align-items: center; margin-top: 12px; padding: 8px 10px; border: 1px solid var(--line2); border-radius: var(--rs); cursor: pointer; background: var(--bg1); }
-  label.qcx:has(input:checked) { border-color: var(--acc-line); background: var(--acc-soft); }
-  label.qcx small { color: var(--tx3); }
-  .va-grid { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 10px; margin: 8px 0; }
-  .va-col { background: var(--bg1); border: 1px solid var(--line); border-radius: var(--r); padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .va-col.cur { border-color: var(--acc-line); }
-  .va-col video, .va-col img { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 6px; background: #000; }
+  .qc-it input.qc-pick { flex: none; width: auto; margin: var(--space-050) 0 0; cursor: pointer; }
+  .qc-it .sg { display: block; color: rgb(var(--color-accent-text)); font-size: var(--text-xs); margin-top: var(--space-050); }
+  .qc-it .nw { color: rgb(var(--color-warning)); font-size: var(--text-2xs); border: 1px solid rgb(var(--color-warning)); border-radius: var(--radius-xs); padding: 0 var(--space-1); margin-left: var(--space-1); }
+  .qc-bulk { display: flex; gap: var(--space-3); align-items: center; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); margin: var(--space-1) 0 0; } .qc-bulk a { color: rgb(var(--color-accent-text)); cursor: pointer; }
+  .qc-it .tm { font-variant-numeric: tabular-nums; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); width: 44px; flex: none; padding-top: 1px; }
+  .qc-it .sv { width: 8px; height: 8px; border-radius: 50%; margin-top: var(--space-1); flex: none; background: rgb(var(--color-fg-subtle)); }
+  .qc-it .sv.high { background: rgb(var(--color-danger)); } .qc-it .sv.med { background: rgb(var(--color-warning)); } .qc-it .sv.low { background: rgb(var(--color-audio)); }
+  .qc-it .bd { flex: 1; min-width: 0; font-size: var(--text-sm); line-height: 1.45; }
+  .qc-it .bd small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); margin-left: var(--space-1); }
+  .qc-it .ok { color: rgb(var(--color-success)); font-size: var(--text-2xs); flex: none; }
+  .qc-it .src { font-size: var(--text-2xs); text-transform: uppercase; color: rgb(var(--color-fg-subtle)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-xs); padding: 0 var(--space-1); margin-right: var(--space-1); }
+  .qc-imgs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-2) 0; } .qc-imgs a { color: rgb(var(--color-accent-text)); font-size: var(--text-xs); }
+  .qc-cmp { width: 100%; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); margin-top: var(--space-2); }
+  .qc-sumt { cursor: pointer; }
+  label.qcx { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); cursor: pointer; background: rgb(var(--color-surface)); }
+  label.qcx.qc-m0 { margin-top: 0; }
+  label.qcx:has(input:checked) { border-color: rgb(var(--color-accent-text) / .5); background: rgb(var(--color-accent-soft) / .24); }
+  label.qcx small { color: rgb(var(--color-fg-subtle)); }
+  .qc-c-ok { color: rgb(var(--color-success)); } .qc-c-warn { color: rgb(var(--color-warning)); } .qc-c-bad { color: rgb(var(--color-danger)); }
+  .qc-sub { font-weight: 400; font-size: var(--text-xs); }
+  .ai-row.qc-mt { margin-top: var(--space-3); } .ai-row.qc-mt2 { margin-top: var(--space-2); } .ai-row.qc-click { cursor: pointer; } .qc-nf { flex: none; }
+  .qc-lbl { flex: none; width: 88px; } .qc-push { margin-left: auto; }
+  p.qc-hint { margin: var(--space-050) 0 0 96px; font-size: var(--text-xs); }
+  .qc-chk { cursor: pointer; margin-right: var(--space-3); }
+  p.qc-p { margin: var(--space-3) 0 var(--space-1); } p.qc-p0 { margin: 0 0 var(--space-2); } textarea.qc-ta { width: 100%; }
+  .va-grid { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-2) 0; }
+  .va-col { background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+  .va-col.cur { border-color: rgb(var(--color-accent-text) / .5); }
+  .va-col video, .va-col img { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: var(--radius-control); background: rgb(var(--color-black)); }
   body.landscape .va-col video, body.landscape .va-col img { aspect-ratio: 16/9; }
-  .va-col b { font-size: 12.5px; } .va-col p { margin: 0; color: var(--tx2); font-size: 11.5px; line-height: 1.45; }
-  .va-col .hk { color: var(--warn); font-weight: 700; font-size: 12px; }
+  .va-col b { font-size: var(--text-sm); } .va-col p { margin: 0; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); line-height: 1.45; }
+  .va-col .hk { color: rgb(var(--color-warning)); font-weight: 700; font-size: var(--text-xs); }
   #modalbox:has(.va-grid) { width: min(1100px, 94vw); max-width: 94vw; }
   #modalbox:has(.qc-list) { width: min(640px, 94vw); }`;
   document.head.appendChild(css);
+  // Data-driven values (ring score, number of variant columns) arrive as data-v="--v:72" and are set with style.setProperty after insert.
+  const applyVars = root => (root || document).querySelectorAll('[data-v]').forEach(el => el.dataset.v.split(';').forEach(p => { const i = p.indexOf(':'); if (i > 0) el.style.setProperty(p.slice(0, i).trim(), p.slice(i + 1).trim()); }));
 
-  const col = v => (v >= 80 ? 'var(--ok)' : v >= 55 ? 'var(--warn)' : 'var(--bad)');
-  const ring = v => `<div class="qc-ring" style="--v:${v};--c:${col(v)}"><b>${v}</b></div>`;
+  const tier = v => (v >= 80 ? 'ok' : v >= 55 ? 'warn' : 'bad');
+  const ring = v => `<div class="qc-ring ${tier(v)}" data-v="--v:${+v || 0}"><b>${v}</b></div>`;
   const KV = { hook: 'Hook', readability: 'Dễ đọc', spelling: 'Chính tả', variety: 'Đa dạng', pacing: 'Nhịp', brand: 'Thương hiệu' };
   let last = null, va = null, exportQc = null, passQc = false, saved = null;
 
@@ -95,16 +107,16 @@
     const initial = q.counts?.initial ?? q.issues.length - newN;
     const sc = q.claude?.scores && Object.keys(q.claude.scores).length ? `<div class="ai-kv">${Object.entries(q.claude.scores).map(([k, v]) => `<span>${KV[k] || k} ${v}/10</span>`).join('')}</div>` : '';
     const sum = !q.issues.length ? 'Không thấy vấn đề nào'
-      : q.fix ? `Ban đầu ${initial} vấn đề${fixedN ? ` · đã sửa <b style="color:var(--ok)">${fixedN}</b>` : ''}${q.selected ? ` <span class="muted">(bạn chọn ${q.selected} gợi ý)</span>` : ''}${newN ? ` · <b style="color:var(--warn)">${newN} phát sinh sau khi sửa</b>` : ''}${q.counts?.high ? ` · <b style="color:var(--bad)">${q.counts.high} nặng</b> còn lại` : ''}`
-      : `${q.issues.length} vấn đề${sug.length ? ` · <b>${sug.length} gợi ý sửa</b>, tick mục muốn áp dụng` : ''}${q.counts?.high ? ` · <b style="color:var(--bad)">${q.counts.high} nặng</b>` : ''}`;
+      : q.fix ? `Ban đầu ${initial} vấn đề${fixedN ? ` · đã sửa <b class="qc-c-ok">${fixedN}</b>` : ''}${q.selected ? ` <span class="muted">(bạn chọn ${q.selected} gợi ý)</span>` : ''}${newN ? ` · <b class="qc-c-warn">${newN} phát sinh sau khi sửa</b>` : ''}${q.counts?.high ? ` · <b class="qc-c-bad">${q.counts.high} nặng</b> còn lại` : ''}`
+      : `${q.issues.length} vấn đề${sug.length ? ` · <b>${sug.length} gợi ý sửa</b>, tick mục muốn áp dụng` : ''}${q.counts?.high ? ` · <b class="qc-c-bad">${q.counts.high} nặng</b>` : ''}`;
     S.modal(`<h3><i class="ti ti-shield-check"></i> Kiểm tra chất lượng</h3>
-      <div class="qc-score">${q.after != null ? `${ring(q.before)}<i class="ti ti-arrow-right" style="color:var(--tx3)"></i>${ring(q.after)}` : ring(q.score)}
+      <div class="qc-score">${q.after != null ? `${ring(q.before)}<i class="ti ti-arrow-right ui-subtle"></i>${ring(q.after)}` : ring(q.score)}
         <div class="qc-sum">${sum}
         ${q.fix && newN ? '<br><small class="muted">“Phát sinh” là vấn đề do chính lần sửa tạo ra (vd chữ dời chỗ thì đè lên thứ khác). Bấm Kiểm tra lại để có gợi ý sửa tiếp, hoặc Hoàn tác.</small>' : ''}
         ${q.audio?.lufs != null ? `<br>Âm thanh: ${q.audio.lufs} LUFS · đỉnh ${q.audio.true_peak} dBTP${q.audio.masked_pct != null ? ` · nhạc át giọng ${q.audio.masked_pct}%` : ''}` : ''}
         ${adsSummary(q)}
         ${q.undone ? '<br><i>Đã hoàn tác lần sửa trước.</i>' : ''}</div></div>
-      ${q.claude?.summary ? `<div class="help"><b>Claude:</b> ${esc(q.claude.summary)}</div>${sc}` : q.claude?.error ? `<div class="help" style="color:var(--warn)">Không có nhận xét của Claude: ${esc(q.claude.error)}</div>` : ''}
+      ${q.claude?.summary ? `<div class="help"><b>Claude:</b> ${esc(q.claude.summary)}</div>${sc}` : q.claude?.error ? `<div class="help qc-c-warn">Không có nhận xét của Claude: ${esc(q.claude.error)}</div>` : ''}
       ${sug.length ? '<div class="qc-bulk"><a data-qcsel="all">Chọn tất cả</a><a data-qcsel="high">Chỉ lỗi nặng + vừa</a><a data-qcsel="none">Bỏ chọn</a></div>' : ''}
       <div class="qc-list">${q.issues.map(i => { const g = !q.fix && i.key && suggestion(i); return `<div class="qc-it ${i.fixed ? 'fixed' : ''}" data-qct="${i.t}" title="Bấm để tua tới ${S.fmt(i.t)}">
         ${g ? `<input type="checkbox" class="qc-pick" data-key="${esc(i.key)}" data-sv="${i.severity}" ${i.severity !== 'low' ? 'checked' : ''} title="Áp dụng gợi ý này">` : ''}
@@ -112,11 +124,12 @@
         <span class="bd"><span class="src">${i.src === 'claude' ? 'Claude' : 'máy'}</span><b>${esc(i.kind_vi)}</b> — ${esc(i.msg)}${i.new ? '<span class="nw">phát sinh sau khi sửa</span>' : ''}${i.note ? `<small>(${esc(i.note)})</small>` : ''}
         ${g ? `<span class="sg"><i class="ti ti-wand"></i> Gợi ý: ${esc(g)}</span>` : ''}</span>
         ${i.fixed ? '<span class="ok"><i class="ti ti-check"></i> đã sửa</span>' : ''}</div>`; }).join('')}</div>
-      ${q.compare_sheet ? `<details><summary class="muted" style="cursor:pointer">Ảnh trước / sau khi sửa (${q.compare.length} cặp)</summary><img class="qc-cmp" src="/project/${q.compare_sheet}?${Date.now()}"></details>` : ''}
+      ${q.compare_sheet ? `<details><summary class="muted qc-sumt">Ảnh trước / sau khi sửa (${q.compare.length} cặp)</summary><img class="qc-cmp" src="/project/${q.compare_sheet}?${Date.now()}"></details>` : ''}
       <div class="qc-imgs">${q.sheet ? `<a href="/project/${q.sheet}" target="_blank"><i class="ti ti-layout-grid"></i> Ảnh tổng quan các khung</a>` : ''}</div>
       <div class="actions">${q.can_undo && q.fix && !q.undone ? '<button id="qcundo"><i class="ti ti-arrow-back-up"></i> Hoàn tác sửa</button>' : ''}
         <button id="qcagain"><i class="ti ti-refresh"></i> Kiểm tra lại</button>
         ${sug.length ? '<button class="primary" id="qcfix"><i class="ti ti-wand"></i> <span>Áp dụng gợi ý đã chọn</span></button>' : ''}<button onclick="closeModal()">Đóng</button></div>`);
+    applyVars($('#modalbox'));
     const list = $('#modalbox .qc-list'), picks = () => [...list.querySelectorAll('.qc-pick')];
     const count = () => { const n = picks().filter(x => x.checked).length, b = $('#qcfix'); if (b) { b.disabled = !n; b.querySelector('span').textContent = n ? `Áp dụng ${n} gợi ý đã chọn` : 'Chưa chọn gợi ý nào'; } };
     list.addEventListener('click', e => { if (e.target.closest('.qc-pick')) return count(); const it = e.target.closest('[data-qct]'); if (it) { S.setTime(+it.dataset.qct); S.closeModal(); } });
@@ -141,19 +154,19 @@
     const lines = st => cl.filter(c => (c.status || 'approved') === st).map(c => c.text).join('\n');
     S.modal(`<h3><i class="ti ti-speakerphone"></i> Kiểm tra quảng cáo</h3>
       <p class="muted">Khi bật, “Kiểm tra chất lượng” soát thêm lời thoại và chữ trên màn hình theo chính sách quảng cáo Meta / TikTok, đối chiếu claim, và chấm điểm nguyên bản so với các phiên bản A/B. Chỉ báo, không tự sửa; không thay kiểm duyệt của nền tảng.</p>
-      <label class="qcx" style="margin-top:0"><input type="checkbox" id="adon" ${a.on ? 'checked' : ''}><span><b>Video này dùng để chạy quảng cáo</b></span></label>
-      <div class="ai-row" style="margin-top:10px"><span style="flex:none;width:86px">Sản phẩm</span><select id="adprod"><option value="">— nhập claim tay cho dự án này —</option>
+      <label class="qcx qc-m0"><input type="checkbox" id="adon" ${a.on ? 'checked' : ''}><span><b>Video này dùng để chạy quảng cáo</b></span></label>
+      <div class="ai-row qc-mt"><span class="qc-lbl">Sản phẩm</span><select id="adprod"><option value="">— nhập claim tay cho dự án này —</option>
         ${prods.map(p => `<option value="${esc(p.id)}" ${a.product === p.id ? 'selected' : ''}>${esc(p.name)} · ${p.claims?.approved || 0} claim đã duyệt</option>`).join('')}
         ${lost ? `<option value="${esc(a.product)}" selected>⚠ ${esc(a.product)} (không còn hồ sơ)</option>` : ''}</select></div>
-      <p class="muted" id="adprodhint" style="margin:2px 0 0 94px;font-size:11.5px"></p>
-      <div class="ai-row"><span style="flex:none;width:86px">Ngành</span><select id="adind">${Object.entries(AD_IND).map(([k, v]) => `<option value="${k}" ${(a.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-      <div class="ai-row"><span style="flex:none;width:86px">Nền tảng</span>${Object.entries(AD_PLAT).map(([k, v]) => `<label style="cursor:pointer;margin-right:12px"><input type="checkbox" data-adp="${k}" ${plats.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
-      <p style="margin:10px 0 4px"><b id="adoklbl">Claim đã có bằng chứng</b> <span class="muted">· mỗi dòng một câu; có ít nhất một dòng thì câu nêu lợi ích hay số liệu không khớp sẽ bị nhắc</span></p>
-      <textarea id="adok" rows="4" style="width:100%">${esc(lines('approved'))}</textarea>
-      <p style="margin:10px 0 4px"><b>Claim bị cấm</b> <span class="muted">· mỗi dòng một câu; lời thoại gần giống sẽ bị chặn</span></p>
-      <textarea id="adno" rows="2" style="width:100%">${esc(lines('prohibited'))}</textarea>
-      <p style="margin:10px 0 4px"><b>Cụm từ không được dùng</b> <span class="muted">· mỗi dòng một cụm</span></p>
-      <textarea id="adbl" rows="2" style="width:100%">${esc((a.blocked || []).join('\n'))}</textarea>
+      <p class="muted qc-hint" id="adprodhint"></p>
+      <div class="ai-row"><span class="qc-lbl">Ngành</span><select id="adind">${Object.entries(AD_IND).map(([k, v]) => `<option value="${k}" ${(a.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="ai-row"><span class="qc-lbl">Nền tảng</span>${Object.entries(AD_PLAT).map(([k, v]) => `<label class="qc-chk"><input type="checkbox" data-adp="${k}" ${plats.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+      <p class="qc-p"><b id="adoklbl">Claim đã có bằng chứng</b> <span class="muted">· mỗi dòng một câu; có ít nhất một dòng thì câu nêu lợi ích hay số liệu không khớp sẽ bị nhắc</span></p>
+      <textarea id="adok" rows="4" class="qc-ta">${esc(lines('approved'))}</textarea>
+      <p class="qc-p"><b>Claim bị cấm</b> <span class="muted">· mỗi dòng một câu; lời thoại gần giống sẽ bị chặn</span></p>
+      <textarea id="adno" rows="2" class="qc-ta">${esc(lines('prohibited'))}</textarea>
+      <p class="qc-p"><b>Cụm từ không được dùng</b> <span class="muted">· mỗi dòng một cụm</span></p>
+      <textarea id="adbl" rows="2" class="qc-ta">${esc((a.blocked || []).join('\n'))}</textarea>
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="adsave">Lưu</button></div>`);
     const hint = () => {
       const id = $('#adprod').value, p = prods.find(x => x.id === id);
@@ -178,12 +191,12 @@
   }
   function adsSummary(q) {
     const a = q.ads; if (!a) return '';
-    if (a.error) return `<br><span style="color:var(--warn)">Kiểm tra quảng cáo không chạy được: ${esc(a.error)}</span>`;
+    if (a.error) return `<br><span class="qc-c-warn">Kiểm tra quảng cáo không chạy được: ${esc(a.error)}</span>`;
     const o = a.originality;
-    return `<br>Quảng cáo (${esc(a.industry_vi || '')} · ${(a.platforms || []).map(p => AD_PLAT[p] || p).join(', ')}${a.product?.name || S.TL.ads?.product ? ` · hồ sơ ${esc(a.product?.name || S.TL.ads.product)}` : ''}): ${a.blocked ? '<b style="color:var(--bad)">có lỗi chặn</b>' : '<b style="color:var(--ok)">không có lỗi chặn</b>'}`
-      + (o ? ` · nguyên bản <b style="color:${o.ok ? 'var(--ok)' : o.ab ? 'var(--warn)' : 'var(--bad)'}">${o.score.toFixed(2)}</b> (ngưỡng ${o.min}, so ${o.compared} bản${o.ab ? ', nhóm A/B' : ''})` : ' · chưa có phiên bản khác để chấm nguyên bản')
+    return `<br>Quảng cáo (${esc(a.industry_vi || '')} · ${(a.platforms || []).map(p => AD_PLAT[p] || p).join(', ')}${a.product?.name || S.TL.ads?.product ? ` · hồ sơ ${esc(a.product?.name || S.TL.ads.product)}` : ''}): ${a.blocked ? '<b class="qc-c-bad">có lỗi chặn</b>' : '<b class="qc-c-ok">không có lỗi chặn</b>'}`
+      + (o ? ` · nguyên bản <b class="qc-c-${o.ok ? 'ok' : o.ab ? 'warn' : 'bad'}">${o.score.toFixed(2)}</b> (ngưỡng ${o.min}, so ${o.compared} bản${o.ab ? ', nhóm A/B' : ''})` : ' · chưa có phiên bản khác để chấm nguyên bản')
       + (a.rechecked ? ' · đã soát lại sau khi sửa' : '')
-      + (q.override ? `<br><span style="color:var(--warn)">Đã bỏ qua chặn xuất (${esc(new Date(q.override.at).toLocaleString('vi-VN'))}): ${esc(q.override.reason)}</span>` : '');
+      + (q.override ? `<br><span class="qc-c-warn">Đã bỏ qua chặn xuất (${esc(new Date(q.override.at).toLocaleString('vi-VN'))}): ${esc(q.override.reason)}</span>` : '');
   }
 
   // ---------- variants ----------
@@ -203,12 +216,13 @@
   function showVariants() {
     const v = va; if (!v) return S.toast('Chưa có phiên bản nào');
     const cols = [{ dir: v.base, name: 'Gốc', desc: 'Dự án ban đầu', hook: v.base_hook, still: v.base_still, video: v.base_video }, ...v.variants];
-    S.modal(`<h3><i class="ti ti-versions"></i> So sánh ${v.variants.length} phiên bản <span class="muted" style="font-weight:400;font-size:12px">· ${esc(v.kind_vi || v.kind)}</span></h3>
-      <div class="va-grid" style="--n:${cols.length}">${cols.map(c => `<div class="va-col ${c.dir === v.current ? 'cur' : ''}">
+    S.modal(`<h3><i class="ti ti-versions"></i> So sánh ${v.variants.length} phiên bản <span class="muted qc-sub">· ${esc(v.kind_vi || v.kind)}</span></h3>
+      <div class="va-grid" data-v="--n:${cols.length}">${cols.map(c => `<div class="va-col ${c.dir === v.current ? 'cur' : ''}">
         ${c.video ? `<video src="${vfile(c.dir, c.video)}" ${c.still ? `poster="${vfile(c.dir, c.still)}"` : ''} muted loop playsinline controls preload="metadata"></video>` : c.still ? `<img src="${vfile(c.dir, c.still)}">` : '<div class="muted">chưa có ảnh</div>'}
         <b>${esc(c.name)}</b>${c.hook ? `<span class="hk">“${esc(c.hook)}”</span>` : ''}<p>${esc(c.desc || '')}</p>
         ${c.dir === v.current ? '<button class="mini" disabled>Đang mở</button>' : `<button class="mini" data-vaopen="${esc(c.dir)}"><i class="ti ti-folder-open"></i> Mở</button>`}</div>`).join('')}</div>
       <div class="actions"><button id="vaplay"><i class="ti ti-player-play"></i> Phát cùng lúc</button><button onclick="closeModal()">Đóng</button></div>`);
+    applyVars($('#modalbox'));
     $('#vaplay').onclick = () => { for (const vd of document.querySelectorAll('#modalbox video')) { vd.currentTime = 0; vd.play().catch(() => {}); } };
     $('#modalbox .va-grid').addEventListener('click', async e => {
       const b = e.target.closest('[data-vaopen]'); if (!b) return;
@@ -223,20 +237,20 @@
     const q = last, v = va;
     return `<div class="ai-card" id="qcbox"><h4><i class="ti ti-shield-check"></i> Kiểm tra chất lượng</h4>
       <p>Máy dò chữ tràn khung, graphic che mặt, phụ đề bị đè, đoạn trống > 6 giây, phụ đề quá dài, file thiếu, hook, độ to âm thanh; rồi Claude xem các khung hình để soi hook, chính tả, nhịp.</p>
-      ${q ? `<div class="qc-score" style="margin:6px 0">${ring(q.score)}<div class="qc-sum">${q.counts?.initial ?? q.issues.length} vấn đề${q.counts?.fixed ? `, đã sửa ${q.counts.fixed}` : ''}${q.counts?.new ? `, ${q.counts.new} phát sinh` : ''}<br><span class="muted">${new Date(q.created).toLocaleString('vi-VN')}</span></div></div>` : ''}
-      <label class="ai-row" style="cursor:pointer"><input type="checkbox" id="qcclaude" style="flex:none" checked><span>Nhờ Claude xem khung hình <span class="muted">· chậm hơn</span></span></label>
+      ${q ? `<div class="qc-score qc-tight">${ring(q.score)}<div class="qc-sum">${q.counts?.initial ?? q.issues.length} vấn đề${q.counts?.fixed ? `, đã sửa ${q.counts.fixed}` : ''}${q.counts?.new ? `, ${q.counts.new} phát sinh` : ''}<br><span class="muted">${new Date(q.created).toLocaleString('vi-VN')}</span></div></div>` : ''}
+      <label class="ai-row qc-click"><input type="checkbox" id="qcclaude" class="qc-nf" checked><span>Nhờ Claude xem khung hình <span class="muted">· chậm hơn</span></span></label>
       <div class="acts"><button class="mini primary" data-qc="fix" title="Kiểm tra rồi liệt kê gợi ý sửa; bạn chọn mục nào thì mới sửa mục đó"><i class="ti ti-wand"></i> Kiểm tra & gợi ý sửa</button>
       ${q ? '<button class="mini" data-qc="show"><i class="ti ti-list-details"></i> Kết quả</button>' : ''}</div>
-      <div class="ai-row" style="margin-top:8px"><span>Kiểm tra quảng cáo: <b>${S.TL.ads?.on ? 'bật' : 'tắt'}</b>${S.TL.ads?.on ? ` <span class="muted">· ${AD_IND[S.TL.ads.industry || '']}${S.TL.ads.product ? ` · hồ sơ ${esc(S.TL.ads.product)}` : ''}</span>` : ''}</span><button class="mini" data-qc="ads" style="margin-left:auto"><i class="ti ti-speakerphone"></i> Thiết lập</button></div></div>
+      <div class="ai-row qc-mt2"><span>Kiểm tra quảng cáo: <b>${S.TL.ads?.on ? 'bật' : 'tắt'}</b>${S.TL.ads?.on ? ` <span class="muted">· ${AD_IND[S.TL.ads.industry || '']}${S.TL.ads.product ? ` · hồ sơ ${esc(S.TL.ads.product)}` : ''}</span>` : ''}</span><button class="mini" data-qc="ads" class="qc-push"><i class="ti ti-speakerphone"></i> Thiết lập</button></div></div>
       <div class="ai-card" id="vabox"><h4><i class="ti ti-versions"></i> Nhiều phiên bản (A/B)</h4>
       <p>Tạo 3 dự án anh em với hook mở đầu khác nhau (Claude viết) và/hoặc gói style khác nhau, để đăng thử xem bản nào giữ chân người xem tốt hơn.</p>
       <div class="ai-row"><select id="vakind"><option value="hook">Khác hook mở đầu</option><option value="style">Khác gói style</option><option value="both">Khác cả hai</option></select></div>
-      <label class="ai-row" style="cursor:pointer"><input type="checkbox" id="vaexp" style="flex:none"><span>Xuất luôn video 720p để so sánh</span></label>
+      <label class="ai-row qc-click"><input type="checkbox" id="vaexp" class="qc-nf"><span>Xuất luôn video 720p để so sánh</span></label>
       <div class="acts"><button class="mini primary" data-qc="variants"><i class="ti ti-copy"></i> Tạo 3 phiên bản</button>${v ? '<button class="mini" data-qc="compare"><i class="ti ti-columns-3"></i> So sánh</button>' : ''}</div></div>`;
   }
   function inject() {
     const lib = $('#libbody'); if (!lib || !lib.querySelector('[data-ai="open"]') || lib.querySelector('#qcbox')) return;
-    lib.insertAdjacentHTML('beforeend', cards());
+    lib.insertAdjacentHTML('beforeend', cards()); applyVars(lib);
   }
   function rerender() { const a = $('#qcbox'), b = $('#vabox'); if (a) { a.remove(); b?.remove(); inject(); } }
   new MutationObserver(inject).observe($('#libbody'), { childList: true });
@@ -268,9 +282,9 @@
     if (exportQc && box.querySelector('h3 .ti-circle-check') && !box.querySelector('#qcdone')) {
       const q = exportQc; exportQc = null;
       box.querySelector('.actions')?.insertAdjacentHTML('beforebegin', `<div class="ai-card" id="qcdone"><h4><i class="ti ti-shield-check"></i> AI đã kiểm tra trước khi xuất</h4>
-        <div class="qc-score">${q.after != null ? `${ring(q.before)}<i class="ti ti-arrow-right" style="color:var(--tx3)"></i>${ring(q.after)}` : ring(q.score)}
+        <div class="qc-score">${q.after != null ? `${ring(q.before)}<i class="ti ti-arrow-right ui-subtle"></i>${ring(q.after)}` : ring(q.score)}
         <div class="qc-sum">Đã sửa ${q.counts?.fixed || 0}/${q.issues.length} vấn đề${q.counts?.high ? ` · còn ${q.counts.high} lỗi nặng` : ''}.<br><a href="#" id="qcdetail">Xem chi tiết</a></div></div></div>`);
-      $('#qcdetail').onclick = e => { e.preventDefault(); showResult(); };
+      applyVars(box); $('#qcdetail').onclick = e => { e.preventDefault(); showResult(); };
     }
   }).observe($('#modalbox'), { childList: true, subtree: false });
   // ---------- export gate (M15, scripts/export_gate.mjs): QC still has high ad issues → ask, default = stop ----------
@@ -288,14 +302,14 @@
     const form = [...box.children].map(el => [el, el.style.display]); form.forEach(([el]) => (el.style.display = 'none'));
     const wasQc = passQc; passQc = false; saved = null; // "Dừng" must not leave the QC-then-export pass armed
     box.insertAdjacentHTML('beforeend', `<div id="qcgate">
-      <h3><i class="ti ti-shield-x" style="color:var(--bad)"></i> Chưa xuất: còn ${g.issues.length} lỗi quảng cáo mức cao</h3>
-      <p class="muted" style="margin:0 0 6px">Lần kiểm tra chất lượng gần nhất${g.checked ? ` (${new Date(g.checked).toLocaleString('vi-VN')})` : ''} còn các lỗi sau. Mặc định là dừng để sửa.</p>
-      ${g.stale ? '<div class="help" style="color:var(--warn)">Timeline đã đổi sau lần kiểm tra đó. Nếu đã sửa, bấm “Kiểm tra lại”.</div>' : ''}
+      <h3><i class="ti ti-shield-x qc-c-bad"></i> Chưa xuất: còn ${g.issues.length} lỗi quảng cáo mức cao</h3>
+      <p class="muted qc-p0">Lần kiểm tra chất lượng gần nhất${g.checked ? ` (${new Date(g.checked).toLocaleString('vi-VN')})` : ''} còn các lỗi sau. Mặc định là dừng để sửa.</p>
+      ${g.stale ? '<div class="help qc-c-warn">Timeline đã đổi sau lần kiểm tra đó. Nếu đã sửa, bấm “Kiểm tra lại”.</div>' : ''}
       <div class="qc-list">${g.issues.map(i => `<div class="qc-it" data-qct="${i.t}"><span class="tm">${S.fmt(i.t).replace(/^0:/, '')}</span><span class="sv high"></span>
         <span class="bd"><span class="src">${esc(KCODE[i.kind] || i.kind)}</span>${esc(i.msg)}</span></div>`).join('')}</div>
-      ${g.hard ? `<div class="help" style="color:var(--bad)"><b>Có lỗi chính sách quảng cáo mức cao: không bỏ qua được.</b> Sửa lời thoại hoặc chữ trên màn hình rồi kiểm tra lại.</div>`
+      ${g.hard ? `<div class="help qc-c-bad"><b>Có lỗi chính sách quảng cáo mức cao: không bỏ qua được.</b> Sửa lời thoại hoặc chữ trên màn hình rồi kiểm tra lại.</div>`
         : `<label class="lbl" for="qcgwhy">Vẫn xuất? Ghi lý do (lưu vào .studio/qc.json và .studio/qc_overrides.log)</label>
-           <textarea id="qcgwhy" rows="2" style="width:100%" placeholder="Ví dụ: claim đã có giấy chứng nhận số …, khách hàng đã duyệt"></textarea>`}
+           <textarea id="qcgwhy" rows="2" class="qc-ta" placeholder="Ví dụ: claim đã có giấy chứng nhận số …, khách hàng đã duyệt"></textarea>`}
       <div class="actions"><button id="qcgqc"><i class="ti ti-refresh"></i> Kiểm tra lại</button>
         ${g.hard ? '' : '<button id="qcggo" disabled><i class="ti ti-upload"></i> Vẫn xuất</button>'}
         <button class="primary" id="qcgstop"><i class="ti ti-player-stop"></i> Dừng</button></div></div>`);
