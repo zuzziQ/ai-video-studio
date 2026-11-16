@@ -1,14 +1,10 @@
 {
   "_note": "Mốc của scripts/check_studio_tokens.mjs (M81): chỉ được giảm.",
   "total": {
-    "color": 238,
-    "style": 113
+    "color": 45,
+    "style": 76
   },
   "files": {
-    "studio/features/00_author.js": {
-      "color": 0,
-      "style": 1
-    },
     "studio/features/28_engines.js": {
       "color": 4,
       "style": 1
@@ -68,26 +64,6 @@
     "studio/features/82_broll_alts.js": {
       "color": 0,
       "style": 2
-    },
-    "studio/library.js": {
-      "color": 33,
-      "style": 8
-    },
-    "studio/routes/60_media.mjs": {
-      "color": 1,
-      "style": 0
-    },
-    "studio/server.mjs": {
-      "color": 5,
-      "style": 4
-    },
-    "studio/studio.css": {
-      "color": 135,
-      "style": 0
-    },
-    "studio/studio.js": {
-      "color": 19,
-      "style": 24
     }
   }
 }

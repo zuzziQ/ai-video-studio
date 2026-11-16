@@ -1,63 +1,78 @@
-// Author intro shown every time the Studio opens (+ "Tác giả" chip next to the logo to see it again).
+// Author card shown every time the Studio opens (+ "Tác giả" chip next to the logo to see it again).
 // Required credit — see NOTICE / AGENTS.md: keep the author name and course link when modifying or redistributing.
-// Own overlay (not #modal) so it never fights with features that open dialogs on start. Closes on the button, Esc, a click
-// outside, or by itself after 9 s (paused while the pointer is over it).
+// M85: a small card in the bottom-right corner (above the timeline, clear of the top bar's "Xuất"), not a centred dialog:
+// it slides in, closes by itself after 3 s (the count pauses while the pointer or keyboard focus is on it), never blocks
+// the editor and never takes focus. Close button, or Esc while focus is inside. The chip reopens it (then it stays until
+// closed). Element id stays `author`: 02_onboarding.js waits for #author to be gone before opening the first-run guide.
 'use strict';
 (() => {
   const AUTHOR = 'Nguyễn Tất Kiểm', COURSE = 'https://nguyentatkiem.com.vn/aiplusntk/', SITE = 'https://taki.vn';
+  const SHOW_MS = 3000;
   const css = document.createElement('style');
   css.textContent = `
-  #author { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgb(var(--color-scrim) / .66); backdrop-filter: blur(4px); animation: au-in .25s ease; }
-  #author.out { opacity: 0; transition: opacity .25s; }
-  @keyframes au-in { from { opacity: 0; } }
-  #author .card { width: min(440px, calc(100vw - 32px)); background: linear-gradient(160deg, var(--bg2), var(--bg1)); border: 1px solid var(--line2); border-radius: 14px;
-    box-shadow: var(--shadow-overlay); padding: 26px 26px 20px; text-align: center; position: relative; overflow: hidden; }
-  #author .card::before { content: ''; position: absolute; inset: -40% -20% auto; height: 220px; background: radial-gradient(closest-side, rgb(var(--color-accent) / .45), transparent); pointer-events: none; }
-  #author .mk { width: 46px; height: 46px; border-radius: 13px; margin: 0 auto 12px; background: conic-gradient(from 210deg, rgb(var(--navy-400)), rgb(var(--color-audio)), rgb(var(--navy-400))); box-shadow: var(--shadow-accent); position: relative; }
-  #author .mk i { position: absolute; background: rgb(var(--color-canvas)); border-radius: 3px; }
-  #author .mk i:nth-child(1) { left: 12px; top: 12px; width: 5px; height: 22px; } #author .mk i:nth-child(2) { left: 20.5px; top: 18px; width: 5px; height: 16px; } #author .mk i:nth-child(3) { left: 29px; top: 14px; width: 5px; height: 20px; }
-  #author h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
-  #author .by { margin: 6px 0 0; color: var(--tx2); font-size: 13px; }
-  #author .by b { color: var(--tx); }
-  #author .tag { margin: 10px 0 16px; color: var(--tx3); font-size: 12px; line-height: 1.5; }
-  #author .gift { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 13.5px;
-    color: rgb(var(--color-accent-fg)); background: rgb(var(--color-accent)); box-shadow: var(--shadow-accent); }
-  #author .gift:hover { background: rgb(var(--color-accent-hover)); }
-  #author .row { display: flex; gap: 8px; margin-top: 10px; }
-  #author .row a, #author .row button { flex: 1; justify-content: center; padding: 9px; border-radius: 9px; border: 1px solid var(--line2); background: var(--bg3); color: var(--tx2); text-decoration: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; }
-  #author .row button { color: var(--tx); font-weight: 600; }
-  #author .bar { height: 2px; background: var(--line); border-radius: 2px; margin-top: 14px; overflow: hidden; }
-  #author .bar i { display: block; height: 100%; width: 100%; background: var(--acc); transform-origin: left; animation: au-t 9s linear forwards; }
-  #author:hover .bar i { animation-play-state: paused; }
+  #author { position: fixed; right: var(--space-4); bottom: calc(var(--tlh, 300px) + var(--space-4)); z-index: 40; width: min(320px, calc(100vw - 2 * var(--space-4)));
+    display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-3);
+    background: rgb(var(--color-surface-raised)); color: rgb(var(--color-fg)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card);
+    box-shadow: var(--shadow-raised); overflow: hidden; animation: au-in var(--duration-slow) var(--ease-standard); }
+  #author.out { opacity: 0; transform: translateX(var(--space-6)); transition: opacity var(--duration-base) var(--ease-standard), transform var(--duration-base) var(--ease-standard); }
+  @keyframes au-in { from { opacity: 0; transform: translateX(var(--space-8)); } }
+  #author .au-head { display: flex; align-items: center; gap: var(--space-3); padding-right: var(--space-6); }
+  #author .mk { flex: none; width: var(--h-md); height: var(--h-md); border-radius: var(--radius-control); position: relative; box-shadow: var(--shadow-accent);
+    background: conic-gradient(from 210deg, rgb(var(--navy-400)), rgb(var(--color-audio)), rgb(var(--navy-400))); }
+  #author .mk i { position: absolute; background: rgb(var(--color-canvas)); border-radius: 2px; }
+  #author .mk i:nth-child(1) { left: 8px; top: 8px; width: 4px; height: 16px; } #author .mk i:nth-child(2) { left: 14px; top: 12px; width: 4px; height: 12px; } #author .mk i:nth-child(3) { left: 20px; top: 10px; width: 4px; height: 14px; }
+  #author .au-t { margin: 0; font-size: var(--text-sm); font-weight: 700; }
+  #author .by { margin: 0; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); }
+  #author .by b { color: rgb(var(--color-fg)); }
+  #author .au-x { position: absolute; top: var(--space-2); right: var(--space-2); }
+  #author .gift { height: var(--h-md); font-size: var(--text-xs); text-decoration: none; }
+  #author .au-site { align-self: center; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); text-decoration: none; }
+  #author .au-site:hover { color: rgb(var(--color-accent-text)); }
+  #author .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgb(var(--color-line)); }
+  #author .bar i { display: block; height: 100%; background: rgb(var(--color-accent-text)); transform-origin: left; animation: au-t ${SHOW_MS}ms linear forwards; }
+  #author:hover .bar i, #author:focus-within .bar i { animation-play-state: paused; }
   @keyframes au-t { to { transform: scaleX(0); } }
-  .au-chip { margin-left: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line2); background: var(--bg2); color: var(--tx2); font-size: 11px; cursor: pointer; white-space: nowrap; }
-  .au-chip:hover { color: var(--tx); border-color: var(--acc-line); }`;
+  .au-chip { margin-left: var(--space-1); }
+  .au-chip .ti { font-size: 12px; vertical-align: -2px; }`;
   document.head.appendChild(css);
 
   function show(auto = true) {
-    if (document.getElementById('author')) return;
-    const el = document.createElement('div');
+    const old = document.getElementById('author');
+    if (old?.classList.contains('out')) old.remove(); // chip pressed while the card fades out: open a fresh one
+    else if (old) { if (!auto) { old.stay?.(); old.querySelector('.bar')?.remove(); } return; } // chip while the card is up: keep it open
+    const el = document.createElement('aside');
     el.id = 'author';
-    el.innerHTML = `<div class="card" role="dialog" aria-label="Giới thiệu tác giả">
-      <div class="mk"><i></i><i></i><i></i></div>
-      <h2>AI Video Studio</h2>
-      <p class="by">Phần mềm của tác giả <b>${AUTHOR}</b></p>
-      <p class="tag">Edit video bằng AI chạy ngay trên máy bạn: template tự bám lời thoại, tạo style từ video bất kỳ, tự lái, agent Telegram.</p>
-      <a class="gift" href="${COURSE}" target="_blank" rel="noopener"><i class="ti ti-gift"></i> Tặng khoá học AI miễn phí</a>
-      <div class="row"><a href="${SITE}" target="_blank" rel="noopener"><i class="ti ti-world"></i> taki.vn</a><button data-close><i class="ti ti-player-play"></i> Bắt đầu dùng</button></div>
-      ${auto ? '<div class="bar"><i></i></div>' : ''}</div>`;
-    const close = () => { if (!el.isConnected) return; el.classList.add('out'); setTimeout(() => el.remove(), 250); document.removeEventListener('keydown', esc, true); };
-    const esc = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
-    el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) close(); });
-    document.addEventListener('keydown', esc, true);
-    if (auto) el.querySelector('.bar i').addEventListener('animationend', close);
+    el.setAttribute('aria-label', 'Giới thiệu tác giả');
+    el.innerHTML = `<div class="au-head"><span class="mk" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div><p class="au-t">AI Video Studio</p><p class="by">Phần mềm của tác giả <b>${AUTHOR}</b></p></div></div>
+      <a class="gift ui-btn ui-btn--primary ui-btn--block" href="${COURSE}" target="_blank" rel="noopener"><i class="ti ti-gift"></i> Tặng khoá học AI miễn phí</a>
+      <a class="au-site" href="${SITE}" target="_blank" rel="noopener">taki.vn</a>
+      <button class="au-x ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-close title="Đóng" aria-label="Đóng giới thiệu tác giả"><i class="ti ti-x"></i></button>
+      ${auto ? '<div class="bar" aria-hidden="true"><i></i></div>' : ''}`;
+    const close = () => { if (!el.isConnected || el.classList.contains('out')) return; el.classList.add('out'); setTimeout(() => el.remove(), 200); };
+    el.addEventListener('click', e => { if (e.target.closest('[data-close]')) close(); });
+    el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+    // Timer in JS (a CSS animationend never fires while the page paints no frames, e.g. a background tab); the bar only shows it.
+    // It pauses while the pointer or keyboard focus is on the card and resumes with the time that was left.
+    if (auto) {
+      let left = SHOW_MS, since = 0, timer = 0;
+      el.stay = () => { el.dataset.stay = '1'; pause(); };
+      // Counting starts only while the page is visible (the browser may open the Studio in a background tab).
+      const run = () => { if (timer || el.dataset.stay || document.hidden || el.matches(':hover, :focus-within')) return; since = performance.now(); timer = setTimeout(close, left); };
+      const pause = () => { if (!timer) return; clearTimeout(timer); timer = 0; left = Math.max(0, left - (performance.now() - since)); };
+      el.addEventListener('mouseenter', pause); el.addEventListener('focusin', pause);
+      el.addEventListener('mouseleave', () => setTimeout(run)); el.addEventListener('focusout', () => setTimeout(run));
+      const vis = () => { if (!el.isConnected) return document.removeEventListener('visibilitychange', vis); if (document.hidden) pause(); else run(); };
+      document.addEventListener('visibilitychange', vis);
+      run();
+    }
     document.body.appendChild(el);
   }
   // "Tác giả" chip beside the logo
   const logo = document.querySelector('.logo');
   if (logo) {
     const b = document.createElement('button');
-    b.className = 'au-chip'; b.title = `Tác giả: ${AUTHOR} · Tặng khoá học AI miễn phí`; b.innerHTML = '<i class="ti ti-user-heart" style="font-size:12px"></i> Tác giả';
+    b.className = 'au-chip ui-chip'; b.title = `Tác giả: ${AUTHOR} · Tặng khoá học AI miễn phí`; b.innerHTML = '<i class="ti ti-user-heart"></i> Tác giả';
     b.onclick = () => show(false);
     logo.appendChild(b);
   }
