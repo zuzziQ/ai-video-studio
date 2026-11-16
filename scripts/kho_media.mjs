@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { KHO_DIRS, kindOf, inWorkspace, linkOrCopy, listWorkspace, workspaceOfProject } from './workspace.mjs';
+import { KHO_DIRS, kindOf, inWorkspace, listWorkspace, workspaceOfProject } from './workspace.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
 import { credit as writeCredit } from './ai_broll.mjs';
 
@@ -63,7 +63,9 @@ export function resolveRel(ws, rel) {
   if (parts.some(p => p === '..' || p.startsWith('.'))) throw bad('Đường dẫn ra ngoài Kho');
   // Windows bỏ dấu chấm/khoảng trắng cuối tên và hiểu tên ngắn 8.3 (DUAN~1), dấu ":" là luồng dữ liệu phụ: chặn để không vòng qua Du an/
   if (parts.some(p => /[. ]$/.test(p) || p.includes('~') || p.includes(':'))) throw bad('Tên thư mục/file không hợp lệ');
-  if ([KHO_DIRS.projects, KHO_DIRS.delivered].some(d => key(d) === key(parts[0]))) throw bad('Không lấy file từ Du an/ hay Thanh pham/');
+  // macOS (APFS) cũng không phân biệt hoa thường; tên có thể ở dạng NFD: so sau khi chuẩn hoá
+  const top = s => s.normalize('NFC').toLowerCase();
+  if ([KHO_DIRS.projects, KHO_DIRS.delivered].some(d => top(d) === top(parts[0]))) throw bad('Không lấy file từ Du an/ hay Thanh pham/');
   const abs = path.join(ws.root, ...parts);
   if (!inWorkspace(ws, abs)) throw bad('Đường dẫn ra ngoài Kho');
   if (!USE_KINDS.has(kindOf(abs))) throw bad('Chỉ chèn được ảnh, video hoặc âm thanh');
@@ -127,22 +129,26 @@ export function useFromKho(projectDir, ws, rel, o = {}) {
   pending.set(k, p); return p;
 }
 const probeDur = f => new Promise(ok => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], (e, o) => ok(e ? NaN : +String(o).trim())));
-async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0 } = {}) {
+async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b-roll tự động' } = {}) {
   const src = resolveRel(ws, rel), relN = rel.split(/[\\/]+/).filter(Boolean).join('/');
   // b-roll tự động chỉ dùng ~2 s đầu: video Kho dài (footage thô) không tách cả nghìn khung trong job (o.maxDur giây)
   if (maxDur > 0 && kindOf(src) === 'video' && !usedName(dir, relN)) {
     const d = await probeDur(src);
-    if (!(d <= maxDur)) throw bad(`Video dài ${Number.isFinite(d) ? Math.round(d) + ' s' : 'không rõ'} (quá ${maxDur} s cho b-roll tự động)`);
+    if (!(d <= maxDur)) throw bad(`Video dài ${Number.isFinite(d) ? Math.round(d) + ' s' : 'không rõ'} (quá ${maxDur} s cho ${why})`);
   }
   const md = path.join(dir, 'media'); fs.mkdirSync(md, { recursive: true });
   const lock = mapFile(dir) + '.lock'; fs.mkdirSync(path.dirname(lock), { recursive: true });
-  // Đọc sổ, chọn tên và tạo liên kết trong cùng một khoá (auto_broll chạy ở tiến trình khác): không hai lần lấy cùng một tên
+  // Trong khoá (auto_broll chạy ở tiến trình khác) chỉ làm việc nhanh: đọc sổ, chọn tên, liên kết cứng (cùng ổ), ghi sổ ngay.
+  // Khác ổ thì chép bất đồng bộ ra file tạm rồi đổi tên, ngoài khoá (không chặn server, không quá hạn khoá).
+  // Như workspace.linkOrCopy: không bao giờ ghi đè đích (linkSync/COPYFILE_EXCL báo lỗi khi đã có).
   let had = null, name = null, linked = null;
   withFileLock(lock, () => {
     had = usedName(dir, relN);
     if (had) return;
     const map = readMap(dir); delete map[relN];
-    name = mediaName(md, src, new Set(Object.values(map))); linked = linkOrCopy(src, path.join(md, name)); // EEXIST/COPYFILE_EXCL: không bao giờ ghi đè đích
+    name = mediaName(md, src, new Set(Object.values(map)));
+    try { fs.linkSync(src, path.join(md, name)); linked = 'link'; } catch (e) { if (e.code === 'EEXIST') throw e; linked = 'copy'; }
+    map[relN] = name; writeJson(mapFile(dir), { version: 1, items: map });
   });
   if (had) {
     const it = mediaItem(dir, had);
@@ -152,12 +158,15 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0 } = {}) {
     return { ...mediaItem(dir, had), kho: relN, linked: 'reuse' };
   }
   const dst = path.join(md, name), fr = path.join(md, name.replace(/\.\w+$/, '') + '_frames');
+  const undo = () => { fs.rmSync(fr, { recursive: true, force: true }); withFileLock(lock, () => { const m = readMap(dir); if (m[relN] === name) { delete m[relN]; writeJson(mapFile(dir), { version: 1, items: m }); } }); };
+  if (linked === 'copy') {
+    const tmp = `${dst}.${process.pid}.tmp`;
+    try { await fs.promises.copyFile(src, tmp, fs.constants.COPYFILE_EXCL); retryBusy(() => fs.renameSync(tmp, dst)); }
+    catch (e) { fs.rmSync(tmp, { force: true }); undo(); throw bad('Không chép được file từ Kho: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
+  }
   try { if (kindOf(name) === 'video') await expandVideo(dst, fr, { run }); }
-  catch (e) { fs.rmSync(dst, { force: true }); fs.rmSync(fr, { recursive: true, force: true }); throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
-  withFileLock(lock, () => {
-    const now = readMap(dir); now[relN] = name; writeJson(mapFile(dir), { version: 1, items: now });
-    addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) });
-  });
+  catch (e) { fs.rmSync(dst, { force: true }); undo(); throw bad('Không tách được khung hình của video: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
+  withFileLock(lock, () => addCredit(dir, { file: name, provider: credit, kho: relN, title: path.basename(src) }));
   return { ...mediaItem(dir, name), kho: relN, linked };
 }
 

@@ -78,7 +78,7 @@ test('hai lần dùng cùng lúc (kể cả viết \\ và /) ra cùng một file
 });
 
 test('resolveRel / useFromKho: đường dẫn thoát Kho, thư mục cấm, file lạ → 400; không thấy → 404', async () => {
-  for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', 'Du an./clip 1/media/x.jpg', 'Du an /clip 1/media/x.jpg', 'DUAN~1/clip 1/media/x.jpg', 'Anh/logo.png:x', '.kho.json', '', null, 42])
+  for (const rel of ['../ngoai/bi-mat.jpg', 'Anh/../../ngoai/bi-mat.jpg', path.join(OUT, 'bi-mat.jpg'), '/etc/passwd', 'C:\\Windows\\win.ini', 'Du an/clip 1/media/x.jpg', 'Du an./clip 1/media/x.jpg', 'Du an /clip 1/media/x.jpg', 'DUAN~1/clip 1/media/x.jpg', 'du an/clip 1/media/x.jpg', 'THANH PHAM/2026-11/ca phe.mp4', 'Anh/logo.png:x', '.kho.json', '', null, 42])
     await assert.rejects(K.useFromKho(PROJ, ws, rel), e => e.status === 400, String(rel));
   await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/khong-co.jpg'), e => e.status === 404);
   assert.ok(!fs.readdirSync(media()).some(f => f.includes('bi-mat')));

@@ -3,7 +3,7 @@
 //                                                            Kho của dự án đang mở (workspaceOfProject); used = media/kho_* đã có trong dự án
 //   GET  /api/kho/file?rel=                                → ảnh / âm thanh trong Kho để xem trước (chỉ đọc)
 //   POST /api/kho/use {rel}                                → liên kết vào media/kho_<tên> (+ khung + audio.m4a nếu là video),
-//                                                            trả mục như /api/media để client chèn ngay; rel thoát Kho, video > 10 phút → 400
+//                                                            trả mục như /api/media để client chèn ngay; rel thoát Kho, video > 3 phút → 400
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,8 +33,8 @@ export default ctx => {
       }
       if (p === '/api/kho/use' && req.method === 'POST') {
         const b = await ctx.body(req);
-        // tách khung chạy ngay trong request: video quá 10 phút (footage thô của Nguon/) dùng ở bước Nguồn, không chèn thẳng
-        return ctx.json(res, await K.useFromKho(ctx.project.dir, ws, b?.rel, { maxDur: 600 })), true;
+        // tách khung chạy ngay trong request (~5 400 JPEG cho 3 phút): video dài hơn (footage thô của Nguon/) dùng ở bước Nguồn, không chèn thẳng
+        return ctx.json(res, await K.useFromKho(ctx.project.dir, ws, b?.rel, { maxDur: 180, why: 'chèn từ Kho; video dài hãy tạo dự án ở bước Nguồn' })), true;
       }
     } catch (e) {
       if (!e.status || e.status >= 500) console.error('kho:', e.message);
