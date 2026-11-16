@@ -47,6 +47,20 @@ test('Xuất tại máy: bản gốc + khổ phụ vào Thanh pham/<tháng>/ tê
   assert.equal(fs.readFileSync(r.items[0].dst, 'utf8'), 'v916');
 });
 
+test('render lại cùng tên: sổ không trả bản giao cũ; bản async + xuất một đoạn có hậu tố; tên rỗng có tên dự phòng', async () => {
+  const ws = chung(), d = project(ws, 'Render Lai');
+  const src = W(path.join(d, 'out', 'r.mp4'), 'cu');
+  const r = await K.deliverExportsAsync(d, [{ src, w: 1080, h: 1920 }], { date: DATE, range: { from: 0, to: 2 } });
+  assert.equal(path.basename(r.items[0].dst), 'Render Lai 9x16 đoạn 0-2s.mp4');
+  assert.equal(K.deliveredOf(d, 'out/r.mp4'), r.items[0].dst);
+  fs.rmSync(src); W(src, 'moi hon'); // render lại: file mới, cùng tên
+  assert.equal(K.deliveredOf(d, 'out/r.mp4'), null, 'nguồn đã đổi: không trỏ vào bản giao cũ');
+  assert.equal(fs.readFileSync(r.items[0].dst, 'utf8'), 'cu');
+  assert.equal(K.fileName('', '.mp4'), 'Thanh pham.mp4');
+  assert.equal(K.fileName('😀'.repeat(80), '.mp4'), '😀'.repeat(35) + '.mp4', 'không cắt đôi emoji');
+  assert.ok(!fs.readdirSync(r.dir).some(f => f.includes('.part.')), 'không còn file tạm');
+});
+
 test('trùng tên: lần giao sau thành "(2)", không ghi đè bản đã giao', () => {
   const ws = chung(), d = project(ws, 'Trung Ten');
   const a = W(path.join(d, 'out', 'a.mp4'), '1'), b = W(path.join(d, 'out', 'b.mp4'), '2');
@@ -93,9 +107,11 @@ const fakes = {
 
 test('hàng loạt: mỗi dòng xong → Thanh pham/<tháng>/<tên lô>/<tiêu đề dòng>.mp4', async () => {
   const ws = chung(), J = batchJob(ws, 'khuyen-mai', { name: 'Khuyến mãi' });
-  const st = await runJob(J.jf, { ...fakes, perf: PERF, signals: false });
+  const mon = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const m0 = mon(), st = await runJob(J.jf, { ...fakes, perf: PERF, signals: false }), m1 = mon(); // runJob lấy tháng lúc giao
   assert.deepEqual(st.rows.map(r => r.state), ['done', 'done']);
-  const now = new Date(), m = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const m = path.basename(path.dirname(path.dirname(st.rows[0].delivered)));
+  assert.ok([m0, m1].includes(m));
   assert.deepEqual(st.rows.map(r => r.delivered), [1, 2].map(i => path.join(ws.root, 'Thanh pham', m, 'Khuyến mãi', `Bản ${i}.mp4`)));
   for (const r of st.rows) assert.equal(fs.readFileSync(r.delivered, 'utf8'), r.dir);
   assert.equal(JSON.parse(fs.readFileSync(path.join(J.out, 'status.json'), 'utf8')).rows[0].delivered, st.rows[0].delivered);
@@ -184,7 +200,26 @@ test('Đăng: nội dung đăng giao kèm cạnh video trong Thanh pham ("<tên>
   assert.ok(fs.existsSync(path.join(d, 'publish', 'tiktok.txt')));
 });
 
+test('Đăng: video Thành phẩm của dự án khác không viết nội dung bằng AI; route Thành phẩm không mở đường dẫn lạ', async () => {
+  const ws = chung(), d = project(ws, 'Mo Thanh Pham'), other = project(ws, 'Cua Nguoi Khac');
+  const theirs = K.deliverExports(other, [{ src: W(path.join(other, 'out', 'k.mp4'), 'b'), w: 1080, h: 1920 }]).items[0].dst;
+  const pub = (await import('../../studio/routes/52_publish.mjs')).default(fakeCtx(d).ctx);
+  const g = await call(pub, '/api/publish/gen', { method: 'POST', body: { video: theirs } });
+  assert.equal(g.code, 400); assert.match(g.data.error, /dự án khác/);
+  const list = (await call(pub, '/api/publish/videos')).data;
+  assert.equal(list.find(v => v.path === theirs)?.own, false);
+  const th = (await import('../../studio/routes/54_thanhpham.mjs')).default(fakeCtx(d).ctx);
+  const info = await call(th, '/api/thanhpham');
+  assert.equal(info.data.root, path.join(ws.root, 'Thanh pham'));
+  for (const bad of [W(path.join(TMP, 'ngoai.mp4')), 'out/x.mp4', path.join(ws.root, 'Nguon', 'a.mp4')]) {
+    const r = await call(th, '/api/thanhpham/open', { method: 'POST', body: { path: bad } });
+    assert.equal(r.code, 404, bad);
+  }
+});
+
 test('Lịch đăng: thấy video trong Thanh pham của mọi Kho đã đăng ký (thương hiệu + Chung), không cần mở dự án', async () => {
+  W(path.join(HOME, 'brands.json'), { version: 1, brands: [{ id: 'nha-dep', title: 'Nhà Đẹp' }] });
+  WS.setWorkspace('nha-dep', path.join(TMP, 'o-dia-khac', 'Kho Brand'));
   const ws = chung(), d = project(ws, 'Lich');
   const a = K.deliverExports(d, [{ src: W(path.join(d, 'out', 'l.mp4'), 'l'), w: 1080, h: 1920 }]).items[0].dst;
   const brandWs = WS.workspaceFor('nha-dep');

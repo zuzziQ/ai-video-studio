@@ -1,13 +1,17 @@
 // Giao thành phẩm vào <Kho>/Thanh pham/<YYYY-MM>/ (S12 M100, docs/plans/S12-kho-du-an.md mục 3 bước 5).
-// Render vẫn ghi vào out/ của dự án; module này đưa bản giao sang Thanh pham/ bằng liên kết cứng (khác ổ thì chép) qua
-// scripts/workspace.mjs, ghi sổ <dự án>/.studio/delivered.json (bản nào đã giao tới đâu) để gói quảng cáo, Đăng tra lại.
-// Liên kết cứng: renderer xoá rồi ghi lại file trong out/ thì bản ở Thanh pham/ vẫn là bản đã giao (không ghi đè tại chỗ).
-// Dùng bởi: studio/server.mjs (Xuất, ảnh bìa, .srt), scripts/batch.mjs, scripts/variants.mjs, scripts/ads_pack.mjs,
-// studio/routes/52_publish.mjs, 18_schedule.mjs, 53_thanhpham.mjs.
+// Render vẫn ghi vào out/ của dự án; module này đưa bản giao sang Thanh pham/ bằng liên kết cứng (khác ổ / ổ không có liên
+// kết cứng thì chép) và ghi sổ <dự án>/.studio/delivered.json (bản nào đã giao tới đâu) để gói quảng cáo, Đăng tra lại.
+// Liên kết cứng dùng chung inode: mọi chỗ render lại cùng tên trong out/ phải xoá (hoặc ghi file tạm rồi rename) trước,
+// không ghi đè tại chỗ, để bản ở Thanh pham/ vẫn là bản đã giao. Sổ lưu dấu vân tay của nguồn (inode, cỡ, mtime): nguồn
+// đã render lại thì deliveredOf không trả bản giao cũ nữa.
+// Bản chép (khác ổ) đi qua "<tên>.part.<pid>" rồi mới lấy tên thật: Đăng / Lịch đăng không thấy file chép dở.
+// Dùng bởi: studio/server.mjs (Xuất, ảnh bìa, .srt: bản async, không chặn server khi chép khác ổ), scripts/batch.mjs,
+// scripts/variants.mjs (tiến trình riêng: bản sync), scripts/ads_pack.mjs, studio/routes/52_publish.mjs, 18_schedule.mjs,
+// 54_thanhpham.mjs.
 import fs from 'node:fs';
 import path from 'node:path';
-import { AVS_HOME, KINDS, deliveredDir, ensureWorkspace, freeName, inWorkspace, linkOrCopy, safeName, sub, workspaceFor, workspaceOfProject } from './workspace.mjs';
-import { retryBusy } from './file_lock.mjs';
+import { AVS_HOME, KINDS, deliveredDir, ensureWorkspace, freeName, inWorkspace, safeName, sub, workspaceFor, workspaceOfProject } from './workspace.mjs';
+import { retryBusy, withFileLock } from './file_lock.mjs';
 
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const VIDEO = KINDS.video;
@@ -22,10 +26,11 @@ export function aspectLabel(w, h) {
 /** Tên dự án để đặt tên bản giao: thư mục dự án (trong Du an/ là tên người dùng đặt). */
 export const projectName = dir => path.basename(path.resolve(dir));
 
-/** Tên file hiển thị an toàn, giữ đuôi: "<base><ext>" (base cắt 70 ký tự, ký tự cấm thay bằng khoảng trắng). */
+/** Tên file hiển thị an toàn, giữ đuôi: "<base><ext>" (base tối đa 70 đơn vị UTF-16, không cắt đôi emoji; rỗng → "Thanh pham"). */
 export function fileName(base, ext) {
-  const b = safeName(String(base || '').slice(0, 70));
-  return `${b}${ext.startsWith('.') ? ext : '.' + ext}`;
+  let cut = ''; for (const ch of String(base || '')) { if (cut.length + ch.length > 70) break; cut += ch; } // safeName cắt theo 80 đơn vị UTF-16
+  const b = safeName(cut), e = ext.startsWith('.') ? ext : '.' + ext;
+  return `${b === 'Chung' && !String(base || '').trim() ? 'Thanh pham' : b}${e}`;
 }
 
 /**
@@ -40,61 +45,120 @@ export function deliverFolder(ws, { folder = '', date = new Date() } = {}) {
   return d;
 }
 
-/** Một file vào thư mục d với tên không trùng (thử lại khi hai bản song song lấy cùng tên). → { dst, how: 'link'|'copy' } */
-function place(ws, src, d, name) {
+// ---------- đặt một file vào thư mục giao ----------
+// Tên không trùng: freeName rồi linkSync (EEXIST nếu hai bản song song lấy cùng tên → thử tên kế). Chép: vào tên tạm
+// ".part" rồi linkSync sang tên thật (nguyên tử, không ghi đè); ổ không có liên kết cứng (FAT/exFAT) thì rename khi tên
+// thật còn trống.
+const nameIn = (d, name) => path.join(d, freeName(d, name));
+const partOf = dst => `${dst}.part.${process.pid}`;
+function claim(tmp, d, name) {
   for (let i = 0; ; i++) {
-    const dst = path.join(d, freeName(d, name));
-    try { return { dst, how: linkOrCopy(src, dst, { ws }) }; }
-    catch (e) { if (e.code !== 'EEXIST' || i >= 20) throw e; }
+    const dst = nameIn(d, name);
+    try { fs.linkSync(tmp, dst); fs.rmSync(tmp, { force: true }); return dst; }
+    catch (e) {
+      if (e.code === 'EEXIST' && i < 20) continue;
+      if (e.code === 'EEXIST') throw e;
+      if (fs.existsSync(dst)) { if (i < 20) continue; throw e; }
+      retryBusy(() => fs.renameSync(tmp, dst)); return dst;
+    }
   }
+}
+function guard(ws, d) { if (!inWorkspace(ws, d)) throw Object.assign(new Error('Đích không nằm trong Kho'), { status: 400 }); }
+function placeSync(ws, src, d, name) {
+  guard(ws, d);
+  for (let i = 0; i < 20; i++) {
+    const dst = nameIn(d, name);
+    try { fs.linkSync(src, dst); return { dst, how: 'link' }; } catch (e) { if (e.code === 'EEXIST') continue; break; }
+  }
+  const tmp = partOf(nameIn(d, name));
+  try { fs.copyFileSync(src, tmp); return { dst: claim(tmp, d, name), how: 'copy' }; } finally { fs.rmSync(tmp, { force: true }); }
+}
+async function placeAsync(ws, src, d, name) {
+  guard(ws, d);
+  for (let i = 0; i < 20; i++) {
+    const dst = nameIn(d, name);
+    try { fs.linkSync(src, dst); return { dst, how: 'link' }; } catch (e) { if (e.code === 'EEXIST') continue; break; }
+  }
+  const tmp = partOf(nameIn(d, name));
+  try { await fs.promises.copyFile(src, tmp); return { dst: claim(tmp, d, name), how: 'copy' }; } finally { fs.rmSync(tmp, { force: true }); }
 }
 
 // ---------- sổ giao của dự án: .studio/delivered.json ----------
 const ledgerFile = dir => path.join(dir, '.studio', 'delivered.json');
 export function readLedger(dir) { const j = readJson(ledgerFile(dir)); return Array.isArray(j?.items) ? j.items : []; }
 function appendLedger(dir, recs) {
-  const f = ledgerFile(dir), items = [...readLedger(dir), ...recs].slice(-500);
+  const f = ledgerFile(dir);
   fs.mkdirSync(path.dirname(f), { recursive: true });
-  const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify({ version: 1, items }, null, 1)); retryBusy(() => fs.renameSync(t, f));
+  withFileLock(f + '.lock', () => {
+    const items = [...readLedger(dir), ...recs].slice(-500);
+    const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify({ version: 1, items }, null, 1)); retryBusy(() => fs.renameSync(t, f));
+  });
 }
-/** Bản giao còn trên đĩa của một file trong dự án (src tuyệt đối hoặc tương đối với dự án), mới nhất. → đường dẫn | null */
+/** Khoá inode để bỏ trùng bản ở out/ và liên kết cứng của nó trong Thanh pham/ (ổ không có inode: theo đường dẫn). */
+export function fileKey(f) { try { const s = fs.statSync(f, { bigint: true }); return s.ino ? `${s.dev}:${s.ino}` : path.resolve(f); } catch { return path.resolve(f); } }
+const stamp = f => { try { const s = fs.statSync(f); return { key: fileKey(f), size: s.size, mtime: Math.round(s.mtimeMs) }; } catch { return null; } };
+const relOf = (dir, f) => path.relative(dir, path.resolve(dir, f)).split(path.sep).join('/');
+/**
+ * Bản giao còn đúng của một file trong dự án (src tuyệt đối hoặc tương đối với dự án), mới nhất. → đường dẫn | null
+ * "Còn đúng": bản giao còn trên đĩa và nguồn chưa bị render lại (cùng inode, cỡ, mtime như lúc giao).
+ */
 export function deliveredOf(dir, src) {
-  const rel = path.relative(dir, path.resolve(dir, src)).split(path.sep).join('/');
-  const hit = readLedger(dir).filter(r => r.src === rel && r.dst && fs.existsSync(r.dst)).pop();
+  const rel = relOf(dir, src), now = stamp(path.resolve(dir, src));
+  if (!now) return null;
+  const hit = readLedger(dir).filter(r => r.src === rel && r.dst && fs.existsSync(r.dst) && (!r.from || (r.from.key === now.key && r.from.size === now.size && r.from.mtime === now.mtime))).pop();
   return hit ? hit.dst : null;
 }
+/** Mọi bản giao còn trên đĩa của dự án (để biết một file trong Thanh pham/ có phải của dự án này). → Set khoá */
+export function deliveredKeys(dir) { return new Set(readLedger(dir).filter(r => r.dst && fs.existsSync(r.dst)).map(r => fileKey(r.dst))); }
 
+function prepare(dir, items, { tl = null, folder = '', date = new Date(), home, ws = null } = {}) {
+  const w = ws || workspaceOfProject(dir, tl, home ? { home } : {});
+  return { w, d: deliverFolder(w, { folder, date }), todo: items.filter(it => it?.src && fs.existsSync(it.src)) };
+}
+function finish(dir, w, d, done) {
+  const at = new Date().toISOString();
+  const recs = done.filter(r => r.dst).map(r => ({ src: relOf(dir, r.src), dst: r.dst, how: r.how, at, from: r.from }));
+  if (recs.length) try { appendLedger(dir, recs); } catch (e) { console.error('[kho] không ghi được delivered.json:', e.message); }
+  return { ws: w.root, dir: d, items: done.map(({ from, ...r }) => r) };
+}
 /**
  * Giao các file của một dự án. items: [{ src: tuyệt đối, name: tên hiển thị kèm đuôi }].
  * o: { tl, folder, date, home, ws } (ws mặc định workspaceOfProject(dir, tl)).
  * → { ws: gốc Kho, dir: thư mục giao, items: [{ src, dst, how }] }. Lỗi một file không chặn file khác (ghi .error).
+ * Bản sync cho tiến trình riêng (batch.mjs, variants.mjs); server Studio dùng deliverProjectAsync.
  */
-export function deliverProject(dir, items, { tl = null, folder = '', date = new Date(), home, ws = null } = {}) {
-  const w = ws || workspaceOfProject(dir, tl, home ? { home } : {});
-  const d = deliverFolder(w, { folder, date });
-  const done = [];
-  for (const it of items) {
-    if (!it?.src || !fs.existsSync(it.src)) continue;
-    try { const r = place(w, it.src, d, it.name || path.basename(it.src)); done.push({ src: it.src, ...r }); }
-    catch (e) { done.push({ src: it.src, error: e.message }); }
+export function deliverProject(dir, items, o = {}) {
+  const { w, d, todo } = prepare(dir, items, o), done = [];
+  for (const it of todo) {
+    const from = stamp(it.src);
+    try { done.push({ src: it.src, from, ...placeSync(w, it.src, d, it.name || path.basename(it.src)) }); } catch (e) { done.push({ src: it.src, error: e.message }); }
   }
-  const at = new Date().toISOString();
-  const recs = done.filter(r => r.dst).map(r => ({ src: path.relative(dir, r.src).split(path.sep).join('/'), dst: r.dst, how: r.how, at }));
-  if (recs.length) try { appendLedger(dir, recs); } catch (e) { console.error('[kho] không ghi được delivered.json:', e.message); }
-  return { ws: w.root, dir: d, items: done };
+  return finish(dir, w, d, done);
+}
+/** Như deliverProject nhưng chép khác ổ bằng I/O bất đồng bộ (không treo server Studio khi chép video vài GB). */
+export async function deliverProjectAsync(dir, items, o = {}) {
+  const { w, d, todo } = prepare(dir, items, o), done = [];
+  for (const it of todo) {
+    const from = stamp(it.src);
+    try { done.push({ src: it.src, from, ...(await placeAsync(w, it.src, d, it.name || path.basename(it.src))) }); } catch (e) { done.push({ src: it.src, error: e.message }); }
+  }
+  return finish(dir, w, d, done);
 }
 
 /**
- * Giao các bản xuất video (xuất tại máy, nhiều khổ): tên "<tên dự án> <khổ>.mp4".
- * outs: [{ src, w, h } | { src, aspect: '9:16' }]. → như deliverProject.
+ * Tên bản xuất video (xuất tại máy, nhiều khổ): "<tên dự án> <khổ>[ đoạn A-Bs].mp4".
+ * outs: [{ src, w, h } | { src, aspect: '9:16' }]; o.range: { from, to } khi chỉ xuất một đoạn.
  */
-export function deliverExports(dir, outs, o = {}) {
-  const name = o.name || projectName(dir);
-  return deliverProject(dir, outs.map(x => {
+export function exportItems(dir, outs, o = {}) {
+  const name = o.name || projectName(dir), r = o.range, n = v => String(+(+v).toFixed(1));
+  const part = r && (r.from != null || r.to != null) ? ` đoạn ${n(r.from ?? 0)}-${r.to != null ? n(r.to) : 'hết'}s` : '';
+  return outs.map(x => {
     const asp = x.aspect ? String(x.aspect).replace(':', 'x') : aspectLabel(x.w, x.h);
-    return { src: x.src, name: fileName(asp ? `${name} ${asp}` : name, path.extname(x.src) || '.mp4') };
-  }), o);
+    return { src: x.src, name: fileName(`${name}${asp ? ' ' + asp : ''}${part}`, path.extname(x.src) || '.mp4') };
+  });
 }
+export const deliverExports = (dir, outs, o = {}) => deliverProject(dir, exportItems(dir, outs, o), o);
+export const deliverExportsAsync = (dir, outs, o = {}) => deliverProjectAsync(dir, exportItems(dir, outs, o), o);
 
 // ---------- đọc Thanh pham/ (Đăng, Lịch đăng) ----------
 /** Video trong Thanh pham/ của một Kho (sâu 3 cấp: tháng/lô/file), mới nhất trước. → [{ file, rel, name, size, mtime }] */
@@ -126,8 +190,6 @@ export function knownWorkspaces({ home = AVS_HOME() } = {}) {
 }
 /** f nằm trong Thanh pham/ của Kho ws (đã giải liên kết). */
 export const inDelivered = (ws, f) => inWorkspace(ws, f) && inWorkspace({ root: sub(ws, 'delivered') }, f);
-/** Khoá inode để bỏ trùng bản ở out/ và liên kết cứng của nó trong Thanh pham/. */
-export function fileKey(f) { try { const s = fs.statSync(f, { bigint: true }); return s.ino ? `${s.dev}:${s.ino}` : path.resolve(f); } catch { return path.resolve(f); } }
 /**
  * File chữ đặt cạnh một video đã giao (nội dung đăng): "<tên video không đuôi><suffix>". Ghi file mới (tmp + rename),
  * không ghi tại chỗ. video phải nằm trong Thanh pham/ của Kho ws. → đường dẫn

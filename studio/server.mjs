@@ -216,9 +216,13 @@ function still(t, dest) {
     fs.mkdirSync(P('out'), { recursive: true });
     const out = dest || `out/cover_${String(t).replace('.', '_')}s.jpg`;
     const abs = path.isAbsolute(out) ? out : P(out);
-    fs.rmSync(abs, { force: true }); // may be hard-linked into Thanh pham/ (M100): ffmpeg -y would overwrite the delivered copy in place
-    execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, abs, '--still', String(t), abs], (e, so, se) => {
+    // Render to a temp name, then rename: the old file may be hard-linked into Thanh pham/ (M100) and ffmpeg -y would
+    // overwrite that delivered copy in place; a failed render also keeps the old cover.
+    const part = abs.replace(/(\.\w+)?$/, '.part$1');
+    execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, part, '--still', String(t), part], (e, so, se) => {
       fs.rmSync(tmp, { force: true });
+      if (!e) try { fs.renameSync(part, abs); } catch (er) { e = er; }
+      fs.rmSync(part, { force: true });
       // Short reason for the user (render.mjs's last stderr line), never the command line or a Node stack with machine paths.
       if (e) console.error('still:', e.message);
       e ? bad(Object.assign(new Error('Không chụp được khung hình: ' + shortErr(se, 'render lỗi')), { status: 500 })) : ok(out);
@@ -302,6 +306,7 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
   }
   fs.mkdirSync(P('out'), { recursive: true });
   const out = `out/${path.basename(project.dir)}_${stamp()}.mp4`;
+  fs.rmSync(P(out), { force: true }); // same minute, same name: never render over a copy already hard-linked into Thanh pham/ (M100)
   job.step = 'Render khung hình';
   const total = (to ?? tl.duration) - (from ?? 0);
   // render.mjs resolves media against the timeline's folder, so the temp copy lives next to it via a relative symlink-free path.
@@ -324,12 +329,16 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
     job.outs = [{ aspect: r.native, out, note: 'Bản gốc (render thật)' }, ...r.outs.map(o => ({ ...o, out: path.relative(project.dir, o.out) }))];
   }
   // S12 M100: bản giao vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng). Lỗi giao không làm hỏng bản đã xuất trong out/.
-  if (give !== false) await deliverFiles(job, (job.outs || [{ out }]).map((o, i) => ({ src: P(o.out), ...(i ? { aspect: o.aspect } : { w: vert ? W : H, h: vert ? H : W }) })), tl);
+  if (give !== false) {
+    job.step = 'Giao vào Thành phẩm';
+    await deliverFiles(job, (job.outs || [{ out }]).map((o, i) => ({ src: P(o.out), ...(i ? { aspect: o.aspect } : { w: vert ? W : H, h: vert ? H : W }) })), tl, { range: { from, to } });
+  }
 }
-async function deliverFiles(into, outs, tl, how = 'exports') {
+// async: copying to a Kho on another drive must not block the server (job polling, preview)
+async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
   try {
     const K = await import(pathToFileURL(path.join(SKILL, 'scripts/kho_deliver.mjs')).href);
-    const r = how === 'exports' ? K.deliverExports(project.dir, outs, { tl }) : K.deliverProject(project.dir, outs, { tl });
+    const r = files ? await K.deliverProjectAsync(project.dir, outs, { tl }) : await K.deliverExportsAsync(project.dir, outs, { tl, range });
     into.delivered = r.items.filter(x => x.dst).map(x => x.dst); into.deliveredDir = r.dir;
     const bad = r.items.find(x => x.error); if (bad) into.deliverError = bad.error;
   } catch (e) { into.deliverError = e.message; console.error('deliver:', e.message); }
@@ -494,14 +503,14 @@ const server = http.createServer(async (req, res) => {
     // b.deliver: giao kèm vào Thanh pham/ của Kho (S12 M100)
     if (p === '/api/still' && req.method === 'POST') {
       const b = await body(req), t = Math.max(0, +b.t || 0);
-      return still(t).then(async out => json(res, b.deliver ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, 'files') : { out }))
+      return still(t).then(async out => json(res, b.deliver ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, { files: true }) : { out }))
         .catch(e => json(res, { error: e.message }, e.status || 500));
     }
     if (p === '/api/srt' && req.method === 'POST') {
       const b = await body(req), { captions, timeline } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
       // a delivered .srt is a hard link to this file: write a new file (rm, then write), never in place
       const out = `out/${path.basename(project.dir)}.srt`; fs.rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
-      return json(res, b.deliver ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)}.srt` }], timeline, 'files') : { out });
+      return json(res, b.deliver ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)}.srt` }], timeline, { files: true }) : { out });
     }
     if (p === '/api/job') return json(res, job ? { ...job, proc: undefined } : null);
     if (p === '/api/job/cancel' && req.method === 'POST') { if (job?.state === 'running') job.cancelled = true; killTree(job?.proc); return json(res, { ok: true }); }

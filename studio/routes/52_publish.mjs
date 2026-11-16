@@ -7,7 +7,7 @@ import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { openPath } from '../../scripts/platform.mjs';
 import { workspaceOfProject } from '../../scripts/workspace.mjs';
-import { deliveredOf, fileKey, inDelivered, listDelivered, writeBeside } from '../../scripts/kho_deliver.mjs';
+import { deliveredKeys, deliveredOf, fileKey, inDelivered, listDelivered, writeBeside } from '../../scripts/kho_deliver.mjs';
 
 // Thông số tham khảo (11/2026) — nền tảng đổi thường xuyên, chỉ dùng để cảnh báo.
 export const PLATFORMS = {
@@ -59,15 +59,18 @@ export default ctx => async (req, res, p, u) => {
   const vid = rel => {
     if (typeof rel !== 'string' || !/\.(mp4|mov|m4v|webm)$/i.test(rel)) return null;
     const ws = path.isAbsolute(rel) ? kho() : null;
-    const f = ws ? (inDelivered(ws, rel) ? path.resolve(rel) : null) : ctx.under(ctx.project.dir, rel);
+    const f = ws && inDelivered(ws, rel) ? path.resolve(rel) : ctx.under(ctx.project.dir, rel);
     try { return f && fs.statSync(f).isFile() ? f : null; } catch { return null; }
   };
+  // Video trong Thanh pham/ là của dự án này (sổ .studio/delivered.json) hay của dự án khác: AI chỉ viết nội dung từ lời
+  // thoại của dự án đang mở, nên video của dự án khác chỉ xem/kiểm/lên lịch được, không viết nội dung, không giao chữ.
+  const ownVideo = f => { const ws = kho(); return !ws || !inDelivered(ws, f) || deliveredKeys(ctx.project.dir).has(fileKey(f)); };
   // S12 M100: nội dung đăng (mọi nền tảng, ghép từ publish/<nền tảng>.txt) đặt cạnh video trong Thanh pham/: "<tên> - nội dung đăng.txt".
   // Video ở out/ chưa giao (tắt "Giao vào Thành phẩm") → không giao chữ. → đường dẫn hoặc null; lỗi chỉ ghi log.
   function giveText(video) {
     try {
       const ws = kho(); if (!ws || typeof video !== 'string') return null;
-      const at = path.isAbsolute(video) ? (inDelivered(ws, video) ? video : null) : deliveredOf(ctx.project.dir, video);
+      const at = path.isAbsolute(video) ? (inDelivered(ws, video) && ownVideo(video) ? video : null) : deliveredOf(ctx.project.dir, video);
       const doc = JSON.parse(fs.readFileSync(path.join(PUB, 'publish.json'), 'utf8'));
       const txt = Object.keys(doc.platforms || {}).filter(k => PLATFORMS[k]).map(k => asText(PLATFORMS[k], doc.platforms[k])).join('\n\n');
       return at && txt ? writeBeside(ws, at, ' - nội dung đăng.txt', txt.replace(/\r?\n/g, '\r\n')) : null;
@@ -78,7 +81,8 @@ export default ctx => async (req, res, p, u) => {
     // out/ của dự án (src 'out', kèm bản giao nếu có) + Thanh pham/ của Kho (src 'kho', đường dẫn tuyệt đối); bỏ trùng theo inode (liên kết cứng)
     const d = ctx.P('out'); const list = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.mp4') && !f.includes('.part.')).map(f => ({ path: `out/${f}`, src: 'out', mtime: fs.statSync(path.join(d, f)).mtimeMs, delivered: deliveredOf(ctx.project.dir, `out/${f}`) || undefined })).sort((a, b) => b.mtime - a.mtime) : [];
     const ws = kho(), seen = new Set(list.map(v => fileKey(ctx.P(v.path))));
-    if (ws) for (const v of listDelivered(ws, { max: 100 })) if (!seen.has(fileKey(v.file))) { seen.add(fileKey(v.file)); list.push({ path: v.file, src: 'kho', name: v.rel, mtime: v.mtime }); }
+    const mine = deliveredKeys(ctx.project.dir);
+    if (ws) for (const v of listDelivered(ws, { max: 100 })) { const k = fileKey(v.file); if (!seen.has(k)) { seen.add(k); list.push({ path: v.file, src: 'kho', name: v.rel, mtime: v.mtime, own: mine.has(k) }); } }
     return J(list);
   }
   if (p === '/api/publish/check') {
@@ -94,6 +98,7 @@ export default ctx => async (req, res, p, u) => {
   const b = await ctx.body(req);
   if (p === '/api/publish/gen') {
     const f = vid(b.video); if (!f) return J({ error: 'Chọn video đã xuất trước' }, 400);
+    if (!ownVideo(f)) return J({ error: 'Video này của dự án khác trong Thành phẩm: mở dự án đó để AI viết nội dung đăng' }, 400);
     const plats = (b.platforms || Object.keys(PLATFORMS)).filter(k => PLATFORMS[k]);
     const ok = ctx.startJob('publish', async () => {
       // prompt + claude -p + publish/*.txt live in scripts/publish_texts.mjs (shared with scripts/autopilot.mjs)

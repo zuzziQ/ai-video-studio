@@ -55,8 +55,8 @@ export default ctx => {
     } catch {}
     try {
       const kho = [...(ctx.project ? [workspaceOfProject(ctx.project.dir, ctx.readProject().timeline)] : []), ...knownWorkspaces()];
-      const roots = new Set();
-      for (const ws of kho) { if (roots.has(ws.root)) continue; roots.add(ws.root); for (const v of listDelivered(ws, { max: 80 })) add(v.file, `Thành phẩm · ${ws.title}`); }
+      const roots = new Set(), rk = r => (process.platform === 'win32' ? path.resolve(r).toLowerCase() : path.resolve(r));
+      for (const ws of kho) { if (roots.has(rk(ws.root))) continue; roots.add(rk(ws.root)); for (const v of listDelivered(ws, { max: 80 })) add(v.file, `Thành phẩm · ${ws.title}`); }
     } catch (e) { console.error('schedule: Thanh pham:', e.message); }
     for (const it of PUB.loadSchedule().items) add(it.file, 'Lịch');
     const list = [...seen.values()].sort((a, b) => b.mtime - a.mtime).slice(0, 80);
