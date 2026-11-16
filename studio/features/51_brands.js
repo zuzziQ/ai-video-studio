@@ -28,6 +28,8 @@
   .bk-intro { margin-top: var(--space-1); }
   .bk-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); } .bk-g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 var(--space-2); }
   .bk-up { display: flex; gap: var(--space-2); align-items: center; }
+  .bk-up .bk-pick { padding: 0; border: 1px dashed rgb(var(--color-line-strong)); cursor: pointer; } .bk-up .bk-pick:hover { border-color: rgb(var(--color-accent-text)); }
+  .bk-up small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
   #bk-menu { position: fixed; z-index: 60; background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); padding: var(--space-2); min-width: 230px; box-shadow: var(--shadow-overlay); }
   #bk-menu button { width: 100%; background: transparent; border-color: transparent; justify-content: flex-start; padding: var(--space-2); }
   #bk-menu button:hover { background: rgb(var(--color-surface-hover)); } #bk-menu .dots { display: inline-flex; gap: var(--space-050); } #bk-menu .dots i { width: 10px; height: 10px; border-radius: var(--radius-pill); background: var(--bk-c); }
@@ -72,8 +74,8 @@
       ${inp('title', 'Tên bộ nhận diện (chỉ để bạn phân biệt)', 'VD: Kênh BĐS Sài Gòn')}
       <div class="bk-g4">${col('primary', 'Màu chính')}${col('accent', 'Màu nhấn')}${col('dark', 'Nền tối')}${col('light', 'Chữ sáng')}</div>
       <div class="bk-g2">${sel('font', 'Font chữ', FONTS)}${sel('disp', 'Font tiêu đề', FONTS)}</div>
-      <label>Logo (PNG nền trong là đẹp nhất)</label><div class="bk-up"><div class="bk-logo">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}">` : '<i class="ti ti-photo"></i>'}</div>
-        <button id="bk-logo" ${b.id ? '' : 'disabled title="Lưu trước rồi tải logo"'}><i class="ti ti-upload"></i> Tải logo</button><input type="file" id="bk-file" accept="image/*" hidden></div>
+      <label>Logo (PNG nền trong là đẹp nhất)</label><div class="bk-up"><button type="button" class="bk-logo bk-pick" id="bk-logo-pv" title="Chọn logo" aria-label="Chọn logo">${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}" alt="">` : '<i class="ti ti-photo"></i>'}</button>
+        <button type="button" id="bk-logo"><i class="ti ti-upload"></i> ${b.logoUrl ? 'Đổi logo' : 'Tải logo'}</button><input type="file" id="bk-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>${b.id ? '' : '<small>Thương hiệu sẽ được lưu khi bạn chọn logo</small>'}</div>
       ${Studio.assistPanel ? '<div id="bk-ai"></div>' : ''}
       <div class="bk-g2">${inp('name', 'Tên hiển thị trong video', 'Kiệm AI')}${inp('handle', 'Kênh / handle', '@kiem.ai')}${inp('phone', 'Điện thoại', '09xx xxx xxx')}${inp('website', 'Website', 'vidu.vn')}</div>
       ${sel('pack', 'Gói style mặc định', [['', '— không đổi gói —'], ...packs()])}
@@ -112,11 +114,19 @@
       EDIT = null; await load(); Studio.toast('Đã lưu thương hiệu “' + (r.title || r.name) + '”');
       if (cur() === r.id && confirm('Thương hiệu này đang dùng cho dự án — áp lại các thay đổi?')) apply(r.id);
     };
-    $('#bk-logo').onclick = () => $('#bk-file').click();
+    // The file picker opens straight from the click (a picker opened after an await can lose the user gesture). A brand that was
+    // never saved has no id for /api/brands/logo yet, so it is saved first (same rule as "Lưu": needs a name), then the logo goes up.
+    $('#bk-logo').onclick = $('#bk-logo-pv').onclick = () => $('#bk-file').click();
     $('#bk-file').onchange = async e => {
-      const f = e.target.files[0]; if (!f) return;
-      const r = await fetch(`/api/brands/logo?id=${encodeURIComponent(EDIT.id)}&name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f }).then(x => x.json());
-      if (r.error) return Studio.toast(r.error);
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      if (!EDIT.id) {
+        const { logoUrl, ...brand } = EDIT;
+        const s = await Studio.api('/api/brands/save', { brand });
+        if (s.error) return Studio.toast(s.error === 'Đặt tên thương hiệu trước khi lưu' ? 'Đặt tên thương hiệu trước, rồi chọn logo' : s.error);
+        EDIT.id = s.id;
+      }
+      const r = await fetch(`/api/brands/logo?id=${encodeURIComponent(EDIT.id)}&name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f }).then(x => x.json()).catch(() => ({ error: 'Không tải được logo, thử lại' }));
+      if (r.error) { await load(); return Studio.toast(r.error); }
       EDIT.logo = r.logo; EDIT.logoUrl = r.logoUrl; await load(); Studio.toast('Đã tải logo');
     };
   }
