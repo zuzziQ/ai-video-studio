@@ -31,7 +31,7 @@ templates/
 | `recipe_opts` | | truyền vào `recipe(ctx).opts` của gói (ví dụ `screen`/`focus` cho `screencast`, `cams`/`cuts`/`episode` cho `multicam`, `images`/`bpm` cho `beatslide`) |
 | `use_recipe` | | mặc định `true`. `false` = chỉ dùng `scenes` của template (bản dựng viết tay hoàn toàn) |
 | `base_dur` | ✔ | độ dài (giây) mà các `scenes` được viết cho. Tất cả template hiện tại viết cho 20,2 s |
-| `scenes` | | scene thêm (ngoài recipe), thời gian **tuyệt đối** theo `base_dur`. Mọi type phải có trong `MODULES` (có thể trộn module của gói khác) |
+| `scenes` | | scene thêm (ngoài recipe), thời gian **tuyệt đối** theo `base_dur`. Mọi type phải có trong `MODULES` (có thể trộn module của gói khác). Áp vào video khác hướng (`aspect` 16:9 trên video dọc hoặc ngược lại): `x` bị bỏ (thẻ về giữa), `y`/`px`/`py` đổi theo tỉ lệ khung; scene có `on_vertical: {…}` / `on_landscape: {…}` thì dùng các trường đó thay cho phép đổi tự động (ví dụ `"on_vertical": {"size": 175}` cho khối HF ngang) |
 | `fx` | | hiệu ứng toàn khung `[{t, type, amp}]` (punch, shake, whip, flash, glitch, blur_in, zoom_in) |
 | `needs` | | những gì người dùng phải tự đưa vào (ảnh, giá, SĐT…). Studio nên hiện danh sách này sau khi áp |
 | `preview` | | `{from, to, still}`: đoạn render xem trước và thời điểm chụp ảnh bìa (mặc định 0 → 6 s, still 1,5 s) |

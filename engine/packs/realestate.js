@@ -131,7 +131,7 @@
       const kRib = E.outBack(prog(lt, 1.5, .45), 1.6), unit = s.unit ?? 'tỷ';
       const txt = vn(v, dec), big = fit(vn(to, dec) + unit, s.value_size || 118, w - 90, .5, 60);
       const ribbon = s.ribbon === false ? '' : `<div style="position:absolute;right:-58px;top:30px;width:230px;transform:rotate(45deg) scale(${f(clamp(kRib, 0, 1.2))});opacity:${f(clamp(kRib * 2))};
-        background:${s.ribbon_color || '#B3322A'};color:#fff;text-align:center;font:800 17px/1 ${C.sans};letter-spacing:.14em;padding:11px 0 10px;box-shadow:0 6px 16px rgba(0,0,0,.35)">${esc(s.ribbon ?? 'GIÁ TỐT')}</div>`;
+        background:${s.ribbon_color || '#B3322A'};color:#fff;text-align:center;font:800 ${f(fit(s.ribbon ?? 'GIÁ TỐT', 17, 140, .8, 11), 1)}px/1 ${C.sans};letter-spacing:.14em;padding:11px 0 10px;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,.35)">${esc(s.ribbon ?? 'GIÁ TỐT')}</div>`;
       return {
         front: `<div class="abs"${cidOf(s)} style="left:${x}px;top:${y}px;width:${w}px;transform:${enterTf(lt, sc)};opacity:${f(o)}">
           <div style="${glass(C)};padding:30px 40px 32px;position:relative;overflow:hidden;text-align:center">${ribbon}

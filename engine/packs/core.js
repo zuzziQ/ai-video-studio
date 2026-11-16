@@ -151,6 +151,24 @@ function applyTemplate(tl, tpl, captions, title) {
     if (n1 - n0 < Math.min(nl, .8)) n0 = Math.max(0, n1 - nl);
     return remap(s, v => n0 + (v - s.t0) * (n1 - n0) / Math.max(.01, len));
   };
+  // M94: a 16:9 template on a vertical video (or 9:16 on a landscape one): its x/y were laid out for the other design space
+  // (1280×720 / 720×1280), so a card at x=900 sat outside a 720-wide frame. Centre such cards horizontally (modules' default)
+  // and scale y (and pointer px/py) into this frame.
+  const tv = (tl.height || 720) > (tl.width || 1280), av = /^(\d+):(\d+)$/.exec(tpl.aspect || '');
+  const flip = av && +av[1] !== +av[2] && (+av[2] > +av[1]) !== tv, [TW, TH] = tv ? [1280, 720] : [720, 1280], [DW, DH] = tv ? [720, 1280] : [1280, 720];
+  // A scene may carry `on_vertical: {…}` (fields used in a vertical frame, e.g. a bigger size for a landscape HF block)
+  // and `on_landscape: {…}`; given, they replace the automatic remap below.
+  const reaspect = s0 => {
+    const { on_vertical, on_landscape, ...s } = s0, ov = tv ? on_vertical : on_landscape;
+    if (ov) Object.assign(s, ov);
+    if (!flip || ov) return s;
+    const o = { ...s };
+    if (typeof o.y === 'number') o.y = Math.round(o.y * DH / TH);
+    if (typeof o.x === 'number') delete o.x;
+    if (typeof o.px === 'number') o.px = Math.round(o.px * DW / TW);
+    if (typeof o.py === 'number') o.py = Math.round(o.py * DH / TH);
+    return o;
+  };
   tl.pack = tpl.pack || tl.pack;
   if (tpl.caption_style != null) tl.caption_style = tpl.caption_style || undefined;
   if (tpl.brand) tl.brand = { ...tpl.brand, ...(tl.brand || {}) };
@@ -159,7 +177,7 @@ function applyTemplate(tl, tpl, captions, title) {
   const keep = (tl.scenes || []).filter(s => !s._recipe && !s._tpl);
   const r = tpl.use_recipe !== false && pack?.recipe ? pack.recipe({ dur, captions: captions || [], brand: { ...BR(), ...(tl.brand || {}) }, vertical: (tl.height || 1920) > (tl.width || 1080), title: title || tpl.title, opts: tpl.recipe_opts || {} }) : {};
   if (r.caption_style != null && tpl.caption_style == null) tl.caption_style = r.caption_style || undefined;
-  const own = (tpl.scenes || []).map(s => ({ ...retime(s), _tpl: true }));
+  const own = (tpl.scenes || []).map(s => ({ ...reaspect(retime(s)), _tpl: true }));
   tl.scenes = [...keep, ...(r.scenes || []).map(s => ({ ...s, _recipe: true })), ...own];
   const fx = [...(r.fx || []), ...(tpl.fx || []).map(retime)];
   if (fx.length) tl.fx = [...(tl.fx || []).filter(f => !f._recipe), ...fx.map(f => ({ ...f, _recipe: true }))];

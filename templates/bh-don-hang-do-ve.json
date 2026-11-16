@@ -60,6 +60,7 @@
   {
    "type": "hf",
    "block": "notification-stack",
+   "size": 175,
    "t0": 3.8,
    "t1": 8,
    "y": 1010,

@@ -43,6 +43,14 @@ Khoảng 200 hiệu ứng lấy từ [HyperFrames](https://github.com/heygen-com
 - `hfSeek()` (`engine/hf_seek.js`) tua mọi timeline GSAP trong `window.__timelines`, cộng thêm `data-start` của các khối con, rồi tua animation CSS/WAAPI. Lệnh tua có bật event để các khối 3D (three.js) vẽ trong `onUpdate`.
 - Phụ đề (`#cap`, `#sub2`) được nhấc sang lớp `#hfcap` phía trên khối.
 - Iframe được dùng lại khi biến và chữ không đổi; đổi nội dung thì tạo iframe mới. Tối đa 14 iframe, thừa thì bỏ cái ít dùng nhất.
+- Chữ không bao giờ bị khung cắt (`M94`, `engine/fit.js`):
+  - Khối lớp `over` (lower-third…) hiện theo chiều ngang tới mép khung hình (vẫn trong canvas của khối), không chỉ trong `box` đo từ chữ mẫu.
+  - Khi khối sẵn sàng, `hfFit()` đo mọi phần tử có chữ (`data-hft` hoặc chữ khối tự điền từ biến) ở 5 mốc thời gian cố định của khối, lấy mốc thấy rõ nhất (bỏ qua hiệu ứng vào/ra); chữ tràn khung cắt thì giảm `font-size`, tối thiểu 70 %, quá nữa mới cắt bằng "…". Đo một lần nên render song song vẫn ra cùng khung.
+  - Khung cắt tính đúng containing block: hộp `overflow:hidden` tĩnh không cắt con `position:absolute` (`window.__clipChain`, dùng chung với `scripts/tpl_text_audit.mjs`).
+  - Bỏ qua dòng chỉ có ký hiệu (★ cắt theo điểm) và chữ cần dưới 45 % (ticker, chữ nền khổng lồ).
+  - Chữ khối tự sinh trong script (không có `data-hft`) dịch qua `live` trong `engine/hf/vi.js`.
+- Module pack: phần tử chữ có class `fit` (bề rộng cố định hoặc `max-width`, `white-space:nowrap`) được `fitStage()` co mỗi khung theo `scrollWidth`, tối thiểu 70 %.
+- Kiểm: `node scripts/tpl_text_audit.mjs <dự án> [--stretch 1.15] [--orig-only] [--only id,…] [--shots <thư mục>] [--shots-all]` áp từng mẫu lên dự án thật và báo chữ bị cắt, kèm dòng "co chữ" liệt kê chữ đã co.
 
 ## Nhập lại / thêm khối
 ```bash
