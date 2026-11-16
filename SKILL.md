@@ -15,6 +15,7 @@ Gồm 3 lớp:
 ## Tính năng v4 (đọc khi cần)
 | Việc | Đọc |
 |---|---|
+| **Kho theo thương hiệu** (một thư mục thật: `Nguon/ Anh/ BRoll/ Nhac/ Thuong hieu/ Du an/ Thanh pham/`): mọi bước lấy nguồn từ Kho, dự án mới vào `Du an/`, bản xuất giao vào `Thanh pham/<YYYY-MM>/`, chuyển file cũ vào Kho có hỏi trước (`scripts/workspace.mjs`, `kho_deliver.mjs`, `kho_media.mjs`, `kho_migrate.mjs`) | `references/studio.md` mục "Thư mục", `docs/plans/S12-kho-du-an.md` |
 | AI dựng giúp (`scripts/ai_edit.mjs`), cắt lỗi nói (`fillers.py`), sửa video bằng chữ | `references/ai-edit.md` |
 | Làm sạch giọng (`voice_clean.py`), tự hạ nhạc, nhiều track âm thanh (`TL.audio.clean/duck/tracks`) | `references/audio.md` |
 | Bám mặt đổi khung (`face_track.py`, `clip.reframe`), xuất nhiều khổ, dịch + lồng tiếng (`dub.py`, `TL.sub2`) | `references/reframe-dub.md` |

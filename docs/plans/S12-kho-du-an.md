@@ -71,9 +71,20 @@ Không đổi tên thư mục bên trong dự án: engine đọc mọi đường
 
 ## 4. Liên quan `S09` (máy trạm → server → máy render)
 
-- Đơn vị đồng bộ lên server là **dự án** (đã tự đủ, chỉ đường dẫn tương đối) + phần Kho mà `timeline.json` thật sự dùng; `.kho.json` có sha256 nên server chống trùng theo Kho (`C09`).
+- Đơn vị đồng bộ lên server là **dự án** (đã tự đủ, chỉ đường dẫn tương đối) + phần Kho mà `timeline.json` thật sự dùng. Chống trùng theo nội dung (`C09`): `source.json` có `sha256` + `size` của video gốc; file `media/kho_*` tính sha256 lúc đóng gói (`workspace.hashFile`). `.kho.json` **không** giữ chỉ mục sha256 (chỉ `version`, `brand`, `title`, `created`, `linked`).
 - Bảng "Gửi máy render" ở mục 2.2 là đầu vào của `scripts/project_bundle.mjs` (`M70`).
-- Kết quả từ server về `out/` của dự án rồi vào `Thanh pham/` như xuất tại máy.
+- Kết quả từ server về `out/` của dự án rồi vào `Thanh pham/` như xuất tại máy (`kho_deliver.deliverProject`, ghi sổ).
+
+### 4.1. Đầu vào cho `M70` sau S12 (đã làm, 2026-11-16)
+
+| Thứ | Ở đâu | Gói lấy gì |
+|---|---|---|
+| Video gốc | `source.json` → `<Kho>/<video>` (tương đối Kho) hoặc `abs` (dự án cũ, nguồn ngoài Kho) | không cần nếu đã có `work/aroll.mp4`; cần khi dựng lại từ đầu → gửi theo sha256 |
+| File từ Kho | `media/kho_*` (liên kết cứng, cùng inode với file trong Kho) | chép nội dung (gói không giữ liên kết cứng); `*_frames/` tạo lại được, bỏ |
+| Tài nguyên dự án | `media/` còn lại, `work/aroll.mp4`, `work/words*.json`, `work/captions.json`, `work/dub_*.wav` | có |
+| Sổ giao | `.studio/delivered.json`, `<Thanh pham>/<tháng>/.giao.json` | không gửi; máy trạm ghi khi kết quả về |
+| Dự án cũ ngoài Kho | `H/footage`, `H/autopilot/projects`, `H/longform` (ghi trong `.kho.json` `linked`) | `workspaceOfProject` → Kho theo brand kit; `source.json` có thể là `abs` → bundle phải đổi thành đường dẫn trong gói |
+| Thành phẩm | `out/` → `Thanh pham/<YYYY-MM>/` | không gửi lên; kết quả trả về đi đúng luồng giao |
 
 ## 5. Đợt làm (mỗi đợt một PR, 300–800 dòng)
 

@@ -12,22 +12,25 @@
     "hash": "b8576d4ee0f1"
   },
   "chunk:studio/studio-api": {
-    "hash": "ad61290306ff"
+    "hash": "9a155fa9b979"
+  },
+  "chunk:studio/studio-kho": {
+    "hash": "b7d15f21c3ff"
   },
   "chunk:studio/studio-plugin": {
-    "hash": "f42390899aea"
+    "hash": "efa216143ec8"
   },
   "chunk:studio/studio-transcript": {
     "hash": "751265729703"
   },
   "guardrail:studio#0/0": {
-    "hash": "9d9ccf478ecc"
+    "hash": "efa216143ec8"
   },
   "guardrail:studio#1/0": {
-    "hash": "8c158cfb0e19"
+    "hash": "9a155fa9b979"
   },
   "guardrail:studio#2/0": {
-    "hash": "8c158cfb0e19"
+    "hash": "9a155fa9b979"
   },
   "chunk:ads/ads-config": {
     "hash": "ccc8ec722b23"
