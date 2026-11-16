@@ -1075,16 +1075,37 @@ $('#export').addEventListener('click', () => {
     });
   };
 });
-$('#newproj').addEventListener('click', () => {
+let newOpening = false; // two quick clicks must not open two dialogs (the dialog waits for /api/onboarding + /api/brands)
+$('#newproj').addEventListener('click', async () => {
+  if (newOpening) return; newOpening = true;
+  try { await openNewProject(); } finally { newOpening = false; }
+});
+async function openNewProject() {
+  // Thương hiệu, gói style và khổ hình đã chọn ở hướng dẫn đầu / brand kit: lấy sẵn, không hỏi lại. Muốn khác thì mở "Đổi".
+  const ls = { get: (k, d) => { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('avs.' + k, v); } catch {} } };
+  const [onb, brands] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => [])]);
+  const BR = Array.isArray(brands) ? brands : [], PK = packs().filter(p => p.recipe);
+  const brand0 = BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : '');
+  const packFor = id => { const b = BR.find(x => x.id === id); return [b?.pack, ls.get('newPack', '')].find(x => x && PK.some(p => p.id === x)) || PK[0]?.id || 'slate'; };
+  const orient0 = { '16:9': 'horizontal', '9:16': 'vertical' }[onb?.aspect] || 'auto';
+  const OR = [['auto', 'Theo video'], ['vertical', 'Dọc 9:16 (Reels, TikTok, Shorts)'], ['horizontal', 'Ngang 16:9 (YouTube)']];
   modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3><label class="lbl">Video</label><div class="row pickrow"><button id="npick" class="primary"><i class="ti ti-folder-open"></i> Chọn video từ máy…</button><input type="file" id="nfile" accept="video/*,.mov,.mkv,.m4v" hidden>
     <input id="npath" placeholder="${/Win/.test(navigator.platform) ? 'hoặc dán đường dẫn: C:\\Users\\ban\\Videos\\clip.mp4' : 'hoặc dán đường dẫn: /Users/ban/Movies/clip.mp4'}"></div>
-    <label class="lbl">Thư mục dự án (để trống = cạnh video)</label><input id="ndir" placeholder="">
-    <label class="lbl">Gói style</label><div class="packs">${packs().filter(p => p.recipe).map((p, i) => `<label><input type="radio" name="npack" value="${p.id}" ${i === 0 ? 'checked' : ''}><b>${p.icon} ${esc(p.name)}</b><span class="muted">${esc(p.desc || '')}</span></label>`).join('')}</div>
     <label class="lbl">Tiêu đề / chủ đề (dùng cho intro)</label><input id="ntitle" placeholder="VD: 3 mẹo dùng ChatGPT">
-    <div class="row2"><div><label class="lbl">Khổ hình</label><select id="norient"><option value="vertical">Dọc 9:16 (Reels, TikTok, Shorts)</option><option value="horizontal">Ngang 16:9 (YouTube)</option></select></div>
-    <div><label class="lbl">Độ chính xác nhận giọng</label><select id="nmodel"><option value="large-v3-turbo">large-v3-turbo (chính xác, khuyên dùng)</option><option value="small">small (nhanh, sai nhiều hơn)</option><option value="large-v3">large-v3 (chậm nhất)</option></select></div></div>
+    <details id="nopts"><summary><span class="muted">Dùng thiết lập sẵn:</span> <b id="nsum"></b> <span class="muted">· Đổi</span></summary>
+    <label class="lbl">Thương hiệu</label><select id="nbrand"><option value="">— không gắn —</option>${BR.map(b => `<option value="${esc(b.id)}" ${b.id === brand0 ? 'selected' : ''}>${esc(b.title || b.name || b.id)}</option>`).join('')}</select>
+    <label class="lbl">Gói style</label><div class="packs">${PK.map(p => `<label><input type="radio" name="npack" value="${p.id}" ${p.id === packFor(brand0) ? 'checked' : ''}><b>${p.icon} ${esc(p.name)}</b><span class="muted">${esc(p.desc || '')}</span></label>`).join('')}</div>
+    <div class="row2"><div><label class="lbl">Khổ hình</label><select id="norient">${OR.map(([v, l]) => `<option value="${v}" ${v === orient0 ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div><label class="lbl">Độ chính xác nhận giọng</label><select id="nmodel">${[['large-v3-turbo', 'large-v3-turbo (chính xác, khuyên dùng)'], ['small', 'small (nhanh, sai nhiều hơn)'], ['large-v3', 'large-v3 (chậm nhất)']].map(([v, l]) => `<option value="${v}" ${v === ls.get('newModel', 'large-v3-turbo') ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+    <label class="lbl">Thư mục dự án (để trống = cạnh video)</label><input id="ndir" placeholder=""></details>
     <p class="muted">Tự làm: nhận giọng → cắt khoảng lặng → cắt khung → phụ đề → bản dựng theo gói (intro, graphic theo từ khoá, CTA, nhạc). Sau đó bạn (hoặc Claude) chỉnh tiếp.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="ngo">Tạo</button></div>`);
+  const sum = () => {
+    const b = BR.find(x => x.id === $('#nbrand').value), pv = document.querySelector('[name=npack]:checked')?.value, p = PK.find(x => x.id === pv);
+    $('#nsum').textContent = [b ? (b.title || b.name) : 'không thương hiệu', p ? p.name : pv, OR.find(o => o[0] === $('#norient').value)?.[1].replace(/ \(.*/, '')].filter(Boolean).join(' · ');
+  };
+  $('#nbrand').onchange = () => { const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; sum(); };
+  $('#nopts').onchange = sum; sum();
   $('#npick').onclick = () => $('#nfile').click();
   $('#nfile').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
@@ -1095,13 +1116,15 @@ $('#newproj').addEventListener('click', () => {
   };
   $('#ngo').onclick = async () => {
     if (!$('#npath').value.trim()) return toast('Chọn video trước');
+    const pack = document.querySelector('[name=npack]:checked')?.value || 'slate';
+    ls.set('newPack', pack); ls.set('newModel', $('#nmodel').value);
     const r = await api('/api/new', { video: $('#npath').value.trim(), dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
-      pack: document.querySelector('[name=npack]:checked')?.value || 'slate', title: $('#ntitle').value.trim(), orient: $('#norient').value });
+      pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined });
     if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
     modal(`<h3>Đang tạo dự án…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
     pollJob(j => { if (j.state === 'done') location.reload(); else modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`); });
   };
-});
+}
 function toast(m) {
   for (const o of document.querySelectorAll('.toast')) o.remove();
   const d = document.createElement('div'); d.className = 'toast'; d.innerHTML = `<i class="ti ti-info-circle"></i>${esc(m)}`; document.body.appendChild(d); setTimeout(() => d.remove(), 2400);

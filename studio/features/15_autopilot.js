@@ -200,6 +200,12 @@
   async function editProfile(p) {
     [BRANDS, TPLS] = await Promise.all([BRANDS || api('/api/brands').catch(() => []), TPLS || api('/api/templates').catch(() => [])]);
     const d = p || { name: 'Kênh mới', pack: 'auto', template: '', caption_style: '', goal: 'Chia sẻ', tone: 'Tự nhiên, gần gũi', ai: true, ai_density: 'vua', broll_density: 'vua', broll_goal: 'auto', broll_src: ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'lib'], sound: 'vua', music: 'auto', clean: 'vua', fillers: true, fillers_claude: false, whisper: 'large-v3-turbo', lang: 'vi', orient: 'auto', aspects: ['9:16'], quality: '1080', qc: true, cta: '', platforms: ['tiktok', 'youtube', 'facebook'], slot: '19:00', learn: true, extra: '', brand: '' };
+    if (!p) { // hồ sơ mới: lấy sẵn thương hiệu, khổ hình và nơi đăng đã chọn ở hướng dẫn đầu (02_onboarding), không bắt chọn lại
+      const o = await api('/api/onboarding').catch(() => null), kit = (BRANDS || []).find(b => b.id === o?.brand);
+      if (kit) { d.brand = kit.id; if (kit.pack) d.pack = kit.pack; }
+      if (o?.aspect) d.aspects = [o.aspect];
+      if (o?.platforms?.length) d.platforms = o.platforms;
+    }
     const packs = (Studio.win?.PACKS || []).filter(x => x.recipe || x.items);
     const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(v) === String(k) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
     const chk = (name, opts, vals) => `<div class="chk">${opts.map(([k, l]) => `<label><input type="checkbox" name="${name}" value="${esc(k)}" ${(vals || []).includes(k) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;

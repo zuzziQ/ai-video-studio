@@ -11,6 +11,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pyBin } from './platform.mjs';
 import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { faceTrack } from './face_track_project.mjs';
+import { forbiddenDir, AVS_HOME } from '../studio/security.mjs';
+import { freeName } from './workspace.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PY = pyBin(SKILL);
@@ -40,14 +42,26 @@ export function videoOrient(src) {
 
 /**
  * Build the starter project. Returns the project dir.
- * o: { video, dir?, model='large-v3-turbo', pack='slate', title='', orient='vertical'|'horizontal'|'auto', lang? }
+ * o: { video, dir?, model='large-v3-turbo', pack='slate', title='', orient='vertical'|'horizontal'|'auto', lang?, brand? (brand kit id) }
  * env: { run(cmd, argv, onLine) → Promise, onStep(text, progress) }
  */
-export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 'slate', title = '', orient = 'vertical', lang }, { run = runCmd, onStep = () => {} } = {}) {
+export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 'slate', title = '', orient = 'vertical', lang, brand },{ run = runCmd, onStep = () => {} } = {}) {
   const src = path.resolve(String(video).trim().replace(/^["']|["']$/g, '').replace(/^~(?=[\\/]|$)/, os.homedir()));
   if (!fs.existsSync(src)) throw new Error(`không thấy video ${src}`);
   if (orient === 'auto') orient = videoOrient(src);
-  const d = path.resolve(dir || path.join(path.dirname(src), path.basename(src, path.extname(src)) + '_studio'));
+  // "Chọn video từ máy" copies the clip into ~/.ai-video-studio/uploads/, which the Studio refuses to open as a project
+  // (config folder). Next to such a clip → ~/.ai-video-studio/footage/<name>_studio instead (an allowed project folder).
+  const base = path.basename(src, path.extname(src)) + '_studio';
+  const foot = path.join(AVS_HOME(), 'footage'); // two uploads with the same name must not overwrite each other's project
+  const d = path.resolve(dir || (forbiddenDir(path.dirname(src)) ? path.join(foot, fs.existsSync(foot) ? freeName(foot, base) : base) : path.join(path.dirname(src), base)));
+  const why = forbiddenDir(d); // check before whisper runs, not after minutes of work
+  if (why) throw new Error(`Không tạo dự án ở ${d}: ${why} — chọn thư mục dự án khác`);
+  let kit = null;
+  if (brand) {
+    const { loadBrand } = await import('./batch.mjs');
+    kit = /^[a-z0-9][a-z0-9-]{0,39}$/.test(String(brand)) ? loadBrand(String(brand)) : null;
+    if (!kit) throw new Error(`không thấy thương hiệu "${String(brand).slice(0, 40)}"`);
+  }
   fs.mkdirSync(path.join(d, 'work/frames'), { recursive: true });
   const S = f => path.join(SKILL, 'scripts', f);
   onStep('Nhận dạng giọng nói (whisper)', .05);
@@ -85,6 +99,8 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
     ],
     audio: { voice: 'work/aroll.mp4', mix: 'work/mix.wav', music: [{ t0: 0, t1: +(dur + 2.5).toFixed(2), mood: 'tech', gain: -20 }], sfx: [] },
   };
+  // Brand kit chosen in the onboarding / "Video mới" dialog: applied here so the project does not ask for it again.
+  if (kit) { const { brandFields } = await import('./batch.mjs'); tl.brand = { ...brandFields(kit, d), kit: kit.id }; }
   fs.writeFileSync(path.join(d, 'timeline.json'), JSON.stringify(tl, null, 1));
   return d;
 }
