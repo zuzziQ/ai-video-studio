@@ -17,6 +17,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { callClaude, parseJson } from './ai_edit.mjs';
 import { pyBin } from './platform.mjs';
+import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { videoArgs } from './encoder_cli.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -265,9 +266,10 @@ export async function buildProject(src, h, dir, o, info, words, onStep = () => {
     await sh(PY, ['-I', '-X', 'utf8', S('find_face.py'), path.join(dir, 'work/frames'), '--design', `${FW}x${FH}`], { onLine: l => { try { const f = JSON.parse(l); if (f.x != null) face = f; } catch {} } }).catch(() => {});
   }
   onStep('tạo phụ đề');
-  await sh(PY, ['-I', '-X', 'utf8', S('captions.py'), W('words.json'), W('captions.json'), '--max', '4']);
+  const fix = projectFix({ dir }), keep = fixWords(fix); // M89: dictionary of the default brand kit
+  await sh(PY, ['-I', '-X', 'utf8', S('captions.py'), W('words.json'), W('captions.json'), '--max', '4', ...fixArgs(fix)]);
   const caps = JSON.parse(fs.readFileSync(W('captions.json'), 'utf8'));
-  for (const c of caps) for (const w of c.words) w.w = w.w.replace(/[.,!?]+$/, '').toLowerCase();
+  for (const c of caps) for (const w of c.words) { w.w = w.w.replace(/[.,!?]+$/, ''); if (!keep.has(w.w)) w.w = w.w.toLowerCase(); }
   fs.writeFileSync(W('captions.json'), JSON.stringify(caps, null, 1));
   const total = r2(dur + 2.5);
   const tl = {

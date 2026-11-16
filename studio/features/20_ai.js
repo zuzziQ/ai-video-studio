@@ -1,5 +1,5 @@
 // AI tools (references/ai-edit.md): "AI dựng giúp" (Claude plans pack, caption fixes, hook, graphics, music, SFX),
-// "Cắt lỗi nói" (fillers / repeats / pauses / false starts) and "Lời thoại" (edit the video by deleting words).
+// "Cắt lỗi nói" (fillers / repeats / pauses / false starts). The "Lời thoại" panel lives in 21_transcript.js (M89).
 // Every cut is a ripple on TL.clips (split + remove + remapAll from clips.js), so captions, scenes, sfx and music follow.
 'use strict';
 (() => {
@@ -28,15 +28,6 @@
   .fl-it .fl-k.pause { background: rgb(var(--color-audio) / .13); color: rgb(var(--color-audio)); } .fl-it .fl-k.false_start { background: rgb(var(--color-danger) / .13); color: rgb(var(--color-danger)); }
   .fl-it .fl-tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fl-it .fl-tx small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
-  .tw-wrap { line-height: 2.05; font-size: var(--text-sm); user-select: none; padding: var(--space-1) 0 var(--space-5); }
-  .tw-wrap .tm { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: 0 var(--space-1) 0 var(--space-050); font-variant-numeric: tabular-nums; cursor: pointer; background: rgb(var(--color-surface-raised)); border-radius: var(--radius-xs); padding: 1px var(--space-1); }
-  .tw-wrap .tm:hover { color: rgb(var(--color-fg)); }
-  .tw { padding: var(--space-050); border-radius: var(--radius-xs); cursor: text; transition: background-color var(--duration-fast) var(--ease-standard); }
-  .tw:hover { background: rgb(var(--color-surface-muted)); }
-  .tw.cur { color: rgb(var(--color-white)); box-shadow: inset 0 -2px 0 rgb(var(--color-accent-text)); }
-  .tw.sel { background: rgb(var(--color-danger) / .28); color: rgb(var(--color-white)); text-decoration: line-through; text-decoration-color: rgb(var(--color-white) / .5); }
-  .tw.hl { color: rgb(var(--color-highlight)); font-weight: 600; }
-  .tw.flag { box-shadow: inset 0 -2px 0 rgb(var(--color-warning)); }
   .ai-qc { display: flex; gap: var(--space-2); margin-top: var(--space-3); } .ai-qc figure { margin: 0; flex: 1; text-align: center; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
   .ai-qc img { width: 100%; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); background: rgb(var(--color-black)); }
   .ai-qc .ph { aspect-ratio: 9/16; border-radius: var(--radius-control); border: 1px dashed rgb(var(--color-line-hover)); display: flex; align-items: center; justify-content: center; }
@@ -274,84 +265,7 @@
   });
   S.onReady(() => S.addTopButton(`<button class="ghost" id="aibtn" title="Claude đọc lời thoại và dựng graphic, phụ đề, nhạc, SFX"><i class="ti ti-wand"></i> AI dựng giúp</button>`, openAiModal));
 
-  // ---------- Lời thoại: edit the video by deleting words ----------
-  let tw = { a: -1, b: -1, drag: false, moved: false }, W = [];
-  const selRange = () => (tw.a < 0 ? null : [Math.min(tw.a, tw.b), Math.max(tw.a, tw.b)]);
-  function renderWords() {
-    W = allWords(); sig = [CAP, TL.duration];
-    const flags = new Set();
-    if (fl) for (const c of fl.cuts) for (const [k, x] of W.entries()) if (x.w.s >= c.a - .01 && x.w.e <= c.b + .05) flags.add(k);
-    $('#libact').innerHTML = `<button class="mini icon" data-transcribe title="Tạo lại lời thoại tự động (Whisper)"><i class="ti ti-microphone"></i></button><button class="mini danger" id="twdel" ${selRange() ? '' : 'disabled'} title="Cắt đoạn đã chọn khỏi video (Delete)"><i class="ti ti-scissors"></i> Xoá đoạn</button>`;
-    $('#twdel').onclick = deleteSel;
-    if (!W.length) { $('#libbody').innerHTML = S.ctaTranscribe('Sửa video bằng chữ'); return; }
-    const sr = selRange();
-    // flowing text; a time chip where the speaker pauses (≥ 0.5 s) or every ~40 words
-    let html = '', lastE = -9, since = 99;
-    for (const [k, x] of W.entries()) {
-      if (x.w.s - lastE >= .5 || since >= 40) { html += `${k ? '<br>' : ''}<span class="tm" data-tws="${x.w.s}">${fmt(x.w.s)}</span>`; since = 0; }
-      lastE = x.w.e; since++;
-      const cls = ['tw', sr && k >= sr[0] && k <= sr[1] ? 'sel' : '', x.w.hl ? 'hl' : '', flags.has(k) ? 'flag' : ''].filter(Boolean).join(' ');
-      html += `<span class="${cls}" data-k="${k}">${esc(x.w.w)}</span> `;
-    }
-    $('#libbody').innerHTML = `<div class="help">Bấm một từ để tua tới đó. Kéo hoặc Shift-bấm để chọn một đoạn, rồi bấm <b>Delete</b> hay “Xoá đoạn” để cắt đoạn đó khỏi video (dồn cả timeline). ${fl ? 'Từ gạch chân vàng = lỗi nói đã dò.' : ''} Hoàn tác bằng ⌘Z.</div>
-      <div class="tw-wrap" id="twwrap">${html}</div>`;
-    markCur();
-  }
-  function deleteSel() {
-    const r = selRange(); if (!r) return;
-    const span = wordSpan(W, r[0], r[1]), txt = W.slice(r[0], r[1] + 1).map(x => x.w.w).join(' ');
-    tw = { a: -1, b: -1, drag: false };
-    if (cutRanges([span], `Đã xoá “${txt.length > 30 ? txt.slice(0, 30) + '…' : txt}”`)) S.setTime(span[0]);
-    renderWords();
-  }
-  function paintSel() {
-    const r = selRange();
-    for (const el of document.querySelectorAll('#twwrap .tw')) { const k = +el.dataset.k; el.classList.toggle('sel', !!r && k >= r[0] && k <= r[1]); }
-    const d = $('#twdel'); if (d) d.disabled = !r;
-  }
-  let curK = -1, sig = null;
-  function markCur() {
-    if (panel !== 'words') return;
-    // the captions were replaced (undo, cut, reload): redraw so indices never point at stale words
-    if (sig && (sig[0] !== CAP || sig[1] !== TL?.duration) && !tw.drag) { sig = null; tw = { a: -1, b: -1 }; return renderWords(); }
-    if (!W.length) return;
-    const T = S.T, k = W.findIndex(x => T >= x.w.s - .02 && T < x.w.e + .02);
-    if (k === curK && document.querySelector('#twwrap .tw.cur')) return;
-    document.querySelector('#twwrap .tw.cur')?.classList.remove('cur');
-    curK = k;
-    const el = k >= 0 && document.querySelector(`#twwrap .tw[data-k="${k}"]`);
-    if (el) { el.classList.add('cur'); if (playing) el.scrollIntoView({ block: 'nearest' }); }
-  }
-  setInterval(markCur, 120);
-  S.addPanel('words', 'ti-file-text', 'Lời thoại', renderWords);
-  const lib = $('#libbody');
-  lib.addEventListener('mousedown', e => {
-    if (panel !== 'words') return;
-    const el = e.target.closest('.tw'); if (!el) return;
-    e.preventDefault();
-    const k = +el.dataset.k;
-    if (e.shiftKey && tw.a >= 0) tw.b = k; else tw = { a: k, b: k, drag: true, moved: false };
-    paintSel();
-  });
-  lib.addEventListener('mouseover', e => {
-    if (panel !== 'words' || !tw.drag) return;
-    const el = e.target.closest('.tw'); if (!el) return;
-    const k = +el.dataset.k; if (k !== tw.b) { tw.b = k; tw.moved = true; paintSel(); }
-  });
-  window.addEventListener('mouseup', e => {
-    if (panel !== 'words' || !tw.drag) return;
-    tw.drag = false;
-    if (!tw.moved && !e.shiftKey && W[tw.a]) S.setTime(W[tw.a].w.s + .001);
-  });
-  lib.addEventListener('click', e => { if (panel === 'words') { const m = e.target.closest('[data-tws]'); if (m) S.setTime(+m.dataset.tws); } });
-  // Delete in the transcript cuts the selected words (capture phase: runs before the editor's own Delete = remove selected element).
-  window.addEventListener('keydown', e => {
-    if (panel !== 'words' || !selRange() || !['Delete', 'Backspace'].includes(e.key)) return;
-    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
-    e.preventDefault(); e.stopImmediatePropagation(); deleteSel();
-  }, true);
-  window.addEventListener('keydown', e => { if (panel === 'words' && e.key === 'Escape' && selRange()) { tw = { a: -1, b: -1 }; paintSel(); } }, true);
-
   // For tests / Claude: Studio.ai.cut([[a,b]]) etc.
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, detect: () => detect() };
+  // features/21_transcript.js (panel Lời thoại) uses cutRanges, wordSpan, allWords and the filler flags.
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, previewRange, detect: () => detect(), get fillers() { return fl; } };
 })();
