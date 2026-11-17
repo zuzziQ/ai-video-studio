@@ -21,7 +21,7 @@
     { k: 'source', n: 2, st: 'source', ic: 'ti-video', label: 'Video nguồn', done: tl => (tl.clips || []).length > 0 && tl.duration > 0,
       say: 'Chọn video quay sẵn để bắt đầu dựng.', btn: 'Chọn video', go: open('wf-new', 'source') },
     { k: 'tpl', n: 3, st: 'build', ic: 'ti-layout-grid', label: 'Mẫu', done: tl => !!tl.pack || (tl.scenes || []).some(s => s._tpl || s._recipe),
-      say: 'Chọn một mẫu hợp nội dung, hoặc để AI dựng nhanh giúp bạn.', btn: 'Chọn mẫu', go: open('tpl', 'build') },
+      say: 'Chọn một mẫu hợp nội dung, hoặc bấm “AI dựng” ở bước Dựng để Claude dựng giúp.', btn: 'Chọn mẫu', go: open('tpl', 'build') },
     { k: 'cap', n: 3, st: 'build', ic: 'ti-badge-cc', label: 'Phụ đề', done: (tl, cap) => (cap || []).length > 0 && tl.caption_style !== 'none',
       say: 'Bật phụ đề để người xem hiểu cả khi tắt tiếng.', btn: 'Chọn kiểu phụ đề', go: open('text', 'build') },
     { k: 'qc', n: 4, st: 'check', ic: 'ti-shield-check', label: 'Kiểm tra', done: () => qcDone,

@@ -19,21 +19,22 @@
     // S13 (M107): Nguồn = video của dự án này (thẻ Video nguồn) + Lời thoại (tab Làm sạch lời nói); Cắt clip từ video dài chỉ
     // hiện trên thanh trái khi video nguồn > 5 phút, lúc nào cũng mở được từ menu ⋯
     'wf-new': ['source', 1], words: ['source', 2], ai: ['source', 3], longform: ['source', 4],
-    autopilot: ['build', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 1], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
+    // S13 (M108): bước Dựng mở đầu bằng một nút "AI dựng" (wf-aihelp, kèm tuỳ chọn Thêm b-roll / Thêm âm thanh = Tự động chạy
+    // nối sau); tab Tự động (tuỳ chỉnh b-roll + âm thanh) sang mục B-roll. C15: Tự lái không thuộc bước nào, mở từ nút trên thanh đầu.
+    autopilot: ['queue', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 6], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
     aibroll: ['build', 6], 'wf-broll': ['build', 6], fx: ['build', 7], sticker: ['build', 8], trans: ['build', 9], filter: ['build', 10], dub: ['build', 11],
     'wf-qc': ['check', 1], comp: ['check', 2, 'pro'],
     'wf-export': ['ship', 1], 'wf-publish': ['ship', 2], schedule: ['ship', 3], batch: ['ship', 4],
     'wf-mode': ['settings', 1], 'wf-engines': ['settings', 2], perf: ['settings', 3, 'pro'], agent: ['settings', 4, 'pro'], stylelab: ['settings', 5, 'pro'],
   };
-  // nút header (id) -> 'park' (giấu, panel của bước làm thay) | 'menu' (vào ⋯). Nút không có ở đây và không có opts.step -> 'menu'.
-  const TOPS = { 'ap-topbtn': 'park', aibtn: 'park', 'pub-btn': 'park', newproj: 'park', aspect: 'park', 'eng-btn': 'menu', 'app-reveal': 'menu', 'bk-sw': 'menu', fitall: 'menu' };
+  // nút header (id) -> 'park' (giấu, panel của bước làm thay) | 'menu' (vào ⋯) | 'bar' (giữ trên thanh đầu, cạnh ⋯). Nút không có ở đây và không có opts.step -> 'menu'.
+  const TOPS = { 'ap-topbtn': 'bar', aibtn: 'park', 'pub-btn': 'park', newproj: 'park', aspect: 'park', 'eng-btn': 'menu', 'app-reveal': 'menu', 'bk-sw': 'menu', fitall: 'menu' };
   const PRO_TABS = ['kf', 'mask', 'json']; // tab inspector ẩn ở Cơ bản: Keyframe, Mặt nạ, Nâng cao (JSON)
   // M84: việc trùng gộp thành một mục trên thanh trái + dải tab trên panel. Panel thành viên vẫn mở được bằng id
   // (#rail [data-p=x] còn trong DOM, chỉ ẩn); mục trên thanh trái mở lại tab dùng gần nhất.
   const GROUPS = [
-    { id: 'quick', name: 'Dựng nhanh AI', short: 'Dựng AI', icon: 'ti-wand', tabs: [['autopilot', 'Tự lái'], ['wf-aihelp', 'AI dựng giúp'], ['autofill', 'Tự động']] },
     { id: 'audio', name: 'Âm thanh', icon: 'ti-music', tabs: [['audio', 'Nhạc & SFX'], ['audioplus', 'Giọng & trộn']] },
-    { id: 'broll', name: 'B-roll', icon: 'ti-movie', tabs: [['aibroll', 'Kho & AI'], ['wf-broll', 'B-roll động']] },
+    { id: 'broll', name: 'B-roll', icon: 'ti-movie', tabs: [['aibroll', 'Kho & AI'], ['wf-broll', 'B-roll động'], ['autofill', 'Tự động']] },
     { id: 'speech', name: 'Lời thoại', icon: 'ti-file-text', tabs: [['words', 'Lời thoại'], ['ai', 'Làm sạch lời nói']] },
   ];
   const SHORT = { longform: 'Cắt clip' }; // nhãn thanh trái (60px) của panel tên dài
@@ -47,8 +48,9 @@
   };
   let level = store.get('uiLevel', DEFAULT_LEVEL) === 'basic' ? 'basic' : 'pro';
   let step = store.get('step', '');
-  const stepIds = [...STEPS.map(s => s[0]), 'settings'];
-  if (!stepIds.includes(step)) step = '';
+  // 'queue' (C15): màn hàng đợi Tự lái, như Cài đặt không nằm trên thanh bước; mở bằng nút Tự lái, không mở lại khi vào Studio
+  const stepIds = [...STEPS.map(s => s[0]), 'settings', 'queue'];
+  if (!stepIds.includes(step) || step === 'queue') step = '';
   const want = step; // bước lần trước (lưu theo máy), mở lại khi dự án sẵn sàng; trước đó thanh trái đi theo panel mặc định
 
   const css = document.createElement('style');
@@ -61,6 +63,10 @@
   #wf-steps button.on b { background: var(--acc); border-color: var(--acc); color: var(--bg0); }
   #wf-steps .ln { width: 12px; height: 1px; background: var(--line3); flex: none; }
   #wf-morebtn.on { background: var(--bg3); color: var(--tx); }
+  #ap-topbtn.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
+  /* C15: Tự lái là lối vào riêng nên giữ chữ (studio.css thu nút thanh đầu về icon dưới 1760px); màn hẹp mới chỉ còn icon */
+  #top > #ap-topbtn { font-size: 12px; gap: 4px; }
+  @media (max-width: 1280px) { #top > #ap-topbtn { font-size: 0; gap: 0; } }
   #wf-more { position: fixed; z-index: 60; min-width: 240px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-raised); display: flex; flex-direction: column; gap: 4px; }
   #wf-more[hidden] { display: none; }
   #wf-more > button, #wf-more .selwrap select { width: 100%; justify-content: flex-start; height: 32px; padding: 0 8px; font-size: 13px; background: transparent; border-color: transparent; color: var(--tx); gap: 8px; }
@@ -130,6 +136,7 @@
     const how = TOPS[el.id] || (opts.step ? 'step' : 'menu');
     if (how === 'park') return toPark(el);
     if (how === 'menu') return toMenu(el);
+    if (how === 'bar') return moreBtn.before(el);
     // nút mới gắn bước: giấu nút, thêm một mục trên thanh trái mở bằng nút đó
     toPark(el);
     const id = 'wf-btn-' + (el.id || Math.random().toString(36).slice(2, 8));
@@ -198,6 +205,7 @@
       m.innerHTML = `<i class="ti ti-dots-circle-horizontal"></i><span>Thêm…</span>`; rail.appendChild(m);
     }
     for (const b of nav.querySelectorAll('[data-step]')) b.classList.toggle('on', b.dataset.step === step);
+    $('#ap-topbtn')?.classList.toggle('on', step === 'queue');
     renderTabs();
   }
   S._rail.push(filterRail);
@@ -254,7 +262,7 @@
   }
   const clickEl = (id, miss) => () => { const el = document.getElementById(id); if (el) el.click(); else S.toast(miss); };
   // S13 (M107): đã mở dự án → thẻ "Video nguồn" (GET /api/source, studio/routes/14_source.mjs); chưa có → bộ chọn như cũ.
-  // C15: một dòng nhắc thả nhiều video vào Nguon/Tha vao day/ cho Tự lái (nút Tự lái ra thanh đầu thuộc M108).
+  // C15: một dòng nhắc thả nhiều video vào Nguon/Tha vao day/ cho Tự lái (nút Tự lái trên thanh đầu, M108).
   let SRC = null, srcDir = null;
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const mb = b => (b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB');
@@ -293,8 +301,8 @@
   });
   S.addPanel('wf-new', 'ti-video', 'Video nguồn', renderSource);
   // trạng thái AI dựng giúp (kế hoạch, cảnh AI, QC nhanh) do 20_ai.js vẽ (S.ai.renderBuild); chưa có thì thẻ mở hộp như cũ
-  S.addPanel('wf-aihelp', 'ti-wand', 'AI dựng', () => (S.ai?.renderBuild ? S.ai.renderBuild() : card('ti-wand', 'AI dựng giúp',
-    'Claude đọc lời thoại rồi đặt graphic, phụ đề, nhạc và hiệu ứng âm thanh. Bạn xem lại và sửa từng thứ sau.', 'Mở AI dựng giúp', clickEl('aibtn', 'Tính năng AI chưa sẵn sàng'))));
+  S.addPanel('wf-aihelp', 'ti-wand', 'AI dựng', () => (S.ai?.renderBuild ? S.ai.renderBuild() : card('ti-wand', 'AI dựng',
+    'Claude đọc lời thoại rồi đặt graphic, phụ đề, nhạc và hiệu ứng âm thanh. Bạn xem lại và sửa từng thứ sau.', 'AI dựng', clickEl('aibtn', 'Tính năng AI chưa sẵn sàng'))));
   // B-roll động (9.080 media_card, GET /api/broll) — cùng dữ liệu với tab "B-roll động" cũ của Media, nay nằm trong mục B-roll
   let bq = '', bres = [], bbusy = false;
   const r2 = v => Math.round(v * 100) / 100;
