@@ -1,8 +1,9 @@
-// Tự lái: thả video → video hoàn chỉnh. Hàng đợi nền, thư mục tự động, hồ sơ kênh + "Học từ chỉnh sửa".
+// Tự lái: thả video → video hoàn chỉnh. Hàng đợi nền, thư mục tự động, chọn thương hiệu (phong cách dựng + "Học từ chỉnh sửa"
+// của thương hiệu sửa ở trang Thương hiệu, 51_brands.js — S19 M133).
 // Server: studio/routes/15_autopilot.mjs · scripts/autopilot.mjs, queue.mjs, profile.mjs (references/autopilot.md).
 (() => {
   const { $, esc } = Studio;
-  const S = { st: null, profile: '', brand: null, product: null, path: '', uploading: null, open: {}, sig: '' };
+  const S = { st: null, brand: null, product: null, path: '', uploading: null, open: {}, sig: '' };
   const css = document.createElement('style');
   css.textContent = `
   .ap-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
@@ -29,18 +30,12 @@
   .ap-it { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); font-size: var(--text-xs); }
   .ap-it .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .ap-it .st { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap-it .st.err { color: rgb(var(--color-danger)); }
-  .ap-it .b, .ap-prof .b { display: flex; gap: 1px; } .ap-it .b button, .ap-prof .b button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
+  .ap-it .b { display: flex; gap: 1px; } .ap-it .b button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
   .ap-ok { color: rgb(var(--color-success)); } .ap-bad { color: rgb(var(--color-danger)); } .ap-run { color: rgb(var(--color-accent-text)); } .ap-warn { color: rgb(var(--color-warning)); } .ap-it .st.stop { color: rgb(var(--color-warning)); }
   .ap-tog { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); margin: var(--space-2) 0; cursor: pointer; } .ap-tog.ap-t3 { margin-top: var(--space-3); } .ap-tog input { width: auto; margin: 0; }
   .ap-tog small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
   .ap-fold { display: grid; grid-template-columns: minmax(0,1fr) var(--h-sm); gap: var(--space-1); align-items: center; margin-bottom: var(--space-1); } .ap-fold input { font-size: var(--text-2xs); height: var(--h-sm); }
   .ap-fold button { width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
-  .ap-prof { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-top: 1px solid rgb(var(--color-line)); font-size: var(--text-xs); }
-  .ap-prof .nm { font-weight: 600; } .ap-prof small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
-  .ap-learn { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); margin: var(--space-1) 0 0 0; padding-left: var(--space-4); } .ap-learn li { margin: var(--space-050) 0; }
-  .ap-form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); } .ap-form label { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin-bottom: var(--space-050); }
-  .ap-form .full { grid-column: 1 / 3; } .ap-form .chk { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); } .ap-form .chk label { display: flex; gap: var(--space-1); align-items: center; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); margin: 0; }
-  .ap-form .chk input { width: auto; margin: 0; } .ap-form input[type=time] { color-scheme: dark; }
   #ap-topbtn[hidden] { display: none; }
   #ap-topbtn .pct { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); font-variant-numeric: tabular-nums; } #ap-topbtn .pct:empty { display: none; }
   #ap-topbtn.run .ti { color: rgb(var(--color-accent-text)); } #ap-topbtn.ok .ti { color: rgb(var(--color-success)); } #ap-topbtn.bad .ti { color: rgb(var(--color-danger)); }`;
@@ -54,13 +49,13 @@
   const SRC = { watch: 'thư mục tự động', upload: 'kéo thả', ui: 'Studio', cli: 'dòng lệnh', app: 'thả vào app' };
   const profiles = () => S.st?.profiles?.list || [];
   const defProfile = () => S.st?.profiles?.default;
+  const styleOf = id => (id && S.st?.profiles?.aliases?.[id]) || id; // S19 M133: id hồ sơ cũ (thư mục canh) → id phong cách
 
   async function refresh(force) {
     const st = await api('/api/autopilot/state').catch(() => null);
     if (!st || st.error) return;
     const sig = JSON.stringify([st.items, st.runner, st.learn]);
     const first = !S.st; S.st = st;
-    if (!S.profile) S.profile = st.settings.profile || defProfile();
     if (S.brand == null) { S.brand = st.settings.brand || ''; S.product = st.settings.product || ''; } // S16 M121: lựa chọn gần nhất
     topBadge();
     if (!active()) return;
@@ -103,17 +98,17 @@
     <div id="ap-upl"></div>
     <div id="ap-claude"></div>
     <div id="ap-prep"></div>
-    <div class="ap-row2"><select id="ap-prof">${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === S.profile ? 'selected' : ''}>${esc(p.name)}${p.id === defProfile() ? ' (mặc định)' : ''}</option>`).join('')}</select>
+    <div class="ap-row2"><span class="help ap-m0">Hoặc chọn video trên máy</span>
       <button id="ap-pick"><i class="ti ti-file-upload"></i> Chọn file</button></div>
     <label class="ap-lbl">Hoặc đường dẫn video / thư mục dự án trên máy</label>
     <div class="ap-row2"><input id="ap-path" placeholder="${/Win/i.test(navigator.platform || navigator.userAgent) ? 'D:\\Video\\clip.mp4' : '/Users/ban/Movies/clip.mov'}" value="${esc(S.path)}"><button id="ap-add" title="Thêm vào hàng đợi"><i class="ti ti-plus"></i> Thêm</button></div>
     <div id="ap-live"></div>
-    <div id="ap-watch"></div>
-    <div id="ap-profiles"></div>`;
-    bindTop(); renderLive(); renderWatch(); renderProfiles(); renderClaude(); renderPrep();
+    <div id="ap-watch"></div>`;
+    bindTop(); renderLive(); renderWatch(); renderClaude(); renderPrep();
   }
   // S16 M121: chuẩn bị trước khi chạy: thương hiệu (brand kit + Kho chứa dự án và Thành phẩm) và sản phẩm (không bắt buộc).
-  // brand '' = theo hồ sơ đang chọn, '__none' = không thương hiệu (Kho Chung); gửi kèm mỗi video (enqueue / upload), nhớ ở autopilot.json.
+  // '__none' = không thương hiệu (Kho Chung, phong cách Chung); gửi kèm mỗi video (enqueue / upload), nhớ ở autopilot.json.
+  // S19 M133: thương hiệu quyết định luôn phong cách dựng; '' (cách cũ "theo hồ sơ") → thương hiệu của phong cách mặc định.
   let PREP = null;
   // S17 M126: video Tự lái vào Kho khác dự án đang mở → nhắc trước, cho đổi lại về thương hiệu của dự án đang mở
   function offKho(kit, name) {
@@ -132,26 +127,38 @@
       Promise.all([api('/api/brands').catch(() => []), api('/api/products').catch(() => [])])
         .then(([b, p]) => { PREP = { brands: Array.isArray(b) ? b : [], products: Array.isArray(p) ? p : [] }; renderPrep(); });
     }
-    const prof = profiles().find(p => p.id === S.profile), byProf = PREP.brands.find(b => b.id === prof?.brand);
-    if (S.brand && S.brand !== '__none' && !PREP.loading && !PREP.brands.some(b => b.id === S.brand)) S.brand = ''; // thương hiệu đã xoá
+    const def = defProfile(), defBrand = def && def !== 'chung' && PREP.brands.some(b => b.id === def) ? def : '__none';
+    if (!PREP.loading && (!S.brand || (S.brand !== '__none' && !PREP.brands.some(b => b.id === S.brand)))) S.brand = defBrand; // chưa chọn / thương hiệu đã xoá
     if (S.product && !PREP.loading && !PREP.products.some(p => p.id === S.product)) S.product = '';
-    const kit = S.brand === '__none' ? null : S.brand ? PREP.brands.find(b => b.id === S.brand) : byProf;
+    const kit = S.brand && S.brand !== '__none' ? PREP.brands.find(b => b.id === S.brand) : null;
+    const sty = profiles().find(p => p.id === (kit ? kit.id : 'chung')), learn = S.st?.learn, proj = S.st?.project;
     const name = b => b.title || b.name || b.id, opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
     box.innerHTML = `<div class="ap-card"><h4><i class="ti ti-building-store"></i>Chuẩn bị trước khi chạy</h4>
       <label class="ap-lbl">Thương hiệu · Kho</label>
-      <select id="ap-brand">${opt('', `Theo hồ sơ (${byProf ? name(byProf) : 'không thương hiệu'})`, S.brand)}${opt('__none', 'Không thương hiệu · Kho Chung', S.brand)}${PREP.brands.map(b => opt(b.id, name(b), S.brand)).join('')}</select>
+      <select id="ap-brand">${opt('__none', 'Không thương hiệu · Kho Chung', S.brand)}${PREP.brands.map(b => opt(b.id, name(b), S.brand)).join('')}</select>
       <label class="ap-lbl">Sản phẩm (không bắt buộc)</label>
       <select id="ap-product">${opt('', '— Không gắn sản phẩm —', S.product)}${PREP.products.map(p => opt(p.id, p.name || p.id, S.product)).join('')}</select>
       <div class="help ap-mt">${kit ? `Logo, màu, CTA của <b>${esc(name(kit))}</b>; dự án và thành phẩm vào Kho của thương hiệu này.`
         : '<i class="ti ti-info-circle ap-warn"></i> Đang chạy không thương hiệu: video không có logo, màu, lời kết riêng; dự án và thành phẩm vào Kho Chung.'}
         ${S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''}
         ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div>${offKho(kit, name)}
+      ${sty ? `<div class="help ap-mt"><i class="ti ti-adjustments"></i> Phong cách dựng ${kit ? `của <b>${esc(name(kit))}</b>` : '<b>Chung</b>'}${sty.saved || !kit ? '' : ' (đang theo Chung)'}:
+        ${esc(Studio.brandStyle?.summary ? Studio.brandStyle.summary(sty) : ['b-roll ' + sty.broll_density, 'âm thanh ' + sty.sound].join(' · '))}${sty.learnedNotes?.length ? ` · áp ${sty.learnedNotes.length} điều đã học` : sty.learn ? ` · đang học từ ${sty.learnedN || 0} video` : ''}.
+        <button class="wf-lnk" id="ap-style">Sửa ở trang Thương hiệu</button>${proj?.autopilot ? ' <button class="wf-lnk" id="ap-learn" title="So dự án đang mở (do Tự lái làm) với bản Tự lái giao để học thói quen sửa của bạn">Học từ dự án này</button>' : ''}</div>` : ''}
+      ${learn ? `<div class="help ap-mt1">${learn.ok ? `Lần học gần nhất: ${esc(learn.observation?.name || '')} → ${esc(learn.name || '')} (${new Date(learn.at).toLocaleTimeString('vi-VN')})` : `Chưa học: ${esc(learn.why || '')}`}</div>` : ''}
       <label class="ap-lbl">Kịch bản (không bắt buộc, cho video kế tiếp)</label><div id="ap-script"></div></div>`;
     Studio.scriptStage?.mount($('#ap-script')); // S17 M123 (studio/features/19_script.js)
     const save = () => api('/api/autopilot/settings', { brand: S.brand, product: S.product }).catch(() => {});
     $('#ap-brand').onchange = e => { S.brand = e.target.value; save(); renderPrep(); };
     $('#ap-kho-back')?.addEventListener('click', () => { const c = Studio.META?.kho; S.brand = c?.brand && PREP.brands.some(b => b.id === c.brand) ? c.brand : '__none'; save(); renderPrep(); });
     $('#ap-product').onchange = e => { S.product = e.target.value; save(); renderPrep(); };
+    $('#ap-style')?.addEventListener('click', () => (Studio.brandStyle ? Studio.brandStyle.open(kit ? kit.id : 'chung') : document.querySelector('#rail [data-p="brands"]')?.click()));
+    $('#ap-learn')?.addEventListener('click', async () => {
+      if (Studio.saveNow && !await Studio.saveNow()) return;
+      const r = await api('/api/autopilot/learn', {});
+      Studio.toast(r.ok ? `Đã ghi nhận vào ${r.name || 'phong cách'}: ${r.rules?.notes?.length || 0} điều chỉnh (${r.rules?.n || 0} video)` : 'Chưa học: ' + (r.why || r.error));
+      if (r.profiles) S.st.profiles = r.profiles; await refresh(); renderPrep();
+    });
   }
   // S16 M120: báo trước khi chạy: máy không có Claude CLI thì "AI dựng giúp" và "Viết nội dung đăng" sẽ bị bỏ qua
   let claudeAsked = false;
@@ -216,15 +223,15 @@
     const st = S.st, w = st.settings.watch, ag = st.runner.agent || {};
     $('#ap-watch').innerHTML = `<div class="ap-card"><h4><i class="ti ti-folder-bolt"></i>Thư mục tự động</h4>
       <label class="ap-tog"><input type="checkbox" id="ap-won" ${w.on ? 'checked' : ''}><span>Tự dựng mọi video thả vào thư mục<small>Video đứng yên 5 giây (đã chép xong) mới được nhận. Mỗi Kho có sẵn thư mục “Tha vao day”: bản gốc chuyển sang Nguon, dự án vào Du an, thành phẩm vào Thanh pham.</small></span></label>
-      ${(st.kho || []).map(k => `<div class="ap-sep"><label class="ap-lbl">Kho ${esc(k.kho)}${k.profile ? ` · hồ sơ ${esc((profiles().find(p => p.id === k.profile) || {}).name || k.profile)}` : ' · hồ sơ mặc định'}</label><div class="ap-fold"><input value="${esc(k.in)}" readonly><button class="icon" title="Mở thư mục" data-wopen="${esc(k.in)}"><i class="ti ti-external-link"></i></button></div></div>`).join('')}
+      ${(st.kho || []).map(k => `<div class="ap-sep"><label class="ap-lbl">Kho ${esc(k.kho)} · phong cách ${esc((profiles().find(p => p.id === styleOf(k.profile)) || {}).name || 'mặc định')}</label><div class="ap-fold"><input value="${esc(k.in)}" readonly><button class="icon" title="Mở thư mục" data-wopen="${esc(k.in)}"><i class="ti ti-external-link"></i></button></div></div>`).join('')}
       ${w.folders.length ? '<label class="ap-lbl ap-t1">Thư mục riêng (kiểu cũ)</label>' : ''}
       ${w.folders.map((f, i) => `<div class="ap-sep">
         <label class="ap-lbl">Thả video vào</label><div class="ap-fold"><input data-wf="${i}" data-k="in" value="${esc(f.in)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.in)}"><i class="ti ti-external-link"></i></button></div>
         <label class="ap-lbl">Kết quả (MP4, ảnh bìa, nội dung đăng)</label><div class="ap-fold"><input data-wf="${i}" data-k="done" value="${esc(f.done)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.done)}"><i class="ti ti-external-link"></i></button></div>
         <label class="ap-lbl">Bản gốc đã xử lý</label><div class="ap-fold"><input data-wf="${i}" data-k="processed" value="${esc(f.processed)}"><button class="icon" title="Mở trong Finder" data-wopen="${esc(f.processed)}"><i class="ti ti-external-link"></i></button></div>
-        <div class="ap-row2 ap-t1"><select data-wf="${i}" data-k="profile"><option value="">Hồ sơ mặc định</option>${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === f.profile ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+        <div class="ap-row2 ap-t1"><select data-wf="${i}" data-k="profile" title="Thương hiệu (phong cách dựng) cho video thả vào đây"><option value="">Phong cách mặc định</option>${profiles().map(p => `<option value="${esc(p.id)}" ${f.profile && p.id === styleOf(f.profile) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
           <button class="icon" title="Bỏ thư mục này" data-wdel="${i}"><i class="ti ti-trash"></i></button></div></div>`).join('')}
-      <div class="acts"><button id="ap-wadd"><i class="ti ti-folder-plus"></i> Thêm thư mục (cho hồ sơ khác)</button><button class="primary" id="ap-wsave"><i class="ti ti-device-floppy"></i> Lưu</button></div>
+      <div class="acts"><button id="ap-wadd"><i class="ti ti-folder-plus"></i> Thêm thư mục (cho thương hiệu khác)</button><button class="primary" id="ap-wsave"><i class="ti ti-device-floppy"></i> Lưu</button></div>
       ${st.runner.watchError ? `<div class="help ap-bad">${esc(st.runner.watchError)}</div>` : ''}
       <label class="ap-tog ap-t3"><input type="checkbox" id="ap-agent" ${st.settings.agent || ag.installed ? 'checked' : ''}><span>Chạy cả khi tắt app<small>Cài một tác vụ nền macOS (LaunchAgent ${ag.installed ? '— đã cài' : ''}). Bỏ chọn để gỡ.</small></span></label>
       <label class="ap-tog"><input type="checkbox" id="ap-notify" ${st.settings.notify ? 'checked' : ''}><span>Thông báo macOS khi xong / lỗi</span></label>
@@ -249,84 +256,6 @@
       await refresh(); renderWatch();
     };
   }
-  function renderProfiles() {
-    const P = profiles(), learn = S.st.learn, proj = S.st.project;
-    $('#ap-profiles').innerHTML = `<div class="ap-card"><h4><i class="ti ti-id-badge-2"></i>Hồ sơ kênh<span class="r">${P.length}</span></h4>
-      ${P.map(p => `<div class="ap-prof"><div class="ap-min"><span class="nm">${p.id === defProfile() ? '<i class="ti ti-star-filled ap-warn"></i> ' : ''}${esc(p.name)}</span>
-        <small>${esc([p.pack === 'auto' ? 'AI chọn gói' : 'gói ' + p.pack, p.template ? 'mẫu ' + p.template : '', 'b-roll ' + p.broll_density, 'âm thanh ' + p.sound, (p.aspects || []).join('+'), p.whisper].filter(Boolean).join(' · '))}</small>
-        ${p.learnedNotes?.length ? `<ul class="ap-learn">${p.learnedNotes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : p.learn ? `<small><i class="ti ti-school"></i> Đang học từ ${p.learnedN || 0} video bạn đã sửa${p.learnedN ? '' : ' (chưa có)'}</small>` : '<small>Không học từ chỉnh sửa</small>'}</div>
-        <div class="b"><button class="icon" title="Sửa" data-pe="${esc(p.id)}"><i class="ti ti-pencil"></i></button><button class="icon" title="Nhân bản" data-pd="${esc(p.id)}"><i class="ti ti-copy"></i></button>
-          ${p.id !== defProfile() ? `<button class="icon" title="Đặt làm mặc định" data-pdef="${esc(p.id)}"><i class="ti ti-star"></i></button>` : ''}
-          ${p.learned ? `<button class="icon" title="Quên điều đã học" data-pr="${esc(p.id)}"><i class="ti ti-eraser"></i></button>` : ''}
-          ${P.length > 1 ? `<button class="icon" title="Xoá hồ sơ" data-px="${esc(p.id)}"><i class="ti ti-trash"></i></button>` : ''}</div></div>`).join('')}
-      <div class="acts"><button id="ap-pnew"><i class="ti ti-plus"></i> Hồ sơ mới</button>${proj?.autopilot ? '<button id="ap-learn" title="So dự án đang mở (do Tự lái làm) với bản Tự lái giao để học thói quen sửa của bạn"><i class="ti ti-school"></i> Học từ dự án này</button>' : ''}</div>
-      ${learn ? `<div class="help ap-mt">${learn.ok ? `Lần học gần nhất: ${esc(learn.observation?.name || '')} (${new Date(learn.at).toLocaleTimeString('vi-VN')})` : `Chưa học: ${esc(learn.why || '')}`}</div>` : ''}
-      <div class="help ap-mt">“Học từ chỉnh sửa”: khi bạn lưu một dự án do Tự lái làm, Studio so với bản Tự lái giao (cảnh tự động bị xoá, đổi kiểu phụ đề / gói, tắt nhạc…). Cần ít nhất 2 video có cùng thói quen mới điều chỉnh hồ sơ.</div></div>`;
-    const B = $('#ap-profiles');
-    const act = async (action, id) => { const r = await api('/api/autopilot/profile', { action, id }); if (r.error) return Studio.toast(r.error); S.st.profiles = r.profiles; renderProfiles(); render(); };
-    B.querySelectorAll('[data-pe]').forEach(b => (b.onclick = () => editProfile(P.find(p => p.id === b.dataset.pe))));
-    B.querySelectorAll('[data-pd]').forEach(b => (b.onclick = () => act('duplicate', b.dataset.pd)));
-    B.querySelectorAll('[data-pdef]').forEach(b => (b.onclick = () => act('default', b.dataset.pdef)));
-    B.querySelectorAll('[data-pr]').forEach(b => (b.onclick = () => confirm('Quên mọi điều hồ sơ này đã học từ các lần bạn sửa?') && act('reset', b.dataset.pr)));
-    B.querySelectorAll('[data-px]').forEach(b => (b.onclick = () => confirm('Xoá hồ sơ này?') && act('delete', b.dataset.px)));
-    $('#ap-pnew').onclick = () => editProfile(null);
-    if ($('#ap-learn')) $('#ap-learn').onclick = async () => { if (Studio.saveNow && !await Studio.saveNow()) return; const r = await api('/api/autopilot/learn', {}); Studio.toast(r.ok ? `Đã ghi nhận: ${r.rules?.notes?.length || 0} điều chỉnh (${r.rules?.n || 0} video)` : 'Chưa học: ' + (r.why || r.error)); if (r.profiles) S.st.profiles = r.profiles; await refresh(); renderProfiles(); };
-  }
-
-  // ---------- profile editor ----------
-  let BRANDS = null, TPLS = null;
-  async function editProfile(p) {
-    [BRANDS, TPLS] = await Promise.all([BRANDS || api('/api/brands').catch(() => []), TPLS || api('/api/templates').catch(() => [])]);
-    const d = p || { name: 'Kênh mới', pack: 'auto', template: '', caption_style: '', goal: 'Chia sẻ', tone: 'Tự nhiên, gần gũi', ai: true, ai_density: 'vua', broll_density: 'vua', broll_goal: 'auto', broll_src: ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'lib'], sound: 'vua', music: 'auto', clean: 'vua', fillers: true, fillers_claude: false, whisper: 'large-v3-turbo', lang: 'vi', orient: 'auto', aspects: ['9:16'], quality: '1080', qc: true, cta: '', platforms: ['tiktok', 'youtube', 'facebook'], slot: '19:00', learn: true, extra: '', brand: '' };
-    if (!p) { // hồ sơ mới: lấy sẵn thương hiệu, khổ hình và nơi đăng đã chọn ở hướng dẫn đầu (02_onboarding), không bắt chọn lại
-      const o = await api('/api/onboarding').catch(() => null), kit = (BRANDS || []).find(b => b.id === o?.brand);
-      if (kit) { d.brand = kit.id; if (kit.pack) d.pack = kit.pack; }
-      if (o?.aspect) d.aspects = [o.aspect];
-      if (o?.platforms?.length) d.platforms = o.platforms;
-    }
-    const packs = (Studio.win?.PACKS || []).filter(x => x.recipe || x.items);
-    const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(v) === String(k) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-    const chk = (name, opts, vals) => `<div class="chk">${opts.map(([k, l]) => `<label><input type="checkbox" name="${name}" value="${esc(k)}" ${(vals || []).includes(k) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
-    Studio.modal(`<h3><i class="ti ti-id-badge-2"></i> ${p ? 'Sửa' : 'Tạo'} hồ sơ kênh</h3><div class="ap-form">
-      <div class="full"><label>Tên hồ sơ</label><input id="pf-name" value="${esc(d.name)}"></div>
-      <div><label>Thương hiệu (brand kit)</label>${sel('pf-brand', [['', '— không —'], ...(BRANDS || []).map(b => [b.id, b.title || b.name])], d.brand)}</div>
-      <div><label>Gói style</label>${sel('pf-pack', [['auto', 'AI chọn'], ...packs.map(x => [x.id, (x.icon || '') + ' ' + x.name]), ...(packs.some(x => x.id === d.pack) || d.pack === 'auto' ? [] : [[d.pack, d.pack]])], d.pack)}</div>
-      <div><label>Mẫu (thay cho AI dựng)</label>${sel('pf-tpl', [['', '— AI dựng giúp —'], ...(TPLS || []).map(t => [t.id, t.name || t.id])], d.template)}</div>
-      <div><label>Kiểu phụ đề (ép)</label><input id="pf-cap" value="${esc(d.caption_style || '')}" placeholder="để trống = theo gói/AI"></div>
-      <div><label>Mục tiêu</label><input id="pf-goal" value="${esc(d.goal)}"></div><div><label>Giọng điệu</label><input id="pf-tone" value="${esc(d.tone)}"></div>
-      <div><label>AI dựng giúp</label>${sel('pf-ai', [['1', 'Bật (claude -p)'], ['0', 'Tắt']], d.ai ? 1 : 0)}</div>
-      <div><label>Mật độ graphic AI</label>${sel('pf-aid', [['thua', 'Thưa'], ['vua', 'Vừa'], ['day', 'Dày']], d.ai_density)}</div>
-      <div><label>Mật độ b-roll</label>${sel('pf-bd', [['off', 'Tắt'], ['thua', 'Thưa (~8 s)'], ['vua', 'Vừa (~5 s)'], ['day', 'Dày (~3 s)'], ['ratday', 'Rất dày (~2 s)']], d.broll_density)}</div>
-      <div><label>Âm thanh (SFX)</label>${sel('pf-snd', [['off', 'Tắt'], ['nhe', 'Nhẹ'], ['vua', 'Vừa'], ['phongphu', 'Phong phú']], d.sound)}</div>
-      <div class="full"><label>Mục tiêu b-roll</label><select id="pf-bg">${[['auto', 'Tự nhận (theo gói + lời thoại)'], ['banhang', 'Bán hàng'], ['bds', 'BĐS'], ['khoahoc', 'Khoá học / Hướng dẫn'], ['review', 'Review'], ['tintuc', 'Tin tức'], ['kechuyen', 'Kể chuyện / Chia sẻ'], ['doanhnghiep', 'Doanh nghiệp'], ['amthuc', 'Ẩm thực / Du lịch'], ['giaitri', 'Giải trí']].map(([k, l]) => `<option value="${k}" ${(d.broll_goal || 'auto') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="full"><label>Nguồn b-roll</label>${chk('pf-bs', [['preset', 'B-roll động'], ['hf', 'Khối HyperFrames'], ['text', 'Chữ nổi'], ['emoji', 'Emoji'], ['logo', 'Logo công cụ'], ['aroll', 'Hiệu ứng trên người nói'], ['media', 'Media của dự án'], ['lib', 'Thư viện của tôi'], ['stock', 'Ảnh stock (mạng)'], ['stockvid', 'Video stock (key Pexels/Pixabay)'], ['aiimg', 'Ảnh AI (key OpenAI/Gemini)']], d.broll_src)}</div>
-      <div><label>Nhạc nền</label>${sel('pf-mus', [['auto', 'Tự chọn (AI / theo đoạn)'], ['off', 'Không nhạc'], ['tech', 'tech'], ['chill', 'chill'], ['upbeat', 'upbeat'], ['corporate', 'corporate'], ['emotional', 'emotional'], ['suspense', 'suspense'], ...(['auto', 'off', 'tech', 'chill', 'upbeat', 'corporate', 'emotional', 'suspense'].includes(d.music) ? [] : [[d.music, d.music]])], d.music)}</div>
-      <div><label>Làm sạch giọng</label>${sel('pf-cl', [['off', 'Tắt'], ['nhe', 'Nhẹ'], ['vua', 'Vừa'], ['manh', 'Mạnh']], d.clean)}</div>
-      <div><label>Cắt lỗi nói / lặp từ</label>${sel('pf-fl', [['1', 'Bật'], ['1c', 'Bật + Claude dò câu hỏng'], ['0', 'Tắt']], d.fillers ? (d.fillers_claude ? '1c' : '1') : '0')}</div>
-      <div><label>Nhận giọng (whisper)</label>${sel('pf-wh', [['large-v3-turbo', 'large-v3-turbo (chính xác)'], ['small', 'small (nhanh)'], ['large-v3', 'large-v3 (chậm nhất)']], d.whisper)}</div>
-      <div><label>Ngôn ngữ</label>${sel('pf-lang', [['vi', 'Tiếng Việt'], ['auto', 'Tự nhận']], d.lang)}</div>
-      <div><label>Khổ dựng</label>${sel('pf-or', [['auto', 'Theo video'], ['vertical', 'Dọc 9:16'], ['horizontal', 'Ngang 16:9']], d.orient)}</div>
-      <div class="full"><label>Xuất các khổ</label>${chk('pf-asp', [['9:16', 'Dọc 9:16'], ['1:1', 'Vuông 1:1'], ['16:9', 'Ngang 16:9']], d.aspects)}</div>
-      <div><label>Chất lượng</label>${sel('pf-q', [['1080', '1080p'], ['720', '720p (nhanh)'], ['4k', '4K']], d.quality)}</div>
-      <div><label>AI kiểm tra (QC)</label>${sel('pf-qc', [['1', 'Bật (tự sửa lỗi an toàn)'], ['0', 'Tắt']], d.qc ? 1 : 0)}</div>
-      <div class="full"><label>Lời kêu gọi (CTA) — dùng cho kết video + nội dung đăng</label><input id="pf-cta" value="${esc(d.cta)}" placeholder="VD: Follow để nhận mẹo AI mỗi ngày"></div>
-      <div class="full"><label>Nền tảng viết nội dung đăng</label>${chk('pf-pl', [['tiktok', 'TikTok'], ['youtube', 'YouTube Shorts'], ['facebook', 'Facebook Reels'], ['instagram', 'Instagram'], ['zalo', 'Zalo']], d.platforms)}</div>
-      <div><label>Giờ đăng mặc định</label><input id="pf-slot" type="time" value="${esc(d.slot || '19:00')}"></div>
-      <div><label>Học từ chỉnh sửa</label>${sel('pf-learn', [['1', 'Bật'], ['0', 'Tắt']], d.learn ? 1 : 0)}</div>
-      <div class="full"><label>Yêu cầu thêm cho AI</label><input id="pf-extra" value="${esc(d.extra || '')}" placeholder="VD: nhấn mạnh con số, giọng hài hước"></div>
-      </div><div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="pf-save"><i class="ti ti-device-floppy"></i> Lưu</button></div>`);
-    const v = id => $('#' + id).value, all = n => [...document.querySelectorAll(`[name=${n}]:checked`)].map(i => i.value);
-    $('#pf-save').onclick = async () => {
-      const fl = v('pf-fl');
-      const prof = { ...(p ? { id: p.id } : {}), name: v('pf-name'), brand: v('pf-brand'), pack: v('pf-pack'), template: v('pf-tpl'), caption_style: v('pf-cap').trim(), goal: v('pf-goal'), tone: v('pf-tone'),
-        ai: v('pf-ai') === '1', ai_density: v('pf-aid'), broll_density: v('pf-bd'), broll_goal: v('pf-bg') || 'auto', broll_src: all('pf-bs'), sound: v('pf-snd'), music: v('pf-mus'), clean: v('pf-cl'), fillers: fl !== '0', fillers_claude: fl === '1c',
-        whisper: v('pf-wh'), lang: v('pf-lang'), orient: v('pf-or'), aspects: all('pf-asp'), quality: v('pf-q'), qc: v('pf-qc') === '1', cta: v('pf-cta'), platforms: all('pf-pl'), slot: v('pf-slot'), learn: v('pf-learn') === '1', extra: v('pf-extra') };
-      const r = await api('/api/autopilot/profile', { action: 'save', profile: prof });
-      if (r.error) return Studio.toast(r.error);
-      S.st.profiles = r.profiles; Studio.closeModal(); Studio.toast('Đã lưu hồ sơ'); render();
-    };
-  }
-
   // ---------- actions ----------
   async function itemAct(id, action) {
     if (action === 'cancel' && !confirm('Huỷ việc này?')) return;
@@ -339,7 +268,7 @@
   async function enqueuePath() {
     const p = $('#ap-path').value.trim(); if (!p) return Studio.toast('Nhập đường dẫn video');
     let script = ''; try { script = await Studio.scriptStage?.take() || ''; } catch (e) { return Studio.toast(e.message); } // S17 M123
-    const r = await api('/api/autopilot/enqueue', { input: p, profile: S.profile, brand: S.brand || '', product: S.product || '', script });
+    const r = await api('/api/autopilot/enqueue', { input: p, brand: S.brand || '', product: S.product || '', script });
     if (r.error) return Studio.toast(r.error);
     if (script) Studio.scriptStage.clear();
     S.path = ''; Studio.toast('Đã thêm vào hàng đợi Tự lái'); refresh(true);
@@ -350,7 +279,7 @@
       if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name)) { Studio.toast('Bỏ qua (không phải video): ' + f.name); continue; }
       const first = script === ''; if (first) { try { script = await Studio.scriptStage?.take() || null; } catch (e) { Studio.toast(e.message); break; } }
       S.uploading = f.name; $('#ap-upl') && ($('#ap-upl').innerHTML = `<div class="help"><i class="ti ti-loader-2 spin"></i> Đang chép ${esc(f.name)} (${(f.size / 1048576).toFixed(0)} MB)…</div>`);
-      const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(S.profile || '')}&brand=${encodeURIComponent(S.brand || '')}&product=${encodeURIComponent(S.product || '')}${script ? `&script=${encodeURIComponent(script)}` : ''}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
+      const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&brand=${encodeURIComponent(S.brand || '')}&product=${encodeURIComponent(S.product || '')}${script ? `&script=${encodeURIComponent(script)}` : ''}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
       if (r.error) Studio.toast('Lỗi: ' + r.error); else { Studio.toast('Đã thêm “' + f.name + '” vào hàng đợi' + (script ? ' (kèm kịch bản)' : '')); if (script) Studio.scriptStage.clear(); }
       script = null; // lỗi thì ô vẫn giữ chữ, nhưng không gắn sang video sau
     }
@@ -365,7 +294,6 @@
     dz.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('over'); });
     dz.addEventListener('dragleave', () => dz.classList.remove('over'));
     dz.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); uploadFiles([...e.dataTransfer.files]); });
-    $('#ap-prof').onchange = e => { S.profile = e.target.value; api('/api/autopilot/settings', { profile: S.profile }); renderPrep(); };
     $('#ap-path').oninput = e => (S.path = e.target.value);
     $('#ap-path').onkeydown = e => e.key === 'Enter' && enqueuePath();
     $('#ap-add').onclick = enqueuePath;

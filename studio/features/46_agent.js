@@ -49,9 +49,9 @@
       h += t.allowed.map(a => `<div class="ag-row"><div><span class="nm">${esc(a.name)}</span><small>chat ${esc(a.id)}</small></div><button class="icon" title="Bỏ ghép nối" data-unpair="${esc(a.id)}"><i class="ti ti-unlink"></i></button></div>`).join('') + '</div>';
       const prof = S.st.profiles;
       h += `<div class="ag-card"><h4><i class="ti ti-settings"></i> Cách bot làm việc</h4>
-        <span class="lbl">Hồ sơ kênh cho video gửi qua bot</span><select id="ag-prof"><option value="">Mặc định</option>${prof.map(p => `<option value="${esc(p.id)}" ${t.profile === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+        <span class="lbl">Thương hiệu (phong cách dựng) cho video gửi qua bot</span><select id="ag-prof"><option value="">Mặc định</option>${prof.map(p => `<option value="${esc(p.id)}" ${t.profile === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
         <span class="lbl">Bản tin sáng (đề xuất + tóm tắt) lúc</span><input id="ag-digest" type="time" value="${esc(t.digest || '')}">
-        <label class="ag-tog"><input type="checkbox" id="ag-auto" ${t.autoImprove ? 'checked' : ''}><span>Tự cải tiến sau mỗi 3 phản hồi<small class="muted">Chỉnh hồ sơ kênh theo điểm và góp ý, báo lại qua Telegram</small></span></label>
+        <label class="ag-tog"><input type="checkbox" id="ag-auto" ${t.autoImprove ? 'checked' : ''}><span>Tự cải tiến sau mỗi 3 phản hồi<small class="muted">Chỉnh phong cách dựng của thương hiệu theo điểm và góp ý, báo lại qua Telegram</small></span></label>
         <div class="acts ag-mt"><button data-ag="opts"><i class="ti ti-device-floppy"></i> Lưu</button></div>
         <div class="help">Trong Telegram: gửi video (≤ 20 MB) để tự dựng · <code>/chude</code> · <code>/trangthai</code> · <code>/dexuat</code> · <code>/caitien</code> · <code>/hoso</code> · hoặc nhắn tự nhiên. Bot chỉ chạy khi Studio đang mở, hoặc chạy riêng bằng <code>node scripts/telegram.mjs run</code>.</div></div>`;
     }

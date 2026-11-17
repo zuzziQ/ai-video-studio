@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 import { AVS_HOME, loadQueue, addItem, retryItem, Runner, KINDS, FAILED, isFailed, loadSettings, khoInboxes } from './queue.mjs';
 import { Readable } from 'node:stream';
 import { workspaceFor, ensureWorkspace, sub, saveUpload } from './workspace.mjs';
-import { loadStore } from './profile.mjs';
+import { loadStore, getProfile, resolveStyleId } from './profile.mjs';
 import { TAGS, addFeedback, patchFeedback, improve, refreshSuggestions, loadSuggestions, actSuggestion, askClaudeJSON, listFeedback } from './feedback.mjs';
 
 // INBOX: video nhận trước S12 (vẫn cho xếp hàng theo đường dẫn). Video mới → <Kho>/Nguon/ (khoDrop).
@@ -24,7 +24,7 @@ const CFG = path.join(AVS_HOME, 'telegram.json'), INBOX = path.join(AVS_HOME, 't
 // Nguon/Tha vao day/: bot tự xếp hàng, thư mục canh sẽ nhận trùng).
 export function khoDrop(profileId) {
   let brand = '';
-  try { const s = loadStore(); brand = (s.profiles.find(p => p.id === (profileId || s.default)) || {}).brand || ''; } catch {}
+  try { brand = getProfile(profileId).brand || ''; } catch {} // S19 M133: id thương hiệu / 'chung' / id hồ sơ cũ (ánh xạ trong styles.json)
   const ws = ensureWorkspace(workspaceFor(brand));
   return { brand: ws.brand, dir: sub(ws, 'source', { mkdir: true }) };
 }
@@ -89,7 +89,7 @@ const HELP = `<b>AI Video Studio · Agent</b>
 📋 /trangthai → hàng đợi đang làm gì
 ✨ /dexuat → đề xuất cải tiến + ý tưởng video
 🧠 /caitien → học từ các lần chấm điểm để dựng đúng gu hơn
-🪪 /hoso → chọn hồ sơ kênh cho video gửi qua bot
+🪪 /hoso → chọn thương hiệu (phong cách dựng) cho video gửi qua bot
 Hoặc cứ nhắn tự nhiên, ví dụ: "làm video về 3 mẹo chốt đơn", "video hôm qua sao rồi?"`;
 
 export class TelegramBot {
@@ -256,7 +256,7 @@ export class TelegramBot {
     }
     if (k === 's') { await ack('Đang xử lý…'); const r = await actSuggestion(a, b, { onImprove: () => improve({ claude: true }) }).catch(e => ({ msg: '⚠️ ' + e.message })); return this.send(chat.id, (b === 'apply' ? '✅ ' : '🗑 ') + esc(r.msg)); }
     if (k === 'q' && b === 'retry') { await ack(retryItem(a) ? 'Đã cho chạy lại' : 'Không chạy lại được'); return; }
-    if (k === 'p') { saveCfg({ profile: a === '_' ? '' : a }); await ack('Đã chọn'); return this.send(chat.id, `🪪 Video gửi qua bot sẽ dùng hồ sơ: <b>${esc(a === '_' ? 'mặc định' : loadStore().profiles.find(p => p.id === a)?.name || a)}</b>`); }
+    if (k === 'p') { saveCfg({ profile: a === '_' ? '' : a }); await ack('Đã chọn'); return this.send(chat.id, `🪪 Video gửi qua bot sẽ dùng phong cách của: <b>${esc(a === '_' ? 'mặc định' : loadStore().profiles.find(p => p.id === a)?.name || a)}</b>`); }
     return ack('');
   }
 
@@ -297,9 +297,9 @@ export class TelegramBot {
     }
   }
   async chooseProfile(chatId) {
-    const s = loadStore(), cur = this.cfg.profile;
+    const s = loadStore(), cur = this.cfg.profile ? (() => { try { return resolveStyleId(this.cfg.profile); } catch { return this.cfg.profile; } })() : '';
     const rows = [[{ text: (cur ? '' : '● ') + 'Mặc định', callback_data: 'p:_' }], ...s.profiles.map(p => [{ text: (cur === p.id ? '● ' : '') + p.name + (p.fb?.avg ? ` (${p.fb.avg}★)` : ''), callback_data: `p:${p.id}` }])];
-    return this.send(chatId, '🪪 Chọn hồ sơ kênh cho video gửi qua bot:', { reply_markup: { inline_keyboard: rows } });
+    return this.send(chatId, '🪪 Chọn thương hiệu (phong cách dựng) cho video gửi qua bot:', { reply_markup: { inline_keyboard: rows } });
   }
 
   // ---------- free text → agent ----------
