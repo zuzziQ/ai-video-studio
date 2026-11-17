@@ -1196,7 +1196,7 @@ async function openNewProject() {
     const off = cur && (cur.brand || '') !== ($('#nbrand').value || '');
     box.classList.toggle('warn', !!off);
     box.querySelector('span').innerHTML = `<b>${esc(khoLabel(k))}</b>${kho?.root ? ` <small>${esc(kho.root)}</small>` : ''}`
-      + (off ? `<br>Video này sẽ vào Kho <b>${esc(k.brand ? k.title : 'Chung')}</b> của ${k.brand ? `thương hiệu <b>${esc(k.title)}</b>` : '<b>không thương hiệu</b>'}, khác dự án đang mở (${esc(khoLabel(cur))}). <button type="button" class="link" id="nkho-back">Dùng Kho của dự án đang mở</button>` : '');
+      + (off ? `<br>Video này sẽ vào Kho <b>${esc(k.brand ? k.title : 'Chung')}</b> của ${k.brand ? `thương hiệu <b>${esc(k.title)}</b>` : '<b>không thương hiệu</b>'}, khác dự án đang mở (${esc(khoLabel(cur))}). <button type="button" class="wf-lnk" id="nkho-back">Dùng Kho của dự án đang mở</button>` : '');
     $('#nkho-back')?.addEventListener('click', () => { $('#nbrand').value = cur.brand || ''; $('#nbrand').onchange(); });
   };
   const vp = videoPicker($('#nvp'), { brand: brand0, onKho: k => { kho = k; khoLine(); }, onChange: (p, name) => { if (p && !$('#ntitle').value) { $('#ntitle').value = String(name || '').replace(/\.\w+$/, ''); dirPh(); } } });
@@ -1265,7 +1265,7 @@ async function boot() {
   if ((TL.width || 1080) > (TL.height || 1920)) { DW = 1280; DH = 720; SAFE = { x: 60, y: 40, w: 1160, h: 620 }; document.body.classList.add('landscape'); }
   migrateClips();
   $('#ver').textContent = META.version; $('#ptag').textContent = META.name;
-  { const k = $('#pkho'); if (k && META.kho) { k.hidden = false; k.textContent = khoLabel(META.kho); k.title = `${khoLabel(META.kho)}\n${META.kho.root}\n${META.dir}`; } }
+  { const k = $('#pkho'); if (k && META.kho) { k.hidden = false; k.textContent = 'Kho ' + (META.kho.brand ? META.kho.title : 'Chung'); k.title = `${khoLabel(META.kho)}\n${META.kho.root}\n${META.dir}`; } }
   for (const a of ['#aspect', '#aspect2']) $(a).textContent = DW > DH ? '16:9' : '9:16';
   $('#durtc').textContent = '/ ' + fmt(TL.duration);
   if (META.audio) voice.src = '/project/' + META.audio;

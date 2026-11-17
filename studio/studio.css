@@ -71,13 +71,14 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgb(var(--
 .sep { width: 1px; height: 24px; background: rgb(var(--color-line-strong)); margin: 0 var(--space-1); }
 .proj { display: flex; align-items: center; gap: var(--space-2); color: rgb(var(--color-fg-muted)); max-width: 340px; min-width: 110px; flex: 0 1 auto; }
 .proj #ptag { font-weight: 600; color: rgb(var(--color-fg)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 3em; }
-/* S17 M126: Kho của dự án đang mở luôn hiện cạnh tên dự án */
-.proj .pkho { flex: none; max-width: 18em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); padding: 0 var(--space-2); border-left: 1px solid rgb(var(--color-line)); }
+/* S17 M126: Kho của dự án đang mở luôn hiện, dòng thứ hai dưới tên dự án (không lấy thêm chỗ ngang của thanh trên) */
+.proj .pcol { display: flex; flex-direction: column; justify-content: center; min-width: 0; line-height: 1.2; }
+.proj .pkho { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+.proj .pkho[hidden] { display: none; }
 /* hộp Video mới: dòng Thương hiệu · Kho, nhắc khi khác dự án đang mở */
 .nkho { display: flex; gap: var(--space-2); align-items: flex-start; margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); font-size: var(--text-xs); line-height: 1.5; color: rgb(var(--color-fg-muted)); }
 .nkho > .ti { flex: none; margin-top: 2px; } .nkho span { min-width: 0; overflow-wrap: anywhere; } .nkho small { color: rgb(var(--color-fg-subtle)); }
 .nkho.warn { border-color: rgb(var(--color-warning) / .6); background: rgb(var(--color-warning) / .08); color: rgb(var(--color-fg)); }
-.nkho button.link { background: none; border: 0; padding: 0; height: auto; color: rgb(var(--color-accent)); text-decoration: underline; font-size: inherit; cursor: pointer; }
 /* đang tạo video mới: dự án cũ đã đóng, không để thấy timeline cũ sau hộp tiến trình */
 body.np-busy > *:not(#modal):not(.toast) { visibility: hidden; }
 .status { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
