@@ -78,6 +78,19 @@ test('không có dự án mở (đang tạo video mới): /api/save từ chối,
   assert.equal(r.status, 400, JSON.stringify(r)); assert.match(r.json.error, /Chưa mở dự án/);
 });
 
+test('/api/save kèm dir của dự án khác (tab cũ sau Video mới) → 409, timeline không bị ghi; dir đúng hoặc không gửi thì lưu', async () => {
+  const f = path.join(PROJ, 'timeline.json'), before = fs.readFileSync(f, 'utf8');
+  const tl = { width: 720, height: 1280, duration: 2, scenes: [], captions: [] };
+  let r = await A.api('/api/save', { timeline: { ...tl, note: 'tab cu' }, captions: [], dir: path.join(KHO, 'Du an', 'Khac') });
+  assert.equal(r.status, 409, JSON.stringify(r)); assert.match(r.json.error, /dự án khác/);
+  assert.equal(fs.readFileSync(f, 'utf8'), before);
+  r = await A.api('/api/save', { timeline: { ...tl, note: 'dung' }, captions: [], dir: PROJ });
+  assert.equal(r.status, 200, JSON.stringify(r)); assert.match(fs.readFileSync(f, 'utf8'), /"dung"/);
+  r = await A.api('/api/save', { timeline: { ...tl, note: 'khong dir' }, captions: [] });
+  assert.equal(r.status, 200); assert.match(fs.readFileSync(f, 'utf8'), /khong dir/);
+  assert.match(read('studio/studio.js'), /api\('\/api\/save', \{ timeline: TL, captions: CAP, dir: META\?\.dir \}\)/);
+});
+
 test('server: newProject đóng dự án đang mở trước khi dựng, khôi phục khi lỗi', () => {
   const s = read('studio/server.mjs'), f = s.slice(s.indexOf('async function newProject'), s.indexOf('function startJob'));
   assert.match(f, /const prev = project; project = null;[\s\S]*await build\(/);
@@ -98,5 +111,5 @@ test('hộp Video mới: lưu dự án đang mở rồi che trình chỉnh sửa
 test('Tự lái: nhắc khi Kho khác dự án đang mở; trang chủ lưu dự án đang mở trước khi đổi', () => {
   const a = read('studio/features/15_autopilot.js');
   assert.match(a, /function offKho/); assert.match(a, /khác dự án đang mở/); assert.match(a, /ap-kho-back/);
-  assert.match(read('studio/features/02_onboarding.js'), /saveNow\(\);[^\n]*\n\s*const j = await api\('\/api\/onboarding\/open'/);
+  assert.match(read('studio/features/02_onboarding.js'), /await Studio\.saveNow\(\)[^\n]*if \(Studio\.dirty\)[^\n]*return; \} \}\n\s*const j = await api\('\/api\/onboarding\/open'/);
 });

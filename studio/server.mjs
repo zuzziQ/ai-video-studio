@@ -112,7 +112,13 @@ function writeNotes(tl, captions) {
   else if (fs.existsSync(f)) fs.unlinkSync(f);
   return out.length;
 }
-function save({ timeline, captions }) {
+function save({ timeline, captions, dir }) {
+  // S17 M126: trình chỉnh sửa gửi kèm thư mục dự án nó đang sửa; khác dự án đang mở (tab cũ còn mở sau "Video mới" hay mở dự án
+  // khác) thì từ chối, không ghi timeline cũ đè lên dự án mới. Không gửi dir (script cũ) thì như trước.
+  if (dir != null) {
+    const k = d => { const r = path.resolve(String(d)); return process.platform === 'win32' ? r.toLowerCase() : r; };
+    if (typeof dir !== 'string' || k(dir) !== k(project.dir)) throw Object.assign(new Error('Studio đã chuyển sang dự án khác — tải lại trang trước khi lưu'), { status: 409 });
+  }
   if (!timeline || typeof timeline !== 'object' || Array.isArray(timeline)) throw Object.assign(new Error('Thiếu timeline — không lưu'), { status: 400 });
   if (captions != null && !Array.isArray(captions)) throw Object.assign(new Error('captions phải là danh sách'), { status: 400 });
   const tl = timeline;

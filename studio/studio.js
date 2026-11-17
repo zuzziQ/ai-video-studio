@@ -1010,7 +1010,7 @@ async function api(path, body) {
 }
 async function saveNow() {
   if (newBusy) return; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
-  const r = await api('/api/save', { timeline: TL, captions: CAP });
+  const r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir }); // dir: server từ chối khi đã sang dự án khác (S17 M126)
   if (r.ok) { dirty = false; $('#status').textContent = 'Đã lưu'; $('#status').classList.remove('dirty'); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); }
   else toast('Lỗi lưu: ' + (r.error || ''));
 }
@@ -1231,7 +1231,7 @@ window.addEventListener('resize', fit);
 // ---------- feature API (studio/features/*.js) ----------
 // Features are plain scripts loaded after boot; they read/mutate TL/CAP through this object and call changed() after edits.
 const Studio = window.Studio = {
-  get TL() { return TL; }, set TL(v) { TL = v; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
+  get TL() { return TL; }, set TL(v) { TL = v; }, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
   $, esc, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),

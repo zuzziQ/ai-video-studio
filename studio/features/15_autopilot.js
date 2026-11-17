@@ -100,8 +100,9 @@
   function offKho(kit, name) {
     const cur = Studio.TL ? Studio.META?.kho : null;
     if (!cur || PREP.loading || (kit?.id || '') === (cur.brand || '')) return '';
-    const to = kit ? `Kho <b>${esc(name(kit))}</b> của thương hiệu <b>${esc(name(kit))}</b>` : 'Kho <b>Chung</b> (không thương hiệu)';
-    const now = cur.brand ? `Kho ${esc(cur.title)} của thương hiệu ${esc(cur.title)}` : 'Kho Chung';
+    // Kho của thương hiệu mang tên thương hiệu (scripts/workspace.mjs workspaceFor); thư mục thật hiện ở bước Chuẩn bị
+    const to = kit ? `Kho của thương hiệu <b>${esc(name(kit))}</b>` : 'Kho <b>Chung</b> (không thương hiệu)';
+    const now = cur.brand ? `Kho ${esc(cur.title)}` : 'Kho Chung';
     return `<div class="help ap-mt"><i class="ti ti-alert-triangle ap-warn"></i> Video này sẽ vào ${to}, khác dự án đang mở (${now}).
       <button class="wf-lnk" id="ap-kho-back">Dùng thương hiệu của dự án đang mở</button></div>`;
   }
