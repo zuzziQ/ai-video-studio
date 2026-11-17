@@ -92,8 +92,10 @@ test('Chrome thật: SPA giả (chữ chỉ có sau JS) đọc được; trang J
 
 test('Chrome thật: chuyển hướng / gọi sang IP nội bộ trong lúc render bị chặn, Chrome không tự ra mạng', real, async () => {
   // máy chủ thật trên 127.0.0.1: nếu Chrome tự nối được (bỏ qua lớp chặn) thì hits > 0
-  let hits = 0;
+  let hits = 0, conns = 0;
   const srv = http.createServer((q, s) => { hits++; s.end('BI-MAT-NOI-BO'); });
+  srv.on('upgrade', (q, sock) => { hits++; sock.destroy(); }); // WebSocket cũng tính
+  srv.on('connection', () => { conns++; }); // mọi kết nối TCP (preconnect, beacon…) dù chưa thành request
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   const port = srv.address().port, seen = [];
   const lookup = async h => (h === 'evil.test' ? [{ address: '10.0.0.7', family: 4 }] : PUBLIC());
@@ -101,7 +103,10 @@ test('Chrome thật: chuyển hướng / gọi sang IP nội bộ trong lúc ren
     const s = document.createElement('script'); s.src = 'http://evil.test/x.js'; document.head.appendChild(s);
     try { new WebSocket('ws://127.0.0.1:${port}/'); } catch {}
     const i = document.createElement('img'); i.src = 'http://127.0.0.1:${port}/img.png'; document.body.appendChild(i);
-    fetch('http://127.0.0.1:${port}/direct').catch(() => {});`;
+    fetch('http://127.0.0.1:${port}/direct').catch(() => {});
+    navigator.sendBeacon('http://127.0.0.1:${port}/beacon', 'x');
+    const l = document.createElement('link'); l.rel = 'preconnect'; l.href = 'http://127.0.0.1:${port}'; document.head.appendChild(l);
+    new Worker(URL.createObjectURL(new Blob(["fetch('http://127.0.0.1:${port}/worker').catch(() => {})"], { type: 'text/javascript' })));`;
   try {
     const net = { lookup, fetchImpl: async (u, init) => {
       seen.push(u.href);
@@ -109,7 +114,8 @@ test('Chrome thật: chuyển hướng / gọi sang IP nội bộ trong lúc ren
       return site({ '/sp': '<div id="app"></div><script src="/app.js"></script>', '/app.js': app }).fetchImpl(u, init);
     } };
     await assert.rejects(A.fetchPage('https://spa.test/sp', { ...net, render }), e => e.kind === 'page-empty' && /nội bộ/.test(e.message) && !/BI-MAT/.test(e.message));
-    assert.equal(hits, 0, 'Chrome đã nối thẳng tới 127.0.0.1');
+    await new Promise(ok => setTimeout(ok, 500));
+    assert.equal(hits, 0, 'Chrome đã nối thẳng tới 127.0.0.1'); assert.equal(conns, 0, 'Chrome đã mở kết nối TCP tới 127.0.0.1');
     assert.ok(!seen.some(u => /127\.0\.0\.1|evil\.test/.test(u)), 'lớp chặn để lọt: ' + seen.join(', '));
     // trang tự chuyển (JS) sang địa chỉ metadata đám mây: không lấy chữ trang lỗi của Chrome
     await assert.rejects(A.fetchPage('https://spa.test/sp', { ...site({ '/sp': '<div></div><script src="/go.js"></script>', '/go.js': "location.href = 'http://169.254.169.254/latest/meta-data/';" }), render }),
