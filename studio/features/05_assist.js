@@ -6,6 +6,9 @@
 //     Ô đề xuất dùng chung: nút gọi AI → tiến độ (Huỷ) → danh sách đề xuất từng trường với Nhận / Bỏ / Nhận tất cả.
 //     Trạng thái nằm trong đối tượng trả về nên phần gọi vẽ lại giao diện thì chỉ cần mount(el) lại. Không tự ghi đè gì:
 //     chỉ gọi onAccept(field) khi người dùng bấm Nhận.
+//     paste (mặc định bật cho brand, product; M122): link không đọc được (lỗi kind 'page-empty' hoặc kết quả có pageEmpty) → hiện ô dán
+//     mô tả chữ và/hoặc ảnh chụp trang (chọn file hoặc Ctrl+V vào ô), lần hỏi sau gửi kèm pageText / pageShot.
+//     Máy thiếu Claude Code CLI (GET /api/setup/check, dùng chung kết quả của 01_setup.js) → báo ngay trong ô, nút sang Kiểm tra máy.
 //   Studio.assistCancel() → dừng trợ lý đang chạy (POST /api/assist/cancel; không dừng xuất video).
 //   Studio.imagePayload(src, { max, type }) → data URL ảnh vẽ lại qua canvas (thu nhỏ, bỏ EXIF/vị trí chụp) để gửi cho trợ lý.
 'use strict';
@@ -35,7 +38,14 @@
   .as-sw { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-white) / .2); background: var(--as-c); }
   .as-row.done .as-v, .as-row.skip .as-v { color: rgb(var(--color-fg-subtle)); } .as-row.skip .as-v { text-decoration: line-through; }
   .as-ok { color: rgb(var(--color-success-text)); font-size: var(--text-2xs); white-space: nowrap; } .as-no { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); white-space: nowrap; }
-  .as-foot { display: flex; gap: var(--space-2); margin-top: var(--space-2); }`;
+  .as-foot { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+  .as-need { margin: 0 0 var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; color: rgb(var(--color-warning-text)); line-height: 1.5; }
+  .as-need span { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+  .as-paste { margin: 0 0 var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .as-paste.after { margin-top: var(--space-2); }
+  .as-paste textarea { width: 100%; box-sizing: border-box; min-height: 72px; resize: vertical; font: inherit; font-size: var(--text-xs); }
+  .as-prow { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; min-width: 0; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  .as-prow span { min-width: 0; overflow-wrap: anywhere; }`;
   document.head.appendChild(css);
 
   const sleep = ms => new Promise(ok => setTimeout(ok, ms));
@@ -69,6 +79,15 @@
     } finally { if (own) URL.revokeObjectURL(url); }
   }
 
+  // Claude Code CLI có trên máy không (M122): lấy kết quả Kiểm tra máy đã có, chưa có thì hỏi một lần cho mọi ô trợ lý
+  let claudeP = null;
+  const claudeItem = R => (R?.items || []).find(i => i.id === 'claude');
+  const claudeMissing = () => {
+    const now = claudeItem(Studio.setupCheck?.());
+    if (now) return Promise.resolve(now.status !== 'ok');
+    return (claudeP ||= api('/api/setup/check').then(r => { const c = claudeItem(r); return c ? c.status !== 'ok' : false; }, () => false));
+  };
+
   const PROV = { claude: 'Claude', ollama: 'Ollama', rules: 'Theo luật' };
   function valueHtml(f) {
     const v = f.value;
@@ -80,8 +99,18 @@
   const sev = f => (f.risk?.some(r => r.severity === 'high') ? 'high' : f.risk?.length ? 'med' : '');
 
   function panel(o) {
-    const st = { state: 'idle', step: '', progress: 0, error: '', res: null, mark: {} }; // mark[id] = 'done' | 'skip'
+    const st = { state: 'idle', step: '', progress: 0, error: '', res: null, mark: {}, // mark[id] = 'done' | 'skip'
+      noClaude: false, need: null, paste: { text: '', shot: null } }; // need = {site} khi link không đọc được (M122)
+    const canPaste = o.paste ?? (o.name === 'brand' || o.name === 'product');
     let el = null;
+    claudeMissing().then(m => { st.noClaude = m; if (m && st.state !== 'running') paint(); });
+    const needHtml = () => (st.noClaude ? '<p class="as-need"><i class="ti ti-alert-triangle"></i><span>Máy chưa có Claude Code CLI: gợi ý bằng AI chưa chạy được (Ollama chỉ thay được phần chữ, không xem được ảnh).</span><button class="ghost mini" data-as="setup"><i class="ti ti-stethoscope"></i> Kiểm tra máy</button></p>' : '');
+    const pasteHtml = (cls = '') => (!canPaste || !(st.need || st.paste.text || st.paste.shot) ? '' : `<div class="as-paste ${cls}">
+        <div class="as-k">${st.need ? `Không đọc được trang ${esc(st.need.site || '')}: dán mô tả hoặc ảnh chụp trang để AI đọc thay` : 'Phần dán thay cho trang'}</div>
+        <textarea data-as="ptext" rows="4" maxlength="5000" placeholder="Dán chữ chép từ trang (tên, giá, công dụng, giới thiệu…). Có thể dán ảnh chụp màn hình vào đây (Ctrl+V).">${esc(st.paste.text)}</textarea>
+        <div class="as-prow"><button class="ghost mini" data-as="pshot"><i class="ti ti-photo"></i> ${st.paste.shot ? 'Đổi ảnh chụp trang' : 'Chọn ảnh chụp trang'}</button>
+          ${st.paste.shot ? `<span>${esc(st.paste.shot.name || 'ảnh dán')}</span><button class="ghost mini" data-as="pdel" title="Bỏ ảnh" aria-label="Bỏ ảnh"><i class="ti ti-x"></i></button>` : ''}
+          <input type="file" accept="image/png,image/jpeg,image/webp" data-as="pfile" hidden></div></div>`);
     const fields = () => (st.res?.fields || []).filter(f => !o.filter || o.filter(f));
     const paint = () => {
       if (!el || !el.isConnected) return;
@@ -102,14 +131,23 @@
               <div class="as-a">${m === 'done' ? '<span class="as-ok"><i class="ti ti-check"></i> Đã nhận</span>' : m === 'skip' ? '<span class="as-no">Đã bỏ</span>'
                 : `<button class="mini" data-ok="${esc(f.id)}">${esc(o.okLabel || 'Nhận')}</button><button class="ghost mini" data-no="${esc(f.id)}">Bỏ</button>`}</div></div>`;
           }).join('') || '<p class="as-reason">AI không có đề xuất nào cho phần này.</p>'}</div>
-          <div class="as-foot"><button class="ghost mini" data-as="go"><i class="ti ti-refresh"></i> Hỏi lại</button></div>`;
+          ${st.need ? pasteHtml('after') : ''}
+          <div class="as-foot"><button class="ghost mini" data-as="go"><i class="ti ti-refresh"></i> ${st.need ? 'Hỏi lại với phần dán' : 'Hỏi lại'}</button></div>`;
         el.querySelectorAll('[data-asc]').forEach(s => s.style.setProperty('--as-c', s.dataset.asc));
       } else {
-        el.innerHTML = `${st.state === 'error' || st.state === 'cancelled' ? `<p class="as-err"><i class="ti ti-alert-circle"></i><span>${esc(st.error)}</span></p>` : ''}
-          <div class="as-head"><button data-as="go"><i class="ti ti-sparkles"></i> ${esc(st.state === 'error' ? 'Thử lại' : o.label || 'Gợi ý bằng AI')}</button><span class="as-hint">${esc(o.hint || 'AI chỉ đề xuất, bạn chọn Nhận hoặc Bỏ từng mục.')}</span></div>`;
+        el.innerHTML = `${needHtml()}${st.state === 'error' || st.state === 'cancelled' ? `<p class="as-err"><i class="ti ti-alert-circle"></i><span>${esc(st.error)}</span></p>` : ''}
+          ${pasteHtml()}<div class="as-head"><button data-as="go"><i class="ti ti-sparkles"></i> ${esc(st.state === 'error' ? 'Thử lại' : o.label || 'Gợi ý bằng AI')}</button><span class="as-hint">${esc(o.hint || 'AI chỉ đề xuất, bạn chọn Nhận hoặc Bỏ từng mục.')}</span></div>`;
       }
       el.querySelector('[data-as=go]')?.addEventListener('click', start);
       el.querySelector('[data-as=stop]')?.addEventListener('click', cancel);
+      el.querySelector('[data-as=setup]')?.addEventListener('click', () => Studio.openSetup?.());
+      const ta = el.querySelector('[data-as=ptext]'), pf = el.querySelector('[data-as=pfile]');
+      const setShot = f => { if (f && /^image\/(png|jpeg|webp)$/.test(f.type)) { st.paste.text = ta?.value ?? st.paste.text; st.paste.shot = f; paint(); } else if (f) Studio.toast('Ảnh chụp trang phải là PNG, JPG hoặc WebP'); };
+      ta?.addEventListener('input', () => { st.paste.text = ta.value; });
+      ta?.addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type)); if (f) { e.preventDefault(); setShot(f); } });
+      el.querySelector('[data-as=pshot]')?.addEventListener('click', () => pf?.click());
+      pf?.addEventListener('change', () => setShot(pf.files[0]));
+      el.querySelector('[data-as=pdel]')?.addEventListener('click', () => { st.paste.shot = null; paint(); });
       el.querySelector('[data-as=all]')?.addEventListener('click', async () => { for (const f of fields()) if (!st.mark[f.id]) await accept(f); });
       el.querySelectorAll('[data-ok]').forEach(b => b.addEventListener('click', () => accept(fields().find(f => f.id === b.dataset.ok))));
       el.querySelectorAll('[data-no]').forEach(b => b.addEventListener('click', () => { st.mark[b.dataset.no] = 'skip'; paint(); }));
@@ -124,9 +162,14 @@
       Object.assign(st, { state: 'running', step: 'Đang chuẩn bị…', progress: 0, error: '', res: null, mark: {} }); paint();
       try {
         const input = await o.input();
+        if (canPaste && st.paste.text.trim()) input.pageText = st.paste.text.trim().slice(0, 5000);
+        if (canPaste && st.paste.shot) input.pageShot = await imagePayload(st.paste.shot, { max: 1600, type: 'image/jpeg', quality: 0.85 });
         st.res = await assist(o.name, input, { onStep: (s, k) => { st.step = s; st.progress = k; paint(); } });
-        st.state = 'done';
-      } catch (e) { st.state = e.state === 'cancelled' ? 'cancelled' : 'error'; st.error = e.message; }
+        st.state = 'done'; st.need = st.res.pageEmpty || null;
+      } catch (e) {
+        st.state = e.state === 'cancelled' ? 'cancelled' : 'error'; st.error = e.message;
+        if (e.kind === 'page-empty') st.need = { site: (/trang (.+?):/.exec(e.message) || [])[1] || '' };
+      }
       paint();
     }
     return { mount(e) { el = e; paint(); }, start, state: st };

@@ -32,7 +32,7 @@ const J = o => JSON.stringify(o);
 const GOOD = { colors: { primary: '#E63946', accent: '#1D3557', dark: '#23090B', light: '#FFFFFF' }, font: 'Be Vietnam Pro', disp: 'Montserrat',
   voice: { adjectives: ['tin cậy', 'ấm áp', 'gọn'], sample: 'Nhà đẹp, giá thật.' }, slogan: 'Nhà đẹp giá thật', cta: 'Gọi ngay', outro: 'Theo dõi Nhà Đẹp', reason: 'Màu đỏ nổi bật.' };
 const PUBLIC = async () => [{ address: '93.184.216.34', family: 4 }];
-const page = html => ({ lookup: PUBLIC, fetchImpl: async () => new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } }) });
+const page = html => ({ lookup: PUBLIC, render: false, fetchImpl: async () => new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } }) });
 const byKey = (r, k) => r.fields.filter(f => f.key === k);
 
 test('check: dữ liệu sai → AssistError 400', () => {
