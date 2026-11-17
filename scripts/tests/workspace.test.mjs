@@ -160,3 +160,14 @@ test('M98: hashFile = sha256 đọc bằng stream', async () => {
   const f = path.join(TMP, 'h.bin'); fs.writeFileSync(f, 'abc');
   assert.equal(await W.hashFile(f), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 });
+
+test('workspaceFor: Kho đã lưu đúng thư mục mặc định ("Tạo Kho mặc định") vẫn là mặc định, không phải tự chọn', () => {
+  const h = path.join(TMP, 'home-macdinh'); fs.mkdirSync(h, { recursive: true });
+  fs.writeFileSync(path.join(h, 'brands.json'), JSON.stringify({ version: 1, brands: [{ id: 'abc-1', title: 'ABC' }] }));
+  const o = { home: h, userHome: U }, def = W.workspaceFor('abc-1', o).root;
+  W.setWorkspace('abc-1', def, { home: h });
+  const ws = W.workspaceFor('abc-1', o);
+  assert.equal(ws.root, def); assert.equal(ws.custom, false);
+  W.setWorkspace('abc-1', path.join(TMP, 'kho-abc-khac'), { home: h });
+  assert.equal(W.workspaceFor('abc-1', o).custom, true);
+});
