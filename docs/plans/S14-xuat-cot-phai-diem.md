@@ -42,7 +42,7 @@ Tiêu chí điểm đề xuất cho `M114` (chỉnh khi làm, ghi lại trong PR
 
 ## 4. Quyết định
 
-- **`C17`** Điểm có chặn Xuất không. Đề xuất: không chặn; Kiểm tra dưới 60 điểm thì bấm Xuất hiện cảnh báo kèm chỗ thiếu và nút "Vẫn xuất".
+- **`C17`** Điểm có chặn Xuất không. Chốt 2026-11-17 theo đề xuất: không chặn; Kiểm tra dưới 60 điểm thì bấm Xuất hiện cảnh báo kèm chỗ thiếu và nút "Vẫn xuất".
 
 ## 5. Rủi ro
 
