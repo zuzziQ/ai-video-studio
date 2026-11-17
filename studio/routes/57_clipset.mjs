@@ -4,9 +4,15 @@
 //   GET  /api/clipset            → {set: null} | {set: {name, dir, n, cur, items: [{i, title, hook, score, dur, thumbUrl, exported, current, exists}]}}
 //   POST /api/clipset/open {i, keep?} → lưu ở trình duyệt trước; server mở clip thứ i của bộ đang mở. S18 M129: thay tab đang xem tại
 //                                  chỗ (nhóm tab của bộ không phình ra); keep: chỉ thêm tab (mở ở cửa sổ mới) → {ok, id}
+//   POST /api/clipset/apply {held?, only?, apply?} → S19 M135 "Áp cho các clip còn lại": so clip đang mở với bản máy giao, áp các thay đổi
+//                                  đếm được sang clip khác của bộ (scripts/set_apply.mjs). Không `apply` = chỉ xem trước. `held`: mã các tab
+//                                  trình duyệt đang giữ khoá Web Locks (M131, navigator.locks.query) → clip đó bỏ qua; `only`: chỉ số clip
+//                                  được chọn. → {ok, from, ops, notes, clips: [{i, title, n, what, skip?, done?}], applied}
 import fs from 'node:fs';
 import path from 'node:path';
 import { readExports } from '../../scripts/exports_log.mjs';
+import { captureBase, planSet } from '../../scripts/set_apply.mjs';
+import { ID_RE, tabId } from '../tabs.mjs';
 
 const rd = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const key = d => { const r = path.resolve(d); return process.platform === 'win32' ? r.toLowerCase() : r; };
@@ -36,12 +42,13 @@ export function clipSet(projectDir) {
 }
 
 export default ctx => async (req, res, p) => {
-  if (p !== '/api/clipset' && p !== '/api/clipset/open') return false;
+  if (p !== '/api/clipset' && p !== '/api/clipset/open' && p !== '/api/clipset/apply') return false;
   const J = (o, c) => (ctx.json(res, o, c), true);
   try {
     const set = clipSet(ctx.project?.dir);
     if (p === '/api/clipset' && req.method === 'GET') {
       if (!set) return J({ set: null });
+      for (const it of set.items) if (it.exists) try { captureBase(it.dir); } catch { /* chỉ mất bản so cho M135 */ }
       return J({ set: { ...set, items: set.items.map(({ dir, thumb, ...x }) => ({ ...x, thumbUrl: furl(thumb) })) } });
     }
     if (p === '/api/clipset/open' && req.method === 'POST') {
@@ -53,6 +60,18 @@ export default ctx => async (req, res, p) => {
       // thay tab đang xem tại chỗ; tab cũ đang chạy tác vụ (xuất…) thì giữ lại, thêm tab mới
       const id = ctx.openProject(it.dir, old && !(job?.state === 'running' && job.tab === old) ? { replace: old } : undefined);
       return J({ ok: true, id });
+    }
+    if (p === '/api/clipset/apply' && req.method === 'POST') {
+      if (!set) return J({ ok: false, error: 'Dự án đang mở không thuộc bộ clip nào' }, 400);
+      const b = (await ctx.body(req)) || {};
+      const held = new Set((Array.isArray(b.held) ? b.held : []).filter(x => typeof x === 'string' && ID_RE.test(x)).slice(0, 64));
+      const only = Array.isArray(b.only) ? b.only.filter(Number.isInteger) : null;
+      const job = ctx.job;
+      const skip = it => { const id = tabId(it.dir);
+        if (held.has(id)) return 'đang mở ở tab khác';
+        if (job?.state === 'running' && job.tab === id) return 'đang chạy tác vụ (' + (job.step || job.kind || '') + ')';
+        return ''; };
+      return J({ ok: true, ...planSet(set, { skip, only, write: b.apply === true }) });
     }
     return false;
   } catch (e) { return J({ ok: false, error: e.message }, e.status || 500); }

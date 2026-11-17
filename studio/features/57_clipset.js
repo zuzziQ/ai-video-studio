@@ -2,6 +2,8 @@
 // nhóm trên thanh tab (58_tabs.js), nhãn nhóm có ‹ › (clip trước / sau) và mở danh sách cả bộ ở đây (ảnh bìa, tiêu đề, điểm, đã
 // xuất, cả clip chưa mở). Bấm clip = lưu dự án đang sửa rồi chuyển, thay tab đang xem tại chỗ; Ctrl/⌘ + bấm = cửa sổ mới.
 // "Xuất cả bộ" chạy job xuất của Cắt clip. Server: studio/routes/57_clipset.mjs. Kiểu bin của phần mềm dựng.
+// S19 M135: "Áp cho các clip còn lại" — lưu clip đang sửa, xem trước (clip nào, đổi gì, bao nhiêu chỗ), chọn clip rồi áp; clip đang mở
+// ở tab khác (khoá Web Locks M131 của trang này thấy qua navigator.locks.query) hoặc đang chạy tác vụ thì server bỏ qua và báo.
 'use strict';
 (() => {
   const S = Studio, { esc, toast } = S;
@@ -25,7 +27,14 @@
   .cset-it .mt { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 2px; }
   .cset-it .sc { font-size: var(--text-2xs); font-weight: 700; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: rgb(var(--color-accent-soft) / .24); color: rgb(var(--color-accent-text-strong)); }
   .cset-it .ok { color: rgb(var(--color-success)); }
-  .cset-acts { display: flex; gap: var(--space-2); margin-top: var(--space-2); } .cset-acts button { flex: 1; justify-content: center; font-size: var(--text-xs); }`;
+  .cset-acts { display: flex; gap: var(--space-2); margin-top: var(--space-2); flex-wrap: wrap; } .cset-acts button { flex: 1; justify-content: center; font-size: var(--text-xs); }
+  .cset-acts .wide { flex-basis: 100%; }
+  .capl-ops { margin: var(--space-2) 0; padding-left: var(--space-5); font-size: var(--text-sm); } .capl-ops li { margin: 2px 0; }
+  .capl-note { font-size: var(--text-xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-1) 0; }
+  .capl-list { display: grid; gap: var(--space-1); max-height: 40vh; overflow: auto; margin-top: var(--space-2); }
+  .capl-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); align-items: start; padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); font-size: var(--text-xs); }
+  .capl-row b { display: block; font-size: var(--text-sm); overflow-wrap: anywhere; } .capl-row .w { color: rgb(var(--color-fg-subtle)); }
+  .capl-row.off { opacity: .6; } .capl-row .sk { color: rgb(var(--color-warning)); }`;
   document.head.appendChild(css);
 
   let anchor = null; // nhãn nhóm trên thanh tab đã mở danh sách
@@ -64,9 +73,10 @@
         ${it.thumbUrl ? `<img src="${esc(it.thumbUrl)}" alt="" loading="lazy">` : '<span class="ph"></span>'}
         <span><span class="tt">${esc(it.title)}</span><span class="mt"><span>${mmss(it.dur)}</span>${it.current ? '<span>đang mở</span>' : ''}${!it.exists ? '<span>đã xoá</span>' : ''}${it.exported ? '<span class="ok"><i class="ti ti-check"></i> đã xuất</span>' : ''}</span></span>
         ${it.score != null ? `<span class="sc" title="Điểm Claude chấm khi cắt">${it.score}</span>` : '<span></span>'}</button>`).join('')}
-      <div class="cset-acts"><button id="cset-exp"><i class="ti ti-upload"></i> Xuất cả bộ</button><button id="cset-lf"><i class="ti ti-scissors"></i> Mở ở Cắt clip</button></div>`;
+      <div class="cset-acts"><button id="cset-apply" class="wide primary" title="Đem các thay đổi của clip này (xoá emoji / chữ / ảnh tự động, kiểu phụ đề, gói, nhạc, sửa chữ phụ đề) sang các clip khác của bộ — xem trước rồi mới áp"><i class="ti ti-copy-check"></i> Áp cho các clip còn lại</button><button id="cset-exp"><i class="ti ti-upload"></i> Xuất cả bộ</button><button id="cset-lf"><i class="ti ti-scissors"></i> Mở ở Cắt clip</button></div>`;
     pop.querySelectorAll('[data-i]').forEach(b => b.onclick = e => go(SET.items[+b.dataset.i], e.ctrlKey || e.metaKey));
     pop.querySelector('#cset-exp').onclick = exportAll;
+    pop.querySelector('#cset-apply').onclick = applyAll;
     pop.querySelector('#cset-lf').onclick = () => { const d = SET.dir; close(); document.querySelector('#rail [data-p=longform]')?.click(); window.dispatchEvent(new CustomEvent('lf:run', { detail: d })); };
   }
   function open(el) {
@@ -99,7 +109,48 @@
     });
   }
 
-  S.clipset = { refresh, open, go, step, get set() { return SET; } };
+  // ---------- S19 M135: áp cho các clip còn lại ----------
+  // mã các dự án đang giữ khoá ở tab / cửa sổ khác của trình duyệt này (M131: 'avs-project:<mã>')
+  async function heldIds() {
+    try { const q = await navigator.locks?.query?.(); return [...new Set((q?.held || []).map(l => /^avs-project:([a-f0-9]{12})$/.exec(l.name || '')?.[1]).filter(Boolean))]; } catch { return []; }
+  }
+  const FROM = { autopilot: 'bản Tự lái giao', set_base: 'bản lúc cắt clip', history: 'bản lưu đầu tiên trong Lịch sử' };
+  async function applyAll() {
+    if (S.TL && S.dirty) { await S.saveNow(); if (S.dirty) return toast('Chưa lưu được clip đang sửa'); }
+    close();
+    S.modal('<h3><i class="ti ti-loader-2 spin"></i> Đang so clip này với bản gốc…</h3>');
+    const held = await heldIds();
+    const r = await api('/api/clipset/apply', { held });
+    if (!r.ok) { S.closeModal(); return toast(r.error || 'Không xem trước được'); }
+    const can = r.clips.filter(c => !c.skip && c.n > 0);
+    const notes = (r.notes || []).map(n => `<p class="capl-note"><i class="ti ti-info-circle"></i> ${esc(n)}</p>`).join('');
+    if (!r.ops.length) {
+      return S.modal(`<h3><i class="ti ti-copy-check"></i> Chưa có gì để áp</h3><p>Clip này chưa có thay đổi nào áp được cho clip khác (so với ${esc(FROM[r.from] || 'bản gốc')}).</p>${notes}
+        <p class="muted">Áp được: xoá hết emoji / chữ nổi / ảnh tự động, đổi kiểu phụ đề hoặc gói, tắt hay chỉnh dB nhạc nền, sửa chữ phụ đề.</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+    }
+    S.modal(`<h3><i class="ti ti-copy-check"></i> Áp cho các clip còn lại</h3>
+      <p class="muted">So clip đang mở với ${esc(FROM[r.from] || 'bản gốc')}. Thay đổi sẽ áp:</p>
+      <ul class="capl-ops">${r.ops.map(o => `<li>${esc(o.label)}</li>`).join('')}</ul>${notes}
+      <div class="capl-list">${r.clips.map(c => { const ok = !c.skip && c.n > 0; return `<label class="capl-row ${ok ? '' : 'off'}">
+        <input type="checkbox" data-ci="${c.i}" ${ok ? 'checked' : 'disabled'}>
+        <span><b>${c.i + 1}. ${esc(c.title)}</b>${c.skip ? `<span class="sk"><i class="ti ti-lock"></i> Bỏ qua: ${esc(c.skip)}</span>` : c.n ? `<span class="w">${c.what.map(w => `${esc(w.label)} (${w.n} chỗ)`).join(' · ')}</span>` : '<span class="w">Đã giống clip này — không đổi gì</span>'}</span></label>`; }).join('')}</div>
+      <p class="capl-note">Mỗi clip được áp có bản cũ trong Lịch sử để mở lại.</p>
+      <div class="actions"><button onclick="closeModal()">Huỷ</button><button id="capl-go" class="primary" ${can.length ? '' : 'disabled'}><i class="ti ti-check"></i> Áp cho <span id="capl-n">${can.length}</span> clip</button></div>`);
+    const box = document.getElementById('modalbox'), n = () => box.querySelectorAll('[data-ci]:checked').length;
+    box.querySelectorAll('[data-ci]').forEach(c => c.onchange = () => { box.querySelector('#capl-n').textContent = n(); box.querySelector('#capl-go').disabled = !n(); });
+    box.querySelector('#capl-go').onclick = async e => {
+      const only = [...box.querySelectorAll('[data-ci]:checked')].map(c => +c.dataset.ci);
+      e.currentTarget.disabled = true;
+      const w = await api('/api/clipset/apply', { held: await heldIds(), only, apply: true });
+      if (!w.ok) return toast(w.error || 'Chưa áp được');
+      S.closeModal();
+      const skipped = w.clips.filter(c => c.skip && only.includes(c.i));
+      toast(`Đã áp cho ${w.applied} clip${skipped.length ? ` · bỏ qua ${skipped.length} clip (${skipped.map(c => c.skip).join(', ')})` : ''}`);
+      refresh();
+    };
+  }
+
+  S.clipset = { refresh, open, go, step, applyAll, get set() { return SET; } };
   // feature nạp trong boot, trước khi có META: đợi dự án nạp xong (không mở dự án nào thì thôi)
   const wait = setInterval(() => { if (S.META) { clearInterval(wait); refresh(); } }, 200);
   setTimeout(() => clearInterval(wait), 30000);
