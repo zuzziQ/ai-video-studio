@@ -34,6 +34,9 @@
         <div class="help">${same ? 'Nguồn cùng khổ với khung nên không cần dời khung; tăng <b>Phóng to</b> ở tab Cơ bản để zoom vào mặt (tâm zoom bám theo mặt).'
           : 'Khung cắt tự dời theo mặt; Tâm X/Y ở tab Cơ bản bị thay bằng vị trí mặt. Phóng to &gt; 1 sẽ zoom quanh mặt.'}</div>`;
     }
+    // S17 M124: khung cắt chỉnh tay trên preview (kéo / tay nắm góc) đè bám mặt ở clip này
+    if (o.crop_manual) h = `<div class="help rf-warn"><i class="ti ti-hand-move"></i> Khung cắt đang chỉnh tay (Tâm ${o.ox ?? 50}% / ${o.oy ?? 45}%, zoom ${o.zoom || 1}×): bám mặt và Tâm tự động bỏ qua ở clip này.</div>
+      <div class="acts"><button data-rf="unmanual"><i class="ti ti-restore"></i> Bỏ chỉnh tay</button></div>` + h;
     return ['reframe', 'Bám mặt', `<div id="rfpanel">${h}</div>`];
   });
   const clipSel = () => (Studio.sel?.kind === 'clip' ? Studio.sel : null);
@@ -55,6 +58,7 @@
     Studio.pushUndo();
     if (a === 'toggle') { if (o.reframe_off) delete o.reframe_off; else o.reframe_off = true; }
     if (a === 'clear') { delete o.reframe; delete o.reframe_off; }
+    if (a === 'unmanual') { delete o.crop_manual; delete o.zoom; delete o.ox; delete o.oy; }
     Studio.changed(true);
   });
 

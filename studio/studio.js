@@ -7,6 +7,7 @@ let DW = 720, DH = 1280; const FPS = 30;
 
 let TL = null, CAP = [], META = {}, LIB = { sfx: [], music: [] }, WAVE = [];
 let T = 0, playing = false, sel = null, comps = [], dirty = false, undoStack = [], redoStack = [];
+let multi = [], guides = null; // S17 M124: element chọn thêm bằng Shift (sel là element chính); đường gióng khi kéo
 let query = '', K = .5, win = null, needInit = true, busy = false, pending = false, SNAP = true;
 const ITAB = {};
 
@@ -98,7 +99,7 @@ function pushUndo(key = '') {
 }
 function restore(s) {
   const o = JSON.parse(s); TL = o.TL; CAP = o.CAP;
-  const cid = sel?.obj.cid; build(); sel = cid ? compByCid(cid) || null : null; changed(true);
+  const cid = sel?.obj.cid, mc = multi.map(m => m.obj.cid); build(); sel = cid ? compByCid(cid) || null : null; multi = mc.map(compByCid).filter(Boolean); changed(true);
 }
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); }
@@ -113,6 +114,7 @@ function changed(inspector = false) {
   if (T > TL.duration) { T = TL.duration; $('#time').textContent = fmt(T); }
   build();
   if (sel) sel = compOf(sel.obj) || null;
+  multi = sel && sel.kind !== 'clip' ? multi.map(m => compOf(m.obj)).filter(m => m && m !== sel) : [];
   needInit = true; draw(); renderList(); renderTimeline();
   if (inspector) renderInspector();
   $('#durtc').textContent = '/ ' + fmt(TL.duration);
@@ -174,9 +176,19 @@ function drawOverlay() {
   const box = (x, y, w, hh) => `data-dl="${x}" data-dt="${y}" data-dw="${w}" data-dh="${hh}"`;
   if ($('#safe').checked) h += `<div class="safe" ${box(SAFE.x * K, SAFE.y * K, SAFE.w * K, SAFE.h * K)}><span>vùng an toàn</span></div>`;
   if ($('[id=face]').checked) { const f = TL?.face || { x: 360, y: 520 }; const r = 120 * K; h += `<div class="facezone" ${box(f.x * K - r, f.y * K - r * 1.2, r * 2, r * 2.4)}></div>`; }
-  if (sel && sel.kind !== 'clip') {
+  const corners = '<i class="nw" data-h="nw"></i><i class="ne" data-h="ne"></i><i class="sw" data-h="sw"></i><i class="se" data-h="se"></i>';
+  for (const m of multi) { const r = rectOf(m.obj); if (r) h += `<div class="selbox multi" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}></div>`; }
+  if (sel && sel.kind === 'clip' && !TRK.video.lock) {
+    // S17 M124: khung cắt video chính — kéo để dời, tay nắm góc để zoom (đè bám mặt ở clip này)
+    h += `<div class="selbox crop ${sel.obj.crop_manual ? 'on' : ''}" ${box(0, 0, DW * K, DH * K)}>${corners}<span>${sel.obj.crop_manual ? 'Khung cắt chỉnh tay' : 'Kéo để dời khung cắt · góc để zoom'}</span></div>`;
+  } else if (sel) {
     const r = rectOf(sel.obj);
-    if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}><i class="nw"></i><i class="ne"></i><i class="sw"></i><i class="se"></i></div>`;
+    const edges = !multi.length && window.StageCore?.canResize(sel.kind, sel.obj.type) ? '<i class="n" data-h="n"></i><i class="s" data-h="s"></i><i class="e" data-h="e"></i><i class="w" data-h="w"></i>' : '';
+    if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length ? '' : corners + edges}</div>`;
+  }
+  if (guides) {
+    for (const x of guides.gx || []) h += `<div class="guide v" ${box(x * K, 0, 0, DH * K)}></div>`;
+    for (const y of guides.gy || []) h += `<div class="guide h" ${box(0, y * K, DW * K, 0)}></div>`;
   }
   ov.innerHTML = h; applyDyn(ov);
 }
@@ -204,10 +216,8 @@ function getPos(c) {
   if (c.kind === 'node') { const k = activeKey(o); return { x: k ? k.x : o.x ?? 360, y: k ? k.y : o.y ?? 600, size: o.size || NODE_SIZE[o.kind] || 24 }; }
   if (c.kind === 'badge') return { x: o.x ?? 360, y: o.y ?? (c.scene.card?.y ?? 140), size: o.size || 118 };
   if (c.kind === 'scene') {
-    if (o.type === 'frame_grid' || o.type === 'media_card') {
-      const d = o.type === 'frame_grid' ? { x: 80, y: 140, w: 560, h: 1000 } : { x: 110, y: 360, w: 500, h: 290 };
-      const cd = { ...d, ...(o.card || {}) }; return { x: cd.x, y: cd.y, size: cd.w, card: cd };
-    }
+    const cd = window.StageCore?.geoOf(o.type) === 'card' ? StageCore.cardOf(o, DW > DH) : null; // S17 M124: mọi cảnh có s.card
+    if (cd) return { x: cd.x, y: cd.y, size: cd.w, card: cd };
     const d = SCENE_DEF[o.type] || [360, 640, 60];
     return { x: o.x ?? d[0], y: o.y ?? d[1], size: o.size || d[2] };
   }
@@ -216,7 +226,7 @@ function getPos(c) {
 function setPos(c, p) {
   const o = c.obj;
   if (c.kind === 'node') { const k = activeKey(o); if (k) { k.x = Math.round(p.x); k.y = Math.round(p.y); } else { o.x = Math.round(p.x); o.y = Math.round(p.y); } if (p.size) o.size = Math.round(p.size); return; }
-  if (c.kind === 'scene' && (o.type === 'frame_grid' || o.type === 'media_card')) {
+  if (c.kind === 'scene' && window.StageCore?.geoOf(o.type) === 'card') {
     const cur = getPos(c).card, f = p.size / cur.w;
     o.card = { ...cur, x: Math.round(p.x), y: Math.round(p.y), w: Math.round(cur.w * f), h: Math.round(cur.h * f) };
     return;
@@ -261,7 +271,7 @@ function setTimes(c, t0, t1, moved) {
 }
 
 function select(c, seek) {
-  sel = c;
+  sel = c; multi = [];
   if (seek && c && (T < c.t0 || T >= c.t1)) setTime(c.t0 + Math.min(.4, (c.t1 - c.t0) / 2));
   renderList(); renderTimeline(); renderInspector(); drawOverlay();
   if (panel === 'trans' || panel === 'filter') renderPanel();
@@ -271,14 +281,35 @@ function select(c, seek) {
 const opt = (list, cur) => list.map(([v, l]) => `<option value="${esc(v)}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('');
 const num = (f, v, step = 1) => `<input type="number" data-f="${f}" value="${v ?? ''}" step="${step}">`;
 const sect = (title, body, ic = '') => `<section>${title ? `<div class="sh">${ic ? `<i class="ti ${ic}"></i>` : ''}${title}</div>` : ''}${body}</section>`;
+// S17 M124: QC nhanh trên vị trí hiện tại (vùng an toàn, tràn khung, che mặt đang nói), đo ngay trong preview, không gọi server.
+function qcOf(c) {
+  const SC = window.StageCore, r = c && c.kind !== 'clip' ? rectOf(c.obj) : null; if (!SC || !r) return null;
+  const face = (TL.clips?.length || TL.aroll) && win?.faceAt ? (() => { try { return win.faceAt(T); } catch { return null; } })() : null;
+  return SC.quickCheck(r, { DW, DH, safe: SAFE, face, cover: c.kind === 'scene' && LAYOUT.has(c.obj.type) });
+}
+function qcHtml(c) {
+  const q = qcOf(c); if (!q) return '';
+  return q.length ? q.map(i => `<div class="warn"><i class="ti ti-alert-triangle"></i> ${esc(i.msg)}</div>`).join('') : '<div class="ok"><i class="ti ti-circle-check"></i> Trong vùng an toàn, không che mặt</div>';
+}
+function refreshQc() { const el = $('#insp .stqc'); if (el && sel) el.innerHTML = qcHtml(sel); }
+// Rộng / cao: hộp engine đọc được (StageCore.boxOf) hoặc hộp đo trên preview (đổi thì phóng đều).
+function sizeOf(c) {
+  const b = window.StageCore?.canResize(c.kind, c.obj.type) ? StageCore.boxOf(c.obj, DW > DH) : rectOf(c.obj);
+  return b ? { w: Math.round(b.w), h: Math.round(b.h) } : null;
+}
+function alignBlock() {
+  const B = [['left', 'ti-layout-align-left', 'Trái'], ['hcenter', 'ti-layout-align-center', 'Giữa ngang'], ['right', 'ti-layout-align-right', 'Phải'],
+    ['top', 'ti-layout-align-top', 'Trên'], ['vcenter', 'ti-layout-align-middle', 'Giữa dọc'], ['bottom', 'ti-layout-align-bottom', 'Dưới']];
+  return sect(`Căn ${multi.length + 1} element`, `<div class="algrid">${B.map(([k, ic, l]) => `<button data-align="${k}" title="${l}"><i class="ti ${ic}"></i></button>`).join('')}</div>
+    <div class="help">Shift + bấm trên preview để thêm / bỏ element. Kéo một element là dời cả nhóm.</div><div class="acts"><button data-align="none"><i class="ti ti-x"></i> Bỏ chọn nhóm</button></div>`, 'ti-layout-align-center');
+}
 function posBlock(c) {
   const p = getPos(c); if (!p) return '';
-  const os = origSize(c) || p.size, pct = Math.round(p.size / os * 100);
-  const r = rectOf(c.obj);
-  const inSafe = !r || (r.x >= SAFE.x && r.y >= SAFE.y && r.x + r.w <= SAFE.x + SAFE.w && r.y + r.h <= SAFE.y + SAFE.h);
+  const os = origSize(c) || p.size, pct = Math.round(p.size / os * 100), sz = sizeOf(c), rot = window.StageCore?.canRotate(c.kind);
   return sect('Vị trí và cỡ', `<div class="row"><div><span class="lbl">X</span>${num('x', Math.round(p.x))}</div><div><span class="lbl">Y</span>${num('y', Math.round(p.y))}</div><div><span class="lbl">Cỡ %</span>${num('pct', pct)}</div></div>
+    ${sz ? `<div class="row"><div><span class="lbl">Rộng</span>${num('w', sz.w)}</div><div><span class="lbl">Cao</span>${num('h', sz.h)}</div>${rot ? `<div><span class="lbl">Xoay °</span>${num('rot', c.obj.rot || 0, 1)}</div>` : ''}</div>` : ''}
     <div class="slrow"><span>Cỡ</span><input type="range" data-f="pct" min="20" max="300" value="${pct}"><b>${pct}%</b></div>
-    ${r ? `<div class="${inSafe ? 'ok' : 'warn'}"><i class="ti ${inSafe ? 'ti-circle-check' : 'ti-alert-triangle'}"></i> ${inSafe ? 'Trong vùng an toàn' : 'Ra ngoài vùng an toàn (bị nút TikTok/Reels che)'}</div>` : ''}`, 'ti-arrows-move');
+    <div class="stqc">${qcHtml(c)}</div>`, 'ti-arrows-move');
 }
 function colorBlock(cur) {
   return `<span class="lbl">Màu</span><div class="sw"><button class="orig ${cur ? '' : 'on'}" data-color="">Gốc</button>
@@ -389,7 +420,7 @@ function renderInspector() {
       <div class="sub"><span class="pill">${esc(tag)}</span><a class="time" data-act="seek"><i class="ti ti-clock-play"></i> ${fmt(c.t0)} – ${fmt(c.t1)}</a></div></div>
       <button class="icon" data-act="desel" title="Bỏ chọn (Esc)"><i class="ti ti-x"></i></button></div>
     ${tabs.length > 1 ? `<div class="itabs">${tabs.map(([k, l]) => `<button data-itab="${k}" class="${k === cur[0] ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
-    <div class="ibody">${cur[2]}${c.kind === 'clip' ? '' : actions(c) + noteBlock(o)}</div>`;
+    <div class="ibody">${multi.length && c.kind !== 'clip' ? alignBlock() : ''}${cur[2]}${c.kind === 'clip' ? '' : actions(c) + noteBlock(o)}</div>`;
 }
 function projectPanel() {
   const capStyles = [...new Set(['slate', 'tiktok', ...Object.keys((win && win.CAPTION_STYLES) || {})])];
@@ -432,10 +463,18 @@ function applyRecipe(packId, title, replace = false) {
 function applyField(f, v, el) {
   const c = sel, o = c?.obj;
   if (f === 'note') { o.note = v || undefined; markDirty(); renderList(); return; }
+  if (f === 'rot') { touch(o, 'rot'); const d = StageCore.rotNorm(v); if (d) o.rot = d; else delete o.rot; changed(); refreshQc(); return; }
+  if (f === 'w' || f === 'h') {
+    if (!(+v > 0)) return;
+    touch(o, 'pos');
+    if (StageCore.canResize(c.kind, o.type)) { const b = StageCore.boxOf(o, DW > DH); b[f] = +v; StageCore.setBox(o, b, DW > DH); }
+    else { const r = rectOf(o), p = getPos(c); if (!r || !p?.size) return; p.size *= +v / (f === 'w' ? r.w : r.h); setPos(c, p); }
+    changed(); syncPosInputs(f); refreshQc(); return;
+  }
   if (['x', 'y', 'pct'].includes(f)) {
     touch(o, 'pos'); const p = getPos(c);
     if (f === 'x') p.x = +v; if (f === 'y') p.y = +v; if (f === 'pct') p.size = (origSize(c) || p.size) * (+v / 100);
-    setPos(c, p); changed(); syncPosInputs(); return;
+    setPos(c, p); changed(); syncPosInputs(); refreshQc(); return;
   }
   if (f === 't0' || f === 't1') { pushUndo(o.cid + f); setTimes(c, f === 't0' ? +v : c.t0, f === 't1' ? +v : c.t1, false); changed(); return; }
   if (f === 'dur') { pushUndo(o.cid + f); setTimes(c, c.t0, c.t0 + +v, false); changed(); const b = el.parentNode.querySelector('b'); if (b) b.textContent = r2(+v) + 's'; return; }
@@ -461,9 +500,12 @@ function applyField(f, v, el) {
   changed(f === 'captext' || f === 'nkind');
 }
 function syncPosInputs() {
-  const p = getPos(sel); if (!p) return;
+  const p = sel && getPos(sel); if (!p) return;
   const set = (f, v) => { for (const i of document.querySelectorAll(`#insp [data-f="${f}"]`)) if (document.activeElement !== i) i.value = v; };
   set('x', Math.round(p.x)); set('y', Math.round(p.y)); set('pct', Math.round(p.size / (origSize(sel) || p.size) * 100));
+  // rộng / cao đo sau khi preview vẽ lại (draw() bất đồng bộ)
+  const sz = () => { const z = sel && sizeOf(sel); if (z) { set('w', z.w); set('h', z.h); } set('rot', sel?.obj.rot || 0); };
+  sz(); setTimeout(sz, 120);
 }
 // "những thông tin / *gây shock*" → words with br/hl; keeps timings when the word count is unchanged, else spreads evenly.
 function setCapText(c, v) {
@@ -537,6 +579,8 @@ $('#insp').addEventListener('click', async e => {
   const t = e.target;
   const it = t.closest('[data-itab]');
   if (it) { ITAB[sel ? sel.kind : 'project'] = it.dataset.itab; return renderInspector(); }
+  const al = t.closest('[data-align]')?.dataset.align;
+  if (al) return alignSel(al);
   const pa = t.closest('[data-pact]')?.dataset.pact;
   if (pa === 'recipe') {
     if (!TL.pack) return toast('Chọn gói style trước');
@@ -644,37 +688,113 @@ function splitAtPlayhead() {
 const packs = () => (win && win.PACKS) || [];
 
 // ---------- stage interactions ----------
+// S17 M124: kéo dời (cả nhóm Shift), tay nắm góc phóng đều, tay nắm cạnh đổi riêng rộng / cao (cảnh StageCore.canResize),
+// đường gióng tới mép / giữa khung, vùng an toàn và element khác (Alt = tắt), khung cắt video chính khi đang chọn clip.
 let drag = null;
+const touchAll = list => { pushUndo(); for (const c of list) if (!c.obj._orig) c.obj._orig = JSON.parse(JSON.stringify(c.obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v))); };
+function otherRects(skip) {
+  return comps.filter(c => c.kind !== 'clip' && c.kind !== 'sfx' && c.kind !== 'music' && !skip.includes(c) && T >= c.t0 && T < c.t1 && !c.obj.hidden)
+    .slice(0, 60).map(c => rectOf(c.obj)).filter(r => r && r.w > 2 && r.h > 2 && r.w < DW * .98);
+}
+function stageLines(skip) { return StageCore.guideLines({ DW, DH, safe: $('#safe').checked ? SAFE : null, rects: otherRects(skip) }); }
+function toggleMulti(c) {
+  if (c === sel) return;
+  const i = multi.indexOf(c); if (i >= 0) multi.splice(i, 1); else multi.push(c);
+  renderInspector(); drawOverlay();
+}
+function alignSel(how) {
+  if (how === 'none') { multi = []; renderInspector(); return drawOverlay(); }
+  const list = [sel, ...multi].filter(c => c && getPos(c)), rs = list.map(c => rectOf(c.obj));
+  if (list.length < 2) return;
+  touchAll(list);
+  StageCore.alignDeltas(rs, how).forEach(({ dx, dy }, i) => { if (!dx && !dy) return; const p = getPos(list[i]); p.x += dx; p.y += dy; setPos(list[i], p); });
+  changed(); syncPosInputs(); setTimeout(refreshQc, 150);
+}
+function cropAr(o) {
+  const im = win && [...win.document.querySelectorAll('#stage img')].find(i => i.naturalWidth && i.offsetWidth >= DW * .9);
+  return im ? im.naturalWidth / im.naturalHeight : o.ar || 16 / 9;
+}
 $('#overlay').addEventListener('mousedown', e => {
   const box = $('#stagebox').getBoundingClientRect();
   const px = (e.clientX - box.left) / K, py = (e.clientY - box.top) / K;
-  const handle = e.target.matches('.selbox i') ? e.target.className : null;
-  if (!handle && !e.target.closest('.selbox')) { const c = pick(px, py); if (c !== sel) { select(c); } }
-  if (!sel || sel.kind === 'clip') return;
-  const p0 = getPos(sel); if (!p0) return;
-  const r = rectOf(sel.obj);
-  drag = { sx: e.clientX, sy: e.clientY, p0: { ...p0 }, handle, cx: r ? r.x + r.w / 2 : p0.x, cy: r ? r.y + r.h / 2 : p0.y, moved: false };
+  const handle = e.target.closest('.selbox i')?.dataset.h || null, onCrop = e.target.closest('.selbox.crop');
+  if (!handle && (!e.target.closest('.selbox') || onCrop || e.shiftKey)) {
+    const c = pick(px, py);
+    if (e.shiftKey && c && sel && sel.kind !== 'clip' && c.kind !== 'clip') { toggleMulti(c); e.preventDefault(); return; }
+    if (c) { if (c !== sel && !multi.includes(c)) select(c); }
+    else if (!onCrop) { if (sel) select(null); }
+  }
+  if (!sel) return;
+  if (sel.kind === 'clip') {
+    if (TRK.video.lock || (!onCrop && !handle)) return;
+    const o = sel.obj;
+    drag = { crop: true, sx: e.clientX, sy: e.clientY, handle, z0: o.zoom || 1, ox0: o.ox ?? 50, oy0: o.oy ?? 45, ar: cropAr(o), moved: false };
+    e.preventDefault(); return;
+  }
+  const group = [sel, ...multi].map(c => ({ c, p0: getPos(c) })).filter(g => g.p0);
+  if (!group.length) return;
+  const r = rectOf(sel.obj), edge = handle && /^[nsew]$/.test(handle) ? handle : null;
+  drag = { sx: e.clientX, sy: e.clientY, group, handle: edge ? null : handle, edge, b0: edge ? StageCore.boxOf(sel.obj, DW > DH) : null,
+    r0: StageCore.union(group.map(g => rectOf(g.c.obj))), lines: stageLines(group.map(g => g.c)),
+    cx: r ? r.x + r.w / 2 : group[0].p0.x, cy: r ? r.y + r.h / 2 : group[0].p0.y, moved: false };
   e.preventDefault();
 });
+function cropMove(e, dx, dy) {
+  const o = sel.obj;
+  if (!drag.moved) {
+    pushUndo('crop' + Date.now()); drag.moved = true;
+    // đè bám mặt từ chỗ khung đang đứng, không nhảy
+    if (!o.crop_manual && o.reframe?.length && !o.reframe_off && win?.reframeAt) {
+      const k = clipLayout()[sel.idx], f = win.reframeAt(o.reframe, srcAt(k, T));
+      if (f) { drag.ox0 = Math.round(f.ox * 10) / 10; drag.oy0 = Math.round(f.oy * 10) / 10; }
+    }
+    o.crop_manual = true; if (!o.fit) o.fit = 'cover';
+  }
+  if (drag.handle) {
+    const box = $('#stagebox').getBoundingClientRect(), cx = DW / 2, cy = DH / 2;
+    const d = (x, y) => Math.hypot((x - box.left) / K - cx, (y - box.top) / K - cy);
+    o.zoom = StageCore.zoomCrop(drag.z0, d(e.clientX, e.clientY) / Math.max(4, d(drag.sx, drag.sy)));
+    o.ox = drag.ox0; o.oy = drag.oy0;
+  } else Object.assign(o, StageCore.panCrop({ ox: drag.ox0, oy: drag.oy0, zoom: o.zoom || 1 }, dx, dy, { ar: drag.ar, boxAr: DW / DH, DW, DH }));
+  if (o.zoom === 1) delete o.zoom;
+  needInit = true; draw(); drawOverlay();
+}
 window.addEventListener('mousemove', e => {
   if (!drag) return;
   const dx = (e.clientX - drag.sx) / K, dy = (e.clientY - drag.sy) / K;
   if (!drag.moved && Math.hypot(dx, dy) < 2) return;
-  if (!drag.moved) { touch(sel.obj, 'drag' + Date.now()); drag.moved = true; }
-  const p = { ...drag.p0 };
-  if (drag.handle) {
-    const box = $('#stagebox').getBoundingClientRect();
+  if (drag.crop) return cropMove(e, dx, dy);
+  if (!drag.moved) { touchAll(drag.group.map(g => g.c)); drag.moved = true; }
+  const thr = 6 / K, snap = !e.altKey;
+  guides = null;
+  if (drag.edge) {
+    let b = StageCore.resizeEdge(drag.b0, drag.edge, dx, dy, { sym: StageCore.geoOf(sel.obj.type) === 'wh' });
+    if (snap) { const s = StageCore.snapEdge(b, drag.edge, drag.lines, thr); b = s.r; guides = s; }
+    StageCore.setBox(sel.obj, b, DW > DH);
+  } else if (drag.handle) {
+    const box = $('#stagebox').getBoundingClientRect(), g = drag.group[0];
     const mx = (e.clientX - box.left) / K, my = (e.clientY - box.top) / K, ox = (drag.sx - box.left) / K, oy = (drag.sy - box.top) / K;
     const f = Math.max(.15, Math.hypot(mx - drag.cx, my - drag.cy) / Math.max(4, Math.hypot(ox - drag.cx, oy - drag.cy)));
-    p.size = drag.p0.size * f;
+    setPos(g.c, { ...g.p0, size: g.p0.size * f });
   } else {
-    let nx = drag.p0.x + dx, ny = drag.p0.y + dy;
-    if (!e.altKey && Math.abs(nx - DW / 2) < 6 && sel.kind !== 'scene') nx = DW / 2; // snap to centre line
-    p.x = nx; p.y = ny;
+    let mx = dx, my = dy;
+    if (snap && drag.r0) { const s = StageCore.snapMove({ ...drag.r0, x: drag.r0.x + dx, y: drag.r0.y + dy }, drag.lines, thr); mx += s.dx; my += s.dy; guides = s; }
+    for (const g of drag.group) setPos(g.c, { ...g.p0, x: g.p0.x + mx, y: g.p0.y + my });
   }
-  setPos(sel, p); needInit = true; build(); draw(); syncPosInputs();
+  needInit = true; build(); draw(); syncPosInputs();
 });
-window.addEventListener('mouseup', () => { if (drag?.moved) changed(); drag = null; });
+window.addEventListener('mouseup', () => {
+  const d = drag; drag = null; guides = null;
+  if (!d?.moved) return;
+  if (d.crop) { changed(true); return; }
+  changed();
+  // QC nhanh chạy lại trên vị trí mới (sau khi preview vẽ xong khung)
+  setTimeout(() => {
+    refreshQc();
+    const bad = [sel, ...multi].flatMap(c => qcOf(c) || []);
+    if (bad.length) toast(bad[0].msg + (bad.length > 1 ? ` (+${bad.length - 1})` : ''));
+  }, 180);
+});
 $('#overlay').addEventListener('dblclick', () => { const i = $('#insp [data-f="text"], #insp [data-f="captext"]'); if (i) { i.focus(); i.select?.(); } });
 
 // ---------- timeline ----------
@@ -994,9 +1114,14 @@ window.addEventListener('keydown', e => {
   if (e.key.startsWith('Arrow')) {
     e.preventDefault();
     if (e.altKey && sel && getPos(sel)) {
-      const p = getPos(sel), n = e.shiftKey ? 10 : 1; touch(sel.obj, 'nudge');
-      if (e.key === 'ArrowLeft') p.x -= n; if (e.key === 'ArrowRight') p.x += n; if (e.key === 'ArrowUp') p.y -= n; if (e.key === 'ArrowDown') p.y += n;
-      setPos(sel, p); changed(); syncPosInputs(); return;
+      const n = e.shiftKey ? 10 : 1, list = [sel, ...multi]; // S17 M124: dời cả nhóm
+      pushUndo('nudge' + list.map(c => c.obj.cid).join()); for (const c of list) if (!c.obj._orig) c.obj._orig = JSON.parse(JSON.stringify(c.obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
+      for (const c of list) {
+        const p = getPos(c); if (!p) continue;
+        if (e.key === 'ArrowLeft') p.x -= n; if (e.key === 'ArrowRight') p.x += n; if (e.key === 'ArrowUp') p.y -= n; if (e.key === 'ArrowDown') p.y += n;
+        setPos(c, p);
+      }
+      changed(); syncPosInputs(); setTimeout(refreshQc, 150); return;
     }
     if (e.key === 'ArrowLeft') setTime(T - (e.shiftKey ? 1 : 1 / FPS));
     if (e.key === 'ArrowRight') setTime(T + (e.shiftKey ? 1 : 1 / FPS));

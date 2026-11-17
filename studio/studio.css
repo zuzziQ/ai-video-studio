@@ -329,6 +329,18 @@ body.expanded #lib, body.expanded #right { display: none; }
 #overlay .selbox i { position: absolute; width: 10px; height: 10px; background: rgb(var(--color-white)); border: 1.5px solid rgb(var(--color-accent-text)); border-radius: 50%; box-shadow: var(--shadow-card); }
 #overlay .selbox i.nw { left: -6px; top: -6px; cursor: nwse-resize; } #overlay .selbox i.ne { right: -6px; top: -6px; cursor: nesw-resize; }
 #overlay .selbox i.sw { left: -6px; bottom: -6px; cursor: nesw-resize; } #overlay .selbox i.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+/* S17 M124: tay nắm cạnh (đổi riêng rộng / cao), nhóm chọn bằng Shift, khung cắt video chính, đường gióng */
+#overlay .selbox i.n, #overlay .selbox i.s { left: calc(50% - 6px); width: 12px; height: 6px; border-radius: var(--radius-xs); cursor: ns-resize; }
+#overlay .selbox i.e, #overlay .selbox i.w { top: calc(50% - 6px); width: 6px; height: 12px; border-radius: var(--radius-xs); cursor: ew-resize; }
+#overlay .selbox i.n { top: -4px; } #overlay .selbox i.s { bottom: -4px; } #overlay .selbox i.e { right: -4px; } #overlay .selbox i.w { left: -4px; }
+#overlay .selbox.multi { border-style: dashed; background: rgb(var(--color-accent-text) / .04); }
+#overlay .selbox.crop { background: none; border-style: dashed; border-color: rgb(var(--track-1)); }
+#overlay .selbox.crop span { position: absolute; left: var(--space-2); bottom: var(--space-2); font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-white)); background: rgb(var(--color-black) / .6); padding: 0 var(--space-1); border-radius: var(--radius-xs); pointer-events: none; }
+#overlay .selbox.crop.on { border-style: solid; }
+#overlay .guide { position: absolute; pointer-events: none; }
+#overlay .guide.v { border-left: 1px solid rgb(var(--color-danger)); } #overlay .guide.h { border-top: 1px solid rgb(var(--color-danger)); }
+#insp .algrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--space-1); }
+#insp .algrid button { justify-content: center; padding: var(--space-1); }
 #overlay .safe { position: absolute; border: 1.5px dashed rgb(var(--color-danger) / .9); pointer-events: none; }
 #overlay .safe span { position: absolute; top: -20px; left: -1px; font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-canvas)); background: rgb(var(--color-danger)); padding: 0 var(--space-1); border-radius: var(--radius-xs); }
 #overlay .facezone { position: absolute; border: 1.5px dashed rgb(var(--color-success) / .9); border-radius: 50%; pointer-events: none; }

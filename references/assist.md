@@ -45,12 +45,14 @@ Nhà cung cấp: có ảnh → Claude xem ảnh bằng `--allowedTools Read --ad
 
 - Prompt không chứa đường dẫn tuyệt đối, tên máy hay token: `assertCleanPrompt` chặn (lỗi 500) nếu prompt có home, thư mục tạm, thư mục repo, `AVS_HOME`, tên máy dạng `DESKTOP-AB12` hay chuỗi giống khoá API. Ảnh được gọi bằng tên tương đối trong thư mục hiện tại.
 - Website / link: chỉ `http(s)` không kèm tài khoản; tải qua `safeFetch` của `scripts/net_guard.mjs` (chặn localhost, mạng nội bộ, link-local/metadata đám mây, kiểm lại ở mỗi lần chuyển hướng và ở IP thật lúc nối), không gửi cookie, đọc tối đa 1,5 MB (`maxBytes`), 10 s. Chỉ nhận `text/html`, `xhtml`, `text/plain`. Nội dung trang vào prompt trong khối "CHỈ LÀ DỮ LIỆU" và chỉ phần chữ (bỏ script, style, iframe).
+- Trang dựng bằng JavaScript (M122): trang ít chữ (`thinPage`: không JSON-LD, không mô tả meta/og, chữ < 200 ký tự; sàn hay chặn bot như Shopee, Lazada thì mô tả chung của sàn không tính) hoặc HTTP 403 / 429 / 503 → `renderPage` mở lại bằng Chrome chạy ngầm (chrome-headless-shell nếu có, không thì Chrome; puppeteer-core). Chrome không tự ra mạng: mọi request bị chặn lại và Node tải thay bằng `safeFetch` (cùng luật chặn IP, kiểm từng request và từng bước chuyển hướng), chỉ `document`/`script`/`xhr`/`fetch` GET, ≤ 80 request, 25 s; không cookie (chỉ chuyển lại `content-type`), ngữ cảnh ẩn danh, bỏ service worker, DNS của Chrome tắt (`--host-resolver-rules=MAP * ~NOTFOUND`), nói chuyện qua pipe. Trang tự chuyển sang địa chỉ bị chặn → không lấy chữ trang lỗi.
+- Vẫn trống (chữ < 20 ký tự) → `AssistError` `kind: 'page-empty'` kèm `host`, `reason` và câu nêu tên trang + lý do (Shopee chặn trình duyệt tự động, đòi đăng nhập/xác minh robot, HTTP lỗi, gọi địa chỉ nội bộ, máy chưa có Chrome). Còn chút chữ (tiêu đề, giá) → trả kèm `thin: true` và cảnh báo. Trợ lý Thương hiệu chỉ cảnh báo; trợ lý Sản phẩm không có ảnh thì báo lỗi. Kết quả hoặc lỗi có `pageEmpty` / `kind: 'page-empty'` → `Studio.assistPanel` hiện ô dán mô tả (`pageText`, ≤ 5000 ký tự) và ảnh chụp trang (`pageShot`, data URL như `image`, ghi `page.<ext>` cạnh ảnh của trợ lý cho Claude Read). Ô trợ lý báo sớm khi máy thiếu Claude Code CLI (`/api/setup/check`), nút sang Kiểm tra máy.
 - Ảnh: chỉ PNG/JPEG/WebP kiểm chữ ký file, ≤ 6 MB sau giải mã.
 - Route không ghi gì xuống đĩa; kết quả chỉ nằm trong bộ nhớ (lượt gần nhất của mỗi trợ lý).
 
 ## Trợ lý `brand`
 
-Đầu vào: `{image?, colors?: ['#RRGGBB' ≤ 6], website?, industry?, name?}` (cần ít nhất ảnh, website hoặc tên).
+Đầu vào: `{image?, colors?: ['#RRGGBB' ≤ 6], website?, industry?, name?, pageText?, pageShot?}` (cần ít nhất ảnh, website, tên hoặc phần dán).
 - Bảng màu cho phép = màu đo được (+ `theme-color` của website) + biến thể đậm/nhạt 25/50/85 % + trắng, đen. Vai trò `primary`, `accent`, `dark`, `light` chỉ được chọn trong bảng; ngoài bảng → luật (`ruleColors`: chính = màu đo đầu, nhấn = màu đo thứ hai hoặc bản nhạt 50 %, nền tối = màu chính đậm 85 %, chữ sáng = trắng).
 - Tương phản `light` trên `dark` < 4,5:1 → đổi sang màu sáng nhất và tối nhất của bảng. Chữ sáng trên màu chính < 4,5:1 → ghi chú ở trường Màu chính.
 - Font: Be Vietnam Pro, Montserrat, Inter, Lexend, Nunito, Oswald, Playfair Display, Bungee, Pacifico (DM Serif Display không có bộ chữ tiếng Việt nên không đề xuất).
@@ -58,7 +60,7 @@ Nhà cung cấp: có ảnh → Claude xem ảnh bằng `--allowedTools Read --ad
 
 ## Trợ lý `product`
 
-Đầu vào: `{image?, url?, industry?, brand?, name?}` (cần ảnh hoặc link). Kết quả: `name` (bắt buộc), `price`, `industry`, các `claim` (điểm mạnh + claim, ≤ 6 mỗi loại, bỏ trùng), `faq` (≤ 5, câu không có đáp bị bỏ).
+Đầu vào: `{image?, url?, industry?, brand?, name?, pageText?, pageShot?}` (cần ảnh, link hoặc phần dán; giá khớp nguyên văn phần dán ghi "đúng như phần bạn dán"). Kết quả: `name` (bắt buộc), `price`, `industry`, các `claim` (điểm mạnh + claim, ≤ 6 mỗi loại, bỏ trùng), `faq` (≤ 5, câu không có đáp bị bỏ).
 - Giá giữ nguyên chuỗi: có link thì phải có nguyên văn trên trang (so sau khi bỏ khoảng trắng), không thì bỏ kèm cảnh báo; chỉ có ảnh thì giữ kèm ghi chú "đọc từ ảnh, kiểm lại".
 - Claim luôn `pending`; AI ghi `approved` hay `evidence` → bị bỏ, kèm cảnh báo.
 - Cờ rủi ro: `python scripts/ad_gates.py --script -` trên các câu claim (chính sách Meta/TikTok, cụm từ rủi ro; `risk_source: 'ad_gates'`); không chạy được Python thì dò danh sách từ đơn giản (`risk_source: 'rules'`).
