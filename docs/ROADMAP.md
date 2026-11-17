@@ -205,6 +205,7 @@ Chủ repo báo 2026-11-17 (`docs/plans/S14-xuat-cot-phai-diem.md`). (1) Kết q
 Chủ repo báo 2026-11-17: Studio cần nhiều thư viện (ffmpeg, Python venv với faster-whisper, Chrome/Edge, puppeteer-core…) nhưng chỉ trình cài (`install.ps1`, `install.sh`, README mục "2. Yêu cầu") kiểm; máy bỏ qua trình cài hoặc thiếu một thư viện chỉ biết khi tính năng hỏng. Nghiệm thu: mở Studio lần đầu trên máy thiếu một thư viện bắt buộc thì thấy ngay tên thư viện, tính năng cần nó và lệnh cài đúng hệ điều hành.
 
 - [x] **`M115`** (`area/infra`): màn "Kiểm tra máy". `GET /api/setup/check` (`studio/routes/01_setup.mjs`) kiểm nhanh, có cache, không tự cài: bắt buộc (ffmpeg/ffprobe, Node ≥ 18, Python 3.10+ trong `.venv`, faster-whisper, numpy, scipy, pillow, Chrome hoặc Edge, puppeteer-core) và tuỳ chọn (rembg, edge-tts, cuBLAS khi có GPU NVIDIA, chrome-headless-shell, Ollama, VieNeu, Claude, mô hình YuNet); gói pip lấy từ chính `install.ps1` / `scripts/setup.sh`. Mỗi mục: có / thiếu / phiên bản, tính năng cần nó, lệnh cài (chạy lại trình cài + lệnh riêng). Màn tự hiện lần đầu sau màn tác giả, trước hướng dẫn người mới; thiếu mục bắt buộc thì tự hiện lại, có "Để sau", "Kiểm tra lại", mở lại từ menu ⋯. Bấm tính năng mà thư viện của nó thiếu thì báo đúng tên thư viện và lệnh cài.
+- [x] **`M116`** (`area/infra`): cài giúp từ màn Kiểm tra máy, không phải gõ lệnh. Chủ repo 2026-11-17: người dùng phổ thông không biết chạy PowerShell. Nút "Cài giúp đủ một lần" chạy lại trình cài (`install.ps1 -Yes` / `install.sh`) như một job của Studio, hiện tiến trình và log ngay trong màn; nút "Cài" từng dòng cho mục cài lẻ được (gói pip khi đã có `.venv`, `npm install`, chrome-headless-shell, winget/brew cho ffmpeg, Chrome, Ollama, Claude CLI). Lệnh do server dựng từ danh sách cho phép, trình duyệt chỉ gửi id. Cài xong Windows đọc lại PATH và tự kiểm lại. Lệnh dạng chữ thu vào mục "Cho người rành máy"; Windows hiện "bấm đúp install.cmd" + nút mở thư mục. Lần cài đầu khi máy chưa có Node vẫn cần `install.cmd` (Studio chưa chạy được).
 
 ## 4. Bị chặn: cần quyết định
 
@@ -225,6 +226,7 @@ Chủ repo báo 2026-11-17: Studio cần nhiều thư viện (ffmpeg, Python ven
 - [x] **`C15`** (`area/infra`): **Tự lái đặt ở đâu (`S13`).** Đề xuất: nút Tự lái trên thanh đầu mở màn hàng đợi riêng, không thuộc bước nào; bước Nguồn nhắc thả nhiều video vào `Nguon/Tha vao day/`. Chốt 2026-11-17: theo đề xuất.
 - [x] **`C16`** (`area/qc`): **QC nhanh tự chạy sau AI dựng hay chờ bấm (`S13`).** Đề xuất: tự chạy (render 3 khung + kiểm hình học, ~10–20 s, không tốn lượt Claude); QC đầy đủ có Claude vẫn chờ bấm. Chốt 2026-11-17: theo đề xuất.
 - [x] **`C17`** (`area/qc`): **điểm từng bước có chặn Xuất không (`S14`).** Đề xuất: không chặn; bấm Xuất khi bước Kiểm tra dưới 60 điểm thì hiện cảnh báo kèm chỗ thiếu và nút "Vẫn xuất". Chốt 2026-11-17: theo đề xuất.
+- [ ] **`C18`** (`area/infra`): **có làm bộ cài một file `AI-Video-Studio-Setup.exe` không (`S15`).** Bộ cài kiểu Next → Finish (Inno Setup) kèm Node, Python, ffmpeg bản portable: người dùng không cần cài gì trước, kể cả Node. Giá: file 1–2 GB sau khi tải thư viện Python (hoặc bộ cài nhỏ tải dần), cần build trên Windows và ký số để SmartScreen không chặn (chứng chỉ ký mã có phí hằng năm). Đề xuất: làm sau `M116`, bắt đầu bằng bộ cài nhỏ tải dần, chưa ký số.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -236,6 +238,7 @@ Chủ repo báo 2026-11-17: Studio cần nhiều thư viện (ffmpeg, Python ven
 6. **`S09`**: chủ repo chốt `C06`–`C12` (render tập trung: máy trạm → server → máy render) rồi mới làm, bắt đầu từ MVP `M70`–`M73`.
 7. **`S14`**: `M112` làm ngay được (lỗi người dùng gặp, không đụng tệp nóng của nhóm QC); `M113` sau `M112`; `M114` sau `M105`, `M106` (`C17` đã chốt 2026-11-17: chỉ cảnh báo, không chặn).
 8. **`S15`**: `M115` làm ngay được (không đụng tệp nóng; chỉ thêm cặp route/feature mới và một dòng chờ trong `02_onboarding.js`).
+9. **`S15`**: `M116` làm ngay sau `M115`; `C18` (bộ cài một file .exe) chờ chủ repo chốt.
 
 ## 6. Không làm
 
