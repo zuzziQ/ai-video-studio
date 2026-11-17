@@ -216,3 +216,15 @@ test('nhân bản: hai lần bấm cùng lúc ra hai dự án khác tên, không
   assert.deepEqual([path.basename(x), path.basename(y)].sort(), ['Clip S (2)', 'Clip S (3)']);
   for (const d of [x, y]) assert.deepEqual(tl(d), tl(S));
 });
+
+// S19 M138: thẻ <audio>/<img> không gửi được header → window.avsUrl thêm ?avs_p=<mã tab>; server nhận với GET, bỏ qua với POST
+test('server: GET mang ?avs_p=<mã> đọc dự án của tab đó; POST không nhận avs_p', async () => {
+  const idA = (await api('/api/open', { path: A })).opened || tabId(A);
+  const idB = (await api('/api/open', { path: B }, idA)).opened || tabId(B);
+  assert.equal((await api(`/api/project?avs_p=${idA}`)).json.meta.name, 'Clip A', 'không header, có avs_p của A');
+  assert.equal((await api(`/api/project?avs_p=${idB}`)).json.meta.name, 'Clip B');
+  assert.equal((await api(`/api/project?avs_p=${idB}`, undefined, idA)).json.meta.name, 'Clip A', 'header thắng tham số');
+  assert.equal((await api('/api/project?avs_p=ffffffffffff')).status, 409, 'mã lạ như header lạ');
+  const r = await api(`/api/save?avs_p=${idA}`, { timeline: tl(A), captions: [], dir: A }); // POST: avs_p bị bỏ qua → dự án mặc định (B)
+  assert.equal(r.status, 409, 'dir của A gửi vào dự án mặc định B → bị từ chối, không ghi nhờ avs_p');
+});

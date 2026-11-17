@@ -237,6 +237,13 @@
     const sel = (sid, opts, v) => `<select id="${sid}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(v) === String(k) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
     const chk = (name, opts, vals) => `<div class="chk">${opts.map(([k, l]) => `<label><input type="checkbox" name="${name}" value="${esc(k)}" ${(vals || []).includes(k) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
     const MUS = ['auto', 'off', 'tech', 'chill', 'upbeat', 'corporate', 'emotional', 'suspense'];
+    // S19 M138: nhạc riêng của thương hiệu = bài trong Kho › Nhac (tải lên ở panel Âm thanh → Nhạc của bạn, hoặc chép vào thư mục)
+    const km = await Studio.api('/api/kho?' + new URLSearchParams({ brand: id === 'chung' ? '' : id, kind: 'audio' })).catch(() => null);
+    const songs = (km?.items || []).filter(it => it.kind === 'audio').slice(0, 200);
+    const musOpts = [['auto', 'Tự chọn (AI / theo đoạn)'], ['off', 'Không nhạc'],
+      ['kho', songs.length ? `Nhạc của thương hiệu: mỗi video một bài trong Kho › Nhac (${songs.length} bài)` : 'Nhạc của thương hiệu (Kho › Nhac chưa có bài)'],
+      ...songs.map(it => ['kho:' + it.rel, '♪ ' + it.name]), ...MUS.slice(2).map(m => [m, 'Mẫu: ' + m])];
+    if (d.music && !musOpts.some(o => o[0] === d.music)) musOpts.push([d.music, String(d.music).startsWith('kho:') ? '♪ ' + d.music.slice(4) + ' (không còn trong Kho)' : d.music]);
     Studio.modal(`<h3><i class="ti ti-adjustments"></i> Phong cách dựng · ${esc(d.name)}</h3>
       <div class="help">Tự lái, AI dựng và Telegram dùng các cài đặt này cho video ${id === 'chung' ? 'không gắn thương hiệu' : `của ${esc(d.name)}`}.${d.saved || id === 'chung' ? '' : ' Chưa lưu riêng: đang theo Chung.'}</div>
       <div class="bk-sform">
@@ -250,7 +257,7 @@
       <div><label>Âm thanh (SFX)</label>${sel('pf-snd', [['off', 'Tắt'], ['nhe', 'Nhẹ'], ['vua', 'Vừa'], ['phongphu', 'Phong phú']], d.sound)}</div>
       <div class="full"><label>Mục tiêu b-roll</label>${sel('pf-bg', [['auto', 'Tự nhận (theo gói + lời thoại)'], ['banhang', 'Bán hàng'], ['bds', 'BĐS'], ['khoahoc', 'Khoá học / Hướng dẫn'], ['review', 'Review'], ['tintuc', 'Tin tức'], ['kechuyen', 'Kể chuyện / Chia sẻ'], ['doanhnghiep', 'Doanh nghiệp'], ['amthuc', 'Ẩm thực / Du lịch'], ['giaitri', 'Giải trí']], d.broll_goal || 'auto')}</div>
       <div class="full"><label>Nguồn b-roll</label>${chk('pf-bs', [['preset', 'B-roll động'], ['hf', 'Khối HyperFrames'], ['text', 'Chữ nổi'], ['emoji', 'Emoji'], ['logo', 'Logo công cụ'], ['aroll', 'Hiệu ứng trên người nói'], ['media', 'Media của dự án'], ['lib', 'Thư viện của tôi'], ['stock', 'Ảnh stock (mạng)'], ['stockvid', 'Video stock (key Pexels/Pixabay)'], ['aiimg', 'Ảnh AI (key OpenAI/Gemini)']], d.broll_src)}</div>
-      <div><label>Nhạc nền</label>${sel('pf-mus', [['auto', 'Tự chọn (AI / theo đoạn)'], ['off', 'Không nhạc'], ...MUS.slice(2).map(m => [m, m]), ...(MUS.includes(d.music) ? [] : [[d.music, d.music]])], d.music)}</div>
+      <div class="full"><label>Nhạc nền (Tự lái, AI dựng)</label>${sel('pf-mus', musOpts, d.music)}${songs.length ? '' : '<small class="muted">Tải nhạc riêng ở panel Âm thanh → Nhạc nền → Nhạc của bạn (lưu vào Kho của thương hiệu).</small>'}</div>
       <div><label>Làm sạch giọng</label>${sel('pf-cl', [['off', 'Tắt'], ['nhe', 'Nhẹ'], ['vua', 'Vừa'], ['manh', 'Mạnh']], d.clean)}</div>
       <div><label>Cắt lỗi nói / lặp từ</label>${sel('pf-fl', [['1', 'Bật'], ['1c', 'Bật + Claude dò câu hỏng'], ['0', 'Tắt']], d.fillers ? (d.fillers_claude ? '1c' : '1') : '0')}</div>
       <div><label>Nhận giọng (whisper)</label>${sel('pf-wh', [['large-v3-turbo', 'large-v3-turbo (chính xác)'], ['small', 'small (nhanh)'], ['large-v3', 'large-v3 (chậm nhất)']], d.whisper)}</div>

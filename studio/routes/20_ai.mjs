@@ -6,7 +6,7 @@
 //   GET  /api/ai/plan                                  → that plan (the Studio applies it client-side, undoable)
 //   POST /api/ai/fillers {words,pause,fillers,claude}  → scripts/fillers.py; with claude:true it runs as job "fillers", result at GET /api/ai/fillers
 import fs from 'node:fs'; import path from 'node:path'; import { execFile } from 'node:child_process';
-import { habitsFor, saveDelivered } from '../../scripts/profile.mjs';
+import { habitsFor, saveDelivered, getProfile } from '../../scripts/profile.mjs';
 import { workspaceOfProject } from '../../scripts/workspace.mjs';
 
 export default ctx => {
@@ -39,6 +39,8 @@ export default ctx => {
         if (a.ai_step) o.density = { day: 'vua', vua: 'thua' }[o.density] || o.density;
         if (a.pack && o.pack === 'auto') o.pack = a.pack;
       }
+      // S19 M138: nhạc riêng của thương hiệu (Phong cách dựng → Nhạc nền = Nhạc trong Kho); thói quen "không nhạc" vẫn thắng
+      try { const m = getProfile(brandOf()).music; if (typeof m === 'string' && (m === 'kho' || m.startsWith('kho:')) && o.learned?.music !== 'off') o.music_pick = m; } catch { /* phong cách lỗi: nhạc AI chọn */ }
       fs.writeFileSync(path.join(st, 'ai_opts.json'), JSON.stringify(o));
       fs.rmSync(path.join(st, 'ai_plan.json'), { force: true });
       const ok = ctx.startJob('ai', async () => {

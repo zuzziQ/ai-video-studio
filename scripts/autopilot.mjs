@@ -354,13 +354,19 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       // music "auto": the bed Claude chose in "AI dựng giúp" wins; without one, auto_sfx picks a mood per section.
       // (auto_sfx --music auto keeps _ai beds and would add its own on top → two overlapping beds.)
       const aiBed = (loadTL(dir).tl.audio?.music || []).some(m => m._ai);
-      const musicAuto = prof.music === 'auto' && !aiBed;
+      // S19 M138: nhạc riêng của thương hiệu (Nhac/ trong Kho). Kho chưa có bài nào → như 'auto' (vẫn có nhạc), ghi chú lại.
+      let own = null;
+      const { isKhoMusic, khoMusicPick } = await import('./kho_media.mjs');
+      if (isKhoMusic(prof.music)) { own = await khoMusicPick(dir, loadTL(dir).tl, prof.music).catch(() => null); if (!own) notes.push('Kho chưa có nhạc của thương hiệu → nhạc tự chọn'); }
+      const musicAuto = (prof.music === 'auto' || (isKhoMusic(prof.music) && !own)) && !aiBed;
       if (prof.sound && prof.sound !== 'off') {
         await run(PY, ['-I', '-X', 'utf8', S('auto_sfx.py'), P('timeline.json'), '--level', prof.sound, '--music', musicAuto ? 'auto' : 'keep']);
         notes.push(`SFX mức ${prof.sound}${musicAuto ? ' + nhạc theo đoạn' : aiBed && prof.music === 'auto' ? ' + nhạc AI chọn' : ''}`);
       }
       const { tl, caps, capFile } = loadTL(dir); tl.audio = tl.audio || {};
       if (prof.music === 'off') { tl.audio.music = []; notes.push('không nhạc'); }
+      else if (own) { tl.audio.music = [...(tl.audio.music || []).filter(m => !m._ai && !m._auto), { t0: 0, t1: tl.duration, file: own.file, kho: own.kho, title: own.title, gain: -20, _auto: true }]; notes.push('nhạc thương hiệu: ' + own.title); }
+      else if (isKhoMusic(prof.music)) { /* Kho chưa có nhạc: giữ nhạc tự chọn ở trên */ }
       else if (prof.music && prof.music !== 'auto') { tl.audio.music = [{ t0: 0, t1: tl.duration, mood: prof.music, gain: -20, _auto: true }]; notes.push('nhạc ' + prof.music); }
       if (prof.music_gain && tl.audio.music?.length) { for (const m of tl.audio.music) m.gain = r2((m.gain ?? -20) + prof.music_gain); notes.push(`nhạc ${prof.music_gain > 0 ? '+' : ''}${prof.music_gain} dB (đã học)`); }
       saveTL(dir, tl, caps, capFile);
