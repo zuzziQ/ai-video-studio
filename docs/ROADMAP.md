@@ -205,8 +205,8 @@ Rà soát 2026-11-17 (`docs/plans/S13-luong-gon-qc-som.md`) trên dự án thậ
 - [ ] **`C12`** (`area/infra`): **server vẫn lưu bằng JSON, không dùng cơ sở dữ liệu (`S09`).** Đề xuất: vẫn JSON vì server là một tiến trình duy nhất ghi; job đã xong chuyển sang file theo tháng; xem lại khi vượt khoảng 10.000 job đang hoạt động.
 - [ ] **`C13`** (`area/infra`): **chế độ mặc định của giao diện (`S10`).** Đề xuất: người mới (chưa có `onboarding.json`) vào chế độ Cơ bản; người đang dùng giữ Chuyên nghiệp như hiện nay; đổi được bất cứ lúc nào.
 - [ ] **`C14`** (`area/infra`): **Studio giữ giao diện tối (`S10`).** Hệ thiết kế chung của hub chỉ có giao diện sáng và chặn màu tím (mục 8.3). Đề xuất: Studio giữ nền tối (phần mềm dựng video cần nền tối để không làm lệch cảm nhận màu video), đổi màu nhấn tím `#8B7BFF` sang navy 82X. 2026-11-16: chủ repo cho bắt đầu `S10` theo đề xuất này.
-- [ ] **`C15`** (`area/infra`): **Tự lái đặt ở đâu (`S13`).** Đề xuất: nút Tự lái trên thanh đầu mở màn hàng đợi riêng, không thuộc bước nào; bước Nguồn nhắc thả nhiều video vào `Nguon/Tha vao day/`.
-- [ ] **`C16`** (`area/qc`): **QC nhanh tự chạy sau AI dựng hay chờ bấm (`S13`).** Đề xuất: tự chạy (render 3 khung + kiểm hình học, ~10–20 s, không tốn lượt Claude); QC đầy đủ có Claude vẫn chờ bấm.
+- [x] **`C15`** (`area/infra`): **Tự lái đặt ở đâu (`S13`).** Đề xuất: nút Tự lái trên thanh đầu mở màn hàng đợi riêng, không thuộc bước nào; bước Nguồn nhắc thả nhiều video vào `Nguon/Tha vao day/`. Chốt 2026-11-17: theo đề xuất.
+- [x] **`C16`** (`area/qc`): **QC nhanh tự chạy sau AI dựng hay chờ bấm (`S13`).** Đề xuất: tự chạy (render 3 khung + kiểm hình học, ~10–20 s, không tốn lượt Claude); QC đầy đủ có Claude vẫn chờ bấm. Chốt 2026-11-17: theo đề xuất.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -214,7 +214,7 @@ Rà soát 2026-11-17 (`docs/plans/S13-luong-gon-qc-som.md`) trên dự án thậ
 2. **`M14`**: chủ repo chạy thử cổng quảng cáo trên ít nhất 3 video quảng cáo thật.
 4. **`M26`**: thử với Ollama thật khi máy có cài.
 5. **`M29`**: đối chiếu lại 45 bài FreePD khi Wayback Machine cho truy cập (thử lại 2026-11-13 vẫn 429).
-3. **`S13`**: chủ repo chốt `C15`, `C16`; làm `M103` → `M104` trước (né mặt kéo điểm QC nhiều nhất), `M107` song song.
+3. **`S13`**: `C15`, `C16` đã chốt 2026-11-17; làm `M103` → `M104` trước (né mặt kéo điểm QC nhiều nhất), `M107` song song.
 6. **`S09`**: chủ repo chốt `C06`–`C12` (render tập trung: máy trạm → server → máy render) rồi mới làm, bắt đầu từ MVP `M70`–`M73`.
 
 ## 6. Không làm

@@ -56,7 +56,7 @@ Chỉ tiêu nghiệm thu trên dự án mẫu (dựng lại bằng gói Review):
 
 Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M105` → `M106`; `M107` làm song song được (không đụng file của nhóm QC). `M104` và `M106` đều sửa `scripts/ai_qc.mjs` (tệp nóng): làm lần lượt.
 
-## 4. Quyết định cần chốt
+## 4. Quyết định (chốt 2026-11-17: theo đề xuất)
 
 - **`C15`** Tự lái đặt ở đâu. Đề xuất: nút "Tự lái" trên thanh đầu (cạnh Kho/thương hiệu) mở màn hàng đợi riêng, không thuộc bước nào; bước Nguồn có một dòng "Có nhiều video? Thả vào `Nguon/Tha vao day/` để Tự lái làm hết".
 - **`C16`** QC nhanh tự chạy sau AI dựng hay chờ bấm. Đề xuất: tự chạy (chỉ render 3 khung + kiểm hình học, ~10–20 s, không tốn lượt Claude); QC đầy đủ có Claude vẫn chờ bấm.
