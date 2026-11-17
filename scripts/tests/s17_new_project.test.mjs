@@ -88,7 +88,7 @@ test('/api/save kèm dir của dự án khác (tab cũ sau Video mới) → 409,
   assert.equal(r.status, 200, JSON.stringify(r)); assert.match(fs.readFileSync(f, 'utf8'), /"dung"/);
   r = await A.api('/api/save', { timeline: { ...tl, note: 'khong dir' }, captions: [] });
   assert.equal(r.status, 200); assert.match(fs.readFileSync(f, 'utf8'), /khong dir/);
-  assert.match(read('studio/studio.js'), /api\('\/api\/save', \{ timeline: TL, captions: CAP, dir: META\?\.dir \}\)/);
+  assert.match(read('studio/studio.js'), /api\('\/api\/save', \{ timeline: TL, captions: CAP, dir: META\?\.dir, base: META\?\.saved/); // S18 M131: + base
 });
 
 test('server: newProject đóng dự án đang mở trước khi dựng, khôi phục khi lỗi', () => {
@@ -104,7 +104,7 @@ test('hộp Video mới: lưu dự án đang mở rồi che trình chỉnh sửa
   assert.match(f, /np-busy/); assert.match(f, /newBusy = true; dirty = false/);
   assert.match(f, /Thương hiệu · Kho/); assert.match(f, /khác dự án đang mở/); assert.match(f, /Dùng Kho của dự án đang mở/);
   assert.match(f, /META\?\.kho/, 'thương hiệu mặc định theo dự án đang mở');
-  assert.match(s, /async function saveNow\(\) \{\n {2}if \(newBusy\) return;/);
+  assert.match(s, /async function saveOnce\(force\) \{\n(  if \(readOnly\)[^\n]*\n)? {2}if \(newBusy\) return false;/);
   assert.match(s, /\$\('#pkho'\)/); assert.match(read('studio/index.html'), /id="pkho"/);
   assert.match(read('studio/studio.css'), /body\.np-busy > \*:not\(#modal\)/);
 });

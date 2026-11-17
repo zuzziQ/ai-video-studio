@@ -104,7 +104,7 @@
   async function run(kind) {
     const s = state(), TL = Studio.TL;
     if (!(Studio.CAP || []).length) return Studio.needCaptions(() => run(kind), 'Dịch và lồng tiếng');
-    await Studio.saveNow();
+    if (!await Studio.saveNow()) return;
     const body = { lang: s.lang, tts: s.tts, voice: s.voice || undefined, voice_gain: TL.audio?.voice_gain ?? .15,
       translate: kind === 'translate' || TL.sub2?.lang !== s.lang || !(Studio.CAP || []).some(c => c.tr), dub: kind === 'dub', force: kind === 'translate' };
     startJob('/api/dub', body, kind === 'dub' ? '<i class="ti ti-microphone-2"></i> Đang lồng tiếng…' : '<i class="ti ti-language"></i> Đang dịch phụ đề…', async out => {

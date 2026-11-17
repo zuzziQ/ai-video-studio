@@ -13,7 +13,7 @@
   S.fitTemplate = async (tpl, o = {}) => {
     if (busy) return;
     busy = true;
-    await S.saveNow();
+    if (!await S.saveNow()) { busy = false; return; }
     const r = await S.api('/api/tplfit', { claude: o.claude !== false, images: o.images !== false });
     if (!r.ok) { busy = false; return S.toast(r.error || 'Đang có tác vụ khác chạy'); }
     const t0 = Date.now();

@@ -160,7 +160,7 @@
     Studio.toast(n ? `Đã thêm ${n} dự án vào hàng đợi Tự lái` : `Không thêm được: ${err}`);
   }
   async function openProject(dir) {
-    if (Studio.TL && Studio.saveNow) await Studio.saveNow().catch(() => {});
+    if (Studio.TL && Studio.dirty && Studio.saveNow && !await Studio.saveNow().catch(() => false)) return Studio.toast('Chưa lưu được dự án đang mở — chưa mở dự án khác');
     const r = await api('/api/longform/open', { dir });
     if (!r.ok) return Studio.toast(r.error || 'Không mở được');
     location.reload();

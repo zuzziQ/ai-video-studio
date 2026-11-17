@@ -123,7 +123,7 @@
     if (busy) return null;
     if (mode !== 'sfx' && mode !== 'clear' && !(S.CAP || []).length) return S.needCaptions(() => run(mode, o), 'Tự thêm b-roll');
     busy = true; render();
-    await S.saveNow();
+    if (!await S.saveNow()) { busy = false; render(); return null; }
     if (!o.noUndo) S.pushUndo();
     const r = await S.api('/api/autofill', { mode, ...opts(o.opts || {}) });
     if (!r.ok) { busy = false; render(); S.toast(r.error || 'Đang có tác vụ khác chạy'); return null; }

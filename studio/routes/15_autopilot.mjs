@@ -28,10 +28,17 @@ const okScript = v => v === '' || (typeof v === 'string' && STAGE_ID.test(v));
 export default ctx => {
   const runner = process.env.AVS_NO_QUEUE ? null : new Runner({ role: 'server', daemon: true, log: m => console.log(m) }).start();
   if (runner) for (const s of ['SIGINT', 'SIGTERM']) process.once(s, () => runner.stop()); // server.mjs exits after every route has cleaned up (Telegram bot, jobs)
-  // "Học từ chỉnh sửa": when the open project was made by Tự lái and the user saved it, compare with what Tự lái delivered.
+  // "Học từ chỉnh sửa": when an open project was made by Tự lái and the user saved it, compare with what Tự lái delivered.
+  // S18 M131: mọi dự án đang mở (thanh tab M129), không chỉ dự án mặc định — timer chạy ngoài request nên ctx.project là
+  // dự án mặc định; các tab khác lấy từ ctx.tabs.
   let learn = null; const seen = new Map();
-  const tryLearn = (force) => {
-    const d = ctx.project?.dir; if (!d) return null;
+  const openDirs = () => {
+    const out = new Set(); if (ctx.project?.dir) out.add(ctx.project.dir); // tab lấy qua tabs.get (resolveProject), không tin thẳng file danh sách
+    try { for (const t of ctx.tabs?.list() || []) { const pr = t.exists && ctx.tabs.get(t.id); if (pr) out.add(pr.dir); } } catch { /* danh sách tab lỗi: chỉ dự án mặc định */ }
+    return [...out];
+  };
+  const tryLearn = (force, d = ctx.project?.dir) => {
+    if (!d) return null;
     const ap = rd(path.join(d, '.studio/autopilot.json')); if (!ap || ap.state !== 'done') return null;
     let mt = 0; try { mt = fs.statSync(path.join(d, 'timeline.json')).mtimeMs; } catch { return null; }
     if (!force && seen.get(d) === mt) return null;
@@ -40,7 +47,7 @@ export default ctx => {
     if (r.ok || force) learn = { ...r, dir: d, at: new Date().toISOString() };
     return r;
   };
-  setInterval(() => { try { tryLearn(false); } catch (e) { console.error('learn:', e.message); } }, 15000).unref();
+  setInterval(() => { for (const d of openDirs()) try { tryLearn(false, d); } catch (e) { console.error('learn:', e.message); } }, 15000).unref();
 
   const profilesOut = () => {
     const s = loadStore();

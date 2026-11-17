@@ -586,7 +586,7 @@
     Object.assign(rh, { state: 'running', step: 'Đang chuẩn bị…', p: 0, note: '', error: '', what });
     stopLoop(); box = 'ai'; render();
     try {
-      await S.saveNow?.(); // tiếng nói lấy theo timeline đã lưu
+      if (S.saveNow && !await S.saveNow()) throw new Error('Chưa lưu được dự án — chọn bản giữ lại rồi thử lại'); // tiếng nói lấy theo timeline đã lưu
       const r0 = await S.api('/api/rehear', { s, e });
       if (!r0 || r0.error) throw new Error(r0?.error || 'Không gọi được nghe lại');
       let r;
@@ -685,7 +685,7 @@
       let heard = [], model = '';
       if (sp.spans.length) {
         ai.step = `Bước 2/2: nghe lại ${sp.spans.length} chỗ nghi…`; ai.p = .4; paintAiRun();
-        await S.saveNow?.();
+        if (S.saveNow && !await S.saveNow()) throw new Error('Chưa lưu được dự án — chọn bản giữ lại rồi thử lại');
         const r0 = await S.api('/api/rehear/batch', { spans: sp.spans.map(x => ({ s: x.s, e: x.e })), ...(ai.model ? { model: ai.model } : {}) });
         if (!r0 || r0.error) warnings.push(`Chưa nghe lại được: ${r0?.error || 'không gọi được nghe lại'}`);
         else {

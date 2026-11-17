@@ -244,7 +244,7 @@ async function saveAsTemplate() {
     <p class="muted">Mẫu giữ: gói ${esc(p?.name || TL.pack || '—')}, kiểu phụ đề, nhạc, brand kit, hiệu ứng và các graphic bạn tự thêm (graphic của bản dựng tự động sẽ được dựng lại theo video mới).</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="tsave">Lưu mẫu</button></div>`);
   $('#tsave').onclick = async () => {
-    if (dirty) await saveNow();
+    if (dirty && !await saveNow()) return;
     const clean = s => JSON.parse(JSON.stringify(s, (k, v) => (k === 'cid' || k === '_orig' || k === '_recipe' || k === '_tpl' || k === 'note' ? undefined : v)));
     const tpl = { name: $('#tname').value.trim() || 'Mẫu của tôi', category: $('#tcat').value, aspect: DW > DH ? '16:9' : '9:16', pack: TL.pack || '',
       desc: $('#tdesc').value.trim(), tags: $('#ttags').value.split(',').map(s => s.trim()).filter(Boolean),

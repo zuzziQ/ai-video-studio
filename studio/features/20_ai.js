@@ -127,7 +127,7 @@
     const body = { goal: $('#aig').value, tone: $('#ait').value, pack: pm === 'pick' ? $('#aipk').value : pm, density: $('#aid .on')?.dataset.d || 'vua', extra: $('#aix').value.trim() };
     readAfter('aim');
     const af = S.autofill?.afterMode() || '';
-    await S.saveNow();
+    if (!await S.saveNow()) return;
     const r = await S.api('/api/ai/edit', body);
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
     S.modal(`<h3><i class="ti ti-sparkles"></i> AI đang dựng…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="aicancel">Dừng</button></div>`);
@@ -223,7 +223,7 @@
     $('#aiqcgo').hidden = true;
     box.innerHTML = `<p class="muted ai-qcst"><span id="jobstep">${fix ? 'Đang sửa vị trí graphic…' : 'Kiểm tra nhanh (không tốn lượt Claude)…'}</span> <button class="ai-lnk" id="aiqstop">Dừng</button></p><div class="bar"><i></i></div>`;
     for (const f of document.querySelectorAll('#aiqc figure .ph i')) f.className = 'ti ti-loader-2 spin';
-    await S.saveNow();
+    if (!await S.saveNow()) { box.innerHTML = '<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa lưu được dự án — chưa kiểm tra.</p>'; $('#aiqcgo').hidden = false; return; }
     if (fix) S.pushUndo();
     const r = await S.api('/api/qc/quick', { times: ts, fix });
     if (!r.ok) { box.innerHTML = `<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa kiểm tra nhanh được: ${esc(r.error || 'lỗi')}</p>`; $('#aiqcgo').hidden = false; return; }

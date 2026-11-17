@@ -43,7 +43,7 @@
 
   async function run(next) {
     const body = { model: document.querySelector('[name=trm]:checked').value, lang: $('#trl').value, max: +$('#trx').value };
-    await S.saveNow();
+    if (!await S.saveNow()) return;
     const r = await S.api('/api/transcribe', body);
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
     const t0 = Date.now();
