@@ -4,8 +4,11 @@
 //   S12/M97: Kho của thương hiệu vừa lưu, không cần dự án đang mở)
 //   + /api/products/save (53_products); (c) Mục đích → /api/onboarding (02_onboarding.mjs).
 //   Bước (a) có "Gợi ý bằng AI" (trợ lý brand), bước (b) có "Điền bằng AI" (trợ lý product): 05_assist.js, M91. Chỉ ghi khi bấm Nhận.
-// - Trang chủ (#onb-home): 4 cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Tự lái, Video mới + Mẫu, Cắt clip từ video dài, Hàng loạt)
+// - Trang chủ (#onb-home): các cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Video mới, Tự lái, Mẫu, Cắt clip từ video dài, Hàng loạt)
 //   + dự án gần đây. Tự hiện khi chưa mở dự án; nút nhà trên thanh trên mở lại. Studio.openOnboarding() / Studio.openHome().
+//   S19 M132: Tự lái bắt đầu ở thẻ của trang chủ (thả nhiều video → /api/autopilot/upload, chọn thương hiệu); thanh trên chỉ còn
+//   chỉ báo việc nền (15_autopilot.js). S19 M136: dự án gần đây là lưới thẻ có ảnh bìa (/api/onboarding/thumb?i=, tạo nền ở
+//   scripts/home_cards.mjs), thời lượng, Kho, sửa lần cuối, đã xuất, dấu đang mở trên thanh tab; tìm theo tên, lọc theo thương hiệu.
 // - S17 M125: Studio mở không kèm dự án (không còn dự án mẫu tự tạo). Chưa có thương hiệu: trang chủ nhắc bước Chuẩn bị và tự mở
 //   hướng dẫn ở bước Thương hiệu (một lần mỗi phiên trình duyệt); "Xem thử dự án mẫu" chép sample/clip-mau rồi mở (/api/onboarding/sample).
 'use strict';
@@ -71,15 +74,42 @@
   #onb-home .card .ic .ti { font-size: 22px; } #onb-home .card b { display: block; font-size: 15px; margin-bottom: 4px; color: var(--tx); }
   #onb-home .card span { font-size: 12px; color: var(--tx2); line-height: 1.5; display: block; } #onb-home .card small { display: block; margin-top: 8px; font-size: 11px; color: var(--tx3); }
   #onb-home h3 { margin: 32px 0 8px; font-size: 13px; color: var(--tx2); font-weight: 600; }
-  #onb-home .rec { display: flex; flex-direction: column; gap: 4px; }
-  #onb-home .rec button { justify-content: flex-start; gap: 12px; padding: 12px; font-size: 13px; background: var(--bg1); border-color: var(--line); border-radius: var(--r); text-align: left; }
-  #onb-home .rec button .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #onb-home .rec small { font-size: 11px; color: var(--tx3); }
+  #onb-home .cards.sm { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; } #onb-home .cards.sm .card { padding: 16px; gap: 12px; }
+  #onb-home .cards.sm .card .ic { width: 40px; height: 40px; }
+  /* S19 M132: Tự lái bắt đầu ở đây (thả nhiều video + chọn thương hiệu), không còn nút trên thanh trên */
+  #onb-home .card.ap { cursor: default; flex-direction: column; align-items: stretch; gap: 12px; } #onb-home .card.ap:hover { border-color: var(--line); background: var(--bg2); }
+  #onb-home .card.ap .top { display: flex; gap: 16px; align-items: flex-start; } #onb-home .card.ap .top > div { flex: 1; min-width: 0; }
+  #onb-home .apdrop { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--line3); border-radius: var(--r); background: var(--bg1); color: var(--tx2); font-size: 12px; cursor: pointer; }
+  #onb-home .apdrop:hover, #onb-home .apdrop.over, #onb-home .apdrop:focus-visible { border-color: var(--acc); color: var(--tx); }
+  #onb-home .apdrop .ti { font-size: 20px; color: var(--acc); flex: none; } #onb-home .apdrop.busy { pointer-events: none; opacity: .7; }
+  #onb-home .aprow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--tx2); }
+  #onb-home .aprow select { flex: 1; min-width: 140px; height: 32px; font-size: 12px; } #onb-home .aprow button { font-size: 12px; height: 32px; }
+  #onb-home .apq { font-size: 11px; color: var(--tx3); }
+  /* S19 M136: dự án gần đây thành lưới thẻ có ảnh bìa (như màn dự án của CapCut / Premiere), tìm theo tên, lọc theo thương hiệu */
+  #onb-home .rhd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 32px 0 12px; } #onb-home .rhd h3 { margin: 0; flex: 1; min-width: 120px; }
+  #onb-home .rhd input { width: 220px; max-width: 100%; height: 32px; font-size: 12px; } #onb-home .rhd select { height: 32px; font-size: 12px; max-width: 180px; }
+  #onb-home .rec { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  #onb-home .pc { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 0 0 8px; border-radius: var(--r); }
+  #onb-home .pc[hidden], #onb-home .empty[hidden] { display: none; }
+  #onb-home .pc .th { position: relative; display: block; aspect-ratio: 16 / 10; border-radius: var(--r); overflow: hidden; background: var(--bg3); border: 1px solid var(--line); }
+  #onb-home .pc:hover .th, #onb-home .pc:focus-visible .th { border-color: var(--acc-line); } #onb-home .pc.cur .th { border-color: var(--acc); }
+  #onb-home .pc .th img { width: 100%; height: 100%; object-fit: cover; display: block; } #onb-home .pc .th.v img { object-fit: contain; }
+  #onb-home .pc .th > .ti { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--tx3); }
+  #onb-home .pc .th.wait { animation: onb-pulse 1.4s ease-in-out infinite; } @keyframes onb-pulse { 50% { opacity: .55; } }
+  #onb-home .pc .bd { position: absolute; display: flex; gap: 4px; align-items: center; padding: 2px 6px; border-radius: var(--rs); font-size: 11px; line-height: 16px; background: rgb(var(--color-scrim) / .72); color: rgb(var(--color-fg-on-media)); }
+  #onb-home .pc .bd.tl { top: 6px; left: 6px; } #onb-home .pc .bd.tr { top: 6px; right: 6px; } #onb-home .pc .bd.br { bottom: 6px; right: 6px; font-variant-numeric: tabular-nums; }
+  #onb-home .pc .bd.on { background: var(--acc); color: var(--bg0); } #onb-home .pc .bd .ok { color: var(--ok); }
+  #onb-home .pc .nm { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #onb-home .pc small { display: block; font-size: 11px; color: var(--tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #onb-home .pc small.set { color: var(--tx2); } #onb-home .pc small .ti { font-size: 12px; vertical-align: -2px; }
   #onb-home .empty { font-size: 12px; color: var(--tx3); padding: 12px; border: 1px dashed var(--line2); border-radius: var(--r); }
   #onb-home .prep { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding: 12px 16px; border-radius: var(--r); background: var(--acc-soft); border: 1px solid var(--acc-line); font-size: 13px; color: var(--tx); }
   #onb-home .prep .ti { font-size: 22px; color: var(--acc); flex: none; } #onb-home .prep div { flex: 1; min-width: 0; } #onb-home .prep small { display: block; color: var(--tx2); font-size: 12px; margin-top: 2px; }
   #onb-home .prep button { flex: none; font-size: 13px; }
   @media (max-width: 720px) { #onb-home .prep { flex-wrap: wrap; } }
   #onb-home .links { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; } #onb-home .links button { font-size: 12px; }
+  @media (max-width: 720px) { #onb-home .cards.sm { grid-template-columns: minmax(0, 1fr); } #onb-home .rhd input { width: 100%; } #onb-home .rhd select { max-width: none; flex: 1; } }
+  @media (max-width: 420px) { #onb-home .rec { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } #onb-home .in { padding-top: 32px; } }
   @media (max-width: 720px) { #onb-home .cards, .onb-g2, .onb-g3 { grid-template-columns: minmax(0, 1fr); } .onb-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); } }`;
   document.head.appendChild(css);
 
@@ -429,35 +459,146 @@
     }
     return out;
   };
+  // S19 M136: thẻ dự án gần đây
+  const fmtDur = d => { d = Math.round(+d || 0); if (!d) return ''; const h = Math.floor(d / 3600), m = Math.floor(d / 60) % 60, x = String(d % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
+  const fmtAgo = t => {
+    const d = new Date(t), m = (Date.now() - d) / 60000; if (isNaN(d)) return '';
+    if (m < 2) return 'vừa sửa'; if (m < 60) return `sửa ${Math.round(m)} phút trước`; if (m < 24 * 60) return `sửa ${Math.round(m / 60)} giờ trước`;
+    if (m < 48 * 60) return 'sửa hôm qua'; return `sửa ${fmtDay(t)}`;
+  };
+  const fold = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase(); // tìm không dấu
+  const thumbUrl = r => avsUrl(`/api/onboarding/thumb?i=${r.i}&v=${r.thumb.v}`);
+  const thumbHtml = r => r.thumb ? `<img loading="lazy" alt="" src="${esc(thumbUrl(r))}">` : r.gone ? '<i class="ti ti-folder-off"></i>' : r.thumbPending ? '' : '<i class="ti ti-movie"></i>';
+  const projCard = r => {
+    const meta = r.gone ? 'Thư mục không còn trên máy' : [r.kho, fmtAgo(r.edited || r.t)].filter(Boolean).join(' · ');
+    return `<button class="pc${r.current ? ' cur' : ''}" data-r="${r.i}" data-q="${esc(fold(`${r.name} ${r.set || ''} ${r.kho || ''}`))}" data-b="${esc(r.brand || '')}" title="${esc(r.set ? `${r.set} · ${r.name}` : r.name)}">
+      <span class="th${r.aspect === 'v' ? ' v' : ''}${!r.thumb && r.thumbPending ? ' wait' : ''}">${thumbHtml(r)}
+        ${r.current ? '<span class="bd tl on">Đang sửa</span>' : r.open ? '<span class="bd tl" title="Dự án này có trên thanh tab">Đang mở</span>' : ''}
+        ${r.exported ? '<span class="bd tr"><i class="ti ti-circle-check ok"></i>Đã xuất</span>' : ''}${r.dur ? `<span class="bd br">${fmtDur(r.dur)}</span>` : ''}</span>
+      <span class="nm">${esc(r.name)}</span>
+      ${r.set ? `<small class="set"><i class="ti ti-stack-2"></i> ${esc(r.set)}${r.more ? ` · +${r.more} clip` : ''}</small>` : ''}<small class="mt">${esc(meta)}</small></button>`;
+  };
+  function filterRec() {
+    if (!HOME) return;
+    const q = fold(HOME.querySelector('#onb-q')?.value).trim(), b = HOME.querySelector('#onb-kb')?.value ?? '*';
+    let n = 0;
+    for (const c of HOME.querySelectorAll('.rec .pc')) { const ok = (!q || c.dataset.q.includes(q)) && (b === '*' || c.dataset.b === b); c.hidden = !ok; n += ok; }
+    const e = HOME.querySelector('#onb-none'); if (e) e.hidden = n > 0;
+  }
+  // ảnh bìa đang tạo nền: hỏi lại vài lần rồi thay khung xám bằng ảnh (không vẽ lại cả trang chủ)
+  let thumbPoll = 0;
+  function pollThumbs(left = 8) {
+    clearTimeout(thumbPoll);
+    if (!HOME || !left || !(ST?.recent || []).some(r => r.thumbPending)) return;
+    thumbPoll = setTimeout(async () => {
+      const s = await api('/api/onboarding').catch(() => null); if (!s?.recent || !HOME) return;
+      ST = s;
+      for (const r of s.recent) {
+        const th = HOME.querySelector(`.pc[data-r="${r.i}"] .th`); if (!th || th.querySelector('img') || r.thumbPending) continue;
+        th.classList.remove('wait'); th.insertAdjacentHTML('afterbegin', thumbHtml(r));
+      }
+      pollThumbs(left - 1);
+    }, 2500);
+  }
+  // S19 M132: thẻ Tự lái của trang chủ: thả nhiều video, chọn thương hiệu (cùng lựa chọn với panel Tự lái: /api/autopilot/settings)
+  let AP = null;
+  const apOpt = (v, l) => `<option value="${esc(v)}" ${v === AP?.brand ? 'selected' : ''}>${esc(l)}</option>`;
+  const apQueue = st => {
+    const it = st?.items || [], run = it.filter(x => x.state === 'running').length, wait = it.filter(x => x.state === 'queued').length;
+    return [run && `Đang chạy ${run} việc`, wait && `${wait} việc chờ`].filter(Boolean).join(' · ');
+  };
+  // dòng trạng thái hàng đợi dưới thẻ Tự lái: hỏi lại khi trang chủ còn mở và hàng đợi còn việc
+  let apPoll = 0;
+  function pollAp() {
+    clearTimeout(apPoll);
+    if (!HOME || !apQueue(AP?.st)) return;
+    apPoll = setTimeout(async () => {
+      const st = await api('/api/autopilot/state').catch(() => null);
+      if (!HOME || !st || st.error) return;
+      AP.st = st; const q = HOME.querySelector('#onb-apq'); if (q && !HOME.querySelector('#onb-apdrop.busy')) q.textContent = apQueue(st);
+      pollAp();
+    }, 3000);
+  }
+  const apCard = brands => `<div class="card ap"><div class="top"><span class="ic"><i class="ti ti-rocket"></i></span><div><b>Tự lái: thả video → video hoàn chỉnh</b>
+      <span>Thả một hay nhiều video quay sẵn. AI tự cắt, thêm phụ đề, hiệu ứng, nhạc và xuất video, chạy nền trong khi bạn làm việc khác.</span></div></div>
+    <div class="apdrop" id="onb-apdrop" role="button" tabindex="0"><i class="ti ti-cloud-upload"></i><div><b>Thả video vào đây</b> hoặc bấm để chọn (được chọn nhiều video)</div></div>
+    <input type="file" id="onb-apfile" accept="video/*,.mkv" multiple hidden>
+    <div class="aprow"><label for="onb-apbrand">Thương hiệu</label><select id="onb-apbrand">${apOpt('', 'Theo hồ sơ Tự lái')}${apOpt('__none', 'Không thương hiệu · Kho Chung')}${brands.map(b => apOpt(b.id, b.title || b.name || b.id)).join('')}</select>
+      <button class="ghost" data-h="auto" title="Mở panel Tự lái: hàng đợi, thư mục tự động, hồ sơ"><i class="ti ti-list-details"></i> Hàng đợi</button></div>
+    <span class="apq" id="onb-apq">${esc(apQueue(AP?.st))}</span></div>`;
+  async function apUpload(files) {
+    const dz = HOME?.querySelector('#onb-apdrop'), q = HOME?.querySelector('#onb-apq');
+    const vids = files.filter(f => /\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name));
+    if (vids.length < files.length) toast(`Bỏ qua ${files.length - vids.length} tệp không phải video`);
+    if (!vids.length) return;
+    dz?.classList.add('busy');
+    let ok = 0;
+    for (const [k, f] of vids.entries()) {
+      if (q) q.textContent = `Đang chép ${k + 1}/${vids.length}: ${f.name} (${(f.size / 1048576).toFixed(0)} MB)…`;
+      const u = `/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(AP?.st?.settings?.profile || '')}&brand=${encodeURIComponent(AP?.brand || '')}`;
+      const r = await fetch(u, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
+      if (r.error) toast(`Lỗi “${f.name}”: ${r.error}`); else ok++;
+    }
+    dz?.classList.remove('busy');
+    if (ok) toast(`Đã thêm ${ok} video vào hàng đợi Tự lái. Video chạy nền, bạn cứ làm việc khác.`);
+    const st = await api('/api/autopilot/state').catch(() => null); if (st && !st.error && AP) AP.st = st;
+    if (q) q.textContent = apQueue(AP?.st);
+    Studio.autopilotRefresh?.(); pollAp();
+  }
+  function wireAp() {
+    const dz = HOME.querySelector('#onb-apdrop'), fi = HOME.querySelector('#onb-apfile'); if (!dz) return;
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fi.click(); } });
+    fi.addEventListener('change', () => { apUpload([...fi.files]); fi.value = ''; });
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); apUpload([...e.dataTransfer.files]); });
+    HOME.querySelector('#onb-apbrand').addEventListener('change', e => { AP.brand = e.target.value; api('/api/autopilot/settings', { brand: AP.brand }).catch(() => {}); });
+  }
   async function openHome() {
     await loadState();
-    const nb = await brandCount();
+    const [brands, st] = await Promise.all([api('/api/brands').catch(() => null), api('/api/autopilot/state').catch(() => null)]);
+    const nb = Array.isArray(brands) ? brands.length : -1;
+    AP = { st: st && !st.error ? st : null, brand: st?.settings?.brand || '' };
     hideHome();
     HOME = document.createElement('div'); HOME.id = 'onb-home';
-    const p = purpose(ST?.purpose), rec = ST?.recent || [];
+    const p = purpose(ST?.purpose), rec = groupRecent(ST?.recent || []);
     const card = (act, ic, title, sub, small = '') => `<button class="card" data-h="${act}"><span class="ic"><i class="ti ${ic}"></i></span><div><b>${title}</b><span>${sub}</span>${small ? `<small>${small}</small>` : ''}</div></button>`;
+    const kb = [...new Map(rec.filter(r => !r.gone).map(r => [r.brand || '', r.kho || 'Chung'])).entries()];
     HOME.innerHTML = `<div class="in"><div class="hd"><div class="grow"><h1>Bạn muốn làm video gì hôm nay?</h1><p class="sub">Chọn một cách bắt đầu. Studio dẫn bạn từng bước.</p></div>
       ${ST?.project ? '<button class="ghost" data-h="close" title="Về trình chỉnh sửa (Esc)"><i class="ti ti-x"></i> Đóng</button>' : ''}</div>
-      <div class="cards">${card('auto', 'ti-rocket', 'Thả video → video hoàn chỉnh', 'Thả video quay sẵn, AI tự cắt, thêm phụ đề, hiệu ứng, nhạc và xuất video.', 'Tự lái')}
-        ${card('tpl', 'ti-layout-grid', 'Dựng theo mẫu', 'Chọn một mẫu đẹp sẵn rồi thay chữ, ảnh, video của bạn.', p ? `Gợi ý cho ${p[2]}` : 'Gần 90 mẫu theo lĩnh vực')}
-        ${card('long', 'ti-scissors', 'Cắt clip từ video dài', 'Đưa video dài (livestream, podcast, buổi học), AI chọn đoạn hay làm clip ngắn.', 'Cắt clip')}
-        ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ một file Excel hoặc CSV, làm nhiều video cùng mẫu trong một lần.', 'Hàng loạt')}</div>
+      <div class="cards">${card('new', 'ti-video-plus', 'Video mới', 'Chọn video quay sẵn rồi tự tay dựng: cắt, phụ đề, hiệu ứng, nhạc, xuất.', 'Trình chỉnh sửa')}
+        ${apCard(Array.isArray(brands) ? brands : [])}</div>
+      <div class="cards sm">${card('tpl', 'ti-layout-grid', 'Dựng theo mẫu', 'Chọn mẫu đẹp sẵn rồi thay chữ, ảnh, video.', p ? `Gợi ý cho ${p[2]}` : 'Gần 90 mẫu theo lĩnh vực')}
+        ${card('long', 'ti-scissors', 'Cắt clip từ video dài', 'Livestream, podcast, buổi học: AI chọn đoạn hay.', 'Cắt clip')}
+        ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ file Excel hoặc CSV, nhiều video cùng mẫu.', 'Hàng loạt')}</div>
       ${nb === 0 ? `<div class="prep"><i class="ti ti-briefcase"></i><div><b>Chưa có thương hiệu</b><small>Làm bước Chuẩn bị trước: thương hiệu (logo, màu, lời kết) và Kho chứa dự án, thành phẩm.</small></div>
         <button class="primary" data-h="prep"><i class="ti ti-arrow-right"></i> Chuẩn bị</button></div>` : ''}
-      <h3>Dự án gần đây</h3><div class="rec">${rec.length ? groupRecent(rec).map(r => `<button data-r="${r.i}" ${r.current ? 'disabled' : ''}><i class="ti ${r.set ? 'ti-stack-2' : 'ti-folder'}"></i><span class="nm">${esc(r.set ? `${r.set} · ${r.name}` : r.name)}</span><small>${r.current ? 'đang mở' : r.set ? `bộ clip${r.more ? ` · +${r.more} clip khác đã mở` : ''}` : esc(r.parent)}${r.t && !r.current ? ' · ' + esc(fmtDay(r.t)) : ''}</small></button>`).join('')
-        : '<div class="empty">Chưa có dự án nào. Bắt đầu bằng một trong 4 cách ở trên.</div>'}</div>
+      <div class="rhd"><h3>Dự án gần đây</h3>${rec.length > 1 ? `<input type="search" id="onb-q" placeholder="Tìm dự án theo tên" title="Gõ có dấu hay không dấu đều được" aria-label="Tìm dự án theo tên">` : ''}
+        ${kb.length > 1 ? `<select id="onb-kb" aria-label="Lọc theo thương hiệu"><option value="*">Mọi thương hiệu</option>${kb.map(([id, t]) => `<option value="${esc(id)}">${esc(t)}</option>`).join('')}</select>` : ''}</div>
+      ${rec.length ? `<div class="rec">${rec.map(projCard).join('')}</div><div class="empty" id="onb-none" hidden>Không có dự án khớp. Thử tên khác hoặc chọn Mọi thương hiệu.</div>`
+        : '<div class="empty">Chưa có dự án nào. Bắt đầu bằng một trong các cách ở trên.</div>'}
       <div class="links"><button class="ghost" data-h="wiz"><i class="ti ti-route"></i> Xem lại hướng dẫn</button>
         <button class="ghost" data-h="sample" title="Mở một video mẫu có sẵn để xem Studio làm được gì"><i class="ti ti-player-play"></i> Xem thử dự án mẫu</button></div></div>`;
     HOME.addEventListener('click', onHome);
+    HOME.addEventListener('input', e => e.target.id === 'onb-q' && filterRec());
+    HOME.addEventListener('change', e => e.target.id === 'onb-kb' && filterRec());
+    // thả tệp ra ngoài ô Tự lái: không để trình chỉnh sửa (đang mở bên dưới) chép tệp vào media/ của dự án
+    for (const ev of ['dragover', 'drop']) HOME.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); });
     document.body.appendChild(HOME);
+    wireAp();
     document.addEventListener('keydown', homeKey, true);
+    pollThumbs(); pollAp();
   }
   async function onHome(e) {
     const r = e.target.closest('[data-r]');
     if (r) {
-      r.disabled = true; r.querySelector('small').textContent = 'đang mở…';
+      if (r.classList.contains('cur')) return hideHome(); // dự án đang sửa: về trình chỉnh sửa
+      if (r.disabled) return;
+      const m = r.querySelector('small.mt');
+      r.disabled = true; m.textContent = 'đang mở…';
       // S17 M126: lưu dự án đang mở trước khi đổi sang dự án khác; lưu không được thì dừng, không bỏ mất thay đổi
-      if (ST?.project && Studio.TL) { await Studio.saveNow().catch(() => {}); if (Studio.dirty) { r.disabled = false; r.querySelector('small').textContent = 'chưa lưu được dự án đang mở'; return; } }
+      if (ST?.project && Studio.TL) { await Studio.saveNow().catch(() => {}); if (Studio.dirty) { r.disabled = false; m.textContent = 'chưa lưu được dự án đang mở'; return; } }
       const j = await api('/api/onboarding/open', { i: +r.dataset.r }).catch(err => ({ error: err.message }));
       if (j.error) { toast(j.error); return openHome(); }
       return location.reload();
@@ -465,6 +606,7 @@
     const b = e.target.closest('[data-h]'); if (!b) return;
     const a = b.dataset.h;
     if (a === 'close') return hideHome();
+    if (a === 'new') { hideHome(); return document.getElementById('newproj')?.click(); }
     if (a === 'wiz' || a === 'prep') return openWizard(0);
     if (a === 'sample') {
       b.disabled = true;

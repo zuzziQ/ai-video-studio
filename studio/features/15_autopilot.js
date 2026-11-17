@@ -41,7 +41,9 @@
   .ap-form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); } .ap-form label { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin-bottom: var(--space-050); }
   .ap-form .full { grid-column: 1 / 3; } .ap-form .chk { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); } .ap-form .chk label { display: flex; gap: var(--space-1); align-items: center; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); margin: 0; }
   .ap-form .chk input { width: auto; margin: 0; } .ap-form input[type=time] { color-scheme: dark; }
-  #ap-topbtn .pct { font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); margin-left: var(--space-1); font-variant-numeric: tabular-nums; }`;
+  #ap-topbtn[hidden] { display: none; }
+  #ap-topbtn .pct { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); font-variant-numeric: tabular-nums; } #ap-topbtn .pct:empty { display: none; }
+  #ap-topbtn.run .ti { color: rgb(var(--color-accent-text)); } #ap-topbtn.ok .ti { color: rgb(var(--color-success)); } #ap-topbtn.bad .ti { color: rgb(var(--color-danger)); }`;
   // Data-driven width of the progress bar arrives as data-v="--w:40%" and is set with style.setProperty after insert.
   const applyVars = root => (root || document).querySelectorAll('[data-v]').forEach(el => el.dataset.v.split(';').forEach(p => { const i = p.indexOf(':'); if (i > 0) el.style.setProperty(p.slice(0, i).trim(), p.slice(i + 1).trim()); }));
   document.head.appendChild(css);
@@ -65,10 +67,27 @@
     if (first || force) return render();
     if (sig !== S.sig) { S.sig = sig; renderLive(); }
   }
+  // S19 M132: thanh trên chỉ còn chỉ báo việc nền (như hàng đợi của Adobe Media Encoder): hiện khi có việc chạy / chờ, hoặc việc
+  // vừa xong / vừa lỗi trong 15 phút mà chưa mở panel Tự lái xem; bấm mở panel. Điểm bắt đầu Tự lái ở thẻ của trang chủ.
+  const FRESH_MS = 15 * 60e3, SEEN = 'avs.apSeen';
+  const seenAt = () => { try { return +localStorage.getItem(SEEN) || 0; } catch { return 0; } };
   function topBadge() {
     const b = $('#ap-topbtn'); if (!b) return;
-    const run = S.st?.items.find(i => i.state === 'running'), wait = S.st?.items.filter(i => i.state === 'queued').length || 0;
-    b.querySelector('.pct').textContent = run ? `${Math.round((run.progress || 0) * 100)}%${wait ? ` +${wait}` : ''}` : wait ? `${wait} chờ` : '';
+    const items = S.st?.items || [], now = Date.now();
+    if (active()) try { localStorage.setItem(SEEN, String(now)); } catch { /* không lưu được: chỉ báo tự tắt sau 15 phút */ }
+    const run = items.find(i => i.state === 'running'), wait = items.filter(i => i.state === 'queued').length;
+    const since = Math.max(now - FRESH_MS, seenAt()), fin = items.filter(i => i.finished && Date.parse(i.finished) > since && (i.state === 'done' || i.state === 'error'));
+    const bad = fin.filter(i => i.state === 'error').length, done = fin.length - bad;
+    const [cls, ic, txt, tip] = run ? ['run', 'ti-loader-2 spin', `${Math.round((run.progress || 0) * 100)}%${wait ? ` +${wait}` : ''}`, `Tự lái đang chạy “${run.title || ''}”${wait ? ` · ${wait} việc chờ` : ''}`]
+      : wait ? ['run', 'ti-clock', `${wait}`, `Tự lái: ${wait} việc đang chờ`]
+      : bad ? ['bad', 'ti-alert-triangle', `${bad}`, `Tự lái: ${bad} việc vừa lỗi`]
+      : done ? ['ok', 'ti-circle-check', `${done}`, `Tự lái: ${done} video vừa xong`] : [];
+    b.hidden = !cls;
+    if (!cls) return;
+    b.className = `ghost ${cls}${b.classList.contains('on') ? ' on' : ''}`;
+    const i = b.querySelector('.ti'); if (i.className !== `ti ${ic}`) i.className = `ti ${ic}`;
+    b.querySelector('.pct').textContent = txt;
+    b.title = `${tip} · bấm để xem hàng đợi`; b.setAttribute('aria-label', b.title);
   }
 
   // ---------- render ----------
@@ -356,7 +375,9 @@
   const openMe = () => document.querySelector('#rail [data-p="autopilot"]')?.click();
   Studio.addPanel('autopilot', 'ti-rocket', 'Tự lái', () => { render(); refresh(true); });
   // the top bar exists even when no project is open (onReady never fires then)
-  Studio.addTopButton('<button class="ghost" id="ap-topbtn" title="Tự lái: thả video → video hoàn chỉnh"><i class="ti ti-rocket"></i> Tự lái<span class="pct"></span></button>', openMe);
+  // S19 M132: chỉ báo việc nền (ẩn khi hàng đợi trống); trang chủ gọi Studio.autopilotRefresh sau khi thả video ở thẻ Tự lái
+  Studio.addTopButton('<button class="ghost" id="ap-topbtn" hidden title="Tự lái: việc nền"><i class="ti ti-rocket"></i><span class="pct"></span></button>', openMe);
+  Studio.autopilotRefresh = () => refresh(false);
   let n = 0; setInterval(() => (active() || ++n % 4 === 0) && refresh(false), 1500);
   refresh(false);
   if (/^#(tu-lai|autopilot)/.test(location.hash)) setTimeout(openMe, 300);
