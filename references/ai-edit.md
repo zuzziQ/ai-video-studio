@@ -25,6 +25,11 @@ Tuỳ chọn trong hộp thoại: mục tiêu (khoá học / BĐS / review / chi
 ```
 `_base` là các cảnh nền dài lấy từ recipe của gói (khung, màu phim, thanh tiến độ…).
 
+**Né mặt và số liệu (S13 · M103–M104)**:
+- prompt có mục "Bố cục khung hình": vùng mặt người nói theo % khung (`faceZone` trong `scripts/face_track_project.mjs`, từ `timeline.face_track`), vùng phụ đề, vùng an toàn; và luật: không che mặt khi đang nói, không thẻ rỗng, mọi con số / % phải có nguyên văn trong lời thoại, không quá 6 s không có graphic;
+- `validate` bỏ cảnh có số / % không nói (`inventedNumbers`; 0–10 không có % thì cho qua; "15 phần trăm" tính là 15%; ghi lý do vào `dropped`);
+- trước khi ghi plan, `placePlan` (`scripts/ai_qc.mjs`) render kế hoạch trong engine (cùng cách lấy mẫu và dò mặt YuNet như QC) rồi dùng bộ giải của QC dời / thu nhỏ graphic che mặt đang nói, đè phụ đề, tràn mép hoặc chữ ngoài vùng an toàn (tối đa 3 vòng, ~35 s cho video 80 s). Kết quả ở `plan.placed = {moved, left}`, hiện trong hộp "Đã dựng xong". `--no-place` bỏ bước này. Tự động (`/api/autofill`) chạy bước này qua `scripts/place_auto.mjs` (tiến trình con) cho b-roll `_auto` chưa bị chỉnh, không dời graphic người dùng tự đặt. Số liệu: trường chữ và trường số hiển thị con số (`value`, `percent`, `score`, `price`…) đều phải có trong lời thoại nhận dạng.
+
 **Áp dụng** (phía client, hoàn tác bằng ⌘Z):
 - xoá các cảnh `_ai` / `_recipe` **chưa bị người dùng chỉnh** (chưa có `_orig`), rồi thêm cảnh mới;
 - thay nhạc phủ cả video và các SFX `_ai`;

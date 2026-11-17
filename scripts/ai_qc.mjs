@@ -264,8 +264,10 @@ async function domPass(E, tl, caps, times, stillDir, tag, onP) {
   return { samples, failed, DW, DH };
 }
 
+// Platform safe zone (design px): app buttons, the profile row and the description cover the rest.
+export const safeOf = tl => (isVert(tl) ? { x: 40, y: 130, w: 600, h: 870 } : { x: 60, y: 40, w: 1160, h: 620 });
 function domIssues(tl, caps, P) {
-  const { samples, DW, DH } = P, M = 6, SAFE = isVert(tl) ? { x: 40, y: 130, w: 600, h: 870 } : { x: 60, y: 40, w: 1160, h: 620 };
+  const { samples, DW, DH } = P, M = 6, SAFE = safeOf(tl);
   const per = {}; // key -> {kind, i, ts:[], frac, mid}
   const hit = (kind, i, t, extra = {}) => { const k = `${kind}:${i}`; const o = per[k] || (per[k] = { kind, i, ts: [], ...extra }); o.ts.push(t); for (const [a, b] of Object.entries(extra)) if (typeof b === 'number') o[a] = Math.max(o[a] || 0, b); return o; };
   for (const s of samples) {
@@ -593,7 +595,7 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
   const sceneRects = i => P.samples.filter(s => s.m.scenes[i]).map(s => ({ t: s.t, face: s.face, cap: s.m.cap ? bbox(s.m.cap.texts) : null, rects: [...s.m.scenes[i].els, ...s.m.scenes[i].texts] }));
   // 1. per-scene placement (text off canvas, face covered, caption covered) — one solve per scene
   const byScene = {};
-  for (const is of issues) if (['text_offcanvas', 'face_cover', 'caption_overlap'].includes(is.kind) && /^s\d+$/.test(is.target || '')) (byScene[is.target] = byScene[is.target] || []).push(is);
+  for (const is of issues) if (['text_offcanvas', 'face_cover', 'caption_overlap', 'text_unsafe'].includes(is.kind) && /^s\d+$/.test(is.target || '')) (byScene[is.target] = byScene[is.target] || []).push(is);
   for (const [id, list] of Object.entries(byScene)) {
     const i = +id.slice(1), s = tl.scenes[i];
     const qcKf = s.kf?.length === 1 && s._qc && s.kf[0].ease === 'hold'; // a keyframe QC (or a Claude move) added: can be adjusted again
@@ -601,14 +603,16 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
     const R = sceneRects(i), B = bbox(R.flatMap(r => r.rects).filter(r => r.s == null || r.s.length >= 1));
     if (!B) continue;
     const avoid = [];
-    if (list.some(x => x.kind === 'face_cover')) avoid.push(...R.filter(r => r.face && speakingAt(caps, r.t)).map(r => r.face));
+    // S13 · M104: whatever the issue, never move a graphic onto the speaking face or the captions (a fix for one used to cause the other)
+    avoid.push(...R.filter(r => r.face && speakingAt(caps, r.t)).map(r => r.face));
     const capB = bbox(R.map(r => r.cap).filter(Boolean));
-    if (capB && list.some(x => x.kind === 'caption_overlap')) avoid.push(grow(capB, 6));
+    if (capB) avoid.push(grow(capB, 6));
     // don't push it onto the base layer's own small furniture (logo badge, progress pill…)
     const seen = new Set();
     for (const smp of P.samples.filter(x => x.m.scenes[i])) for (const [j, o] of Object.entries(smp.m.scenes)) if (tl.scenes[j] && isBase(tl.scenes[j], tl))
       for (const r of o.els) { const k = [r.x, r.y, r.w, r.h].map(Math.round).join(','); if (r.w * r.h < DW * DH * .12 && !seen.has(k)) { seen.add(k); avoid.push(r); } }
-    const sol = solve(B, M, avoid);
+    // text outside the platform safe zone → place inside it; no room there → at least inside the frame
+    const sol = (list.some(x => x.kind === 'text_unsafe') && solve(B, safeOf(tl), avoid)) || solve(B, M, avoid);
     const minK = sizeKey(s) ? Math.min(1, 30 / Math.max(...(sizeKey(s) === 'size' ? [s.size] : s.lines.map(L => L.size || 48)))) : .55;
     if ((!sol || (sol.k < Math.max(.55, minK) && !(sizeKey(s) && sol.k >= minK))) && list.some(x => x.kind === 'text_offcanvas')) {
       // too long to shrink readably: reflow a plain one-line text graphic into a 2-line text at the same height
@@ -708,6 +712,40 @@ async function sheet(files, out, vert) {
 // ---------- main ----------
 // Stable id of an issue between a check run and the fix run that follows on the same timeline (same hash → same passes,
 // Claude result from cache): Studio sends back the ids the user accepted as suggestions (o.only), only those get fixed.
+// S13 · M104: place the graphics of an "AI dựng giúp" plan before they reach the timeline. The plan is rendered in the engine
+// (same sampling and face boxes as QC); the QC solver moves/shrinks every graphic that covers the speaking face, sits on the
+// captions or has text outside the frame / safe zone; later rounds re-measure what moved. No Claude, no audio.
+// opts: onP(0..1) progress, only(scene) which graphics may move, tag: fields for a reflowed text that replaces one.
+// → { scenes (plan order; moved ones carry a hold keyframe + _qc; a too-long label may become a 2-line text), moved, left }
+export async function placePlan(dir, tl, caps, plan, { onP, only, tag = { _ai: true } } = {}) {
+  const t = { ...deep(tl), scenes: deep(plan.scenes), pack: plan.pack, caption_style: plan.caption_style || tl.caption_style };
+  const c = deep(caps), PLACE = new Set(['text_offcanvas', 'face_cover', 'caption_overlap', 'text_unsafe']);
+  // only(scene): which graphics may move (Tự động passes its own _auto scenes, never what the user placed)
+  const placeable = i => { const sc = /^s\d+$/.test(i.target || '') && t.scenes[+i.target.slice(1)]; return PLACE.has(i.kind) && !!sc && !sc._base && (!only || only(sc)); };
+  const hidden0 = new Set(t.scenes.filter(s => s.hidden)), moved = new Set(); // hidden before this call: kept as they are
+  let left = [], E = null, stillDir = null;
+  try {
+    stillDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-place-'));
+    E = await openEngine(dir);
+    for (let round = 0; round < 3; round++) {
+      // progress: round 1 is most of the work, a 2nd/3rd round only when something moved
+      const P = await domPass(E, t, c, sampleTimes(t, c), stillDir, 'p' + round, k => onP && onP(Math.min(1, (round + k) / 3)));
+      left = domIssues(t, c, P).filter(placeable);
+      if (!left.length || round === 2) break;
+      const n0 = t.scenes.length, fixed = applyDeterministic(t, c, left, P, new Set());
+      if (!fixed.size) break;
+      for (const i of fixed) moved.add(i.target);
+      // a reflowed 2-line text replaces a hidden graphic: tagged as the caller's (AI plan: _ai, Tự động: _auto)
+      for (const s of t.scenes.slice(n0)) Object.assign(s, tag);
+    }
+  } finally {
+    if (E) await E.browser.close().catch(() => {});
+    if (stillDir) fs.rmSync(stillDir, { recursive: true, force: true });
+  }
+  onP && onP(1);
+  // drop only what this call hid (a graphic replaced by a reflowed text), never scenes that were already hidden
+  return { scenes: t.scenes.filter(s => !(s.hidden && !hidden0.has(s) && s._qc && !s._base)), moved: moved.size, left };
+}
 export const qcKey = i => [i.src || 'auto', i.kind, i.target || '', (+i.t || 0).toFixed(2)].join('|');
 
 export async function runQC(src, o = {}) {

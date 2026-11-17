@@ -27,6 +27,26 @@ export function arollSeq(tl) {
   return c ? { seq: c.src.seq, fps: c.src.fps || tl.fps || 30 } : tl.aroll?.frames ? { seq: tl.aroll.frames, fps: tl.fps || 30 } : null;
 }
 
+// S13 · M103: where the speaker's head is over [t0, t1] (whole video by default), in % of the frame, for placing graphics.
+// From timeline.face_track (hairline→chin box: centre ox/oy, height fs) with hair above and a little margin; 10th–90th
+// percentile so one bad detection does not widen the zone. No track → the fixed timeline.face; no face at all → null.
+// → { x0, x1, y0, y1 } (% of frame width / height)
+export function faceZone(tl, t0 = 0, t1 = Infinity) {
+  const vert = (tl.height || 1920) > (tl.width || 1080), ar = (tl.height || 1920) / (tl.width || 1080); // frame height / width (4:5, 1:1 too)
+  let keys = (tl.face_track?.keys || []).filter(k => k.t >= t0 - .3 && k.t <= t1 + .3);
+  if (!keys.length && tl.face_track?.keys?.length) keys = tl.face_track.keys; // range between two keys: use the whole track
+  const box = k => { const w = k.fs * .85 * ar; return { x0: k.ox - w / 2, x1: k.ox + w / 2, y0: k.oy - k.fs * .65, y1: k.oy + k.fs * .5 }; };
+  let boxes = keys.map(box);
+  if (!boxes.length && tl.face) {
+    const [DW, DH] = tl.design || (vert ? [720, 1280] : [1280, 720]); // timeline.face is in design px (find_face.py --design)
+    boxes = [box({ ox: tl.face.x / DW * 100, oy: tl.face.y / DH * 100, fs: vert ? 24 : 40 })]; // typical talking-head face height
+  }
+  if (!boxes.length) return null;
+  const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.max(0, Math.round((s.length - 1) * p)))]; };
+  const c = v => Math.round(Math.max(0, Math.min(100, v)));
+  return { x0: c(q(boxes.map(b => b.x0), .1)), x1: c(q(boxes.map(b => b.x1), .9)), y0: c(q(boxes.map(b => b.y0), .1)), y1: c(q(boxes.map(b => b.y1), .9)) };
+}
+
 // Runs face_track.py on <dir>/<seq folder>; returns {seq, keys} or null (no person / no detector).
 export async function faceTrack(dir, seq, { fps = 5, srcFps = 30, py = pyBin(SKILL) } = {}) {
   const out = path.join(os.tmpdir(), `avs_ft_${process.pid}_${Date.now()}.json`);

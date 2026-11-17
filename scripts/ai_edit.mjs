@@ -9,6 +9,8 @@ import os from 'node:os'; import path from 'node:path'; import { spawn, execFile
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome } from './platform.mjs';
 import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
+import { faceZone } from './face_track_project.mjs';
+import { safeOf, designOf } from './ai_qc.mjs'; // ai_qc runs its CLI only when executed directly; Chrome opens only in placePlan
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -86,6 +88,10 @@ export function buildPrompt({ tl, caps, cat, lib, o }) {
   const packList = packs.filter(p => p.id !== 'basic').map(p => `- ${p.id}: ${p.name} — ${p.desc.slice(0, 120)} (phụ đề: ${p.caption || 'mặc định'})`).join('\n');
   const itemList = packs.map(p => `## Gói ${p.id}\n` + p.items.filter(it => items.get(it.type)?.pack === p.id).map(it => `- ${it.type} (${it.label}) ví dụ params: ${JSON.stringify(compact(it.ex))}`).join('\n')).join('\n');
   const tpl = lib.tpls.slice(0, 60).map(t => `${t.name} → ${t.pack}`).join('; ');
+  const fz = faceZone(tl); // S13 · M103/M104: where the head is, so graphics are not planned over it
+  const [DW, DH] = designOf(tl), SF = safeOf(tl), pc = (v, d) => Math.round(v / d * 100);
+  const safe = `Vùng an toàn để đặt chữ (ngoài vùng này bị nút / mô tả của app che): x ${pc(SF.x, DW)}–${pc(SF.x + SF.w, DW)}%, y ${pc(SF.y, DH)}–${pc(SF.y + SF.h, DH)}%. Phụ đề nằm ở phần dưới khung (khoảng y ${vertical ? '62–80' : '75–92'}%).`;
+  const layout = (fz ? `Mặt người nói nằm khoảng x ${fz.x0}–${fz.x1}%, y ${fz.y0}–${fz.y1}% của khung (tính từ góc trên trái). ` : 'Không dò được mặt người nói. ') + safe;
   return `Bạn là editor video ngắn tiếng Việt chuyên nghiệp. Hãy lên bản dựng cho video người nói (talking-head) ${vertical ? 'dọc 9:16' : 'ngang 16:9'}, dài ${tl.duration}s.
 Mục tiêu video: ${o.goal || 'khác'}. Giọng điệu: ${o.tone || 'tự nhiên'}. Mật độ graphic: ${n[0]}–${n[1]} cảnh.${o.extra ? `\nYêu cầu thêm của người dùng: ${o.extra}` : ''}
 Brand: ${JSON.stringify(tl.brand || {})}
@@ -105,6 +111,9 @@ Chủ đề: ${topics}
 Template: ${brTpl}
 Bảng màu: ember, light, neon, ocean, violet, gold, forest, sunset, candy, mono
 
+# Bố cục khung hình
+${layout}
+
 # Nhạc nền (mood): ${moods}
 # SFX: ${sfxNames}
 
@@ -113,6 +122,7 @@ Bảng màu: ember, light, neon, ocean, violet, gold, forest, sunset, candy, mon
 2. Sửa phụ đề để hiển thị: sửa lỗi nhận dạng (tên riêng, chính tả, dấu), viết hoa tên riêng, có thể rút gọn từ thừa bằng cách để chuỗi rỗng "" cho từ đó. KHÔNG được đổi số lượng từ của dòng (mỗi từ giữ nguyên thời gian). "hl" = chỉ số các từ cần nhấn mạnh (1–2 từ khoá/dòng, không phải dòng nào cũng cần), "br" = chỉ số từ mà sau đó xuống dòng. Chỉ trả về các dòng có thay đổi.
 3. Viết "hook": câu mở đầu giật tít ≤ 40 ký tự dựa trên nội dung. Cảnh đầu tiên (c=0,w=0) là cảnh hook hiển thị câu này.
 4. Đặt ${n[0]}–${n[1]} cảnh graphic: mỗi cảnh bắt đầu ĐÚNG lúc người nói nói từ khoá liên quan, chỉ định bằng "c" (chỉ số dòng) và "w" (chỉ số từ). "dur" 1.5–6 giây. Các cảnh không chồng lên nhau về thời gian. Cảnh cuối nên là CTA/kết. "params" theo đúng cấu trúc ví dụ của type đó, viết nội dung thật bằng tiếng Việt có dấu, ngắn gọn: mỗi trường chữ dài xấp xỉ chữ trong ví dụ (graphic được thiết kế cho độ dài đó; trường số/giá trị chỉ vài ký tự; một dòng chữ ngắn tối đa 20 ký tự, dài hơn sẽ bị cắt nên tự rút gọn). Mọi trường thời gian bên trong params (t, reveal_t, …) tính bằng giây KỂ TỪ khi cảnh bắt đầu. Dùng b-roll có chủ đề khớp nội dung.
+4b. Chất lượng (bắt buộc): graphic không được che mặt người nói khi họ đang nói — ưu tiên khối gọn, đặt trên đầu hoặc giữa mặt và phụ đề; không tạo thẻ/khung không có nội dung; mọi con số, %, giá, số liệu trong graphic PHẢI có nguyên văn trong lời thoại (không tự suy ra, không bịa); không để quá 6 giây liền không có graphic hay hiệu ứng nào (trừ khi cả video ngắn hơn).
 5. Chọn nhạc nền "music": {"mood": "...", "gain": -18 đến -22} và 3–8 SFX đặt tại từ khoá/chỗ graphic xuất hiện: {"name": "...", "c": số, "w": số}.
 
 Chỉ trả về DUY NHẤT một object JSON (không markdown, không giải thích ngoài JSON) theo dạng:
@@ -181,6 +191,39 @@ function resolveBroll(id, lib, used) {
   const pick = c.find(x => x.template === tpl && x.pal === pal) || c.find(x => x.template === tpl) || c.find(x => x.pal === pal && !used.has(x.id)) || c.find(x => !used.has(x.id)) || c[0];
   return pick ? (used.add(pick.id), pick.id) : 'cong-nghe-moi--neural--ember';
 }
+// S13 · M104: numbers a graphic shows that the speaker never said (a stat "13%" made up from "tuổi 25", or a leftover from the
+// catalog example). Only text values are read (colours, ids, files, timing are not); 0–10 without % is allowed (step / list
+// numbers, scores). Thousand separators are ignored ("84.000" = "84000"). → the offending tokens
+const NUM = /\d+(?:[.,]\d+)*\s*%?/g, NOT_TEXT = /color|colour|bg|fill|font|src|file|id$|broll|url|anim|style|ease|icon|kf|anchor/i;
+// "84.000" / "84,000" = "84000" (thousand groups); "2,5" stays "2,5" (decimal) so it never matches "25"
+const numKey = t => t.replace(/\s/g, '').replace(/(\d)[.,](?=\d{3}(?!\d))/g, '$1');
+// number fields that show a figure on screen (stat cards, scores, prices…): checked like text; coordinates / sizes / timing are not
+const FIGURE = /value|percent|pct|score|stat|num|count|price|amount|total|number|rating/i, PCT_KEY = /percent|pct/i;
+// numbers said, as "84000" and, when said as a percentage ("15%", "15 phần trăm"), also "15%"
+export function saidNumbers(caps) {
+  const text = caps.map(c => (c.words || []).map(w => w.w).join(' ')).join(' ').replace(/(\d[\d.,]*)\s*phần\s*trăm/giu, '$1%');
+  return new Set((text.match(NUM) || []).flatMap(t => { const n = numKey(t); return n.endsWith('%') ? [n, n.slice(0, -1)] : [n]; }));
+}
+export function inventedNumbers(scene, said) {
+  const bad = [];
+  const walk = (v, k = '') => {
+    if (Array.isArray(v)) return v.forEach(x => walk(x, k));
+    if (v && typeof v === 'object') return Object.entries(v).forEach(([kk, x]) => { if (!NOT_TEXT.test(kk) && !/^(t|t0|t1|_.*)$/.test(kk)) walk(x, kk); });
+    if (typeof v === 'number' && FIGURE.test(k)) {
+      const pct = PCT_KEY.test(k), d = numKey(String(v));
+      if ((pct || Math.abs(v) > 10) && !said.has(pct ? d + '%' : d)) bad.push(pct ? d + '%' : d);
+      return;
+    }
+    if (typeof v !== 'string' || v.startsWith('#')) return;
+    for (const tok of v.match(NUM) || []) {
+      const n = numKey(tok), pct = n.endsWith('%'), d = n.replace(/%$/, '');
+      if (!pct && +d <= 10) continue;
+      if (!said.has(pct ? n : d)) bad.push(tok.trim()); // a % must have been said as a % ("tuổi 25" is not "25%")
+    }
+  };
+  walk(scene);
+  return bad;
+}
 export function validate(raw, { tl, caps, cat, lib, o }) {
   const dropped = [];
   const dur = tl.duration;
@@ -204,6 +247,7 @@ export function validate(raw, { tl, caps, cat, lib, o }) {
     if (words.every(w => !w.w)) { dropped.push(`phụ đề C${i}: rỗng`); continue; }
     capOut.push({ i, t0: cap.t0, n: cap.words.length, words });
   }
+  const said = saidNumbers(caps); // numbers the speaker said (recognised words, not Claude's caption edits: those could "make" a number)
   // scenes: known types only, start on a word, clamp to the video, no overlaps
   const used = new Set(), sc = [];
   for (const s of Array.isArray(raw.scenes) ? raw.scenes : []) {
@@ -219,6 +263,8 @@ export function validate(raw, { tl, caps, cat, lib, o }) {
     const ex = shiftRel(it.ex, t0, t1);
     const scene = { ...ex, ...shiftRel(params, t0, t1), type: s.type, t0, t1, _ai: true };
     fixBroll(scene, lib, used);
+    const made = inventedNumbers(scene, said);
+    if (made.length) { dropped.push(`cảnh ${s.type} @${t0}s: số liệu "${made.slice(0, 3).join('", "')}" không có trong lời thoại`); continue; }
     sc.push(scene);
   }
   sc.sort((a, b) => a.t0 - b.t0);
@@ -294,6 +340,18 @@ async function main() {
   const plan = validate(raw, ctx);
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
   try { const k = await (await import('./kho_media.mjs')).khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
+  // S13 · M104: render the plan once and move graphics off the speaking face / captions / unsafe edges before it is applied
+  if (!args.includes('--no-place')) {
+    say(.93, 'Đặt graphic né mặt, phụ đề và mép khung');
+    try {
+      const { placePlan } = await import('./ai_qc.mjs');
+      const kept = (tl.scenes || []).filter(s => !(tl._starter || ((s._ai || s._recipe) && !s._orig))); // what applyPlan keeps
+      // the plan's scenes go in as tagged copies (a failed placement leaves plan.scenes untouched, no tag leaks into the plan)
+      const r = await placePlan(dir, tl, caps, { ...plan, scenes: [...kept, ...plan.scenes.map(s => ({ ...s, _planned: true }))] },
+        { only: s => s._planned, tag: { _ai: true, _planned: true }, onP: k => say(.93 + k * .06, `Đặt graphic né mặt và phụ đề… ${Math.round(k * 100)}%`) });
+      plan.scenes = r.scenes.filter(s => s._planned).map(({ _planned, ...s }) => s); plan.placed = { moved: r.moved, left: r.left.map(i => ({ t: i.t, kind: i.kind, msg: i.msg })) };
+    } catch (e) { console.log('Bỏ qua bước đặt chỗ: ' + e.message.slice(0, 200)); plan.placed = { error: e.message.slice(0, 200) }; }
+  }
   const out = path.resolve(dir, opt('--out', '.studio/ai_plan.json'));
   fs.writeFileSync(out, JSON.stringify(plan, null, 1));
   console.log(`plan: ${plan.pack} · ${plan.scenes.length} cảnh · ${plan.captions.length} dòng phụ đề sửa · ${plan.sfx.length} sfx · bỏ ${plan.dropped.length}`);
