@@ -167,6 +167,8 @@ const CLEAN = (src, cur = {}) => {
   for (const k of ['ai', 'fillers', 'fillers_claude', 'broll_claude', 'qc', 'learn']) if (k in o) o[k] = !!o[k];
   if ('cta' in o) o.cta = String(o.cta || '').slice(0, 200);
   if ('extra' in o) o.extra = String(o.extra || '').slice(0, 600);
+  // S19 M138: 'kho:<rel>' = một bài trong Kho; rel tương đối, không thoát ra ngoài (kho_media.resolveRel kiểm lại khi dùng)
+  if ('music' in o) { const m = String(o.music || 'auto').slice(0, 300).replace(/\\/g, '/'); o.music = /^kho:/.test(m) && (m.length <= 4 || m.slice(4).split('/').some(x => x === '..' || x.startsWith('.')) || /^[a-z]:|^\//i.test(m.slice(4))) ? 'kho' : m; }
   return o;
 };
 // Lưu phong cách dựng của một thương hiệu (src.id = id thương hiệu / 'chung' / id hồ sơ cũ). Không tạo "hồ sơ" mới nữa.

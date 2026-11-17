@@ -5,6 +5,7 @@
 // Dùng chung cho route studio/routes/61_kho_media.mjs, b-roll tự động (auto_broll.mjs) và nhạc nền AI dựng giúp (ai_edit.mjs).
 // Liên kết cứng dùng chung inode với file trong Kho: KHÔNG ghi đè tại chỗ media/kho_* (references/qc-variants.md) — chỉ tạo file mới.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -272,6 +273,26 @@ export async function khoMusic(projectDir, tl, mood, o = {}) {
   try {
     const ws = o.ws || khoOf(projectDir, tl);
     const hit = musicFor(khoItems(projectDir, ws, { group: 'music' }), mood); if (!hit) return null;
+    const it = await useFromKho(projectDir, ws, hit.rel, { ...o, credit: 'Kho · Nhac' });
+    return { file: it.path, kho: hit.rel, title: hit.name };
+  } catch { return null; }
+}
+// S19 M138: nhạc riêng của thương hiệu. Phong cách dựng `music`: 'kho' = một bài trong Nhac/ của Kho (mỗi dự án một bài, cố định
+// theo dự án nên chạy lại không đổi bài), 'kho:<rel>' = đúng bài đó (bài bị xoá / đổi tên thì như 'kho').
+export const isKhoMusic = v => typeof v === 'string' && (v === 'kho' || (v.startsWith('kho:') && v.length > 4));
+/** Bài nhạc riêng cho dự án theo lựa chọn của phong cách → đưa vào media/kho_* → { file, kho, title } | null (Kho chưa có nhạc). */
+export async function khoMusicPick(projectDir, tl, choice, o = {}) {
+  if (!isKhoMusic(choice)) return null;
+  try {
+    const ws = o.ws || khoOf(projectDir, tl);
+    const want = choice.startsWith('kho:') ? choice.slice(4).replace(/\\/g, '/') : '';
+    // bài chọn đích danh: mọi file âm thanh của Kho (trang Phong cách liệt kê cả ngoài Nhac/); "mỗi video một bài": chỉ Nhac/
+    // không thấy đúng đường dẫn (trang Phong cách liệt kê Kho của thương hiệu, dự án có thể ở Kho tự chọn) → cùng tên file
+    const all = want ? khoItems(projectDir, ws).filter(it => it.kind === 'audio') : [], base = want && want.split('/').pop().toLowerCase();
+    const named = want && (all.find(it => it.rel === want) || all.find(it => it.name.toLowerCase() === base));
+    const items = khoItems(projectDir, ws, { group: 'music' }).filter(it => it.kind === 'audio').sort((a, b) => a.rel.localeCompare(b.rel));
+    if (!named && !items.length) return null;
+    const hit = named || items[parseInt(crypto.createHash('md5').update(path.resolve(projectDir)).digest('hex').slice(0, 8), 16) % items.length];
     const it = await useFromKho(projectDir, ws, hit.rel, { ...o, credit: 'Kho · Nhac' });
     return { file: it.path, kho: hit.rel, title: hit.name };
   } catch { return null; }

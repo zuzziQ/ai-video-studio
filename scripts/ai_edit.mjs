@@ -448,7 +448,8 @@ async function main() {
     console.log(`chữ quá dài: ${plan.cuts.length} · Claude viết ngắn lại ${n}`);
   }
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
-  if (plan.music) try { const k = await (await import('./kho_media.mjs')).khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
+  // S19 M138: phong cách thương hiệu chọn nhạc riêng (opts.music_pick = 'kho' | 'kho:<rel>') → bài đó thắng bài hợp mood
+  if (plan.music) try { const K = await import('./kho_media.mjs'); const k = (o.music_pick && await K.khoMusicPick(dir, tl, o.music_pick)) || await K.khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
   // S13 · M104: render the plan once and move graphics off the speaking face / captions / unsafe edges before it is applied
   if (!args.includes('--no-place')) {
     say(.93, 'Đặt graphic né mặt, phụ đề và mép khung');

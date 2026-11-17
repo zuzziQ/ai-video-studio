@@ -38,6 +38,7 @@
   window.avsUrl = u => {
     if (!u || !own(u)) return u;
     const x = new URL(u, location.href); x.searchParams.set('avs_token', T);
+    if (PID && x.pathname.startsWith('/api/')) x.searchParams.set('avs_p', PID); // S19 M138: thẻ media không gửi được X-AVS-Project
     return x.pathname + x.search + x.hash;
   };
 })();

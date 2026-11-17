@@ -398,15 +398,62 @@ function audition(src, key) {
 function refreshAud() { for (const b of document.querySelectorAll('[data-aud]')) { const on = b.dataset.aud === audKey; b.classList.toggle('on', on); b.innerHTML = `<i class="ti ${on ? 'ti-player-pause-filled' : 'ti-player-play-filled'}"></i>`; } }
 const MOOD_VI = { corporate: 'Doanh nghiệp', epic: 'Hùng tráng', happy: 'Vui tươi', hype: 'Sôi động', inspire: 'Truyền cảm hứng', lofi: 'Lofi thư giãn', mellow: 'Nhẹ nhàng', sad: 'Trầm buồn', suspense: 'Hồi hộp', tech: 'Công nghệ' };
 const MOOD_IC = { corporate: 'ti-briefcase', epic: 'ti-sword', happy: 'ti-mood-happy', hype: 'ti-flame', inspire: 'ti-sparkles', lofi: 'ti-coffee', mellow: 'ti-feather', sad: 'ti-cloud-rain', suspense: 'ti-eye', tech: 'ti-cpu' };
+// S19 M138: "Nhạc của bạn" = Nhac/ trong Kho của dự án (Kho của thương hiệu): tải lên, nghe thử, thay nhạc nền cả video, thêm tại
+// playhead. Đưa vào dự án qua /api/media/kho/use (media/kho_*, như tab Kho của panel Media). Nhạc mẫu theo tâm trạng ở dưới.
+let MYMUS = null, myMusBusy = '', myMusAt = 0;
+async function loadMyMusic(force) {
+  if (MYMUS && !force) return;
+  myMusAt = Date.now();
+  try { const r = await api('/api/media/kho?group=music'); MYMUS = { kho: r.kho || null, items: (r.items || []).filter(i => i.kind === 'audio'), error: r.error || '' }; }
+  catch (e) { MYMUS = { kho: null, items: [], error: e.message }; }
+  if (panel === 'audio' && audioTab === 'music') renderPanel();
+}
+function myMusicBlock() {
+  const head = n => `<div class="mgh"><i class="ti ti-user-star"></i>Nhạc của bạn${n != null ? `<span>${n}</span>` : ''}</div>`;
+  if (MYMUS && Date.now() - myMusAt > 15000) loadMyMusic(true); // file chép thẳng vào thư mục Nhac/: đọc lại khi mở panel
+  if (!MYMUS) { loadMyMusic(); return head() + '<div class="help">Đang đọc Kho…</div>'; }
+  const k = MYMUS.kho, where = k ? `Kho ${k.brand ? k.title : 'Chung'} › Nhac` : 'Kho';
+  const up = k?.exists ? `<label class="upl"><i class="ti ti-cloud-upload"></i><span><b>Tải nhạc lên</b><small>Lưu vào ${esc(where)}, dùng lại cho mọi video của thương hiệu</small></span><input type="file" id="mymus-up" accept="audio/*,.mp3,.m4a,.wav,.aac,.flac,.ogg" multiple hidden></label>`
+    : `<div class="help">${esc(MYMUS.error || 'Dự án chưa có Kho')}: tạo Kho ở bước ① Chuẩn bị (mục Kho) để lưu nhạc riêng.</div>`;
+  const rows = MYMUS.items.map(it => `<div class="arow"><button class="pl" data-aud="kho:${esc(it.rel)}" title="Nghe thử"><i class="ti ti-player-play-filled"></i></button><span class="mi"><i class="ti ti-music"></i></span>
+    <div class="mid"><b>${esc(it.name.replace(/\.[^.]+$/, ''))}</b><small>${esc(it.rel)}</small></div>
+    <button class="add" data-mymus="replace" data-rel="${esc(it.rel)}" title="Dùng làm nhạc nền cả video (thay nhạc nền đang có)" ${myMusBusy ? 'disabled' : ''}><i class="ti ti-replace"></i></button>
+    <button class="add" data-mymus="add" data-rel="${esc(it.rel)}" title="Thêm tại playhead" ${myMusBusy ? 'disabled' : ''}><i class="ti ti-plus"></i></button></div>`).join('');
+  return head(MYMUS.items.length) + up + (rows ? `<div class="alist">${rows}</div>` : k?.exists ? `<div class="help">Chưa có bài nào trong ${esc(where)}. Tải nhạc lên hoặc chép file vào thư mục đó.</div>` : '')
+    + '<div class="mgh"><i class="ti ti-music"></i>Nhạc mẫu theo tâm trạng</div>';
+}
+async function useMyMusic(rel, how) {
+  if (myMusBusy) return; myMusBusy = rel; renderPanel();
+  let m = null; try { m = await api('/api/media/kho/use', { rel }); } catch (e) { m = { error: e.message }; }
+  myMusBusy = ''; renderPanel();
+  if (!m || m.error || m.kind !== 'audio') return toast('Không dùng được bài này: ' + (m?.error || 'không phải file âm thanh'));
+  try { MEDIA = await api('/api/media'); } catch {}
+  if (how === 'add') return insertMedia(m);
+  // thay nhạc nền cả video: một đoạn từ đầu tới hết, thay mọi đoạn nhạc nền đang có (⌘Z để quay lại)
+  pushUndo(); TL.audio = TL.audio || {};
+  const x = { t0: 0, t1: TL.duration, file: m.path, gain: -18 }; TL.audio.music = [x];
+  changed(); select(compOf(x)); toast('Đã thay nhạc nền bằng “' + (m.name || rel) + '” · ⌘Z để hoàn tác');
+}
+async function uploadMyMusic(files) {
+  for (const f of files) {
+    toast('Đang tải ' + f.name + '…');
+    // vào Nhac/ của Kho chứa dự án này (không theo id thương hiệu: dự án có thể nằm trong Kho tự chọn)
+    let r = null; try { r = await (await fetch('/api/media/kho/upload?' + new URLSearchParams({ name: f.name }), { method: 'POST', body: f })).json(); } catch (e) { r = { error: e.message }; }
+    if (r?.error) { toast('Không tải được ' + f.name + ': ' + r.error); continue; }
+  }
+  await loadMyMusic(true); toast('Đã lưu nhạc vào Kho');
+}
 function panelAudio() {
   const q = query.toLowerCase();
   const seg = `<div class="seg">${[['music', 'Nhạc nền'], ['sfx', 'Hiệu ứng âm thanh']].map(([k, l]) => `<button data-atab="${k}" class="${audioTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (audioTab === 'music') {
     const rows = LIB.music.map(f => f.replace('.mp3', '')).filter(m => !q || (m + ' ' + (MOOD_VI[m.replace(/_\d+$/, '')] || '')).toLowerCase().includes(q));
     $('#libbody').innerHTML = seg + `<div class="help">${(TL.audio?.music || []).length ? `Đang có ${(TL.audio.music).length} đoạn nhạc trên timeline.` : 'Chưa có nhạc nền.'} Bấm + để thêm từ playhead tới hết video.</div>
+      ${myMusicBlock()}
       <div class="alist">${rows.map(m => { const b = m.replace(/_\d+$/, ''), n = m.match(/_(\d+)$/)?.[1]; return `<div class="arow">
         <button class="pl" data-aud="music:${m}"><i class="ti ti-player-play-filled"></i></button><span class="mi"><i class="ti ${MOOD_IC[b] || 'ti-music'}"></i></span>
         <div class="mid"><b>${esc(MOOD_VI[b] || b)}${n ? ' ' + n : ''}</b><small>${esc(m)}.mp3</small></div><button class="add" data-addmusic="${m}" title="Thêm tại playhead"><i class="ti ti-plus"></i></button></div>`; }).join('')}</div>`;
+    $('#mymus-up')?.addEventListener('change', e => uploadMyMusic([...e.target.files]));
   } else {
     const rows = LIB.sfx.map(f => f.replace(/\.\w+$/, '')).filter(s => !q || s.includes(q));
     $('#libbody').innerHTML = seg + `<button class="wide" data-pact="autosfx"><i class="ti ti-wand"></i> Tự đặt SFX theo graphic</button>
@@ -536,7 +583,8 @@ $('#libbody').addEventListener('click', async e => {
     return how === 'overlay' || how === 'music' ? insertMedia(m) : insertMediaClip(m);
   }
   if ((b = q('[data-b]'))) { pushUndo(); const s = { type: 'media_card', t0: r2(T), t1: r2(Math.min(TL.duration, T + 3)), screen: { broll: { id: BRES[+b.dataset.b].id, ...(BRES[+b.dataset.b].text ? { text: BRES[+b.dataset.b].text } : {}) } } }; TL.scenes.push(s); changed(); return select(compOf(s)); }
-  if ((b = q('[data-aud]'))) { const [kind, n] = b.dataset.aud.split(':'); return audition(kind === 'music' ? `/assets/music/${n}.mp3` : sfxUrl(n), b.dataset.aud); }
+  if ((b = q('[data-aud]'))) { const a = b.dataset.aud, i = a.indexOf(':'), kind = a.slice(0, i), n = a.slice(i + 1); return audition(kind === 'music' ? `/assets/music/${n}.mp3` : kind === 'kho' ? avsUrl('/api/media/kho/file?rel=' + encodeURIComponent(n)) : sfxUrl(n), a); }
+  if ((b = q('[data-mymus]'))) return useMyMusic(b.dataset.rel, b.dataset.mymus);
   if ((b = q('[data-addmusic]'))) return addMusic(b.dataset.addmusic);
   if ((b = q('[data-addsfx]'))) return addSfx(b.dataset.addsfx);
   if (q('[data-pact="autosfx"]')) return autoSfx();

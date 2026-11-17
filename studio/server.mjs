@@ -458,7 +458,9 @@ function sendLocked(res) {
 // S18 M129: dự án của request theo mã tab trong header X-AVS-Project; không có mã thì dự án mặc định. Mã của tab đã đóng (hay
 // quá 8 tab nên bị đẩy ra) → 409 tabClosed với mọi /api trừ /api/tabs, để trang đó biết mà mở lại, không đọc / ghi nhầm dự án khác.
 const server = http.createServer((req, res) => {
-  const want = req.headers['x-avs-project'];
+  // S19 M138: thẻ <audio>/<img> không gửi được header → mã tab đi theo tham số avs_p của URL (window.avsUrl), chỉ với GET
+  let want = req.headers['x-avs-project'];
+  if (!want && req.method === 'GET') { const q = /[?&]avs_p=([a-f0-9]{12})(?:&|$)/.exec(req.url || ''); if (q) want = q[1]; }
   let st;
   if (want) { const pr = TABS.get(String(want)); st = { project: pr, pid: pr ? String(want) : null, asked: String(want), closed: !pr }; if (pr) TABS.touch(st.pid); }
   else st = { project: active, pid: active ? tabId(active.dir) : null, asked: null };
