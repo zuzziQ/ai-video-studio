@@ -206,6 +206,7 @@ Chủ repo báo 2026-11-17: Studio cần nhiều thư viện (ffmpeg, Python ven
 
 - [x] **`M115`** (`area/infra`): màn "Kiểm tra máy". `GET /api/setup/check` (`studio/routes/01_setup.mjs`) kiểm nhanh, có cache, không tự cài: bắt buộc (ffmpeg/ffprobe, Node ≥ 18, Python 3.10+ trong `.venv`, faster-whisper, numpy, scipy, pillow, Chrome hoặc Edge, puppeteer-core) và tuỳ chọn (rembg, edge-tts, cuBLAS khi có GPU NVIDIA, chrome-headless-shell, Ollama, VieNeu, Claude, mô hình YuNet); gói pip lấy từ chính `install.ps1` / `scripts/setup.sh`. Mỗi mục: có / thiếu / phiên bản, tính năng cần nó, lệnh cài (chạy lại trình cài + lệnh riêng). Màn tự hiện lần đầu sau màn tác giả, trước hướng dẫn người mới; thiếu mục bắt buộc thì tự hiện lại, có "Để sau", "Kiểm tra lại", mở lại từ menu ⋯. Bấm tính năng mà thư viện của nó thiếu thì báo đúng tên thư viện và lệnh cài.
 - [x] **`M116`** (`area/infra`): cài giúp từ màn Kiểm tra máy, không phải gõ lệnh. Chủ repo 2026-11-17: người dùng phổ thông không biết chạy PowerShell. Nút "Cài giúp đủ một lần" chạy lại trình cài (`install.ps1 -Yes` / `install.sh`) như một job của Studio, hiện tiến trình và log ngay trong màn; nút "Cài" từng dòng cho mục cài lẻ được (gói pip khi đã có `.venv`, `npm install`, chrome-headless-shell, winget/brew cho ffmpeg, Chrome, Ollama, Claude CLI). Lệnh do server dựng từ danh sách cho phép, trình duyệt chỉ gửi id. Cài xong Windows đọc lại PATH và tự kiểm lại. Lệnh dạng chữ thu vào mục "Cho người rành máy"; Windows hiện "bấm đúp install.cmd" + nút mở thư mục. Lần cài đầu khi máy chưa có Node vẫn cần `install.cmd` (Studio chưa chạy được).
+- [x] **`M117`** (`area/infra`): cài sẵn phần nặng, Ollama tắt mặc định. Chủ repo 2026-11-17: tính năng mặt và mô hình whisper large-v3 phải cài ngay lúc cài, không để lần đầu dùng mới tải (chờ rất lâu); Ollama tạm tắt, dùng Claude Code. Trình cài tải sẵn mô hình whisper `large-v3-turbo` (tách lời thoại) + `large-v3` (nghe lại đoạn nghi sai) và mô hình tách nền `u2net_human_seg` (`scripts/prefetch_models.py`, danh sách ở `scripts/models.json`, bỏ qua bằng `-NoModels` / `--no-models`), thêm `onnxruntime` vào dòng pip (bám mặt YuNet), cài Claude Code CLI khi thiếu. Màn Kiểm tra máy thêm mức "Cài sẵn (nên có)" gồm mô hình, mặt, tách nền, Claude, nút "Cài" từng mô hình. Ollama: ẩn khỏi lựa chọn trong "Mô hình & giọng" cho tới khi bấm "Bật Ollama", màn Kiểm tra máy ghi "Đang tắt".
 
 ## 4. Bị chặn: cần quyết định
 
@@ -239,6 +240,7 @@ Chủ repo báo 2026-11-17: Studio cần nhiều thư viện (ffmpeg, Python ven
 7. **`S14`**: `M112` làm ngay được (lỗi người dùng gặp, không đụng tệp nóng của nhóm QC); `M113` sau `M112`; `M114` sau `M105`, `M106` (`C17` đã chốt 2026-11-17: chỉ cảnh báo, không chặn).
 8. **`S15`**: `M115` làm ngay được (không đụng tệp nóng; chỉ thêm cặp route/feature mới và một dòng chờ trong `02_onboarding.js`).
 9. **`S15`**: `M116` làm ngay sau `M115`; `C18` (bộ cài một file .exe) chờ chủ repo chốt.
+10. **`S15`**: `M117` sau `M116`.
 
 ## 6. Không làm
 

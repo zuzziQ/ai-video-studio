@@ -41,7 +41,7 @@ export default ctx => {
   async function view() {
     const { L, T } = await mods(), c = L.llmConfig(), t = T.ttsConfig(), env = process.env;
     return {
-      llm: { text: c.text, fallback: c.fallback, providers: L.PROVIDERS, ollama: { url: c.ollama.url, model: c.ollama.model },
+      llm: { text: c.text, fallback: c.fallback, providers: L.PROVIDERS, ollama: { url: c.ollama.url, model: c.ollama.model, enabled: c.ollama.enabled },
         env: { text: !!env.AVS_LLM_TEXT, fallback: env.AVS_LLM_FALLBACK != null, url: !!env.OLLAMA_HOST, model: !!env.AVS_OLLAMA_MODEL } },
       tts: { default_engine: t.default_engine, engines: T.ENGINES, vieneu: { url: t.vieneu.url, voice: t.vieneu.voice }, env: { url: t.env_url } },
       platform: process.platform,
@@ -81,7 +81,8 @@ export default ctx => {
     if (p === '/api/engines' && req.method === 'GET') { ctx.json(res, await view()); return true; }
     if (p === '/api/engines/status' && req.method === 'GET') {
       const c = L.llmConfig();
-      const [ollama, vieneu] = await Promise.all([ollamaStatus(c.ollama.url, c.ollama.model), vieneuStatus()]);
+      // M117: Ollama đang tắt thì không dò máy chủ
+      const [ollama, vieneu] = await Promise.all([c.ollama.enabled ? ollamaStatus(c.ollama.url, c.ollama.model) : { reachable: false, disabled: true }, vieneuStatus()]);
       ctx.json(res, { ollama, vieneu }); return true;
     }
     if (req.method !== 'POST') return false;
@@ -90,6 +91,7 @@ export default ctx => {
       const b = await ctx.body(req), patch = {};
       if (b.text !== undefined) { if (!L.PROVIDERS.includes(b.text)) throw bad('Nhà cung cấp phải là: ' + L.PROVIDERS.join(', ')); patch.text = b.text; }
       if (b.fallback !== undefined) patch.fallback = b.fallback === 'claude' ? 'claude' : '';
+      if (b.enabled !== undefined) { if (typeof b.enabled !== 'boolean') throw bad('enabled phải là true/false'); patch.enabled = b.enabled; }
       const o = {};
       if (b.url !== undefined && b.url !== '') { try { o.url = L.loopbackUrl(b.url); } catch (e) { throw bad(e.message); } }
       if (b.model !== undefined && b.model !== '') { if (typeof b.model !== 'string' || !MODEL_RE.test(b.model)) throw bad('Tên model không hợp lệ (vd qwen2.5:7b)'); o.model = b.model; }

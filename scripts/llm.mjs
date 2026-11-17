@@ -141,6 +141,8 @@ export async function askJSON(prompt, opts = {}) {
 //   { "llm": { "text": "claude" | "ollama", "fallback": "claude" | "",
 //              "ollama": { "url": "http://127.0.0.1:11434", "model": "qwen2.5:7b", "timeout": 600000 } } }
 // Biến môi trường thắng file: AVS_LLM_TEXT, AVS_LLM_FALLBACK, OLLAMA_HOST, AVS_OLLAMA_MODEL.
+// M117: Ollama tắt mặc định (Studio dùng Claude Code). "ollama_enabled": true (nút "Bật Ollama" của Mô hình & giọng) hoặc
+// AVS_OLLAMA=1 mới hiện lựa chọn Ollama. Máy đã chọn text "ollama" từ trước được coi là đang bật (không đổi hành vi cũ).
 export const CONFIG = () => path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'config.json');
 export const PROVIDERS = ['claude', 'ollama'];
 const DEF_OLLAMA = { url: 'http://127.0.0.1:11434', model: 'qwen2.5:7b', timeout: 600000 };
@@ -159,10 +161,12 @@ export function llmConfig() {
   const c = readConfig().llm || {}, o = { ...DEF_OLLAMA, ...(c.ollama || {}) }, env = process.env;
   const text = String(env.AVS_LLM_TEXT || c.text || 'claude').toLowerCase();
   const fallback = String(env.AVS_LLM_FALLBACK ?? c.fallback ?? '').toLowerCase();
+  const t = PROVIDERS.includes(text) ? text : 'claude';
+  const enabled = env.AVS_OLLAMA === '1' || c.ollama_enabled === true || t === 'ollama';
   return {
-    text: PROVIDERS.includes(text) ? text : 'claude',
+    text: t,
     fallback: fallback === 'claude' ? 'claude' : '',
-    ollama: { url: hostUrl(env.OLLAMA_HOST || o.url), model: env.AVS_OLLAMA_MODEL || o.model, timeout: +o.timeout || DEF_OLLAMA.timeout },
+    ollama: { url: hostUrl(env.OLLAMA_HOST || o.url), model: env.AVS_OLLAMA_MODEL || o.model, timeout: +o.timeout || DEF_OLLAMA.timeout, enabled },
   };
 }
 // Merge a patch into config.json's "llm" (other keys untouched; mode 600 like the API keys).
@@ -170,6 +174,8 @@ export function saveLlmConfig(patch = {}) {
   const f = CONFIG(), cur = readConfig(), llm = { ...(cur.llm || {}) };
   if (patch.text !== undefined) { if (!PROVIDERS.includes(patch.text)) throw new LlmError('Nhà cung cấp phải là: ' + PROVIDERS.join(', ')); llm.text = patch.text; }
   if (patch.fallback !== undefined) llm.fallback = patch.fallback === 'claude' ? 'claude' : '';
+  // Tắt Ollama: quay về Claude cho việc chỉ có chữ
+  if (patch.enabled !== undefined) { llm.ollama_enabled = patch.enabled === true; if (!llm.ollama_enabled && llm.text === 'ollama') llm.text = 'claude'; }
   if (patch.ollama) {
     const o = Object.entries(patch.ollama).filter(([k, v]) => ['url', 'model', 'timeout'].includes(k) && v !== undefined && v !== '');
     for (const kv of o) if (kv[0] === 'url') kv[1] = loopbackUrl(kv[1]);

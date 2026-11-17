@@ -71,7 +71,7 @@ Giao diện tối kiểu editor chuyên nghiệp. Phần mềm có **28 gói sty
 | **ffmpeg ≥ 6** | `brew install ffmpeg` | trình cài tự cài bằng `winget` |
 | **Node.js ≥ 18** | `brew install node` | trình cài tự cài bằng `winget` |
 | **Python ≥ 3.10** | `brew install python` | trình cài tự cài bằng `winget` |
-| **Claude Code CLI** *(nên có)* | cài theo <https://docs.claude.com/claude-code> | như macOS |
+| **Claude Code CLI** *(mô hình AI mặc định)* | trình cài tự cài bằng `npm` nếu thiếu (hoặc theo <https://docs.claude.com/claude-code>) | như macOS |
 | Mạng | lúc cài và lần đầu dùng một font/emoji/logo; sau đó lấy từ bộ nhớ đệm `~/.ai-video-studio/cache/net` (icon giao diện và thư viện của khối HyperFrames đã có sẵn trong app) | như macOS |
 | Ổ đĩa | khoảng 1,5 GB (gồm thư viện Python) | khoảng 1,5 GB |
 | RAM | 8 GB trở lên (render nhiều luồng: 16 GB) | như macOS |
@@ -87,10 +87,11 @@ Linux chạy được phần lõi (dùng `install.sh`), nhưng không có app ha
 | ffmpeg, ffprobe · Node.js ≥ 18 · Python 3.10+ trong `scripts/.venv` | bắt buộc | nhập video, sóng âm, mọi script Python |
 | `faster-whisper`, `numpy`, `scipy`, `pillow` (pip) | bắt buộc | tách lời thoại, âm thanh, ảnh |
 | Chrome hoặc Edge · `puppeteer-core` (npm) | bắt buộc | render và xuất video |
-| `rembg` (tách nền), `edge-tts` (giọng online), cuBLAS CUDA 12 (whisper chạy GPU NVIDIA), `chrome-headless-shell` (render nhanh hơn) | tuỳ chọn | trình cài vẫn cài; lỗi thì bỏ qua |
-| Ollama, VieNeu (`scripts/install_vieneu.ps1`), Claude Code CLI, mô hình mặt YuNet (`assets/models`, cần `onnxruntime`) | tuỳ chọn | LLM trên máy, giọng Việt trên máy, tính năng AI, bám mặt |
+| Mô hình whisper `large-v3-turbo` (tách lời thoại) + `large-v3` (nghe lại đoạn nghi sai), mô hình tách nền `u2net_human_seg` (~4,9 GB, `scripts/models.json`) | cài sẵn | tải ngay lúc cài để lần đầu dùng không phải chờ; bỏ qua bằng `install.cmd -NoModels` / `install.sh --no-models` |
+| Bám mặt YuNet (`assets/models` + `onnxruntime`), `rembg` (tách nền), `edge-tts` (giọng online), cuBLAS CUDA 12 (whisper chạy GPU NVIDIA), `chrome-headless-shell` (render nhanh hơn), Claude Code CLI | cài sẵn | trình cài cài luôn; lỗi thì bỏ qua |
+| Ollama (đang tắt, bật trong ⋯ → Mô hình & giọng), VieNeu (`scripts/install_vieneu.ps1`) | tuỳ chọn | LLM trên máy, giọng Việt trên máy |
 
-**Kiểm tra máy trong Studio** (S15): lần đầu mở Studio, sau thẻ tác giả, màn **Kiểm tra máy** liệt kê từng mục ở trên (có / thiếu / phiên bản) và tính năng nào cần nó. Thiếu thì **không phải gõ lệnh**: bấm **Cài giúp đủ một lần** (Studio tự chạy trình cài, hiện tiến trình ngay trong màn; Windows có thể hỏi quyền cài đặt, bấm Yes) hoặc nút **Cài** trên từng dòng (gói Python, thư viện render, ffmpeg, Chrome, Ollama, Claude CLI). Cài xong Studio tự kiểm lại; cài mới Node, Chrome hoặc ffmpeg thì đóng Studio rồi mở lại. Lệnh dạng chữ vẫn có trong mục "Lệnh cho người rành máy". Thiếu mục bắt buộc thì màn tự hiện lại và nút ⋯ có chấm đỏ; mở lại bất cứ lúc nào từ ⋯ → **Kiểm tra máy…**. Studio chỉ cài khi bạn bấm. Lần cài đầu tiên (máy chưa có Node.js nên Studio chưa chạy được) vẫn là bấm đúp `install.cmd` (Windows) hoặc chạy `install.sh`.
+**Kiểm tra máy trong Studio** (S15): lần đầu mở Studio, sau thẻ tác giả, màn **Kiểm tra máy** liệt kê từng mục ở trên theo ba nhóm Bắt buộc / Cài sẵn (nên có) / Tuỳ chọn (có / thiếu / phiên bản) và tính năng nào cần nó; mỗi mô hình chưa tải có nút **Cài** riêng. Thiếu thì **không phải gõ lệnh**: bấm **Cài giúp đủ một lần** (Studio tự chạy trình cài, hiện tiến trình ngay trong màn; Windows có thể hỏi quyền cài đặt, bấm Yes) hoặc nút **Cài** trên từng dòng (gói Python, thư viện render, ffmpeg, Chrome, Ollama, Claude CLI). Cài xong Studio tự kiểm lại; cài mới Node, Chrome hoặc ffmpeg thì đóng Studio rồi mở lại. Lệnh dạng chữ vẫn có trong mục "Lệnh cho người rành máy". Thiếu mục bắt buộc thì màn tự hiện lại và nút ⋯ có chấm đỏ; mở lại bất cứ lúc nào từ ⋯ → **Kiểm tra máy…**. Studio chỉ cài khi bạn bấm. Lần cài đầu tiên (máy chưa có Node.js nên Studio chưa chạy được) vẫn là bấm đúp `install.cmd` (Windows) hoặc chạy `install.sh`.
 
 ---
 

@@ -1,6 +1,7 @@
 // Kiểm tra máy (ROADMAP S15 M115): Studio có đủ thư viện để chạy chưa. Danh sách lấy từ chính trình cài.
 //   GET  /api/setup/check[?fresh=1]  → {ready, platform, install, items:[{id, label, need, status, version, note, features, api, fix}], seen, ms, at}
-//        status: ok | missing | old (phiên bản thấp) | na (không cần trên máy này, vd không có GPU NVIDIA)
+//        status: ok | missing | old (phiên bản thấp) | na (không cần trên máy này, vd không có GPU NVIDIA; Ollama đang tắt)
+//        need: required (thiếu thì Studio hỏng) | recommended (M117: trình cài cài sẵn, thiếu thì lần đầu dùng phải chờ tải) | optional
 //        Kết quả giữ trong bộ nhớ 5 phút (fresh=1 kiểm lại). Không cài gì, không chạy trình cài.
 //   POST /api/setup/seen {missing:[id…]} → ghi $AVS_HOME/setup.json (đã xem màn này, các mục bắt buộc còn thiếu lúc bấm "Để sau")
 //   POST /api/setup/install {id}         → M116: cài giúp, chạy như job của Studio (theo dõi qua /api/job). id = "all" chạy lại trình cài
@@ -12,6 +13,7 @@
 // màn này thấy ngay. META chỉ thêm nhãn, mức bắt buộc và tính năng; gói không có META hiện thành mục tuỳ chọn.
 // Không trả token, nội dung .env hay đường dẫn tới file bí mật: chỉ phiên bản, có/thiếu và lệnh cài.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -26,10 +28,12 @@ export const PIP_META = {
   numpy: { id: 'numpy', label: 'numpy', need: 'required', features: 'Âm thanh (lọc ồn, nhịp, tự chèn SFX), bám mặt', api: ['/api/audio/', '/api/autosfx'] },
   scipy: { id: 'scipy', label: 'scipy', need: 'required', features: 'Âm thanh: lọc, nhận nhịp, tự chèn SFX', api: ['/api/audio/', '/api/autosfx'] },
   pillow: { id: 'pillow', label: 'pillow', need: 'required', features: 'Ảnh: sticker, ảnh bìa, màu logo', api: ['/api/sticker', '/api/publish/cover'] },
-  rembg: { id: 'rembg', label: 'rembg', need: 'optional', features: 'Tách nền người / vật (sticker, cắt nền)', api: ['/api/segment', '/api/sticker'] },
-  'edge-tts': { id: 'edge-tts', label: 'edge-tts', need: 'optional', features: 'Giọng đọc online (lồng tiếng edge-tts)', api: ['/api/dub'] },
-  'nvidia-cublas-cu12': { id: 'cuda', label: 'cuBLAS (CUDA 12) cho whisper GPU', need: 'optional', features: 'Tách lời thoại bằng GPU NVIDIA (nhanh hơn nhiều lần)', api: [], gpu: true },
-  'nvidia-cudnn-cu12': { id: 'cuda', label: 'cuBLAS (CUDA 12) cho whisper GPU', need: 'optional', features: 'Tách lời thoại bằng GPU NVIDIA (nhanh hơn nhiều lần)', api: [], gpu: true },
+  rembg: { id: 'rembg', label: 'rembg', need: 'recommended', features: 'Tách nền người / vật (sticker, cắt nền)', api: ['/api/segment', '/api/sticker'] },
+  'edge-tts': { id: 'edge-tts', label: 'edge-tts', need: 'recommended', features: 'Giọng đọc online (lồng tiếng edge-tts)', api: ['/api/dub'] },
+  'nvidia-cublas-cu12': { id: 'cuda', label: 'cuBLAS (CUDA 12) cho whisper GPU', need: 'recommended', features: 'Tách lời thoại bằng GPU NVIDIA (nhanh hơn nhiều lần)', api: [], gpu: true },
+  // onnxruntime (M117, cài rõ trong trình cài): thuộc mục "yunet" (bám mặt), kiểm ở đó
+  onnxruntime: { id: 'yunet', label: 'onnxruntime', need: 'recommended', features: 'Bám mặt YuNet, lọc giọng nói (VAD) của whisper', api: ['/api/reframe'] },
+  'nvidia-cudnn-cu12': { id: 'cuda', label: 'cuBLAS (CUDA 12) cho whisper GPU', need: 'recommended', features: 'Tách lời thoại bằng GPU NVIDIA (nhanh hơn nhiều lần)', api: [], gpu: true },
 };
 
 /** Gói pip trình cài của hệ điều hành này cài: [{dist, spec}] (spec là chữ đưa cho pip, vd "rembg[cpu]"). */
@@ -86,6 +90,7 @@ function commands(skill, platform) {
   return {
     install: win ? `powershell -ExecutionPolicy Bypass -File ${q(path.join(skill, 'install.ps1'))}` : `bash ${q(path.join(skill, 'install.sh'))}`,
     pip,
+    prefetch: name => `${vpy} -I ${q(path.join(skill, 'scripts', 'prefetch_models.py'))} --model ${name}`,
     ffmpeg: pick('winget install --id Gyan.FFmpeg -e', 'brew install ffmpeg', 'sudo apt install ffmpeg'),
     node: pick('winget install --id OpenJS.NodeJS.LTS -e', 'brew install node', 'Cài Node.js LTS tại https://nodejs.org'),
     venv: pick(`py -3 -m venv ${q(path.join(skill, 'scripts', '.venv'))}  (chưa có Python 3.10+: winget install --id Python.Python.3.12 -e)`,
@@ -100,6 +105,30 @@ function commands(skill, platform) {
   };
 }
 
+// ---------- mô hình tải sẵn (M117): danh sách ở scripts/models.json, tải bằng scripts/prefetch_models.py ----------
+export function loadModels(skill) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(skill, 'scripts/models.json'), 'utf8'));
+    return [...(m.whisper || []).map(x => ({ ...x, kind: 'whisper' })), ...(m.rembg || []).map(x => ({ ...x, kind: 'rembg' }))]
+      .filter(x => typeof x.name === 'string' && /^[\w.-]{1,40}$/.test(x.name));
+  } catch { return []; }
+}
+const homeOf = env => env.USERPROFILE || env.HOME || os.homedir();
+// Cache Hugging Face mà faster_whisper.download_model dùng (mặc định của huggingface_hub)
+export const hfCache = env => env.HF_HUB_CACHE || (env.HF_HOME ? path.join(env.HF_HOME, 'hub') : path.join(env.XDG_CACHE_HOME || path.join(homeOf(env), '.cache'), 'huggingface', 'hub'));
+/** Mô hình đã có trên máy chưa (chỉ xem file, không import thư viện). */
+export function modelPresent(m, env = process.env) {
+  if (m.kind === 'whisper') {
+    const snaps = path.join(hfCache(env), `models--${String(m.repo || '').replace(/\//g, '--')}`, 'snapshots');
+    try { return fs.readdirSync(snaps).some(d => fs.existsSync(path.join(snaps, d, 'model.bin'))); } catch { return false; }
+  }
+  // rembg: bản cũ ~/.u2net/<tên>.onnx (U2NET_HOME), bản mới <REMBG_HOME | XDG_DATA_HOME/rembg | ~/.rembg>/models/<tên>…
+  const dirs = [env.U2NET_HOME, path.join(homeOf(env), '.u2net'), env.REMBG_HOME && path.join(env.REMBG_HOME, 'models'),
+    env.XDG_DATA_HOME && path.join(env.XDG_DATA_HOME, 'rembg', 'models'), path.join(homeOf(env), '.rembg', 'models')].filter(Boolean);
+  return dirs.some(d => { try { return fs.readdirSync(d).some(f => f.startsWith(m.name)); } catch { return false; } });
+}
+const modelId = m => `${m.kind}-${m.name}`;
+
 // ---------- cài giúp (M116) ----------
 // npm của chính Node đang chạy Studio (npm.cmd trên Windows không spawn được nếu không qua shell).
 export function npmCli(exec = process.execPath) {
@@ -113,7 +142,8 @@ export function pipSpecs(id, skill, platform = process.platform) {
   return pipFromInstallers(skill, platform).filter(p => (PIP_META[p.dist]?.id || p.dist) === id).map(p => p.spec);
 }
 // Mục trình cài lo được (chạy lại trình cài là có): ffmpeg/Node qua winget (Windows), .venv + pip, npm, headless-shell.
-const BY_INSTALLER = new Set(['ffmpeg', 'ffprobe', 'node', 'venv', 'puppeteer-core', 'headless-shell', ...PIP_IDS]);
+const BY_INSTALLER = new Set(['ffmpeg', 'ffprobe', 'node', 'venv', 'puppeteer-core', 'headless-shell', 'claude', 'yunet', ...PIP_IDS]);
+const isModelId = id => /^(whisper|rembg)-[\w.-]+$/.test(id);
 /**
  * Các bước [{cmd, argv, label}] để cài một mục, hoặc null khi không cài lẻ được (dùng trình cài hoặc cài tay).
  * o: {skill, platform, venv (có scripts/.venv chạy được), winget, brew (đường dẫn hoặc null), npm (npm-cli.js), node, puppeteer}
@@ -127,6 +157,12 @@ export function fixPlan(id, o) {
     ? [{ cmd: POWERSHELL, argv: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(o.skill, 'install.ps1'), '-Yes'], label: 'Chạy trình cài (install.ps1)' }]
     : [{ cmd: '/bin/bash', argv: [path.join(o.skill, 'install.sh')], label: 'Chạy trình cài (install.sh)' }];
   const vpy = path.join(o.skill, 'scripts', win ? '.venv/Scripts/python.exe' : '.venv/bin/python');
+  // mô hình: tải bằng prefetch_models.py trong .venv (cần thư viện của nó: faster-whisper / rembg)
+  if (isModelId(id)) {
+    const m = loadModels(o.skill).find(x => modelId(x) === id);
+    return m && o.venv && (o.pkgs?.[m.kind === 'whisper' ? 'faster-whisper' : 'rembg'] ?? true)
+      ? [{ cmd: vpy, argv: ['-I', path.join(o.skill, 'scripts', 'prefetch_models.py'), '--model', m.name], label: `Tải mô hình ${m.name} (~${m.gb} GB)` }] : null;
+  }
   if (PIP_IDS.has(id) || id === 'yunet') {
     const specs = pipSpecs(id, o.skill, o.platform);
     return o.venv && specs.length ? [{ cmd: vpy, argv: ['-m', 'pip', 'install', ...specs], label: `pip install ${specs.join(' ')}` }] : null;
@@ -211,8 +247,8 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
   pup.fix = C.npm;
   try { pup.version = JSON.parse(fs.readFileSync(path.join(skill, 'scripts/node_modules/puppeteer-core/package.json'), 'utf8')).version || ''; pup.status = 'ok'; } catch { /* chưa npm install */ }
 
-  // ---------- tuỳ chọn ----------
-  const hs = item('headless-shell', 'chrome-headless-shell', 'optional', 'Render nhanh hơn (không có thì render bằng Chrome đã cài)');
+  // ---------- cài sẵn (nên có) và tuỳ chọn ----------
+  const hs = item('headless-shell', 'chrome-headless-shell', 'recommended', 'Render nhanh hơn (không có thì render bằng Chrome đã cài)');
   hs.fix = C.headless;
   try {
     const { findHeadlessShell } = await import(pathToFileURL(path.join(skill, 'scripts/render_hw.mjs')).href);
@@ -224,8 +260,10 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
   ollama.fix = C.ollama;
   const ollamaP = (async () => {
     const exe = which('ollama', env);
-    let url = 'http://127.0.0.1:11434';
-    try { const L = await import(pathToFileURL(path.join(skill, 'scripts/llm.mjs')).href); url = L.loopbackUrl(L.llmConfig().ollama.url); } catch { /* mặc định */ }
+    let url = 'http://127.0.0.1:11434', on = false;
+    try { const L = await import(pathToFileURL(path.join(skill, 'scripts/llm.mjs')).href); const c = L.llmConfig(); url = L.loopbackUrl(c.ollama.url); on = !!c.ollama.enabled; } catch { /* mặc định */ }
+    // M117: Ollama tắt mặc định (dùng Claude Code); không dò máy chủ khi đang tắt
+    if (!on) { ollama.status = 'na'; ollama.note = 'Đang tắt: Studio dùng Claude Code (bật trong Mô hình & giọng)'; return; }
     try {
       const r = await fetch(url + '/api/version', { signal: AbortSignal.timeout(800), redirect: 'error' });
       ollama.version = String((await r.json()).version || ''); ollama.status = 'ok'; ollama.note = 'Đang chạy';
@@ -240,7 +278,7 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
     if (vp && fs.existsSync(vp)) { vieneu.status = 'ok'; vieneu.note = 'Đã cài'; }
   } catch { /* chưa có config */ }
 
-  const claude = item('claude', 'Claude Code CLI', 'optional', 'AI dựng giúp, Tạo style, trợ lý điền, QC bằng AI, lồng tiếng có kịch bản', ['/api/ai/', '/api/assist', '/api/stylelab/analyze', '/api/stylelab/generate', '/api/agent/']);
+  const claude = item('claude', 'Claude Code CLI', 'recommended', 'AI dựng giúp, Tạo style, trợ lý điền, QC bằng AI, lồng tiếng có kịch bản', ['/api/ai/', '/api/assist', '/api/stylelab/analyze', '/api/stylelab/generate', '/api/agent/']);
   claude.fix = C.claude;
   if (env.CLAUDE_BIN ? fs.existsSync(env.CLAUDE_BIN) : which('claude', env)) claude.status = 'ok';
   else if (!env.CLAUDE_BIN) {
@@ -248,6 +286,7 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
     const extra = IS_WIN ? [path.join(home, '.local/bin/claude.exe'), path.join(env.APPDATA || '', 'npm/claude.cmd')] : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
     if (extra.some(f => f && fs.existsSync(f))) claude.status = 'ok';
   }
+  if (claude.status === 'ok') claude.note = 'Mô hình AI mặc định (lần đầu chạy claude một lần để đăng nhập)';
 
   const gpu = !!which('nvidia-smi', env);
   const [ff, py] = await Promise.all([ffmpegP, pyP, chromeP, ollamaP]);
@@ -263,6 +302,7 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
   // pip: một mục cho mỗi id (cuBLAS + cuDNN chung một mục)
   const pipItems = new Map();
   for (const { dist, spec } of pipList) {
+    if (PIP_META[dist]?.id === 'yunet') continue; // onnxruntime: kiểm trong mục bám mặt bên dưới
     const meta = PIP_META[dist] || { id: dist, label: dist, need: 'optional', features: 'Thư viện Python trình cài có cài', api: [] };
     let it = pipItems.get(meta.id);
     if (!it) { it = item(meta.id, meta.label, meta.need, meta.features, meta.api); it.specs = []; it.dists = []; pipItems.set(meta.id, it); }
@@ -277,19 +317,30 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
     delete it.specs; delete it.dists;
   }
 
-  const yunet = item('yunet', 'Mô hình mặt YuNet (+ onnxruntime)', 'optional', 'Bám mặt: né mặt khi đặt chữ, reframe theo mặt, QC che mặt', ['/api/reframe']);
+  const yunet = item('yunet', 'Bám mặt: mô hình YuNet + onnxruntime', 'recommended', 'Bám mặt: né mặt khi đặt chữ, reframe theo mặt, QC che mặt', ['/api/reframe']);
   const model = fs.existsSync(path.join(skill, 'assets/models/face_detection_yunet_2023mar.onnx'));
   yunet.fix = model ? C.pip('onnxruntime') : `git -C ${q(skill)} checkout -- assets/models  (file mô hình đi kèm repo)`;
   if (model && py?.ort) { yunet.status = 'ok'; yunet.note = 'onnxruntime có sẵn'; }
   else if (model) yunet.note = py ? 'Có file mô hình, thiếu onnxruntime trong .venv' : 'Có file mô hình, chưa có .venv';
   else yunet.note = 'Thiếu assets/models/face_detection_yunet_2023mar.onnx';
 
+  // mô hình nặng (M117)
+  const models = loadModels(skill).map(m => {
+    const it = item(modelId(m), `Mô hình ${m.kind === 'whisper' ? 'whisper' : 'tách nền'} ${m.name} (~${m.gb} GB)`, 'recommended', m.for,
+      m.kind === 'whisper' ? (m.name === 'large-v3' ? ['/api/rehear'] : ['/api/transcribe', '/api/new']) : ['/api/segment', '/api/sticker']);
+    it.fix = C.prefetch(m.name);
+    if (modelPresent(m, env)) it.status = 'ok'; else it.note = 'Chưa tải: lần đầu dùng sẽ phải chờ tải';
+    return it;
+  });
+
   const req = [...ff, node, venv, ...[...pipItems.values()].filter(i => i.need === 'required'), chrome, pup];
-  const opt = [...[...pipItems.values()].filter(i => i.need !== 'required'), hs, ollama, vieneu, claude, yunet];
-  const items = [...req, ...opt];
+  const rec = [...models, yunet, ...[...pipItems.values()].filter(i => i.need === 'recommended'), claude, hs];
+  const opt = [...[...pipItems.values()].filter(i => i.need === 'optional'), ollama, vieneu];
+  const items = [...req, ...rec, ...opt];
   // M116: mục nào cài lẻ được ('item'), mục nào chạy lại trình cài là có ('all'), còn lại cài tay ('').
-  const plan = { skill, platform, venv: !!py && !py.broken && verGe(py.py, [3, 10]), winget: which('winget', env), brew: which('brew', env), npm: npmCli(), puppeteer: pup.status === 'ok' };
-  for (const i of items) i.auto = !(i.status === 'missing' || i.status === 'old') ? '' : fixPlan(i.id, plan) ? 'item' : BY_INSTALLER.has(i.id) ? 'all' : '';
+  const pkgs = Object.fromEntries(items.map(i => [i.id, i.status === 'ok']));
+  const plan = { skill, platform, venv: !!py && !py.broken && verGe(py.py, [3, 10]), winget: which('winget', env), brew: which('brew', env), npm: npmCli(), puppeteer: pup.status === 'ok', pkgs };
+  for (const i of items) i.auto = !(i.status === 'missing' || i.status === 'old') ? '' : fixPlan(i.id, plan) ? 'item' : BY_INSTALLER.has(i.id) || isModelId(i.id) ? 'all' : '';
   const installer = platform === 'win32' ? 'install.cmd' : 'install.sh';
   return { ready: req.every(i => i.status === 'ok'), platform, install: C.install, installer, items, ms: Date.now() - t0, at: new Date().toISOString() };
 }
@@ -328,7 +379,8 @@ export default ctx => {
         const item = r.items.find(i => i.id === id);
         if (id !== 'all' && !item) { ctx.json(res, { error: 'Không có mục này trong danh sách kiểm' }, 400); return true; }
         const steps = fixPlan(id, { skill: ctx.SKILL, platform: process.platform, venv: r.items.find(i => i.id === 'venv')?.status === 'ok' && fs.existsSync(venvPy(ctx.SKILL)),
-          winget: which('winget'), brew: which('brew'), npm: npmCli(), puppeteer: r.items.find(i => i.id === 'puppeteer-core')?.status === 'ok' });
+          winget: which('winget'), brew: which('brew'), npm: npmCli(), puppeteer: r.items.find(i => i.id === 'puppeteer-core')?.status === 'ok',
+          pkgs: Object.fromEntries(r.items.map(i => [i.id, i.status === 'ok'])) });
         if (!steps) { ctx.json(res, { error: `Chưa cài giúp được ${item?.label || id} trên máy này: chạy lại trình cài hoặc dùng lệnh trong mục "Cho người rành máy"` }, 400); return true; }
         const dry = process.env.AVS_SETUP_DRY === '1';
         const ok = ctx.startJob('setup', async () => {

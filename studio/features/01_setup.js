@@ -116,16 +116,19 @@
       ${act}${show ? adv(i.fix) : ''}</li>`;
   }
   function render(el, busy) {
-    const m = missingReq(R), optMiss = R.items.filter(i => i.need !== 'required' && bad(i));
+    const m = missingReq(R), recMiss = R.items.filter(i => i.need === 'recommended' && bad(i));
+    // M117: mục "cài sẵn" thiếu thì Studio vẫn chạy, nhưng lần đầu dùng tính năng đó phải chờ tải (mô hình whisper vài GB…)
+    const recTxt = recMiss.length ? ` ${recMiss.length} mục nên cài sẵn chưa có: lần đầu dùng tính năng đó sẽ phải chờ tải lâu.` : '';
     const sum = m.length
       ? `<p class="su-sum bad">Thiếu ${m.length} thư viện bắt buộc: ${esc(m.map(i => i.label).join(', '))}. Tính năng cần chúng sẽ không chạy cho tới khi cài.</p>`
-      : `<p class="su-sum good">Đủ thư viện bắt buộc.${optMiss.length ? ` ${optMiss.length} mục tuỳ chọn chưa có (không cần để dùng Studio).` : ''}</p>`;
+      : `<p class="su-sum ${recMiss.length ? '' : 'good'}">Đủ thư viện bắt buộc.${recTxt}</p>`;
     el.querySelector('.su-box').innerHTML = `
       <div class="su-head"><h3 id="su-title"><i class="ti ti-stethoscope"></i> Kiểm tra máy</h3>${sum}</div>
       <div class="su-body">
         <div class="su-all ${m.length ? 'bad' : ''}">${allBox(m)}</div>
         <h4>Bắt buộc</h4><ul>${R.items.filter(i => i.need === 'required').map(row).join('')}</ul>
-        <h4>Tuỳ chọn</h4><ul>${R.items.filter(i => i.need !== 'required').map(row).join('')}</ul>
+        <h4>Cài sẵn (nên có)</h4><ul>${R.items.filter(i => i.need === 'recommended').map(row).join('')}</ul>
+        <h4>Tuỳ chọn</h4><ul>${R.items.filter(i => i.need !== 'required' && i.need !== 'recommended').map(row).join('')}</ul>
       </div>
       <div class="su-foot"><span class="su-note">Kiểm lúc ${esc(new Date(R.at).toLocaleTimeString('vi-VN'))} · ${R.ms} ms${R.cached ? ' · kết quả đã lưu' : ''}</span><div class="grow"></div>
         <button class="ui-btn ui-btn--secondary ui-btn--md" data-su="again" ${busy || INST?.running ? 'disabled' : ''}><i class="ti ti-refresh"></i> ${busy ? 'Đang kiểm…' : 'Kiểm tra lại'}</button>
@@ -142,7 +145,7 @@
       ? `<p class="su-res bad"><i class="ti ti-alert-triangle"></i> Cài chưa xong: ${esc(INST.step || 'lỗi')}</p>${INST.log ? `<pre class="su-log">${esc(INST.log)}</pre>` : ''}`
       : INST?.result === 'done' ? `<p class="su-res good"><i class="ti ti-circle-check"></i> Cài xong, đã kiểm lại máy.${INST.restart ? ' Đóng cửa sổ Studio rồi mở lại để mọi tính năng dùng bản vừa cài.' : ''}</p>` : '';
     const winTip = R.platform === 'win32' ? 'hoặc bấm đúp <b>install.cmd</b> trong thư mục cài đặt' : 'hoặc chạy <b>install.sh</b> trong thư mục cài đặt';
-    return `${res}<span>${m.length ? 'Bấm <b>Cài giúp đủ một lần</b>: Studio tự chạy trình cài, mục đã có sẽ bỏ qua.' : 'Muốn cài thêm phần tuỳ chọn hoặc cài lại: bấm <b>Cài giúp đủ một lần</b>.'}</span>
+    return `${res}<span>${m.length ? 'Bấm <b>Cài giúp đủ một lần</b>: Studio tự chạy trình cài, mục đã có sẽ bỏ qua. Lần đầu tải cả mô hình whisper và tách nền (~5 GB), có thể mất 10–30 phút.' : 'Muốn cài thêm phần tuỳ chọn hoặc cài lại: bấm <b>Cài giúp đủ một lần</b>.'}</span>
       <div class="su-acts"><button class="ui-btn ${m.length ? 'ui-btn--primary' : 'ui-btn--secondary'} ui-btn--md" data-inst="all"><i class="ti ti-download"></i> Cài giúp đủ một lần</button>
         <button class="ui-btn ui-btn--ghost ui-btn--md" data-su="reveal"><i class="ti ti-folder-open"></i> Mở thư mục cài đặt</button></div>
       <span class="su-hint">${winTip}.</span>${adv(R.install)}`;
