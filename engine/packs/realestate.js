@@ -497,7 +497,7 @@
   for (const it of items) if (!MK[it.type]) MK[it.type] = it.make;
 
   PACKS.push({
-    id: P, name: 'Bất động sản', icon: '🏡', caption: 'realestate',
+    id: P, name: 'Bất động sản', icon: '🏡', caption: 'realestate', needs: ['broll'],
     desc: 'Giới thiệu căn hộ, nhà phố, dự án: thẻ kính navy–vàng, giá đếm số, thông số, bản đồ vị trí, tiện ích, ảnh Ken Burns, mặt bằng, trả góp, thẻ môi giới',
     items,
     recipe: ctx => {

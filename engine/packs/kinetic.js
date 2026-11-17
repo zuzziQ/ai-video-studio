@@ -388,7 +388,7 @@
   const BROLL_ROT = ['ai--neural--ember', 'robot--glitch_text--ember', 'ai--code_rain--ember', 'ai--browser--ember', 'robot--orbit_icons--ember'];
 
   PACKS.push({
-    id: P, name: 'Kinetic b-roll / short-form', icon: '⚡', caption: 'kinetic',
+    id: P, name: 'Kinetic b-roll / short-form', icon: '⚡', caption: 'kinetic', needs: ['broll', 'music'],
     desc: 'Chữ động nhiều cỡ trên nền đen cung đỏ, số lớn đập vào, b-roll cắt nhanh có từ khoá Anton vàng kem, zoom-cut, emoji, thanh tiến trình, CTA',
     items: [
       { type: 'kinetic_words', label: 'Chữ xếp tầng (nền đen cung đỏ)', make: T => ({ type: 'kinetic_words', t0: T, t1: T + 2, bg: 'arc', words: [{ text: 'thậm chí', t: T, tier: 's', align: 'left' }, { text: 'khủng khiếp', t: T + .4, tier: 'l', hl: true }, { text: 'hơn', t: T + .8, tier: 's', align: 'right' }] }) },

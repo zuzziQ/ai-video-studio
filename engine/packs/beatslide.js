@@ -329,7 +329,7 @@
   // ---------- Studio metadata + automatic first cut ----------
   const IMG = ['media/living.jpg', 'media/bedroom.jpg', 'media/kitchen.jpg', 'media/facade.jpg'];
   PACKS.push({
-    id: P, name: 'Ảnh theo nhịp nhạc (beat slideshow)', icon: '🥁', caption: P,
+    id: P, name: 'Ảnh theo nhịp nhạc (beat slideshow)', icon: '🥁', caption: P, needs: ['music'],
     desc: 'Ảnh → video cắt đúng nhịp nhạc: zoom-punch, trượt, chớp, glitch, Ken Burns, chữ theo nhịp, collage polaroid, cột EQ, intro/outro thương hiệu',
     items: [
       { type: 'beat_slideshow', label: 'Slideshow theo nhịp', make: T => ({ type: 'beat_slideshow', t0: T, t1: T + 6, bpm: 120, every: 2, images: IMG, labels: ['Phòng khách', 'Phòng ngủ', 'Bếp', 'Mặt tiền'], trans: 'mix' }) },

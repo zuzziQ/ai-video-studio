@@ -26,7 +26,7 @@ Mục `M87` soạn, chủ repo chạy ở `M88`. Đo xem đợt `S10` (5 bước
 
 | Bản | Cách lấy | Ghi chú |
 |---|---|---|
-| Trước S10 | `git worktree add ../avs-before ecb6e4d` (commit cuối trước `M81`/`M82`) | Không có thanh 5 bước, hướng dẫn lần đầu, thẻ Bước tiếp theo, ⌘K (từ `M113` cột phải theo bước đang mở thay thẻ Bước tiếp theo) |
+| Trước S10 | `git worktree add ../avs-before ecb6e4d` (commit cuối trước `M81`/`M82`) | Không có thanh 5 bước, hướng dẫn lần đầu, thẻ Bước tiếp theo, ⌘K (từ `M113` cột phải theo bước đang mở thay thẻ Bước tiếp theo; từ `M114` cột phải có điểm 0–100 từng bước, và bấm Xuất khi bước Kiểm tra dưới 60 hiện hộp cảnh báo có nút Vẫn xuất) |
 | Sau S10 | `main` sau khi `M81`–`M87` đã gộp (ghi mã commit vào bảng) | Chạy đúng như người dùng mới: chưa có `onboarding.json` |
 
 Chạy mỗi bản trong thư mục của nó với `AVS_HOME` tạm như mục 2. Cả hai bản dùng cùng clip, logo, ảnh.
@@ -41,7 +41,7 @@ Chạy mỗi bản trong thư mục của nó với `AVS_HOME` tạm như mục 
 | 2 | "Đặt thương hiệu của bạn: tên là *Tiệm Bánh Mây*, dùng file logo trên Desktop." | Brand kit có tên + logo (bản trước: panel Thương hiệu; bản sau: hướng dẫn lần đầu hoặc Chuẩn bị) |
 | 3 | "Làm một video từ clip *video-goc.mov* trên Desktop." | Dự án mở với clip trên timeline, có phụ đề tự động hoặc người thử chủ động bỏ qua |
 | 4 | "Cho video một kiểu trình bày đẹp (mẫu hoặc gói style) và kiểm tra phụ đề có đúng không, sửa một chữ sai." | Đổi gói/mẫu ít nhất một lần và sửa được một chữ phụ đề |
-| 5 | "Xuất video ra file để đăng TikTok." | Có file MP4 9:16 trong `out/` |
+| 5 | "Xuất video ra file để đăng TikTok." | Có file MP4 9:16 trong `out/` (bản sau: người thử chưa kiểm tra thì gặp hộp cảnh báo điểm Kiểm tra; ghi lại họ bấm Sửa hay Vẫn xuất) |
 
 ## 5. Cách đo
 

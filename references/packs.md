@@ -20,6 +20,7 @@ Mỗi gói là **1 file JS** nạp sau `slate.js` và trước `engine.js` (xem 
     recipe: ctx => ({ caption_style: 'course', music: 'corporate', scenes: [/* … */] }) });
 })();
 ```
+- `needs` (tuỳ chọn, M114): mảng trong `'product' | 'broll' | 'music'` — gói cần hồ sơ sản phẩm, b-roll, nhạc/SFX. Điểm từng bước ở cột phải (`studio/features/02_score.core.js`) chỉ chấm các tiêu chí này khi gói khai báo; không viết cứng theo id gói. Đang dùng: `review` (product), `kinetic`, `montage` (broll, music), `realestate` (broll), `beatslide` (music).
 - Khung thiết kế **720×1280** khi dọc (`TL.width < TL.height`), **1280×720** khi ngang. Đọc kích thước bằng `const [W, H] = VERT() ? [720, 1280] : [1280, 720]` (hàm `VERT()` có trong `packs/core.js`).
 - `back`: nằm dưới người (chèn sau video nền). `front`: nằm trên cùng. `cover:true`: không vẽ video nền (module tự vẽ toàn khung). `person:true`: vẽ người đã tách nền giữa back và front.
 - **Phần tử chọn được trong Studio phải có `data-cid`**: thêm `${cidOf(s)}` vào div gốc. Phần tử con riêng (một dòng, một nút) thì dùng `cidOf(child)`. Các `lines[]` render bằng `lines(s, t)` đã tự có cid.
