@@ -20,6 +20,7 @@ import { qcHash } from './export_gate.mjs';
 import { createRequire } from 'node:module';
 import { saidNumbers, inventedNumbers, hasFlag, stripFlags, sceneStrings } from './ai_edit.mjs'; // ai_edit imports ai_qc too: both only call each other's functions later
 import { txCheckEdit } from './assist.mjs';
+import { burnBand, burnIssues } from './burnin.mjs'; // S13 M110: phụ đề mới chồng phụ đề cháy sẵn của video gốc
 const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
 
 export const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -291,7 +292,7 @@ export async function domPass(E, tl, caps, times, stillDir, tag, onP) {
       fs.rmSync(s.base, { force: true }); delete s.base;
     }
   }
-  return { samples, failed, DW, DH };
+  return { samples, failed, DW, DH, burn: burnBand(E.dir, tl) };
 }
 
 // Platform safe zone (design px): app buttons, the profile row and the description cover the rest.
@@ -331,6 +332,7 @@ export function domIssues(tl, caps, P) {
     if (o.kind === 'text_cut') out.push({ t: o.ts[0], kind: o.kind, severity: 'med', target: `s${o.i}`, msg: `${name}: chữ “${o.s}” không vừa khối, bị cắt “…”: viết ngắn lại` });
     if (o.kind === 'caption_overlap') out.push({ t: o.ts[0], kind: o.kind, severity: 'med', target: `s${o.i}`, msg: `Phụ đề bị ${name} đè lên (${Math.round(o.frac * 100)}%)` });
   }
+  out.push(...burnIssues(tl, samples, P.burn));
   // hook: a big non-caption text or graphic in the first 2 s
   const early = samples.filter(s => s.t <= 2);
   const hero = early.some(s => Object.entries(s.m.scenes).some(([i, o]) => o.texts.some(r => r.h >= DH * .028 && /[\p{L}\d]/u.test(r.s)) || (!isBase(tl.scenes[i], tl) && o.els.some(r => r.w * r.h > DW * DH * .04))));

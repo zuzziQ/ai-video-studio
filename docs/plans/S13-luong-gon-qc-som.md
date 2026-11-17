@@ -78,3 +78,5 @@ Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M1
 - Đặt chỗ tất định có thể thu graphic quá nhỏ khi mặt chiếm giữa khung dọc: cho phép đổi sang vị trí trên/dưới và rút thời lượng cảnh; quá nhỏ thì đổi thành chữ 2 dòng (đường `reflow` có sẵn).
 - `face_track.json` thêm thời gian tạo dự án: chạy trên khung 30 fps đã tách, lấy mẫu thưa, mục tiêu < 5 s cho video 60 s.
 - Đổi tên/di chuyển panel làm lệch hướng dẫn người mới (`S10`) và `PANEL_STEP`: sửa cùng PR với `M107`/`M108`.
+
+Kết quả `M110` (2026-11-17): dò phụ đề cháy sẵn bằng ffmpeg + cạnh dọc (không OCR), lưu `.studio/burnin.json`; chọn cách xử lý ở thẻ Video nguồn ghi `timeline.burnin.mode`, engine áp. Ngưỡng cạnh 40 báo nhầm kính / tay trên clip mẫu không chữ, nên dùng 80. Bản sao clip mẫu có chữ cháy: QC không Claude 52 → 67.

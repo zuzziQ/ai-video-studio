@@ -98,6 +98,10 @@
   .wf-st li { display: flex; align-items: center; gap: 8px; } .wf-st .ti { font-size: 16px; color: var(--tx3); } .wf-st .is-done .ti { color: var(--acc); }
   .wf-acts { display: flex; flex-wrap: wrap; gap: 8px; } .wf-card .wf-acts button { align-self: auto; }
   .wf-lnk { background: none; border: 0; padding: 0; height: auto; color: var(--acc); cursor: pointer; font-size: inherit; text-decoration: underline; }
+  .wf-st .is-warn .ti { color: var(--warn); }
+  .wf-burn { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--rs); background: var(--bg2); }
+  .wf-burn-opts { display: flex; flex-wrap: wrap; gap: 6px; } .wf-card .wf-burn-opts button { align-self: auto; min-width: 0; white-space: normal; text-align: left; height: auto; min-height: 28px; }
+  .wf-burn-opts button.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
   .wf-hint code, .wf-src code { font-size: 11px; color: var(--tx2); overflow-wrap: anywhere; }
   #wf-tabs { display: flex; gap: 4px; padding: 0 12px 8px; flex: none; overflow-x: auto; }
   #wf-tabs[hidden] { display: none; }
@@ -263,7 +267,15 @@
   const clickEl = (id, miss) => () => { const el = document.getElementById(id); if (el) el.click(); else S.toast(miss); };
   // S13 (M107): đã mở dự án → thẻ "Video nguồn" (GET /api/source, studio/routes/14_source.mjs); chưa có → bộ chọn như cũ.
   // C15: một dòng nhắc thả nhiều video vào Nguon/Tha vao day/ cho Tự lái (nút Tự lái trên thanh đầu, M108).
-  let SRC = null, srcDir = null;
+  let SRC = null, srcDir = null, burnBusy = false;
+  // S13 M110: phụ đề cháy sẵn trong video gốc (POST /api/source/burnin dò, kết quả ở SRC.burnin); cách xử lý ghi TL.burnin.mode
+  const BURN = { off: ['ti-message-off', 'Tắt phụ đề mới'], move: ['ti-arrows-vertical', 'Dời phụ đề mới'], mask: ['ti-blur', 'Che dải chữ cũ'] };
+  function scanBurn() {
+    if (burnBusy || !SRC?.canScan) return;
+    burnBusy = true; const dir = srcDir;
+    S.api('/api/source/burnin', {}).then(r => { if (srcDir !== dir) return; if (r?.burnin) SRC.burnin = r.burnin; else S.toast(r?.error || 'Không dò được phụ đề cháy sẵn'); })
+      .catch(() => {}).finally(() => { burnBusy = false; if (srcDir === dir && panel === 'wf-new') renderSource(); });
+  }
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const mb = b => (b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB');
   const newVideo = clickEl('newproj', 'Chưa có nút Video mới');
@@ -272,17 +284,32 @@
       'Chọn một video quay sẵn: Studio tách lời thoại, làm phụ đề và mở dự án mới để dựng.', 'Chọn video', newVideo);
     if (srcDir !== META.dir) {
       SRC = null; srcDir = META.dir;
-      S.api('/api/source').then(r => { if (srcDir !== META.dir) return; SRC = r?.error ? { failed: true } : r; if (panel === 'wf-new') renderSource(); }).catch(() => { SRC = { failed: true }; });
+      S.api('/api/source').then(r => {
+        if (srcDir !== META.dir) return; SRC = r?.error ? { failed: true } : r;
+        if (SRC.canScan && !SRC.burnin) scanBurn(); // dò một lần cho dự án chưa dò
+        if (panel === 'wf-new') renderSource();
+      }).catch(() => { SRC = { failed: true }; });
     }
-    const d = srcDur(), cap = (CAP || []).length, capOn = cap > 0 && TL.caption_style !== 'none';
+    const d = srcDur(), cap = (CAP || []).length, capOn = cap > 0 && TL.caption_style !== 'none' && TL.burnin?.mode !== 'off';
     const faceT = TL.face_track?.keys?.length > 0, face = faceT || !!TL.face;
     const st = (done, text) => `<li class="${done ? 'is-done' : ''}"><i class="ti ${done ? 'ti-circle-check' : 'ti-circle-dashed'}"></i>${text}</li>`;
     const where = !SRC ? 'Đang đọc…' : SRC.failed ? 'Không đọc được' : SRC.inKho ? `${esc(SRC.kho.title)} · <code>${esc(SRC.rel)}</code>${SRC.exists ? '' : ' (không còn file)'}`
       : SRC.name ? `Ngoài Kho${SRC.exists ? '' : ' (không còn file)'}` : 'Dự án cũ, chưa ghi video gốc';
+    const B = SRC?.burnin, bm = B?.found && BURN[TL.burnin?.mode] ? TL.burnin.mode : null, pc = v => Math.round(v * 100) + '%';
+    const burnLi = !SRC || SRC.failed ? '' : burnBusy ? '<li><i class="ti ti-loader-2"></i>Đang dò phụ đề cháy sẵn…</li>'
+      : !B ? (SRC.canScan ? st(false, 'Chưa dò phụ đề cháy sẵn') : '')
+      : !B.found ? st(true, 'Không thấy phụ đề cháy sẵn')
+      : `<li class="${bm ? 'is-done' : 'is-warn'}"><i class="ti ${bm ? 'ti-circle-check' : 'ti-alert-triangle'}"></i>Video gốc có phụ đề cháy sẵn${bm ? ` · ${BURN[bm][1]}` : ''}</li>`;
+    const low = B?.found && B.y0 + B.y1 > 1;
+    const burnBox = B?.found && B.design ? `<div class="wf-burn"><p>Chữ cũ nằm ở dải ${pc(B.y0)}–${pc(B.y1)} chiều cao khung; phụ đề mới đặt ở đó sẽ chồng lên. Chọn một cách:</p>
+        <div class="wf-burn-opts">${Object.entries(BURN).map(([k, [ic, lb]]) => `<button data-wf="src-burn-${k}" class="${bm === k ? 'on' : ''}" aria-pressed="${bm === k}"
+          title="${k === 'move' ? `Phụ đề mới nằm ${low ? 'trên' : 'dưới'} dải chữ cũ` : k === 'mask' ? 'Làm mờ dải chữ cũ, phụ đề mới giữ nguyên chỗ' : 'Chỉ còn chữ cũ của video gốc'}"><i class="ti ${ic}"></i>${k === 'move' ? `Dời phụ đề ${low ? 'lên trên' : 'xuống dưới'}` : lb}</button>`).join('')}</div>
+        <button class="wf-lnk" data-wf="src-burn-scan">Dò lại</button></div>` : '';
     $('#libbody').innerHTML = `<div class="wf-card wf-src"><h4 class="wf-name"><i class="ti ti-movie"></i>${esc(SRC?.name || META.name || 'Dự án')}</h4>
       <dl><dt>Độ dài</dt><dd>${mmss(d)}${SRC?.size ? ` · ${mb(SRC.size)}` : ''}</dd>
         <dt>Vị trí</dt><dd>${where}${SRC?.inKho && SRC.exists ? ` <button class="wf-lnk" data-wf="src-reveal">Mở thư mục</button>` : ''}</dd></dl>
-      <ul class="wf-st">${st(cap, cap ? `Đã tách lời thoại (${cap} câu)` : 'Chưa tách lời thoại')}${st(capOn, capOn ? 'Phụ đề đang bật' : cap ? 'Phụ đề đang tắt' : 'Chưa có phụ đề')}${st(face, faceT ? 'Đã dò mặt theo thời gian' : face ? 'Đã dò vị trí mặt' : 'Chưa dò mặt')}</ul>
+      <ul class="wf-st">${st(cap, cap ? `Đã tách lời thoại (${cap} câu)` : 'Chưa tách lời thoại')}${st(capOn, capOn ? 'Phụ đề đang bật' : cap ? 'Phụ đề đang tắt' : 'Chưa có phụ đề')}${st(face, faceT ? 'Đã dò mặt theo thời gian' : face ? 'Đã dò vị trí mặt' : 'Chưa dò mặt')}${burnLi}</ul>
+      ${burnBox}
       <div class="wf-acts"><button data-wf="src-change" title="Chọn video khác: Studio tạo dự án mới, dự án này vẫn giữ trong Kho"><i class="ti ti-replace"></i>Đổi video</button>
         <button data-wf="src-new" title="Trang chủ: mẫu, video dài, hàng loạt, dự án gần đây"><i class="ti ti-plus"></i>Tạo dự án khác</button></div></div>
       ${cap || !S.ctaTranscribe ? '' : S.ctaTranscribe('')}
@@ -298,6 +325,13 @@
     if (a === 'src-new') (S.openHome || newVideo)();
     if (a === 'src-long') openPanel('longform');
     if (a === 'src-reveal') S.api('/api/source/reveal', {}).then(r => { if (!r.ok) S.toast(r.error || 'Không mở được thư mục'); });
+    if (a === 'src-burn-scan') { if (SRC) SRC.canScan = true; scanBurn(); renderSource(); }
+    const m = a.startsWith('src-burn-') && a.slice(9), B = SRC?.burnin;
+    if (m && BURN[m] && B?.design && S.TL) {
+      S.pushUndo();
+      if (S.TL.burnin?.mode === m) delete S.TL.burnin; else S.TL.burnin = { ...B.design, mode: m };
+      S.changed(); renderSource();
+    }
   });
   S.addPanel('wf-new', 'ti-video', 'Video nguồn', renderSource);
   // trạng thái AI dựng giúp (kế hoạch, cảnh AI, QC nhanh) do 20_ai.js vẽ (S.ai.renderBuild); chưa có thì thẻ mở hộp như cũ

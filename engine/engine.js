@@ -245,7 +245,7 @@ function personLayer(t) {
 }
 
 function captionHTML(t) {
-  if (TL.caption_style === 'none') return '';
+  if (TL.caption_style === 'none' || TL.burnin?.mode === 'off') return '';
   if (activeIn(TL.captionsHide, t).length) return '';
   const c = (TL.captions || []).find(c => t >= c.t0 && t < c.t1 && !c.hidden);
   if (!c) return '';
@@ -264,6 +264,26 @@ function sub2HTML(c) {
   const v = FRAME_AR < 1, txt = String(c.tr).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   return `<div id="sub2" style="position:absolute;left:${v ? 40 : 120}px;right:${v ? 40 : 120}px;top:${s.y ?? (v ? 1090 : 640)}px;text-align:center;z-index:95;pointer-events:none">
     <span style="display:inline-block;font-family:'Be Vietnam Pro',Inter,sans-serif;font-weight:600;font-size:${s.size || (v ? 27 : 25)}px;line-height:1.3;${SUB2[s.style] || SUB2.plain}">${txt}</span></div>`;
+}
+// Phụ đề cháy sẵn trong video gốc (S13 M110, scripts/burnin.mjs): TL.burnin = {x0, x1, y0, y1 (px thiết kế), mode}.
+//   mode mask: một dải mờ che chữ cũ ngay trên a-roll (dưới mọi graphic); move: dời #cap (+ #sub2) ra khỏi dải; off: tắt phụ đề mới.
+function burnMask() {
+  const B = TL.burnin; if (B?.mode !== 'mask' || B.y1 == null) return '';
+  // cả chiều ngang (mỗi câu cũ dài ngắn khác nhau), mép trên / dưới mềm
+  const p = 12, f = 'linear-gradient(transparent,#000 22%,#000 78%,transparent)';
+  return `<div class="abs" data-burnmask style="left:0;right:0;top:${B.y0 - p}px;height:${B.y1 - B.y0 + 2 * p}px;-webkit-mask-image:${f};mask-image:${f};
+    -webkit-backdrop-filter:blur(18px) brightness(.85);backdrop-filter:blur(18px) brightness(.85);background:rgba(0,0,0,.22);pointer-events:none"></div>`;
+}
+function placeBurn(stage) {
+  const B = TL.burnin, cap = stage.querySelector('#cap');
+  if (B?.mode !== 'move' || B.y1 == null || !cap) return;
+  const sr = stage.getBoundingClientRect(), k = sr.height / stage.offsetHeight, r = cap.getBoundingClientRect();
+  if (!r.height || !k) return;
+  const top = (r.top - sr.top) / k, bot = (r.bottom - sr.top) / k, H = stage.offsetHeight, g = 14;
+  if (bot <= B.y0 - 4 || top >= B.y1 + 4) return;
+  // dải ở nửa dưới → phụ đề lên trên dải; dải ở nửa trên → phụ đề xuống dưới dải
+  const dy = (B.y0 + B.y1) / 2 > H / 2 ? B.y0 - g - bot : B.y1 + g - top;
+  for (const el of [cap, stage.querySelector('#sub2')]) if (el) el.style.translate = `0 ${dy.toFixed(1)}px`;
 }
 function placeSub2(stage) {
   const s2 = stage.querySelector('#sub2'), cap = stage.querySelector('#cap');
@@ -390,7 +410,7 @@ function compose(t) {
     if (r.front) front.push(r.front);
     if (t < s0.t1 && (s.hideCaptions ?? (r.hideCaptions || DEFAULT_HIDE_CAPS.has(s.type)))) hideCaps = true;
   }
-  return fxWrap(t, (cover ? '' : arollImg(t)) + back.join('') + (person ? personLayer(t) : '') + front.join('')) + (hideCaps ? '' : captionHTML(t));
+  return fxWrap(t, (cover ? '' : arollImg(t) + burnMask()) + back.join('') + (person ? personLayer(t) : '') + front.join('')) + (hideCaps ? '' : captionHTML(t));
 }
 
 // Whole-frame transition accents: timeline.fx = [{ t, type, dur?, amp? }] — captions stay steady on top.
@@ -470,6 +490,7 @@ window.renderFrame = async (t) => {
   await Promise.race([preload(html), new Promise(r => setTimeout(r, 1000))]);
   stage.innerHTML = html;
   placeSub2(stage);
+  placeBurn(stage);
   fixReframe(stage, t);
   if (window.fitStage) fitStage(stage); // M94: .fit texts of pack modules shrink to their box (engine/fit.js)
   if (KF_LINES.length) applyLineKf(stage, t);
