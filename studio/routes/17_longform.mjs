@@ -18,6 +18,7 @@ import { forbiddenDir } from '../security.mjs';
 import { uploadVideo, brandParam } from './26_pick.mjs';
 import { cleanBrief } from '../../scripts/highlights.mjs';
 import { validId, loadProduct } from '../../scripts/products.mjs';
+import { habitsFor } from '../../scripts/profile.mjs';
 
 export default ctx => {
   const HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -93,7 +94,9 @@ export default ctx => {
         const argv = [HL, video, '--out', out, '--n', String(Math.max(1, Math.min(12, +b.n || 6))), '--min', String(+b.min || 20), '--max', String(+b.max || 60),
           '--orient', b.orient === 'horizontal' ? 'horizontal' : 'vertical', '--model', ['small', 'medium', 'large-v3-turbo', 'large-v3'].includes(b.model) ? b.model : 'large-v3-turbo'];
         // S18 M127: hướng dẫn cho Claude + sản phẩm ưu tiên (không bắt buộc)
-        const brief = cleanBrief(b.brief), product = String(b.product || '');
+        // S19 M134: thói quen đã học của thương hiệu (câu khẳng định hay bị xoá, CTA, chính tả) nối vào hướng dẫn cho Claude
+        const learned = (() => { try { return habitsFor(typeof b.brand === 'string' && b.brand ? b.brand : 'chung').extra; } catch { return ''; } })();
+        const brief = cleanBrief([b.brief, learned && `Thói quen của thương hiệu (học từ những lần người dùng sửa video): ${learned}`].filter(Boolean).join('\n')), product = String(b.product || '');
         if (product && !validId(product)) return J({ ok: false, error: 'Mã sản phẩm không hợp lệ' }, 400);
         if (product) { try { loadProduct(product); } catch (e) { return J({ ok: false, error: e.message }, 400); } }
         if (brief) argv.push('--brief', brief);

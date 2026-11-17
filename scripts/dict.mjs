@@ -6,12 +6,15 @@
 //      → cặp "chữ thường=Đúng Hoa" (sửa cách viết hoa, Whisper viết thường tên riêng);
 //   2. thương hiệu: khoá `dict` của brand kit trong `$AVS_HOME/brands.json` (chuỗi "sai=đúng;sai=đúng");
 //   3. dự án: `<dự án>/.studio/dict.json` = {version: 1, entries: [{from, to}]}.
+//   (S19 M134) giữa 1 và 2: chính tả đã học của thương hiệu (scripts/profile.mjs learnedDict: chữ phụ đề người dùng hay sửa),
+//   nên từ điển gõ tay của thương hiệu và của dự án vẫn thắng.
 // Chuỗi đi vào dòng lệnh nên được kiểm: không ký tự điều khiển, không `=`/`;` trong một vế, mỗi vế ≤ 80 ký tự,
 // tối đa 500 cặp, cả chuỗi ≤ 8000 ký tự; truyền dạng một tham số `--fix=<chuỗi>` (không thể thành tham số khác).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { loadProduct } from './products.mjs';
+import { learnedDict } from './profile.mjs';
 
 export const LIMITS = { side: 80, entries: 500, arg: 8000 };
 const home = () => process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -105,13 +108,14 @@ export function dictSources({ dir, kit, product, timeline, h = home() } = {}) {
   return {
     auto: nameEntries([...new Set(names.filter(Boolean))]),
     brand: parseDict(kitObj?.dict || ''),
+    learned: normalizeEntries(learnedDict(kitObj?.id || 'chung')),
     project: dir ? loadProjectDict(dir) : [],
     kit: kitObj ? { id: kitObj.id, title: kitObj.title || kitObj.name || '' } : null,
   };
 }
 /** Chuỗi `--fix` của một dự án (gọi ngay trước captions.py). Không bao giờ ném lỗi: từ điển hỏng = không sửa. */
 export function projectFix(opts = {}) {
-  try { const s = dictSources(opts); return fixArg(s.auto, s.brand, s.project); } catch { return ''; }
+  try { const s = dictSources(opts); return fixArg(s.auto, s.learned, s.brand, s.project); } catch { return ''; }
 }
 /** Các từ đích (đúng) của chuỗi fix: giữ nguyên chữ hoa khi bước sau hạ chữ thường cả phụ đề. */
 export function fixWords(fix) {

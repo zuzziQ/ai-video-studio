@@ -28,7 +28,8 @@ const okScript = v => v === '' || (typeof v === 'string' && STAGE_ID.test(v));
 export default ctx => {
   const runner = process.env.AVS_NO_QUEUE ? null : new Runner({ role: 'server', daemon: true, log: m => console.log(m) }).start();
   if (runner) for (const s of ['SIGINT', 'SIGTERM']) process.once(s, () => runner.stop()); // server.mjs exits after every route has cleaned up (Telegram bot, jobs)
-  // "Học từ chỉnh sửa": when an open project was made by Tự lái and the user saved it, compare with what Tự lái delivered.
+  // "Học từ chỉnh sửa": when an open project has an AI delivery (Tự lái, AI dựng, Tự động — S19 M134 .studio/ai_result.json) and
+  // the user saved it, compare with what AI delivered; the observation goes to the brand of the project's Kho.
   // S18 M131: mọi dự án đang mở (thanh tab M129), không chỉ dự án mặc định — timer chạy ngoài request nên ctx.project là
   // dự án mặc định; các tab khác lấy từ ctx.tabs.
   let learn = null; const seen = new Map();
@@ -39,7 +40,7 @@ export default ctx => {
   };
   const tryLearn = (force, d = ctx.project?.dir) => {
     if (!d) return null;
-    const ap = rd(path.join(d, '.studio/autopilot.json')); if (!ap || ap.state !== 'done') return null;
+    if (!fs.existsSync(path.join(d, '.studio/ai_result.json'))) { const ap = rd(path.join(d, '.studio/autopilot.json')); if (!ap || ap.state !== 'done') return null; }
     let mt = 0; try { mt = fs.statSync(path.join(d, 'timeline.json')).mtimeMs; } catch { return null; }
     if (!force && seen.get(d) === mt) return null;
     seen.set(d, mt);
@@ -66,7 +67,7 @@ export default ctx => {
         return J({ items: q.items.map(it => (it.state === 'running' || u.searchParams.get('id') === it.id ? detail(it) : it)), runner: runner ? runner.status() : { active: false, disabled: true },
           settings: loadSettings(), profiles: profilesOut(), steps: STEPS.map(([id, label, , req]) => ({ id, label, required: !!req })),
           kinds: Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, { name: v.name, ok: fs.existsSync(path.join(ctx.SKILL, 'scripts', v.script)) }])),
-          learn, project: ctx.project ? { dir: ctx.project.dir, autopilot: !!rd(path.join(ctx.project.dir, '.studio/autopilot.json')) } : null, home: AVS_HOME,
+          learn, project: ctx.project ? { dir: ctx.project.dir, autopilot: !!rd(path.join(ctx.project.dir, '.studio/autopilot.json')) || fs.existsSync(path.join(ctx.project.dir, '.studio/ai_result.json')) } : null, home: AVS_HOME,
           kho: (() => { try { return khoInboxes().map(f => ({ in: f.in, kho: f.kho, brand: f.brand, profile: f.profile })); } catch { return []; } })() });
       }
       if (req.method !== 'POST') return false;
@@ -156,7 +157,7 @@ export default ctx => {
         if (a === 'reset') { resetLearned(b.id); return J({ ok: true, profiles: profilesOut() }); }
         return J({ error: 'hành động lạ' }, 400);
       }
-      if (p === '/api/autopilot/learn') { const r = tryLearn(true); return J(r ? { ...r, profiles: profilesOut() } : { ok: false, why: 'Dự án đang mở không phải do Tự lái làm (hoặc chưa chạy xong)' }); }
+      if (p === '/api/autopilot/learn') { const r = tryLearn(true); return J(r ? { ...r, profiles: profilesOut() } : { ok: false, why: 'Dự án đang mở chưa có bản AI giao (AI dựng, Tự động hoặc Tự lái)' }); }
     } catch (e) { return J({ error: e.message }, e.status || 500); }
     return false;
   };

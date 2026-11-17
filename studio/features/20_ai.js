@@ -21,6 +21,7 @@
   .ai-opts select.ai-grow { width: auto; flex: 1; }
   .ai-after { margin: var(--space-1) 0 var(--space-2); } .ai-after .ai-row { margin: var(--space-1) 0; }
   .ai-row { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; } .ai-row > * { flex: 1; min-width: 0; }
+  .ai-hab { margin: var(--space-2) 0; font-size: var(--text-xs); } .ai-hab summary { cursor: pointer; color: rgb(var(--color-fg-muted)); } .ai-hab .ai-row span { font-size: var(--text-2xs); }
   .ai-row.ai-click { cursor: pointer; } .ai-row > .ai-nf { flex: none; } .ai-row > .ai-end { text-align: right; }
   p.ai-intro { margin: var(--space-050) 0 var(--space-2); } p.ai-note { font-size: var(--text-2xs); }
   .lbl.ai-lbl { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
@@ -113,6 +114,7 @@
         <label class="o"><input type="radio" name="aip" value="pick"> Gói khác: <select id="aipk" class="ai-grow">${packs().filter(p => p.recipe).map(p => `<option value="${p.id}">${p.icon || ''} ${esc(p.name)}</option>`).join('')}</select></label></div>
       <label class="lbl">Mật độ graphic</label><div class="seg" id="aid">${DENS.map(([k, l, s]) => `<button data-d="${k}" class="${k === 'vua' ? 'on' : ''}" title="${s}">${l} <span class="muted">${s}</span></button>`).join('')}</div>
       <label class="lbl">Yêu cầu thêm (tuỳ chọn)</label><textarea id="aix" placeholder="VD: nhấn mạnh con số, CTA là “nhắn tin để nhận tài liệu”, không dùng emoji…"></textarea>
+      <div id="ai-habits"></div>
       ${afterOpts('aim')}
       <p class="muted ai-note">Cảnh do AI tạo được đánh dấu; chạy lại sẽ chỉ thay các cảnh AI chưa bị bạn chỉnh. Cảnh bạn đã sửa hoặc tự thêm được giữ nguyên.</p>
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="aigo"><i class="ti ti-sparkles"></i> Dựng</button></div>`);
@@ -120,11 +122,27 @@
     $('#aid').onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; for (const x of $('#aid').children) x.classList.toggle('on', x === b); };
     $('#aipk').onfocus = () => { document.querySelector('[name=aip][value=pick]').checked = true; };
     $('#aigo').onclick = startAi;
+    loadHabits();
   }
+  // S19 M134: thói quen đã học của thương hiệu của dự án (GET /api/ai/habits); bỏ chọn = tắt điều đó cho lần dựng này
+  let HAB = null;
+  async function loadHabits() {
+    const box = $('#ai-habits'); if (!box) return;
+    HAB = await S.api('/api/ai/habits').catch(() => null);
+    const on = (HAB?.items || []).filter(i => !i.off);
+    if (!HAB || HAB.error || !on.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<details class="ai-hab"><summary><i class="ti ti-school"></i> Đang áp <b>${on.length}</b> thói quen của <b>${esc(HAB.name)}</b></summary>
+      ${on.map(i => `<label class="ai-row ai-click"><input type="checkbox" class="ai-nf" data-hab="${esc(i.key)}" checked><span>${esc(i.note)}</span></label>`).join('')}
+      <p class="muted">Bỏ chọn để tắt cho lần dựng này. Quản lý hẳn ở trang Thương hiệu.</p></details>`;
+    box.querySelectorAll('[data-hab]').forEach(el => (el.onchange = () => {
+      const n = box.querySelectorAll('[data-hab]:checked').length; box.querySelector('summary b').textContent = n;
+    }));
+  }
+  const skipHabits = () => [...document.querySelectorAll('#ai-habits [data-hab]')].filter(el => !el.checked).map(el => el.dataset.hab);
   async function startAi() {
     if (!CAP.length) return S.needCaptions(openAiModal, 'AI dựng giúp');
     const pm = document.querySelector('[name=aip]:checked').value;
-    const body = { goal: $('#aig').value, tone: $('#ait').value, pack: pm === 'pick' ? $('#aipk').value : pm, density: $('#aid .on')?.dataset.d || 'vua', extra: $('#aix').value.trim() };
+    const body = { goal: $('#aig').value, tone: $('#ait').value, pack: pm === 'pick' ? $('#aipk').value : pm, density: $('#aid .on')?.dataset.d || 'vua', extra: $('#aix').value.trim(), skip: skipHabits() };
     readAfter('aim');
     const af = S.autofill?.afterMode() || '';
     if (!await S.saveNow()) return;
@@ -139,6 +157,8 @@
       lastPlan = plan; applyPlan(plan);
       // M108: Thêm b-roll / Thêm âm thanh = Tự động chạy nối ngay, cùng bước hoàn tác với bản dựng AI
       const out = af ? await S.autofill.run(af, { noUndo: true }) : undefined;
+      // S19 M134: bản AI giao (đã lưu) để "Học từ chỉnh sửa" so với các lần bạn sửa sau
+      try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này, không chặn */ }
       showResult(plan, af ? (out || { error: true }) : null);
       if (panel === 'wf-aihelp') renderAi();
     });
@@ -166,7 +186,8 @@
     TL.scenes = [...(TL.scenes || []).filter(s => !mine(s)), ...JSON.parse(JSON.stringify(plan.scenes))];
     TL.audio = TL.audio || {};
     // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
-    TL.audio.music = [...(TL.audio.music || []).filter(m => !m._ai && !m._auto && !(m.t0 <= .05 && m.t1 >= TL.duration - .1)), { ...plan.music, t1: TL.duration }];
+    // S19 M134: plan.music null = thói quen "không nhạc": bỏ nhạc _ai/_auto, không thêm (nhạc file / tay giữ nguyên, bài học ai-video-studio-020)
+    TL.audio.music = [...(TL.audio.music || []).filter(m => !m._ai && !m._auto && !(plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1)), ...(plan.music ? [{ ...plan.music, t1: TL.duration }] : [])];
     TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai), ...plan.sfx.map(x => ({ ...x }))];
     let n = 0;
     for (const e of plan.captions) {
@@ -176,8 +197,20 @@
       c.words = c.words.filter(w => w.w); n++;
     }
     CAP = CAP.filter(c => c.words.length);
+    plan._dict = dictFix(CAP, plan.dict); // S19 M134: chính tả đã học của thương hiệu, mọi dòng phụ đề
     plan._applied = n;
     S.changed(true);
+  }
+  // S19 M134: như applyDict của scripts/ai_edit.mjs (từng từ, không phân biệt hoa thường, giữ dấu câu hai đầu)
+  function dictFix(caps, dict) {
+    const m = new Map((Array.isArray(dict) ? dict : []).filter(e => e && typeof e.from === 'string' && typeof e.to === 'string' && !/\s/.test(e.from)).map(e => [e.from.normalize('NFC').toLocaleLowerCase('vi'), e.to]));
+    let n = 0; if (!m.size) return 0;
+    for (const c of caps) for (const w of c.words || []) {
+      const x = /^([,.!?:;"'“”…()[\]-]*)(.*?)([,.!?:;"'“”…()[\]-]*)$/su.exec(String(w.w ?? '').normalize('NFC'));
+      const to = x && m.get(x[2].toLocaleLowerCase('vi'));
+      if (to && to !== x[2]) { w.w = x[1] + to + x[3]; n++; }
+    }
+    return n;
   }
   // S13 · M104: what the placement step did (ai_edit.mjs placePlan)
   function placedNote(p) {
@@ -192,6 +225,7 @@
       <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(plan.music?.kho ? `${plan.music.title || plan.music.kho} (Kho)` : plan.music?.mood || '—')}</span><span>${plan.sfx.length} SFX</span></div>
       ${plan.summary ? `<p>${esc(plan.summary)}</p>` : ''}
       ${placedNote(plan.placed)}
+      ${plan.learned?.length ? `<p class="muted" title="${esc(plan.learned.join('\n'))}"><i class="ti ti-school"></i> Đã áp ${plan.learned.length} thói quen của thương hiệu${plan._dict ? ` · sửa chính tả ${plan._dict} từ` : ''}.</p>` : ''}
       ${full ? `<div class="ai-kv">${Object.entries(kinds).map(([k, v]) => `<span>${esc(k)}${v > 1 ? ' ×' + v : ''}</span>`).join('')}</div>` : ''}
       ${plan.dropped?.length ? `<ul class="ai-drop">${plan.dropped.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}</div>`;
   }
@@ -295,11 +329,17 @@
       const sc = TL.scenes || [], nAi = sc.filter(s => s._ai && !s._base).length, nEd = sc.filter(s => s._ai && s._orig).length, nAuto = sc.filter(s => s._auto).length;
       // data-ai="build" (không phải "open"): thẻ QC của 16_qc.js chỉ chèn vào bước Kiểm tra
       $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng</button>
-        ${afterOpts('aip')}
+        ${afterOpts('aip')}<div id="aip-hab"></div>
         <div class="help">Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX; rồi thêm b-roll, âm thanh nếu bạn chọn. Xong có QC nhanh 3 khung. Cần Claude Code (lệnh <b>claude</b>) trên máy.${S.autofill ? ' <button class="ai-lnk" data-ai="af">Tuỳ chỉnh b-roll, âm thanh</button>' : ''}</div>
         ${lastPlan ? planCard(lastPlan, true) : ''}
         <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}${nAuto ? `, ${nAuto} b-roll tự động` : ''}.</p>
         <div class="acts"><button class="mini" data-ai="qc" ${nAi + nAuto ? '' : 'disabled'}><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="mini danger" data-ai="clear" ${nAi ? '' : 'disabled'}><i class="ti ti-trash"></i> Xoá cảnh AI</button></div></div>`;
+      // S19 M134: "Đang áp n thói quen của <thương hiệu>" (tắt từng điều trong hộp AI dựng, quản lý ở trang Thương hiệu)
+      S.api('/api/ai/habits').then(h => {
+        const box = $('#aip-hab'), on = (h?.items || []).filter(i => !i.off); if (!box || panel !== 'wf-aihelp') return;
+        box.innerHTML = on.length ? `<div class="help"><i class="ti ti-school"></i> Đang áp ${on.length} thói quen của <b>${esc(h.name)}</b> (tắt từng điều khi bấm AI dựng). <button class="wf-lnk" id="aip-hab-go">Quản lý</button></div>` : '';
+        $('#aip-hab-go')?.addEventListener('click', () => (S.brandStyle ? S.brandStyle.open(h.id) : null));
+      }).catch(() => {});
       if (!lastPlan) S.api('/api/ai/plan').then(p => { if (!p.error && !lastPlan) { lastPlan = p; if (panel === 'wf-aihelp') renderAi(); } }).catch(() => {});
       return;
     }
