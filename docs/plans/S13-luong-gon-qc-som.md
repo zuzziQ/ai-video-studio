@@ -58,6 +58,8 @@ Chỉ tiêu nghiệm thu trên dự án mẫu (dựng lại bằng gói Review):
 
 Kết quả `M103`–`M104` (2026-11-17): new_project đã có `timeline.face_track` nên `M103` chỉ thêm `faceZone`; `M104` không tách `layout_solve.mjs` (dùng thẳng `applyDeterministic` qua `placePlan`), vùng mặt gửi Claude là của cả video. Trên dự án mẫu: che mặt 11 → 0, QC đầy đủ có Claude 48 (chính tả phụ đề, khoảng trống, phụ đề cháy sẵn, chữ bị cắt) → phần nghiệm thu còn lại ở `M106`, `M110`, `M111`.
 
+Kết quả `M105` (2026-11-17): `scripts/qc_quick.mjs` + job `qc_quick` (`/api/qc/quick`), tự chạy khi hộp "Đã dựng xong" mở (`C16`); ảnh 3 ô lấy từ chính các khung QC render (không qua `/api/still`). Kiểm tra ~8 s, "Sửa ngay" ~27 s trên clip mẫu 31,6 s.
+
 Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M105` → `M106`; `M107` làm song song được (không đụng file của nhóm QC). `M104` và `M106` đều sửa `scripts/ai_qc.mjs` (tệp nóng): làm lần lượt.
 
 ## 4. Quyết định (chốt 2026-11-17: theo đề xuất)

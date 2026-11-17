@@ -32,7 +32,7 @@ const trackOf = s => (s.type === 'text' ? 'add' : LAYOUT.has(s.type) ? 'scene' :
 // Decorative types that are meant to bleed past the frame edge (big background words, text orbiting the head…).
 const BLEED = new Set(['orbit', 'mega', 'slam_bg', 'mosaic_wall', 'kinetic', 'light_leak', 'flash_ring', 'iris', 'ticker', 'marquee']);
 const WEIGHT = { high: 15, med: 7, low: 3 };
-const KIND_VI = {
+export const KIND_VI = {
   text_offcanvas: 'Chữ tràn khung', text_unsafe: 'Chữ ngoài vùng an toàn', face_cover: 'Graphic che mặt', caption_overlap: 'Phụ đề đè graphic',
   overlap: 'Cảnh chồng nhau', empty: 'Khoảng trống', dense: 'Quá dày', caption_long: 'Phụ đề dài', missing_media: 'Thiếu file',
   hook_missing: 'Thiếu hook', loudness: 'Độ to', true_peak: 'Đỉnh âm', music_masking: 'Nhạc át giọng', music_quiet: 'Nhạc quá nhỏ', silence: 'Im lặng',
@@ -222,7 +222,7 @@ function covered(rects, b) {
 const grow = (r, px, py = px) => ({ x: r.x - px, y: r.y - py, w: r.w + 2 * px, h: r.h + 2 * py });
 
 // ---------- sampling + DOM checks ----------
-function sampleTimes(tl, caps, extra = []) {
+export function sampleTimes(tl, caps, extra = []) {
   const D = tl.duration || 0, T = [];
   for (let t = .5; t < D - .1; t += 3) T.push(t);
   T.push(.5, 1, 1.8);
@@ -238,7 +238,7 @@ function sampleTimes(tl, caps, extra = []) {
 }
 const speakingAt = (caps, t) => caps.some(c => !c.hidden && (c.words || []).some(w => t >= w.s - .1 && t <= w.e + .3));
 
-async function domPass(E, tl, caps, times, stillDir, tag, onP) {
+export async function domPass(E, tl, caps, times, stillDir, tag, onP) {
   const [DW, DH] = designOf(tl), samples = [];
   await engineInit(E, tl, caps, 'full');
   E.failed = [];
@@ -266,7 +266,7 @@ async function domPass(E, tl, caps, times, stillDir, tag, onP) {
 
 // Platform safe zone (design px): app buttons, the profile row and the description cover the rest.
 export const safeOf = tl => (isVert(tl) ? { x: 40, y: 130, w: 600, h: 870 } : { x: 60, y: 40, w: 1160, h: 620 });
-function domIssues(tl, caps, P) {
+export function domIssues(tl, caps, P) {
   const { samples, DW, DH } = P, M = 6, SAFE = safeOf(tl);
   const per = {}; // key -> {kind, i, ts:[], frac, mid}
   const hit = (kind, i, t, extra = {}) => { const k = `${kind}:${i}`; const o = per[k] || (per[k] = { kind, i, ts: [], ...extra }); o.ts.push(t); for (const [a, b] of Object.entries(extra)) if (typeof b === 'number') o[a] = Math.max(o[a] || 0, b); return o; };
@@ -309,7 +309,7 @@ const sceneLabel = s => String(s.text || s.question || s.title || s.lines?.[0]?.
 
 // ---------- timeline checks (no rendering) ----------
 const MEDIA_RE = /\.(jpe?g|png|webp|gif|svg|mp4|mov|m4v|webm|mp3|wav|m4a|aac|flac)$/i;
-function staticIssues(tl, caps, dir) {
+export function staticIssues(tl, caps, dir) {
   const out = [], D = tl.duration || 0, sc = (tl.scenes || []).map((s, i) => ({ s, i })).filter(({ s }) => !s.hidden);
   const over = sc.filter(({ s }) => !isBase(s, tl));
   // same-layer overlap

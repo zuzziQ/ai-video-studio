@@ -31,7 +31,10 @@
   .ai-qc { display: flex; gap: var(--space-2); margin-top: var(--space-3); } .ai-qc figure { margin: 0; flex: 1; text-align: center; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
   .ai-qc img { width: 100%; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); background: rgb(var(--color-black)); }
   .ai-qc .ph { aspect-ratio: 9/16; border-radius: var(--radius-control); border: 1px dashed rgb(var(--color-line-hover)); display: flex; align-items: center; justify-content: center; }
-  body.landscape .ai-qc .ph { aspect-ratio: 16/9; }`;
+  body.landscape .ai-qc .ph { aspect-ratio: 16/9; }
+  .ai-qc img, .fl-it.ai-click { cursor: pointer; } .ai-qcst { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-2) 0 var(--space-1); }
+  .ai-qcst .primary { margin-left: auto; } .ai-lnk { background: none; border: 0; padding: 0; color: rgb(var(--color-accent-text)); cursor: pointer; font-size: var(--text-2xs); }
+  .fl-it .fl-k.ai-sev-h { background: rgb(var(--color-danger) / .13); color: rgb(var(--color-danger)); } .fl-it .fl-k.ai-sev-m { background: rgb(var(--color-warning) / .15); color: rgb(var(--color-warning)); }`;
   document.head.appendChild(css);
 
   const r2 = v => Math.round(v * 100) / 100;
@@ -175,26 +178,62 @@
     const pick = sc.length >= 3 ? [sc[0], sc[Math.floor(sc.length / 2)], sc[sc.length - 1]] : sc;
     return pick.map(s => r2(Math.min(s.t1 - .05, s.t0 + Math.min(1, (s.t1 - s.t0) * .5))));
   }
+  // S13 · M105 (C16): QC nhanh tự chạy khi hộp mở: 3 khung cho 3 ô + lỗi hình học (che mặt, đè phụ đề, ngoài vùng an toàn,
+  // khoảng trống dài), không gọi Claude (/api/qc/quick → scripts/qc_quick.mjs). "Sửa ngay" = bộ giải của QC, một bước hoàn tác.
+  const qcBlock = ts => `<div class="ai-qc" id="aiqc">${ts.map(t => `<figure><div class="ph"><i class="ti ti-photo"></i></div><figcaption>${fmt(t)}</figcaption></figure>`).join('')}</div><div id="aiqcr"></div>`;
+  // panel AI → "Render thử 3 khung": cùng QC nhanh, không có thẻ kế hoạch
+  function openQuick() {
+    const ts = qcTimes();
+    S.modal(`<h3><i class="ti ti-photo-check"></i> QC nhanh</h3>${qcBlock(ts)}<div class="actions"><button id="aiqcgo" hidden><i class="ti ti-refresh"></i> Kiểm tra lại</button><button class="primary" onclick="closeModal()">Đóng</button></div>`);
+    $('#aiqcgo').onclick = () => quickQc(ts);
+    quickQc(ts);
+  }
   function showResult(plan) {
     const ts = qcTimes();
-    S.modal(`<h3><i class="ti ti-circle-check ai-c-ok"></i> Đã dựng xong</h3>${planCard(plan, true)}
-      <div class="ai-qc" id="aiqc">${ts.map(t => `<figure><div class="ph"><i class="ti ti-photo"></i></div><figcaption>${fmt(t)}</figcaption></figure>`).join('')}</div>
-      <div class="actions"><button id="aiundo"><i class="ti ti-arrow-back-up"></i> Hoàn tác</button><button id="aiqcgo"><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="primary" onclick="closeModal()">Xem trên timeline</button></div>`);
+    S.modal(`<h3><i class="ti ti-circle-check ai-c-ok"></i> Đã dựng xong</h3>${planCard(plan, true)}${qcBlock(ts)}
+      <div class="actions"><button id="aiundo"><i class="ti ti-arrow-back-up"></i> Hoàn tác</button><button id="aiqcgo" hidden><i class="ti ti-refresh"></i> Kiểm tra lại</button><button class="primary" onclick="closeModal()">Xem trên timeline</button></div>`);
     $('#aiundo').onclick = () => { undo(); S.closeModal(); S.toast('Đã hoàn tác bản dựng AI'); };
-    $('#aiqcgo').onclick = () => renderQc(ts);
+    $('#aiqcgo').onclick = () => quickQc(ts);
+    quickQc(ts);
   }
-  // QC: real stills from the export renderer at three AI scene starts.
-  async function renderQc(ts) {
-    $('#aiqcgo').disabled = true;
+  async function quickQc(ts, fix = false) {
+    const box = $('#aiqcr'); if (!box) return;
+    $('#aiqcgo').hidden = true;
+    box.innerHTML = `<p class="muted ai-qcst"><span id="jobstep">${fix ? 'Đang sửa vị trí graphic…' : 'Kiểm tra nhanh (không tốn lượt Claude)…'}</span> <button class="ai-lnk" id="aiqstop">Dừng</button></p><div class="bar"><i></i></div>`;
+    for (const f of document.querySelectorAll('#aiqc figure .ph i')) f.className = 'ti ti-loader-2 spin';
     await S.saveNow();
+    if (fix) S.pushUndo();
+    const r = await S.api('/api/qc/quick', { times: ts, fix });
+    if (!r.ok) { box.innerHTML = `<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa kiểm tra nhanh được: ${esc(r.error || 'lỗi')}</p>`; $('#aiqcgo').hidden = false; return; }
+    $('#aiqstop').onclick = () => S.api('/api/job/cancel', {});
+    S.pollJob(async j => {
+      if (fix && j.state === 'done') await S.reload();
+      if (!$('#aiqcr')) return; // hộp đã đóng
+      if (j.state !== 'done') { $('#aiqcr').innerHTML = `<p class="muted"><i class="ti ti-alert-triangle"></i> ${esc(j.step || 'Kiểm tra nhanh lỗi')}</p>`; $('#aiqcgo').hidden = false; return; }
+      showQuick(await S.api('/api/qc/quick'), ts);
+    });
+  }
+  const SEV = { high: 'ai-sev-h', med: 'ai-sev-m', low: '' };
+  function showQuick(q, ts) {
+    if (q.error) { $('#aiqcr').innerHTML = `<p class="muted">${esc(q.error)}</p>`; $('#aiqcgo').hidden = false; return; }
     const figs = [...document.querySelectorAll('#aiqc figure')];
-    for (const [k, t] of ts.entries()) {
-      figs[k].querySelector('.ph, img').outerHTML = '<div class="ph"><i class="ti ti-loader-2 spin"></i></div>';
-      const r = await S.api('/api/still', { t });
-      figs[k].querySelector('.ph').outerHTML = r.out ? `<img src="/project/${esc(r.out)}?${Date.now()}" title="Bấm để tới ${fmt(t)}">` : `<div class="ph" title="${esc(r.error || '')}"><i class="ti ti-alert-triangle ai-c-bad"></i></div>`;
-      const img = figs[k].querySelector('img'); if (img) img.onclick = () => { S.closeModal(); S.setTime(t); };
-    }
-    $('#aiqcgo').disabled = false;
+    figs.forEach((fg, k) => {
+      const st = (q.stills || [])[k], ph = fg.querySelector('.ph, img');
+      if (!st) { ph.outerHTML = '<div class="ph"><i class="ti ti-photo-off"></i></div>'; return; }
+      ph.outerHTML = `<img src="/project/${esc(st.file)}?${Date.now()}" title="Bấm để tới ${fmt(st.t)}">`;
+      fg.querySelector('img').onclick = () => { S.closeModal(); S.setTime(st.t); };
+    });
+    const is = q.issues || [], sec = Math.round((q.ms || 0) / 1000);
+    const fixedNote = q.fix ? `<p class="muted"><i class="ti ti-wand"></i> Đã sửa ${q.fixed}/${q.before} chỗ${is.length ? `, còn ${is.length} chỗ bộ giải không tự dời được: xem ở bước Kiểm tra` : ''} · ⌘Z để hoàn tác.</p>` : '';
+    const full = '<p class="muted ai-note">QC đầy đủ (chính tả, hook, nhịp, âm thanh, có Claude) vẫn ở bước Kiểm tra.</p>';
+    if (!is.length) { $('#aiqcr').innerHTML = `${fixedNote}<p class="ai-c-ok"><i class="ti ti-circle-check"></i> QC nhanh: không thấy graphic che mặt, đè phụ đề, chữ ngoài vùng an toàn hay khoảng trống dài <span class="muted">(${sec}s)</span>.</p>${full}`; $('#aiqcgo').hidden = false; return; }
+    const canFix = !q.fix || q.fixed > 0;
+    $('#aiqcr').innerHTML = `${fixedNote}<p class="ai-qcst"><b><i class="ti ti-alert-triangle help ai-c-warn"></i> QC nhanh thấy ${is.length} chỗ</b> <span class="muted">(${sec}s, không gọi Claude)</span>${canFix ? ' <button class="primary" id="aiqfix"><i class="ti ti-wand"></i> Sửa ngay</button>' : ''}</p>
+      <div class="fl-list">${is.slice(0, 8).map((i, k) => `<div class="fl-it ai-click" data-qi="${k}" title="Bấm để tới ${fmt(i.t)}"><span class="fl-k ${SEV[i.severity] || ''}">${esc(i.kind_vi)}</span><span class="fl-tx">${esc(i.msg)}<small>${fmt(i.t)}</small></span></div>`).join('')}</div>
+      ${is.length > 8 ? `<p class="muted ai-note">… và ${is.length - 8} chỗ khác.</p>` : ''}${full}`;
+    for (const el of document.querySelectorAll('#aiqcr [data-qi]')) el.onclick = () => { S.closeModal(); S.setTime(is[+el.dataset.qi].t); };
+    if ($('#aiqfix')) $('#aiqfix').onclick = () => quickQc(ts, true);
+    $('#aiqcgo').hidden = false;
   }
   function removeAi() {
     const n = (TL.scenes || []).filter(s => s._ai && !s._orig).length;
@@ -265,7 +304,7 @@
     const a = b.dataset.ai;
     if (a === 'open') openAiModal();
     if (a === 'clear') removeAi();
-    if (a === 'qc') { const ts = qcTimes(); S.modal(`<h3><i class="ti ti-photo-check"></i> Render thử</h3><div class="ai-qc" id="aiqc">${ts.map(t => `<figure><div class="ph"></div><figcaption>${fmt(t)}</figcaption></figure>`).join('')}</div><div class="actions"><button id="aiqcgo" hidden></button><button onclick="closeModal()">Đóng</button></div>`); renderQc(ts); }
+    if (a === 'qc') openQuick();
     if (a === 'detect') detect();
     if (a === 'all' && fl) { flSel = new Set(fl.cuts.map((c, i) => i)); renderAi(); }
     if (a === 'none') { flSel.clear(); renderAi(); }

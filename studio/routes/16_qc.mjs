@@ -1,6 +1,9 @@
 // AI QC + A/B variants (references/qc-variants.md):
 //   POST /api/qc/run {fix, claude, model, fresh}  → job "qc": scripts/ai_qc.mjs → .studio/qc.json
 //   GET  /api/qc                                  → last report (+ backup flag)
+//   POST /api/qc/quick {times, fix}               → job "qc_quick" (S13 · M105): scripts/qc_quick.mjs, kiểm hình học không Claude;
+//                                                   fix = sửa bằng bộ giải QC rồi ghi timeline.json → .studio/qc_quick.json
+//   GET  /api/qc/quick                            → kết quả QC nhanh gần nhất (+ stale khi timeline đã đổi)
 //   GET  /api/qc/gate                             → cổng chặn xuất (scripts/export_gate.mjs): {blocked, hard, overridable, issues, override, stale}
 //   POST /api/qc/override {reason}                → ghi lý do bỏ qua chặn xuất (chỉ lỗi claim / nguyên bản; lỗi chính sách → 400)
 //   POST /api/qc/undo                             → restore .studio/qc_backup.json (timeline + captions as before the fix)
@@ -9,7 +12,7 @@
 //   GET  /api/variants/file?dir=&f=               → a still / video inside one of the listed variant folders
 //   POST /api/variants/open {dir}                 → open a listed variant (or the base) in the Studio
 import fs from 'node:fs'; import path from 'node:path';
-import { readGate, recordOverride } from '../../scripts/export_gate.mjs';
+import { readGate, recordOverride, projectHash } from '../../scripts/export_gate.mjs';
 
 export default ctx => {
   const S = f => path.join(ctx.SKILL, 'scripts', f);
@@ -43,6 +46,24 @@ export default ctx => {
         ctx.job.out = '.studio/qc.json';
       });
       return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
+    }
+    // S13 · M105: QC nhanh sau AI dựng giúp (tự chạy theo C16): 3 khung cho hộp "Đã dựng xong" + lỗi hình học, không gọi Claude
+    if (p === '/api/qc/quick' && req.method === 'POST') {
+      const b = await ctx.body(req);
+      const times = (Array.isArray(b.times) ? b.times : []).map(Number).filter(t => Number.isFinite(t) && t >= 0).slice(0, 3).map(t => t.toFixed(2));
+      const argv = [S('qc_quick.mjs'), ctx.project.dir, ...(times.length ? ['--times', times.join(',')] : []), ...(b.fix ? ['--fix'] : [])];
+      const ok = ctx.startJob('qc_quick', async () => {
+        ctx.job.step = b.fix ? 'Sửa vị trí graphic' : 'Kiểm tra nhanh';
+        await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); });
+        ctx.job.out = '.studio/qc_quick.json';
+      });
+      return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
+    }
+    if (p === '/api/qc/quick') {
+      const r = readJ(path.join(st, 'qc_quick.json'));
+      if (!r) return ctx.json(res, { none: true, error: 'Chưa kiểm tra nhanh' }), true;
+      const stale = projectHash(ctx.project.dir) !== r.hash;
+      return ctx.json(res, { ...r, stale }), true;
     }
     if (p === '/api/qc') {
       const r = readJ(path.join(st, 'qc.json'));
