@@ -42,6 +42,8 @@
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const api = (u, b) => Studio.api(u, b).catch(e => ({ error: e.message }));
 
+  // S18 M128: nút "Mở ở Cắt clip" của dải Cùng bộ → hiện đúng bộ đó
+  window.addEventListener('lf:run', e => { S.tab = 'long'; LSset('tab', 'long'); S.dir = e.detail || ''; LSset('dir', S.dir); S.list = null; refresh(); });
   async function refresh() {
     if (!S.brands) {
       const [b, onb] = await Promise.all([api('/api/brands'), S.brand == null ? api('/api/onboarding') : null]);
@@ -52,6 +54,7 @@
     }
     const r = await api('/api/longform/runs');
     S.runs = r.runs || []; S.queue = !!r.queue;
+    if (!S.dir && Studio.clipset?.set?.dir) S.dir = Studio.clipset.set.dir; // S18 M128: đang mở một clip của bộ → hiện sẵn bộ đó
     if (S.dir) { const l = await api('/api/longform/list?dir=' + encodeURIComponent(S.dir)); S.list = l.items || null; if (!l.items) S.dir = ''; }
     if (active()) render();
   }

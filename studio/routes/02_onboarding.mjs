@@ -109,7 +109,9 @@ const pub = (s, project) => ({
   done: s.done, skipped: s.skipped, step: s.step, purpose: s.purpose, aspect: s.aspect, platforms: s.platforms, brand: s.brand, updated: s.updated,
   isNew: !s.exists, project: !!project,
   // `i` giữ vị trí trong file (POST /open nhận nó) nên lọc sau khi đánh số
-  recent: s.recent.map((r, i) => ({ i, name: r.name, parent: path.basename(path.dirname(r.dir)), t: r.t, current: r.dir === project?.dir, hide: hiddenRecent(r.dir) }))
+  // S18 M128: clip của một lần cắt (thư mục cha có highlights.json) mang `set` để trang chủ gom thành một bộ
+  recent: s.recent.map((r, i) => ({ i, name: r.name, parent: path.basename(path.dirname(r.dir)), t: r.t, current: r.dir === project?.dir, hide: hiddenRecent(r.dir),
+    ...(fs.existsSync(path.join(path.dirname(r.dir), 'highlights.json')) ? { set: path.basename(path.dirname(r.dir)) } : {}) }))
     .filter(r => !r.hide).map(({ hide, ...r }) => r),
 });
 

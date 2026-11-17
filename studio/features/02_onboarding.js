@@ -418,6 +418,17 @@
   function hideHome() { HOME?.remove(); HOME = null; document.removeEventListener('keydown', homeKey, true); }
   function homeKey(e) { if (e.key === 'Escape' && ST?.project && !document.getElementById('onb-wiz') && document.getElementById('modal')?.hidden !== false) { e.stopPropagation(); hideHome(); } }
   const brandCount = async () => { const b = await api('/api/brands').catch(() => null); return Array.isArray(b) ? b.length : -1; };
+  // S18 M128: các clip cùng một lần cắt chỉ hiện một dòng (clip mở gần nhất, hoặc clip đang mở), kèm số clip khác đã mở
+  const groupRecent = rec => {
+    const out = [], seen = new Map();
+    for (const r of rec) {
+      if (!r.set) { out.push(r); continue; }
+      const g = seen.get(r.set);
+      if (!g) { const x = { ...r, more: 0 }; seen.set(r.set, x); out.push(x); }
+      else if (r.current) { Object.assign(g, r, { more: g.more + 1 }); } else g.more++;
+    }
+    return out;
+  };
   async function openHome() {
     await loadState();
     const nb = await brandCount();
@@ -433,7 +444,7 @@
         ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ một file Excel hoặc CSV, làm nhiều video cùng mẫu trong một lần.', 'Hàng loạt')}</div>
       ${nb === 0 ? `<div class="prep"><i class="ti ti-briefcase"></i><div><b>Chưa có thương hiệu</b><small>Làm bước Chuẩn bị trước: thương hiệu (logo, màu, lời kết) và Kho chứa dự án, thành phẩm.</small></div>
         <button class="primary" data-h="prep"><i class="ti ti-arrow-right"></i> Chuẩn bị</button></div>` : ''}
-      <h3>Dự án gần đây</h3><div class="rec">${rec.length ? rec.map(r => `<button data-r="${r.i}" ${r.current ? 'disabled' : ''}><i class="ti ti-folder"></i><span class="nm">${esc(r.name)}</span><small>${r.current ? 'đang mở' : esc(r.parent)}${r.t && !r.current ? ' · ' + esc(fmtDay(r.t)) : ''}</small></button>`).join('')
+      <h3>Dự án gần đây</h3><div class="rec">${rec.length ? groupRecent(rec).map(r => `<button data-r="${r.i}" ${r.current ? 'disabled' : ''}><i class="ti ${r.set ? 'ti-stack-2' : 'ti-folder'}"></i><span class="nm">${esc(r.set ? `${r.set} · ${r.name}` : r.name)}</span><small>${r.current ? 'đang mở' : r.set ? `bộ clip${r.more ? ` · +${r.more} clip khác đã mở` : ''}` : esc(r.parent)}${r.t && !r.current ? ' · ' + esc(fmtDay(r.t)) : ''}</small></button>`).join('')
         : '<div class="empty">Chưa có dự án nào. Bắt đầu bằng một trong 4 cách ở trên.</div>'}</div>
       <div class="links"><button class="ghost" data-h="wiz"><i class="ti ti-route"></i> Xem lại hướng dẫn</button>
         <button class="ghost" data-h="sample" title="Mở một video mẫu có sẵn để xem Studio làm được gì"><i class="ti ti-player-play"></i> Xem thử dự án mẫu</button></div></div>`;
