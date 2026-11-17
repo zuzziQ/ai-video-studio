@@ -14,10 +14,14 @@ Mở **một** Chrome headless, nạp engine, render ảnh tại: đầu/giữa/
 | Loại (`kind`) | Cách dò | Mức |
 |---|---|---|
 | `text_offcanvas` | hộp chữ ra ngoài khung > 6 px (bỏ qua hiệu ứng vào/ra: phải thấy ở giữa cảnh hoặc ≥ 2 ảnh) | cao |
-| `text_unsafe` | chữ ngoài vùng an toàn của Studio (chỉ báo) | thấp |
+| `text_unsafe` | chữ ngoài vùng an toàn của Studio (`safeOf`); tự sửa dời vào vùng an toàn (S13 M104) | thấp |
 | `face_cover` | phần tử graphic phủ > 30 % **hộp mặt** khi đang nói. Hộp mặt = YuNet (`face_track.py`) chạy trên ảnh chỉ có lớp nền (không graphic, không phụ đề) | vừa/cao |
 | `caption_overlap` | graphic phủ > 25 % dòng phụ đề | vừa |
 | `readability` (`code: burnin`) | phụ đề mới chồng > 30 % chiều cao lên dải phụ đề cháy sẵn của video gốc (dò bằng `scripts/burnin.mjs`, lưu `.studio/burnin.json`). Không báo khi đã chọn Che dải chữ cũ / Tắt phụ đề mới (`timeline.burnin.mode`); chọn Dời thì đo vị trí phụ đề thật. Chọn cách xử lý ở thẻ Video nguồn, không tự sửa | cao |
+| `empty_card` | (tĩnh, S13 M106) thẻ không chữ, không ảnh / b-roll / chat (`emptyCard`). Tự sửa: ẩn | vừa |
+| `invented_number` | (tĩnh, S13 M106) số / % trên graphic (cả trường số kiểu `value`, `percent`, `score`) không có trong lời thoại (`inventedNumbers`, chung với AI dựng giúp). Tự sửa: ẩn khi graphic do máy tạo (`_ai`, `_auto`) và chưa bị chỉnh; graphic người dùng đặt chỉ đánh dấu | cao |
+| `emoji_flag` | (tĩnh, S13 M111) chữ graphic có emoji cờ (🇯🇵 hiện thành "JP" trên Chrome Windows). Tự sửa: bỏ cờ khỏi chữ | vừa |
+| `text_cut` | (S13 M111) chữ máy dựng kết bằng "…" (tĩnh), hoặc khối engine phải cắt "…" vì chữ không vừa (đo DOM). Chỉ báo: viết ngắn lại | vừa |
 | `hook_missing` | 2 giây đầu không có chữ cao ≥ 2,8 % khung hoặc graphic lớn | cao |
 | `overlap` | 2 cảnh cùng lớp (cùng nhóm track như timeline Studio) chồng > 0,25 s | vừa |
 | `empty` | > 6 s không có sự kiện hình (graphic vào/ra, fx, zoom, chuyển cảnh) | vừa/cao |
@@ -44,9 +48,11 @@ Studio dùng dạng **gợi ý**: “Kiểm tra” (hoặc “Kiểm tra & gợi
 1. Sao lưu `.studio/qc_backup.json` (+ bản có giờ trong `.studio/qc/`). Hoàn tác: `POST /api/qc/undo` hoặc nút **Hoàn tác sửa**.
 2. Áp lệnh Claude (trừ `move/resize` lên cảnh mà máy cũng phải xếp chỗ — bộ xếp chỗ đo thật nên được ưu tiên).
 3. Sửa tự động:
-   - **Xếp chỗ** (chữ tràn, che mặt, đè phụ đề): tìm dời/thu nhỏ ít nhất để hộp nằm trong khung, tránh hộp mặt lúc nói, dòng phụ đề và logo/badge của lớp nền. Có tham số `size` thì đổi cỡ chữ (không dưới 30 px), còn lại dùng keyframe hằng `kf:[{t, x, y, scale, ease:"hold"}]` (engine `sceneFx`, chạy với mọi module). Chữ quá dài không thu nổi → **dàn lại thành chữ 2 dòng** (cảnh `text`), ẩn cảnh cũ.
+   - **Xếp chỗ** (chữ tràn, chữ ngoài vùng an toàn, che mặt, đè phụ đề): tìm dời/thu nhỏ ít nhất để hộp nằm trong khung, tránh hộp mặt lúc nói, dòng phụ đề và logo/badge của lớp nền (luôn né cả mặt lẫn phụ đề). Có tham số `size` thì đổi cỡ chữ (không dưới 30 px), còn lại dùng keyframe hằng `kf:[{t, x, y, scale, ease:"hold"}]` (engine `sceneFx`, chạy với mọi module). Cảnh đã có keyframe riêng (S13 M106) được dời **cả đường đi**: mọi khoá dời cùng một khoảng, giữ hình dạng đường; thu nhỏ quanh tâm mặc định của engine. Chữ quá dài không thu nổi → **dàn lại thành chữ 2 dòng** (cảnh `text`), ẩn cảnh cũ. Thẻ lớn ngắn (≤ 3,6 s) che mặt mà không còn chỗ giữa mặt và phụ đề → đặt lên vùng phụ đề và ẩn phụ đề lúc thẻ hiện.
+   - Thẻ trống → ẩn. Số không có trong lời thoại → ẩn graphic do máy tạo, đánh dấu graphic người dùng. Emoji cờ → bỏ khỏi chữ (S13 M106, M111).
    - Hook thiếu → chữ hook (tiêu đề / câu đầu) ở chỗ trống trên/dưới mặt + `punch`.
-   - Đoạn trống → chữ từ khoá (từ phụ đề giữa đoạn) + `punch`; bỏ qua nếu Claude đã dời một graphic vào đó.
+   - Đoạn trống → chữ từ khoá (từ phụ đề trong đoạn) + `punch`, thêm nhiều chữ nhấn cho tới khi không còn đoạn > 6 s (đoạn không có lời thì thêm nhịp zoom); lấp luôn khoảng trống mới hở ra do ẩn thẻ; bỏ qua nếu Claude đã dời một graphic vào đó.
+   - Chính tả phụ đề (S13 M106): lệnh `text` của Claude lên phụ đề đi qua cổng sửa lời thoại của M90 (`captionEdit`: `txCheckEdit` + `TranscriptCore.planEdit`; tìm ở mọi khối khi Claude ghi sai khối; đổi ≤ 3 từ; **không bao giờ đổi con số**). Lỗi chính tả Claude báo mà không có bản sửa qua cổng thì gọi trợ lý `transcript` (`references/assist.md`) và chỉ nhận đề xuất ở đúng chỗ bị báo (`spellFromTranscript`). Số nghe nhầm (vd "15 đến 3 phút") cần Nghe lại bằng AI (M95), QC không tự đổi.
    - Chồng lớp → cắt ngắn cảnh trước (hoặc ẩn cảnh ngắn hơn). Thiếu file → ẩn cảnh / bỏ SFX. Nhạc át giọng → hạ `gain` nhạc. Phụ đề dài → tách ≤ 4 từ theo mốc từng từ.
 4. Kiểm tra lại (tối đa 3 vòng xếp chỗ). Một lỗi máy chỉ được tính **đã sửa** khi lần kiểm tra lại không còn thấy.
 5. Mọi phần tử bị đổi có `_qc: true`. Ghi `timeline.json`, phụ đề, và một bản trong `.studio/history/`.
@@ -59,7 +65,17 @@ Studio dùng dạng **gợi ý**: “Kiểm tra” (hoặc “Kiểm tra & gợi
  "issues": [{"t": 0.5, "kind": "spelling", "kind_vi": "Chính tả", "severity": "high", "msg": "…", "fixed": true, "src": "claude", "fix": {"op": "text", …}}],
  "applied": […], "compare": [{"t", "kind", "before", "after"}], "sheet": ".studio/qc/sheet.jpg", "stills": […], "backup": ".studio/qc_backup.json"}
 ```
-Điểm = 100 − lỗi máy chưa sửa (cao 15, vừa 7, thấp 3; mỗi loại tính tối đa 2 lần) − nhận xét Claude chưa sửa (cao 8, vừa 4, thấp 1,5; tối đa 30; bỏ nhận xét trùng thời điểm với lỗi máy).
+Điểm = 100 − lỗi máy chưa sửa (cao 15, vừa 7, thấp 3; mỗi loại tính tối đa 2 lần) − nhận xét Claude chưa sửa (cao 8, vừa 4, thấp 1,5; tối đa 30; bỏ nhận xét trùng thời điểm với lỗi máy). Claude chấm dao động khoảng ±5 điểm giữa các lượt trên cùng timeline.
+
+## 1b. QC nhanh — `scripts/qc_quick.mjs` (S13 M105)
+```bash
+node scripts/qc_quick.mjs <dự án | timeline.json> [--times 1.2,5,9.4] [--fix]
+```
+Bản rút gọn của bước 1 để chạy ngay sau AI dựng: **không gọi Claude, không trộn âm thanh**. Một Chrome headless render các khung mẫu của QC (`domPass`), chỉ giữ các loại sửa được bằng bộ giải (`QUICK`): `face_cover`, `caption_overlap`, `text_unsafe`, `text_offcanvas`, `empty`, `empty_card`, `invented_number`, `emoji_flag`. Ba khung ở `--times` (mặc định `pickTimes`: đầu / giữa / cuối các graphic AI, lúc graphic đã hiện hẳn; thiếu thì 20/50/80 % video) được giữ làm 3 ảnh cho hộp "Đã dựng xong".
+- `--fix`: bộ giải của QC (`applyDeterministic`, ≤ 3 vòng đo lại) dời / thu nhỏ / ẩn / lấp khoảng trống, ghi `timeline.json` (có bản lịch sử). Cảnh người dùng đã chỉnh (`_orig`) được để nguyên, lỗi đó còn trong danh sách.
+- Kết quả `.studio/qc_quick.json` `{issues, stills, before, fixed, ms, hash}`, ảnh ở `.studio/qc_quick/`. `GET /api/qc/quick` thêm `stale` khi timeline đã đổi.
+- Studio: tự chạy khi hộp "Đã dựng xong" mở (`C16`) và khi bấm "Render thử 3 khung" ở panel AI dựng; "Sửa ngay" = `POST /api/qc/quick {fix: true}` rồi tải lại, một bước ⌘Z. QC đầy đủ (bước 1–3, có Claude, âm thanh) vẫn chờ bấm ở bước Kiểm tra.
+- Đo trên bản sao `sample/clip-mau` (31,6 s): kiểm tra 7,9 s; 4 graphic gói Review ở toạ độ mặc định → 4 lỗi, "Sửa ngay" 27 s, kiểm lại 0; bản có 4 graphic giả (thẻ trống, "13%" không nói, chữ có keyframe chạy qua mặt, 21 s không graphic) → 7 lỗi, "Sửa ngay" 17,9 s, còn 0.
 
 ## 2. Nhiều phiên bản — `scripts/variants.mjs`
 ```bash
@@ -81,7 +97,7 @@ node scripts/variants.mjs <dự án> --n 3 [--kind hook|style|both] [--export] [
 - Xoá bản anh em (`rm -r`, xoá trong Studio) chỉ gỡ liên kết, bản gốc còn nguyên; xoá bản gốc cũng không làm hỏng bản anh em. Dung lượng chỉ được giải phóng khi xoá hết mọi bản dùng chung file đó.
 
 ## 3. Studio
-- Panel **AI** → tab “Dựng giúp” có thêm 2 thẻ (chèn bằng MutationObserver, không sửa `20_ai.js`): **Kiểm tra chất lượng** (Kiểm tra · Kiểm tra & gợi ý sửa · Kết quả; bỏ tick “Nhờ Claude” để chỉ dùng máy) và **Nhiều phiên bản (A/B)** (chọn kiểu, tick xuất 720p, **Tạo 3 phiên bản**, **So sánh**).
+- Panel **Kiểm tra** (`wf-qc`, bước ④) có 2 thẻ (`16_qc.js` chèn bằng MutationObserver vào panel có `[data-ai="open"]`): **Kiểm tra chất lượng** (Kiểm tra · Kiểm tra & gợi ý sửa · Kết quả; bỏ tick “Nhờ Claude” để chỉ dùng máy) và **Nhiều phiên bản (A/B)** (chọn kiểu, tick xuất 720p, **Tạo 3 phiên bản**, **So sánh**).
 - Hộp kết quả: điểm trước → sau, nhận xét + điểm từng mục của Claude, danh sách lỗi (bấm = tua tới) kèm gợi ý sửa có ô tick, ảnh trước/sau, **Áp dụng N gợi ý đã chọn**, **Hoàn tác sửa**, **Kiểm tra lại**.
 - Hộp **Xuất**: ô “AI kiểm tra & sửa trước khi xuất” → chạy `--fix` (có Claude), tải lại dự án rồi xuất với đúng lựa chọn cũ; hộp “Xuất xong” có thẻ điểm QC.
 - Hộp **So sánh phiên bản**: các cột Gốc + v1…vN, video (hoặc ảnh hook), hook, mô tả, **Mở** (đổi dự án đang mở), **Phát cùng lúc**.
@@ -91,6 +107,7 @@ node scripts/variants.mjs <dự án> --n 3 [--kind hook|style|both] [--export] [
 | `POST /api/qc/run {fix, claude, model, fresh}` | job `qc` |
 | `GET /api/qc` | `qc.json` + `can_undo` |
 | `POST /api/qc/undo` | khôi phục bản trước khi sửa |
+| `POST /api/qc/quick {times, fix}`, `GET /api/qc/quick` | job `qc_quick` (mục 1b) / kết quả gần nhất + `stale` |
 | `POST /api/variants/run {n, kind, export, quality}` | job `variants` |
 | `GET /api/variants` | `variants.json` (của dự án gốc nếu đang mở một bản) |
 | `GET /api/variants/file?dir=&f=` | ảnh/video trong thư mục phiên bản đã liệt kê |
@@ -100,5 +117,5 @@ node scripts/variants.mjs <dự án> --n 3 [--kind hook|style|both] [--export] [
 - Hộp mặt chỉ có khi YuNet thấy mặt trên lớp nền; người quay lưng / mặt quá nhỏ (< 3 % khung) thì không kiểm tra che mặt.
 - Xếp chỗ dùng hộp đo ở các thời điểm lấy mẫu; hiệu ứng bay dài hơn 0,6 s có thể vẫn chạm mép lúc đang bay vào.
 - Claude chỉ thấy ≤ 14 ảnh tĩnh: không nghe tiếng, không thấy chuyển động. Lỗi nhận giọng trong phụ đề chỉ sửa khi Claude chắc và giữ nguyên số từ.
-- `delete` của Claude là **ẩn** cảnh (`hidden`), hoàn tác được. Lỗi `dense`, `text_unsafe`, `silence` chỉ báo, không tự sửa.
+- `delete` của Claude là **ẩn** cảnh (`hidden`), hoàn tác được. Lỗi `dense`, `silence`, `text_cut`, `readability` (phụ đề cháy sẵn: chọn cách xử lý ở thẻ Video nguồn) chỉ báo, không tự sửa.
 - Teaser chỉ khi đoạn nằm trọn trong một clip (không vắt qua chỗ cắt); dự án nhiều clip phức tạp có thể không có teaser.

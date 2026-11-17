@@ -80,3 +80,28 @@ Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M1
 - Đổi tên/di chuyển panel làm lệch hướng dẫn người mới (`S10`) và `PANEL_STEP`: sửa cùng PR với `M107`/`M108`.
 
 Kết quả `M110` (2026-11-17): dò phụ đề cháy sẵn bằng ffmpeg + cạnh dọc (không OCR), lưu `.studio/burnin.json`; chọn cách xử lý ở thẻ Video nguồn ghi `timeline.burnin.mode`, engine áp. Ngưỡng cạnh 40 báo nhầm kính / tay trên clip mẫu không chữ, nên dùng 80. Bản sao clip mẫu có chữ cháy: QC không Claude 52 → 67.
+
+## 6. Kiểm nghiệm thu đợt (`M109`, 2026-11-17)
+
+Máy làm đợt này không có dự án 82x, nên mọi số đo của `M105`–`M111` là trên bản sao `sample/clip-mau` (31,6 s, khung dọc). Riêng `M104` đo trên bản sao dự án 82x (trước khi dự án rời máy).
+
+| Chỉ tiêu (mục 2) | Clip mẫu | Dự án 82x |
+|---|---|---|
+| `face_cover` = 0 | Đạt: AI dựng giúp thật + QC đầy đủ có Claude ra 0 (`M106`) | Đạt sau `M104` (11 → 0, dời 9 graphic); chờ đo lại sau `M106`–`M111` |
+| Không thẻ trống | Đạt: 0 (`M106`) | Chờ chủ repo đo |
+| Không số bịa | Đạt: 0 (`M106`); `validate` của AI dựng giúp bỏ cảnh có số không nói (`M104`) | Chờ chủ repo đo |
+| Điểm QC **trước** tự sửa ≥ 75 | Đạt vừa đủ: 75 (sau tự sửa 89); Claude chấm dao động ±5 giữa các lượt (75 / 70) | `M104` ra 48 vì chính tả phụ đề, khoảng trống, phụ đề cháy sẵn, chữ bị cắt "…", emoji cờ; các nguyên nhân này đã có sửa ở `M106`, `M110`, `M111` nhưng **chưa đo lại** |
+
+Luồng (mục 1.2), kiểm trong trình duyệt trên clip mẫu ở 1440×900 và 1024×700, không tràn ngang:
+
+| Chỗ | Sau S13 |
+|---|---|
+| Nguồn → Video mới | Thẻ Video nguồn theo trạng thái (`M107`), báo phụ đề cháy sẵn + ba cách xử lý (`M110`) |
+| Nguồn → Video dài | "Cắt clip từ video dài", chỉ hiện trên thanh trái khi video > 5 phút (thử bằng giả lập 400 s), luôn có trong ⋯ và trang chủ |
+| Nguồn → AI | "Làm sạch lời nói", tab thứ hai của Lời thoại |
+| Dựng → Dựng nhanh AI | Một nút AI dựng (+ Thêm b-roll, Thêm âm thanh), xong mở hộp có QC nhanh (~70 s cả luồng trên clip mẫu, `M108`); Tự lái lên thanh đầu (`C15`) |
+| Kiểm tra chạy sau cùng | QC nhanh tự chạy ngay sau AI dựng (`C16`, ~8 s, không Claude); QC đầy đủ vẫn ở bước Kiểm tra |
+
+Còn chờ chủ repo (trên máy có dự án 82x): dựng lại dự án mẫu bằng gói Review, chạy AI dựng (bật Thêm b-roll, Thêm âm thanh), xem QC nhanh, rồi QC đầy đủ có Claude; ghi `face_cover`, thẻ trống, số bịa, điểm trước / sau tự sửa vào mục `M109` của ROADMAP. Video gốc 82x tải từ Reels nên cũng là ca thật đầu tiên cho dò phụ đề cháy sẵn (`M110` chỉ thử trên chữ drawtext giả). Còn mở: số nghe nhầm ("15 đến 3 phút") QC không tự sửa, cần Nghe lại bằng AI (`M95`).
+
+Tài liệu đã cập nhật: `references/studio.md` (bước, panel, Tự lái, route `14_source`, `/api/qc/quick`), `references/ai-edit.md`, `references/qc-variants.md` (loại lỗi mới, tự sửa của `M106`, mục 1b QC nhanh), `references/autofill.md`, `SKILL.md`. Hướng dẫn lần đầu (`02_onboarding`, `S10`): chỉ sửa mô tả trang chủ trong `references/studio.md`; nội dung hướng dẫn và cột phải để `M113`.

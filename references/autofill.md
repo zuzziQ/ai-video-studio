@@ -1,6 +1,6 @@
 # Tự động: b-roll + âm thanh một bấm
 
-Code: `scripts/auto_broll.mjs`, `scripts/auto_sfx.py --level`, `studio/routes/80_autofill.mjs`, `studio/features/80_autofill.js` (panel **Tự động**), ô “Tự thêm b-roll + âm thanh sau khi dựng” trong **AI dựng giúp** (`20_ai.js`). Thư viện: `scripts/gen_sfx.py` (309 SFX), `scripts/gen_music.py` (30 nhạc) — bảng ở `references/sound-library.md`.
+Code: `scripts/auto_broll.mjs`, `scripts/auto_sfx.py --level`, `studio/routes/80_autofill.mjs`, `studio/features/80_autofill.js` (tab **Tự động** của mục B-roll ở bước Dựng), hai ô “Thêm b-roll”, “Thêm âm thanh” của nút **AI dựng** (`20_ai.js`, S13 M108). Thư viện: `scripts/gen_sfx.py` (309 SFX), `scripts/gen_music.py` (30 nhạc) — bảng ở `references/sound-library.md`.
 
 ## 1. B-roll tự động — `auto_broll.mjs`
 ```bash
@@ -54,9 +54,11 @@ Không có `--level` = hành vi cũ, không đổi (đã so 23 timeline mẫu: g
 - Chỉ thay mục `_auto`; SFX khác giữ nguyên, hit mới không đặt trùng (±0,15 s) hit đã có.
 - `--music auto`: chia đoạn ≥ 8 s, chấm mood theo từ khoá (hoặc Claude với `--claude`), mood gốc = nhạc đang có hoặc theo gói; tối đa 1 lần đổi / 10 s; `xfade` 0,8 s, đoạn sau vào phần “lift” (`offset` = ½ track), fade cuối 1,5 s, gain −18. Nhạc cũ bị thay (kể cả nhạc của AI dựng giúp, `_ai`; chỉ giữ nhạc `file` hoặc `manual`) được cất trong `_was` → “Xoá phần tự động” trả lại. AI dựng giúp chạy lại thì bỏ nhạc `_auto` để không chồng hai nhạc (M62). Có nhạc file riêng của bạn hoặc gói `beatslide` → không đụng nhạc. Luôn bật `audio.duck` kiểu object (−10 dB).
 
-## 3. Studio — panel “Tự động”
+## 3. Studio — tab “Tự động” (mục B-roll)
+Từ S13 (M108) Tự động không còn là tab của "Dựng nhanh AI": cách dùng thường là hai ô **Thêm b-roll**, **Thêm âm thanh** dưới nút **AI dựng** (Tự động chạy nối ngay sau bản dựng AI, chế độ `all` khi bật cả hai, `broll` hoặc `sfx` khi bật một, tắt cả hai thì không chạy); tab Tự động trong mục B-roll để tuỳ chỉnh và chạy riêng. Hai ô lưu ở `ai_broll`, `ai_sfx` (localStorage, mặc định bật; công tắc cũ `after_ai: false` được chuyển thành tắt cả hai), cũng chỉnh được ngay trong tab Tự động ("Thêm b-roll / Thêm âm thanh sau “AI dựng”"). B-roll `_auto` chưa bị chỉnh được đặt chỗ né mặt + phụ đề bằng `scripts/place_auto.mjs` (tiến trình con, Huỷ dừng được; `references/ai-edit.md`), và QC nhanh của hộp "Đã dựng xong" lấy khung cả cảnh `_auto`.
+
 Mục tiêu video (10 nút) · mật độ · thanh Đều tay ↔ Đa dạng · 12 nguồn (nguồn cần key hiện “cần key”) · Thư viện b-roll của tôi (thêm ảnh/clip, Claude gắn thẻ, sửa thẻ, xoá). Bấm một cảnh tự động → tab **Phương án khác**. Hồ sơ kênh (Tự lái/Telegram) có `broll_goal` (mặc định `auto`, không đặt thì suy từ trường “Mục tiêu”).
-Mật độ · nguồn (B-roll động / Chữ nổi / Emoji / Media của tôi / Ảnh stock / Claude chọn) · mức âm thanh · tự chọn nhạc · tự chạy sau AI dựng giúp (lưu trong localStorage). Nút **Tự thêm B-roll + âm thanh**, **Chỉ B-roll**, **Chỉ âm thanh**, **Xoá tự động**. Mỗi lần: lưu → `pushUndo` (⌘Z quay lại) → job `POST /api/autofill {mode, density, src, claude, level, music}` (snapshot `.studio/history/<giờ>_autofill.json`) → `Studio.reload()`. `Studio.autofill.run(mode, {noUndo})` dùng cho AI dựng giúp (chung 1 bước hoàn tác).
+Mật độ · nguồn (B-roll động / Chữ nổi / Emoji / Media của tôi / Ảnh stock / Claude chọn) · mức âm thanh · tự chọn nhạc · Thêm b-roll / Thêm âm thanh sau AI dựng (lưu trong localStorage). Nút **Tự thêm B-roll + âm thanh**, **Chỉ B-roll**, **Chỉ âm thanh**, **Xoá tự động**. Mỗi lần: lưu → `pushUndo` (⌘Z quay lại) → job `POST /api/autofill {mode, density, src, claude, level, music}` (snapshot `.studio/history/<giờ>_autofill.json`) → `Studio.reload()`. `Studio.autofill.run(mode, {noUndo})` dùng cho AI dựng (chung 1 bước hoàn tác); `Studio.autofill.afterMode()` trả chế độ theo hai ô, `setAfter(k, v)` đổi một ô. Đo trên bản sao `sample/clip-mau` (M108): AI dựng → Tự động thêm 2 b-roll, 16 SFX, nhạc theo đoạn; "Hoàn tác" một bước gỡ cả 11 cảnh AI + 2 b-roll + 23 SFX.
 
 ## Đo trên clip thật (clip-mau, 31,6 s, dọc slate)
 - B-roll: thưa 4 · vừa 5 · dày 9 · rất dày 12 chèn; mặt không bị che ở mọi still (contact sheet).
@@ -64,7 +66,7 @@ Mật độ · nguồn (B-roll động / Chữ nổi / Emoji / Media của tôi 
 
 ## Giới hạn
 - Chọn b-roll offline theo từ khoá/tag — đúng ý ở mức “minh hoạ chủ đề”; `--claude` tốt hơn nhưng chậm 20–60 s.
-- `TL.face` là một điểm cố định; người di chuyển nhiều có thể bị che một phần. Không có `TL.face` → giả định giữa khung.
+- Bước chọn khung của `auto_broll.mjs` dùng `TL.face` (một điểm cố định); người di chuyển nhiều có thể bị che lúc chọn, nên trong Studio bước đặt chỗ `place_auto.mjs` đo mặt theo từng thời điểm rồi dời lại. Không có `TL.face` → giả định giữa khung.
 - Ảnh stock Commons/Openverse là CC (nhiều ảnh CC BY/BY-SA → **phải ghi nguồn**, xem `media/credits.json`); chất lượng/độ đúng ý không đảm bảo; không có Pexels/Pixabay nếu chưa có key.
 - Preset 16:9 trong khung dọc `full` hiện dạng letterbox (nền tối trên/dưới).
 - Mood nhạc offline chỉ dựa trên từ khoá; video ngắn thường giữ 1 mood.
