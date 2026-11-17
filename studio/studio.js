@@ -425,31 +425,38 @@ function renderInspector() {
     ${tabs.length > 1 ? `<div class="itabs">${tabs.map(([k, l]) => `<button data-itab="${k}" class="${k === cur[0] ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
     <div class="ibody">${multi.length && c.kind !== 'clip' ? alignBlock() : ''}${cur[2]}${c.kind === 'clip' ? '' : actions(c) + noteBlock(o)}</div>`;
 }
+// Cài đặt dự án (cột phải khi không chọn gì; 03_nextstep.js gom vào mục thu gọn dưới khối bước). Chủ repo báo 2026-11-17: phần này
+// trùng nhiều chỗ khác. Mỗi thứ chỉ một nơi sửa: bộ thương hiệu dùng chung ở bước ① (ở đây chỉ thẻ tóm tắt + chỉnh riêng cho video
+// này, thu gọn), kiểu phụ đề ở panel Chữ, SFX tự động ở panel Âm thanh (ở đây là đường tắt). Còn lại là việc chỉ có ở đây: gói style
+// + dựng tự động theo gói, hiện từng từ, ghi chú cho Claude; vị trí mặt vào "Nâng cao".
 function projectPanel() {
-  const capStyles = [...new Set(['slate', 'tiktok', ...Object.keys((win && win.CAPTION_STYLES) || {})])];
   const B = TL.brand || {};
-  const bf = (k, label, type = 'text', ph = '') => `<div><span class="lbl">${label}</span><input ${type === 'color' ? 'type="color"' : ''} data-brand="${k}" value="${esc(B[k] ?? (type === 'color' ? (k === 'primary' ? '#FF5A36' : '#FFD84A') : ''))}" placeholder="${ph}"></div>`; // design-token-ok: brand-kit defaults are video colours
-  const tabs = [['proj', 'Dự án'], ['brand', 'Thương hiệu']];
-  const cur = ITAB.project || 'proj';
-  const body = cur === 'brand' ? sect('Bộ nhận diện thương hiệu', `<div class="help help--flush">Mọi gói style và mẫu dùng chung.</div>
+  const bf = (k, label, type = 'text', ph = '') => `<div><span class="lbl">${label}</span><input ${type === 'color' ? 'type="color"' : ''} data-brand="${k}" value="${esc(B[k] ?? (type === 'color' ? (k === 'primary' ? '#FF5A36' : '#FFD84A') : ''))}" placeholder="${esc(ph)}"></div>`; // design-token-ok: brand-kit defaults are video colours
+  const capLabel = TL.caption_style === 'none' ? 'Tắt phụ đề' : !TL.caption_style ? 'Karaoke cơ bản' : ((win && win.CAPTION_LABELS || {})[TL.caption_style] || TL.caption_style);
+  const pk = packs().find(p => p.id === TL.pack);
+  const brandName = B.name || B.title || '';
+  const brand = sect('Thương hiệu', `<div class="pp-brand"><span class="pp-sw">${['primary', 'accent'].map(k => `<i data-dfill="${esc(B[k] || '')}" title="${k === 'primary' ? 'Màu chính' : 'Màu nhấn'}"></i>`).join('')}</span>
+      <div class="pp-bn"><b>${esc(brandName || 'Chưa có thương hiệu')}</b><small>${esc([B.handle, B.website].filter(Boolean).join(' · ') || (B.kit ? 'bộ thương hiệu đang dùng' : 'video này chưa dùng bộ thương hiệu nào'))}</small></div></div>
+    <div class="acts"><button data-pact="brandkit" class="primary"><i class="ti ti-pencil"></i> ${B.kit ? 'Sửa bộ thương hiệu' : 'Chọn thương hiệu'}</button></div>
+    <details class="pp-more"><summary><i class="ti ti-adjustments"></i>Chỉnh riêng cho video này</summary>
+      <div class="help">Chỉ đổi ở video này, bộ thương hiệu dùng chung không đổi.</div>
       <div class="row">${bf('primary', 'Màu chính', 'color')}${bf('accent', 'Màu nhấn', 'color')}</div>
-      <div class="row">${bf('name', 'Tên / thương hiệu', 'text', 'Kiệm AI')}${bf('handle', 'Kênh', 'text', '@kiem.ai')}</div>
+      <div class="row">${bf('name', 'Tên hiển thị', 'text', 'Kiệm AI')}${bf('handle', 'Kênh', 'text', '@kiem.ai')}</div>
       <div class="row">${bf('phone', 'Điện thoại', 'text', '09xx…')}${bf('website', 'Website', 'text', 'nguyentatkiem.com')}</div>
-      ${bf('logo', 'Logo (media/logo.png, si:slug, emoji)', 'text', 'media/logo.png')}`, 'ti-palette')
-    : sect('Gói style', `<select data-pf="pack">${opt([['', '— chọn —'], ...packs().map(p => [p.id, p.icon + ' ' + p.name])], TL.pack || '')}</select>
-      <div class="help">${esc(packs().find(p => p.id === TL.pack)?.desc || 'Gói quyết định kiểu phụ đề, graphic gợi ý và bản dựng tự động.')}</div>
+      ${bf('logo', 'Logo (đường dẫn trong dự án, si:tên-biểu-tượng hoặc emoji; tải ảnh logo ở bộ thương hiệu)', 'text', 'media/logo.png')}</details>`, 'ti-palette');
+  const style = sect('Gói style', `<select data-pf="pack">${opt([['', '— chọn —'], ...packs().map(p => [p.id, p.icon + ' ' + p.name])], TL.pack || '')}</select>
+      <div class="help">${esc(pk?.desc || 'Gói quyết định kiểu phụ đề, graphic gợi ý và bản dựng tự động.')}</div>
       <div class="acts"><button data-pact="recipe" class="primary"><i class="ti ti-wand"></i> Dựng tự động theo gói</button><button data-pact="tplfit"><i class="ti ti-text-recognition"></i> Bám lời thoại</button></div>
-      <div class="help">“Dựng tự động”: thêm intro, graphic theo từ khoá trong lời nói, CTA cuối, nhạc. “Bám lời thoại”: canh các graphic của mẫu đúng lúc nói, viết lại chữ và thay ảnh mẫu theo nội dung clip (tự chạy khi chọn mẫu). Hoàn tác được.</div>`, 'ti-package') +
-    sect('Kiểu phụ đề', `<select data-pf="caption_style">${opt([...capStyles.map(c => [c, (win && win.CAPTION_LABELS || {})[c] || c]), ['', 'Karaoke cơ bản'], ['none', 'Tắt phụ đề']], TL.caption_style ?? '')}</select>
-      <label class="check"><input type="checkbox" data-pf="caption_reveal" ${TL.caption_reveal === false ? '' : 'checked'}> Hiện từng từ theo lời nói</label>`, 'ti-badge-cc') +
-    sect('Vị trí mặt (bubble / PIP / vùng mặt)', `<div class="row"><div><span class="lbl">X</span><input type="number" data-pf="facex" value="${TL.face?.x ?? 360}"></div><div><span class="lbl">Y</span><input type="number" data-pf="facey" value="${TL.face?.y ?? 520}"></div></div>`, 'ti-face-id') +
-    sect('Âm thanh', `<div class="acts"><button data-pact="autosfx"><i class="ti ti-wand"></i> Tự đặt SFX theo graphic</button></div>
-      <div class="help">Lưu dự án, rồi đặt whoosh / pop / ding đúng lúc từng graphic xuất hiện (giữ SFX bạn tự thêm).</div>`, 'ti-volume') +
-    sect('Ghi chú chung cho Claude', `<textarea data-pf="note" placeholder="Ví dụ: thêm b-roll ở đoạn 0:12, nhạc sôi động hơn…">${esc(TL.note || '')}</textarea>
-      <div class="help">Bấm vào chữ / khung trên preview hoặc khối trên timeline để chỉnh. Kéo để di chuyển, kéo góc để đổi cỡ.</div>`, 'ti-message-2') +
-    `<div class="meta"><span><i class="ti ti-movie"></i> ${(TL.clips || []).length} clip</span><span><i class="ti ti-photo"></i> ${META.frames} khung</span><span><i class="ti ti-clock"></i> ${fmt(TL.duration)}</span><span><i class="ti ti-aspect-ratio"></i> ${DW > DH ? '16:9' : '9:16'}</span></div>`;
-  return `<div class="ihead"><span class="iic"><i class="ti ti-settings"></i></span><div class="it"><h3>${esc(META.name || 'Dự án')}</h3><div class="sub"><span class="pill">Cài đặt dự án</span></div></div></div>
-    <div class="itabs">${tabs.map(([k, l]) => `<button data-itab="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('')}</div><div class="ibody">${body}</div>`;
+      <div class="help">“Dựng tự động”: thêm intro, graphic theo từ khoá trong lời nói, CTA cuối, nhạc. “Bám lời thoại”: canh các graphic của mẫu đúng lúc nói, viết lại chữ và thay ảnh mẫu theo nội dung clip. Hoàn tác được.</div>`, 'ti-layout-grid');
+  const caps = sect('Phụ đề', `<div class="pp-line"><span>Kiểu: <b>${esc(capLabel)}</b></span><button data-pact="open-text" class="ghost"><i class="ti ti-arrow-right"></i> Đổi ở panel Chữ</button></div>
+      <label class="check"><input type="checkbox" data-pf="caption_reveal" ${TL.caption_reveal === false ? '' : 'checked'}> Hiện từng từ theo lời nói</label>`, 'ti-badge-cc');
+  const sfx = sect('Âm thanh', `<div class="pp-line"><span>${(TL.audio?.sfx || []).length} SFX · ${(TL.audio?.music || []).length} nhạc nền</span><button data-pact="open-audio" class="ghost"><i class="ti ti-arrow-right"></i> Mở panel Âm thanh</button></div>`, 'ti-volume');
+  const note = sect('Ghi chú chung cho Claude', `<textarea data-pf="note" placeholder="Ví dụ: thêm b-roll ở đoạn 0:12, nhạc sôi động hơn…">${esc(TL.note || '')}</textarea>
+      <div class="help">Bấm vào chữ / khung trên preview hoặc khối trên timeline để chỉnh. Kéo để di chuyển, kéo góc để đổi cỡ.</div>`, 'ti-message-2');
+  const adv = `<details class="pp-more pp-adv"><summary><i class="ti ti-settings-2"></i>Nâng cao</summary>${sect('Vị trí mặt (bubble / PIP / vùng mặt)', `<div class="row"><div><span class="lbl">X</span><input type="number" data-pf="facex" value="${TL.face?.x ?? 360}"></div><div><span class="lbl">Y</span><input type="number" data-pf="facey" value="${TL.face?.y ?? 520}"></div></div>`, 'ti-face-id')}</details>`;
+  const meta = `<div class="meta"><span><i class="ti ti-movie"></i> ${(TL.clips || []).length} clip</span><span><i class="ti ti-photo"></i> ${META.frames} khung</span><span><i class="ti ti-clock"></i> ${fmt(TL.duration)}</span><span><i class="ti ti-aspect-ratio"></i> ${DW > DH ? '16:9' : '9:16'}</span></div>`;
+  return `<div class="ihead" data-proj><span class="iic"><i class="ti ti-settings"></i></span><div class="it"><h3>${esc(META.name || 'Dự án')}</h3><div class="sub"><span class="pill">Cài đặt dự án</span></div></div></div>
+    <div class="ibody">${brand}${style}${caps}${sfx}${note}${adv}${meta}</div>`;
 }
 // Starter edit from a pack recipe (also used once for projects made by "Video mới").
 function applyRecipe(packId, title, replace = false) {
@@ -592,6 +599,10 @@ $('#insp').addEventListener('click', async e => {
     pushUndo(); return applyRecipe(TL.pack);
   }
   if (pa === 'autosfx') return autoSfx();
+  // đường tắt của Cài đặt dự án sang nơi sửa duy nhất (S19 M137)
+  if (pa === 'brandkit') return TL.brand?.kit && Studio.nextStep?.editBrand ? Studio.nextStep.editBrand('name') : Studio.workflow?.focus('brands', ['.bk-card.cur', '.bk-card', '#bk-new2']);
+  if (pa === 'open-text') return Studio.workflow?.focus('text', ['.cslist .on', '.cslist']);
+  if (pa === 'open-audio') return Studio.workflow?.focus('audio');
   if (!sel) return;
   const c = sel, o = c.obj;
   // clip controls

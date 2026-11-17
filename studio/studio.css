@@ -417,6 +417,13 @@ body.landscape .clipcard .cth { width: 80px; aspect-ratio: 16/9; }
 .stat { display: flex; gap: var(--space-2); align-items: baseline; background: rgb(var(--color-surface-raised)); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); margin: var(--space-2) 0; }
 .stat b { font-size: var(--text-md); font-variant-numeric: tabular-nums; }
 .stat span:first-child { color: rgb(var(--color-fg-muted)); }
+/* Cài đặt dự án (S19 M137): thẻ thương hiệu tóm tắt, dòng đường tắt, mục thu gọn */
+.pp-brand { display: flex; gap: var(--space-3); align-items: center; }
+.pp-sw { display: flex; gap: var(--space-1); flex: none; } .pp-sw i { width: 18px; height: 18px; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-hover)); }
+.pp-bn { min-width: 0; flex: 1; } .pp-bn b { display: block; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pp-bn small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-line { display: flex; gap: var(--space-2); align-items: center; justify-content: space-between; font-size: var(--text-xs); } .pp-line > span { min-width: 0; }
+.pp-more { margin-top: var(--space-2); } .pp-more > summary { cursor: pointer; display: flex; gap: var(--space-2); align-items: center; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); padding: var(--space-2) 0; }
+.pp-more > summary:hover { color: rgb(var(--color-fg)); } .pp-adv { border-top: 1px solid rgb(var(--color-line)); margin-top: var(--space-3); }
 .meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); padding: var(--space-3) 0; }
 /* text animation previews */
 .angrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }

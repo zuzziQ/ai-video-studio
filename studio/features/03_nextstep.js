@@ -36,9 +36,9 @@
   // chỗ sửa của từng tiêu chí (id = id mục của ScoreCore): go: [panel, [selector…]]. Nhãn, câu vì sao, điểm: ScoreCore.
   const TASKS = {
     prep: {
-      name: ['brands', ['.bk-card.cur', '#bk-new2', '.bk-card']],
-      logo: ['brands', ['.bk-card.cur .bk-logo', '#bk-logo', '#bk-new2']],
-      color: ['brands', ['.bk-card.cur .bk-sw', '#bk-new2']],
+      name: ['brands', [], null, 'name'], // brandEdit: mở biểu mẫu của thương hiệu đang dùng (chưa có thì tạo mới) rồi vào đúng ô
+      logo: ['brands', [], null, 'logo'],
+      color: ['brands', [], null, 'color'],
       product: ['products', ['.pr-cur', '.pr-it', '.wf-card']],
     },
     source: {
@@ -158,7 +158,31 @@
     return { step, score: sc[step].score, tasks, need: main.length, done: main.filter(t => t.done).length,
       next: main.find(t => !t.done) || tasks.find(t => !t.done) || null };
   }
-  const fix = t => go(t.go[0], t.go[1], t.at);
+  const fix = t => (t.go[3] ? () => editBrand(t.go[3]) : go(t.go[0], t.go[1], t.at));
+
+  // Nút "Sửa" của bước Chuẩn bị (tên, logo, màu): trước chỉ tô sáng panel Thương hiệu, nên khi biểu mẫu chưa mở hoặc dự án chưa
+  // dùng thương hiệu nào thì không thấy gì xảy ra. Giờ: dự án đang dùng một thương hiệu → mở biểu mẫu sửa của nó; chưa có thương
+  // hiệu nào → mở biểu mẫu tạo mới; có thương hiệu nhưng chưa áp → tô các thẻ và nói phải bấm "Áp dụng cho dự án".
+  const FIELD = { name: '[data-bk="name"]', logo: '#bk-logo', color: '[data-bk="primary"]' };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  async function editBrand(field) {
+    S.workflow?.focus('brands');
+    let root = null;
+    for (let i = 0; i < 25; i++) { root = $('#libbody'); if (root?.querySelector('.bk-card, #bk-new2')) break; await wait(80); }
+    if (!root) return;
+    if (!root.querySelector('.bk-form')) {
+      const open = root.querySelector('.bk-card.cur [data-bke]') || (!root.querySelector('.bk-card') && root.querySelector('#bk-new2'));
+      if (!open) {
+        for (const c of root.querySelectorAll('.bk-card')) { c.classList.remove('wf-flash'); void c.offsetWidth; c.classList.add('wf-flash'); }
+        return S.toast('Dự án chưa dùng thương hiệu nào: bấm “Áp dụng cho dự án” ở thương hiệu muốn dùng, hoặc + để tạo mới');
+      }
+      open.click();
+      for (let i = 0; i < 15 && !root.querySelector('.bk-form'); i++) await wait(60);
+    }
+    const el = root.querySelector(FIELD[field] || FIELD.name); if (!el) return;
+    el.scrollIntoView({ block: 'center' }); el.classList.remove('wf-flash'); void el.offsetWidth; el.classList.add('wf-flash');
+    el.focus({ preventScroll: true }); setTimeout(() => el.classList.remove('wf-flash'), 1600);
+  }
 
   function result(step) {
     const row = (k, v, warn, act) => `<div class="ns-res"><span class="ns-k">${esc(k)}</span><span class="ns-v ${warn ? 'is-warn' : ''}">${v}</span>${act || ''}</div>`;
@@ -217,15 +241,13 @@
   // inspector "không chọn gì" (projectPanel của studio.js) vừa vẽ lại: thêm khối bước, gom phần cũ vào mục thu gọn
   function wrap() {
     const insp = $('#insp');
-    if (!insp || S.sel || !S.TL || insp.querySelector(':scope > .ns') || !insp.querySelector(':scope > .itabs [data-itab="proj"]')) return;
+    if (!insp || S.sel || !S.TL || insp.querySelector(':scope > .ns') || !insp.querySelector(':scope > .ihead[data-proj]')) return;
     const box = document.createElement('div'); box.className = 'ns';
     box.innerHTML = `<div data-ns="top" class="ns-step">${html()}</div>
-      <details class="ns-more"${store.get('nsMore', '') === '1' ? ' open' : ''}><summary><i class="ti ti-settings"></i>Cài đặt dự án và thương hiệu<i class="ti ti-chevron-right"></i></summary></details>`;
+      <details class="ns-more"${store.get('nsMore', '') === '1' ? ' open' : ''}><summary><i class="ti ti-settings"></i>Cài đặt dự án<i class="ti ti-chevron-right"></i></summary></details>`;
     const det = box.querySelector('details');
     det.append(...insp.childNodes);
     det.addEventListener('toggle', () => store.set('nsMore', det.open ? '1' : ''));
-    if (det.querySelector('.itabs [data-itab="brand"].on')) det.querySelector('.ibody')?.insertAdjacentHTML('afterbegin',
-      `<p class="wf-hint">Màu, chữ của riêng dự án này. Bộ thương hiệu dùng chung ở <a class="ns-link" data-ns="brands">bước ① Thương hiệu</a>.</p>`);
     insp.appendChild(box); bars(box);
     refresh();
   }
@@ -235,7 +257,8 @@
     new MutationObserver(wrap).observe(insp, { childList: true });
     insp.addEventListener('click', e => {
       const b = e.target.closest('[data-ns], [data-ns-i], [data-ns-step]'); if (!b || !S.TL) return;
-      if (b.dataset.nsStep) { view = b.dataset.nsStep; return paint(); }
+      // thẻ điểm = đổi bước thật (thanh bước trên + panel trái + cột phải cùng nhảy); không có workflow thì chỉ xem tiêu chí
+      if (b.dataset.nsStep) { if (S.workflow?.goStep && S.workflow.step !== b.dataset.nsStep) return S.workflow.goStep(b.dataset.nsStep); view = b.dataset.nsStep; return paint(); }
       const st = state(view);
       if (b.dataset.nsI != null) { const t = st.tasks[+b.dataset.nsI]; return t && fix(t)(); }
       const a = b.dataset.ns;
@@ -275,8 +298,8 @@
 
   // đổi bước bên trái (01_workflow.js lọc thanh trái trước hook này) → vẽ lại cột phải theo bước mới
   let lastStep = null;
-  (S._rail || []).push(() => { const st = S.workflow?.step; if (st !== lastStep) { lastStep = st; view = null; paint(); refresh(); } });
+  (S._rail || []).push(() => { const st = S.workflow?.step; if (st !== lastStep) { lastStep = st; view = null; if (S.TL && !S.sel && S.renderInspector) S.renderInspector(); else paint(); refresh(); } }); // vẽ lại cả Cài đặt dự án (thương hiệu vừa áp ở bước ①)
   window.addEventListener('focus', () => refresh());
   S.onReady(() => { wrap(); refresh(true); });
-  S.nextStep = { refresh: () => refresh(true), state, scores, paint, steps: ORDER, guardExport };
+  S.nextStep = { refresh: () => refresh(true), state, scores, paint, steps: ORDER, guardExport, editBrand };
 })();
