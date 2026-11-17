@@ -120,7 +120,7 @@
   document.head.appendChild(css);
 
   function refresh(force) {
-    if (busy) return busy;
+    if (busy) return force ? busy.then(() => refresh(true)) : busy; // lần ép làm mới (vừa xuất xong) không nhận kết quả của lượt đang bay
     if (!S.TL || (!force && Date.now() - fetchedAt < 8000)) return Promise.resolve();
     const dir = S.META?.dir;
     if (D.dir !== dir) { D.qc = D.quick = D.src = D.fill = null; D.ready = false; D.dir = dir; }

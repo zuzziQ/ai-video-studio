@@ -25,6 +25,7 @@ import { findChrome } from './platform.mjs';
 import { readGate, recordOverride, gateText } from './export_gate.mjs';
 import { workspaceFor, ensureWorkspace, workspaceOfProject, sub, safeName } from './workspace.mjs';
 import { deliverProject } from './kho_deliver.mjs';
+import { recordExport, updateExport } from './exports_log.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const S = f => path.join(SKILL, 'scripts', f);
@@ -92,6 +93,12 @@ function loadTL(dir) {
 function saveTL(dir, tl, caps, capFile = 'work/captions.json') {
   if (caps) { fs.mkdirSync(path.dirname(path.join(dir, capFile)), { recursive: true }); fs.writeFileSync(path.join(dir, capFile), JSON.stringify(caps, null, 1)); tl.captions = capFile; }
   fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl, null, 1));
+}
+// S16 M118: Tự lái tự dựng cả video, nên bỏ `_starter` trước bước sửa timeline đầu tiên sau bước `ai`. Còn giữ thì lần đầu mở trong Studio
+// sẽ áp lại công thức gói (studio.js boot) và xoá b-roll / chữ / SFX đã dựng.
+export function dropStarter(dir) {
+  const f = path.join(dir, 'timeline.json'), tl = rd(f);
+  if (tl && tl._starter) { delete tl._starter; fs.writeFileSync(f, JSON.stringify(tl, null, 1)); }
 }
 const frameCount = (dir, tl) => { const d = tl.aroll?.frames && path.join(dir, path.dirname(tl.aroll.frames)); return d && fs.existsSync(d) ? fs.readdirSync(d).filter(f => /\.(jpe?g|png)$/i.test(f)).length : 0; };
 function backup(dir, id) {
@@ -230,7 +237,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
         if (!kit) throw new Error(`không thấy brand kit "${prof.brand}"`);
         tl.brand = { ...(tl.brand || {}), ...brandFields(kit, dir), kit: kit.id }; notes.push(kit.title || kit.name);
       }
-      if (prof.cta) { tl.brand = { ...(tl.brand || {}), outro: prof.cta }; const end = (tl.scenes || []).find(s => s.type === 'title_card' && tl._starter); if (end) end.question = prof.cta; notes.push('CTA'); }
+      if (prof.cta) { tl.brand = { ...(tl.brand || {}), outro: prof.cta }; const end = (tl.scenes || []).filter(s => s.type === 'title_card' && !s._ai && !s._auto).pop(); if (end) end.question = prof.cta; notes.push('CTA'); }
       saveTL(dir, tl, caps, capFile); return notes.join(' · ');
     },
     async clean() {
@@ -346,6 +353,13 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
       res.videos = outs.map(o => ({ ...o, ...probe(P(o.out)) }));
       const { caps } = loadTL(dir);
       fs.writeFileSync(P(`out/${path.basename(dir)}.srt`), srt(caps)); res.srt = `out/${path.basename(dir)}.srt`;
+      // S16 M118: bản xuất vào lịch sử của dự án (panel Xuất, cột phải, điểm Xuất), như khi xuất trong Studio
+      try {
+        const at = new Date().toISOString(), size = f => { try { return fs.statSync(P(f)).size; } catch { return null; } };
+        const it = recordExport(dir, { id: `ap-${Date.now()}`, at, quality: prof.quality || '1080', range: null, delivered: [], deliverError: null,
+          files: res.videos.map(v => ({ file: v.out, aspect: v.aspect, w: v.w, h: v.h, dur: v.dur, size: size(v.out) })) });
+        res.exportId = it?.id || null;
+      } catch (e) { console.log(`! không ghi được lịch sử xuất: ${e.message}`); }
       return res.videos.map(v => `${v.aspect} ${v.w}×${v.h} ${v.dur}s`).join(' · ');
     },
     async publish() {
@@ -400,6 +414,8 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
         if (summary.publish.length) { const txt = summary.publish.filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n\n-----\n\n'); fs.writeFileSync(path.join(st.out, `${name} - nội dung đăng.txt`), txt); copies.push(path.join(st.out, `${name} - nội dung đăng.txt`)); }
       }
       if (!files.length) files.push(...copies);
+      if (res.exportId) { try { updateExport(dir, res.exportId, { delivered: files.filter(f => VIDEO.test(f)) }); } catch (e) { console.log(`! không ghi được bản giao vào lịch sử xuất: ${e.message}`); } }
+      try { (await import('../studio/routes/02_onboarding.mjs')).addRecent(dir); } catch (e) { console.log(`! không thêm được vào Dự án gần đây: ${e.message}`); }
       summary.delivered = files; summary.steps.deliver = { ...summary.steps.deliver, state: 'done', msg: `${summary.videos.length} video` };
       summary.seconds = Math.round((Date.now() - new Date(st.started).getTime()) / 1000);
       wr(P('out/summary.json'), summary);
@@ -418,6 +434,8 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
     say(0, prev?.state === 'running' || prev?.state === 'error' ? 'chạy tiếp' : '');
     const t0 = Date.now();
     try {
+      // bước `ai` (ai_edit.mjs applyPlan) cần `_starter` để thay cảnh khởi tạo và tự xoá nó; các bước sau thì bỏ hẳn
+      if (MUTATES.has(id) && STEPS.findIndex(s => s[0] === id) > STEPS.findIndex(s => s[0] === 'ai')) dropStarter(dir);
       if (MUTATES.has(id) && fs.existsSync(P('timeline.json'))) { const b = backup(dir, id); if (b === 'restored') console.log(`(khôi phục timeline trước bước ${id} sau lần chạy bị dừng)`); }
       const r = await impl[id]();
       const sec = +((Date.now() - t0) / 1000).toFixed(2);

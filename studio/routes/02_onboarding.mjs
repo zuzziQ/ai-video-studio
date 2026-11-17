@@ -62,6 +62,13 @@ function touchRecent(s, dir) {
   s.recent = [{ dir, name: path.basename(dir), t: new Date().toISOString() }, ...s.recent.filter(r => r.dir !== dir)].slice(0, MAX_RECENT);
   return true;
 }
+/** Thêm dự án vào "Dự án gần đây" từ ngoài Studio (Tự lái tạo dự án mà chưa mở lần nào, S16 M118). */
+export function addRecent(dir) {
+  if (!dir || !path.isAbsolute(dir)) return false;
+  // chưa có onboarding.json (chạy Tự lái bằng dòng lệnh trước khi mở Studio): không tạo file, để người mới vẫn thấy hướng dẫn
+  const s = loadState(); if (!s.exists || !touchRecent(s, dir)) return false;
+  storeState(s); return true;
+}
 const pub = (s, project) => ({
   done: s.done, skipped: s.skipped, step: s.step, purpose: s.purpose, aspect: s.aspect, platforms: s.platforms, brand: s.brand, updated: s.updated,
   isNew: !s.exists, project: !!project,

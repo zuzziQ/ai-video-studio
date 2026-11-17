@@ -1255,7 +1255,13 @@ async function boot() {
     win = f.contentWindow; needInit = true; FLU = null; build(); renderPanel(); renderTimeline(); renderInspector(); draw();
     MEDIA_LOAD();
     if (!Studio._isReady) { Studio._isReady = true; Studio._ready.splice(0).forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
-    if (TL._starter) { const st = TL._starter; delete TL._starter; if (st.title) TL.title = st.title; pushUndo(); applyRecipe(st.pack, st.title, true); saveNow(); }
+    // S16 M118: chỉ áp công thức gói lên bản khởi tạo còn nguyên; timeline đã có cảnh máy dựng (Tự lái, AI dựng, b-roll, QC)
+    // hoặc SFX thì bỏ _starter trong bộ nhớ, không áp lại, không lưu (lưu sẽ coi bản xuất là cũ).
+    if (TL._starter) {
+      const st = TL._starter; delete TL._starter;
+      const built = (TL.scenes || []).some(s => s._auto || s._ai || s._qc || s._recipe) || (TL.audio?.sfx || []).length > 0;
+      if (!built) { if (st.title) TL.title = st.title; pushUndo(); applyRecipe(st.pack, st.title, true); saveNow(); }
+    }
   };
   if (f.contentWindow?.renderFrame) ready(); else f.addEventListener('load', ready);
 }
