@@ -829,7 +829,7 @@
   // ===================================================================================== STUDIO
   const M = 'media/';
   PACKS.push({
-    id: P, name: 'Montage kể chuyện (5 kiểu)', icon: '🎞️', caption: 'mt_result',
+    id: P, name: 'Montage kể chuyện (5 kiểu)', icon: '🎞️', caption: 'mt_result', needs: ['broll', 'music'],
     desc: 'Danh sách Seoul (b-roll nhanh + chữ lớn), RESULT podcast ấm (thẻ navy, polaroid, phim), RESULT quanh mặt (đạo cụ giấy cạnh mặt), POV hành trình (HUD, tua lại, khoảnh khắc đóng băng), hoạt hình giải thích (thế giới tự vẽ). Chọn kiểu bằng recipe_opts.variant: seoul | result | face | pov | vector',
     items: [
       { type: 'mt_seoul_shots', label: 'Seoul · B-roll cắt nhanh', make: T => ({ type: 'mt_seoul_shots', t0: T, t1: T + 4.2, images: [M + 'top_dalat.jpg', M + 'top_hoian.jpg', M + 'top_sapa.jpg'], every: 1.4 }) },

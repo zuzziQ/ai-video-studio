@@ -401,7 +401,7 @@
   const XY = (y, size = 100) => () => ({ x: DIMS()[0] / 2, y: VERT() ? y : Math.round(y * 720 / 1280 + 40), size: VERT() ? size : Math.round(size * .82) });
   const at = (fy, size) => XY(fy, size)();
   PACKS.push({
-    id: P, name: 'Review sản phẩm', icon: '⭐',
+    id: P, name: 'Review sản phẩm', icon: '⭐', needs: ['product'],
     desc: 'Thẻ tối, xanh điện cho ưu điểm, đỏ cho nhược điểm: sản phẩm xoay, chấm điểm, so sánh A vs B, so giá, mã giảm giá, con dấu kết luận',
     caption: 'review',
     items: [
