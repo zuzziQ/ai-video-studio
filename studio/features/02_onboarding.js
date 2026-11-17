@@ -466,8 +466,8 @@
     let pid = null; try { pid = sessionStorage.getItem('avs-onb-tpl'); sessionStorage.removeItem('avs-onb-tpl'); } catch { /* không có sessionStorage */ }
     if (pid) openTemplates(pid === '-' ? '' : pid);
   });
-  // The author screen (#author, 00_author.js) always comes first: wait until it has closed.
-  const afterAuthor = fn => { const t = setInterval(() => { if (!document.getElementById('author')) { clearInterval(t); fn(); } }, 250); };
+  // The author screen (#author, 00_author.js) always comes first, then the machine check (01_setup.js, S15 M115): wait for both.
+  const afterAuthor = fn => { const t = setInterval(() => { if (!document.getElementById('author')) { clearInterval(t); (Studio.setupGate || Promise.resolve()).then(fn); } }, 250); };
   loadState().then(async s => {
     if (!s) return;
     if (!s.project) {
