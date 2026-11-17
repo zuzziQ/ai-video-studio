@@ -11,8 +11,9 @@ import { qcHash } from './export_gate.mjs';
 
 const r2 = v => Math.round(v * 100) / 100;
 const deep = o => JSON.parse(JSON.stringify(o));
-// kiểm hình học của QC nhanh; mọi loại đều sửa được bằng applyDeterministic
-export const QUICK = new Set(['face_cover', 'caption_overlap', 'text_unsafe', 'text_offcanvas', 'empty']);
+// kiểm hình học của QC nhanh; mọi loại đều sửa được bằng applyDeterministic. S13 · M106: thêm thẻ trống và số không có trong
+// lời thoại (ẩn khi graphic do máy tạo; graphic người dùng đặt chỉ được đánh dấu)
+export const QUICK = new Set(['face_cover', 'caption_overlap', 'text_unsafe', 'text_offcanvas', 'empty', 'empty_card', 'invented_number']);
 
 // Ba thời điểm cho ba ô ảnh: đầu, giữa, cuối các graphic AI (không có thì mọi graphic), lúc graphic đã hiện hẳn.
 export function pickTimes(tl) {
@@ -27,7 +28,7 @@ export function pickTimes(tl) {
 
 // P = kết quả domPass (samples có hộp phần tử, phụ đề, mặt). Trả lỗi đã sắp theo thời gian, mỗi lỗi có key ổn định (qcKey).
 export function quickIssues(tl, caps, P, dir) {
-  const stat = staticIssues(tl, caps, dir).filter(i => i.kind === 'empty');
+  const stat = staticIssues(tl, caps, dir).filter(i => QUICK.has(i.kind));
   const dom = domIssues(tl, caps, P).filter(i => QUICK.has(i.kind));
   return [...stat, ...dom].map(i => ({ ...i, src: 'auto' })).sort((a, b) => a.t - b.t);
 }

@@ -17,6 +17,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin } from './platform.mjs';
 import { runLLM, parseLooseJSON } from './llm.mjs';
 import { qcHash } from './export_gate.mjs';
+import { createRequire } from 'node:module';
+import { saidNumbers, inventedNumbers } from './ai_edit.mjs'; // ai_edit imports ai_qc too: both only call each other's functions later
+import { txCheckEdit } from './assist.mjs';
+const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
 
 export const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PY = pyBin(SKILL);
@@ -32,12 +36,36 @@ const trackOf = s => (s.type === 'text' ? 'add' : LAYOUT.has(s.type) ? 'scene' :
 // Decorative types that are meant to bleed past the frame edge (big background words, text orbiting the head…).
 const BLEED = new Set(['orbit', 'mega', 'slam_bg', 'mosaic_wall', 'kinetic', 'light_leak', 'flash_ring', 'iris', 'ticker', 'marquee']);
 const WEIGHT = { high: 15, med: 7, low: 3 };
+// S13 · M106: a card-like graphic (b-roll card, callout, badge, bubble…) with no text, picture, b-roll or chat in it is an empty
+// frame on screen. Style fields (colours, fonts, ids, animation) and timing are not content.
+const CARD = /card|callout|badge|bubble|quote|stat|chip|panel|note|box/;
+const STYLE_KEY = /^(type|icon|font|style|anim|kind|layout|id|mood|color|colour|bg|fill|ease|align|weight|italic|upper|shape|theme|pal|variant|dir|pos)$/i;
+export function hasContent(s) {
+  let ok = false;
+  const walk = (v, k = '') => {
+    if (ok) return;
+    if (Array.isArray(v)) return v.forEach(x => walk(x, k));
+    if (v && typeof v === 'object') {
+      if ((v.broll && v.broll.id) || v.chat) { ok = true; return; }
+      for (const [kk, x] of Object.entries(v)) if (!kk.startsWith('_') && !['kf', 'anchor', 'card', 'pan', 'mask'].includes(kk)) walk(x, kk);
+      return;
+    }
+    if (typeof v === 'number') { if (/value|percent|pct|score|stat|num|count|price|amount|rating/i.test(k)) ok = true; return; }
+    if (typeof v !== 'string') return;
+    if (MEDIA_RE.test(v) || /%0\d+d/.test(v)) ok = true;
+    else if (!STYLE_KEY.test(k) && !/^(#|var\(|rgba?\(|si:)/.test(v) && /[\p{L}\d]/u.test(v)) ok = true;
+  };
+  walk(s);
+  return ok;
+}
+export const emptyCard = s => (BROLL.has(s.type) || CARD.test(s.type)) && !hasContent(s);
 export const KIND_VI = {
   text_offcanvas: 'Chữ tràn khung', text_unsafe: 'Chữ ngoài vùng an toàn', face_cover: 'Graphic che mặt', caption_overlap: 'Phụ đề đè graphic',
   overlap: 'Cảnh chồng nhau', empty: 'Khoảng trống', dense: 'Quá dày', caption_long: 'Phụ đề dài', missing_media: 'Thiếu file',
   hook_missing: 'Thiếu hook', loudness: 'Độ to', true_peak: 'Đỉnh âm', music_masking: 'Nhạc át giọng', music_quiet: 'Nhạc quá nhỏ', silence: 'Im lặng',
   hook: 'Hook', readability: 'Dễ đọc', spelling: 'Chính tả', variety: 'Đa dạng', pacing: 'Nhịp', brand: 'Thương hiệu', other: 'Khác',
   ad_policy: 'Chính sách quảng cáo', ad_claim: 'Claim quảng cáo', ad_originality: 'Nguyên bản',
+  empty_card: 'Thẻ trống', invented_number: 'Số không có trong lời thoại',
 };
 
 // ---------- ad gates (references/ad-gates.md) ----------
@@ -309,8 +337,19 @@ const sceneLabel = s => String(s.text || s.question || s.title || s.lines?.[0]?.
 
 // ---------- timeline checks (no rendering) ----------
 const MEDIA_RE = /\.(jpe?g|png|webp|gif|svg|mp4|mov|m4v|webm|mp3|wav|m4a|aac|flac)$/i;
+// stretches without a visual event (> 6 s): graphic start/end, fx, zoom, clip transitions
+export function emptyGaps(tl) {
+  const D = tl.duration || 0, ev = [0, D], out = [];
+  for (const s of tl.scenes || []) if (!s.hidden && !isBase(s, tl)) ev.push(s.t0, s.t1);
+  for (const f of tl.fx || []) ev.push(f.t);
+  for (const z of tl.zoom || []) ev.push(z.t0);
+  let acc = 0; for (const c of tl.clips || []) { if (c.hidden) continue; const d = ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1); if (acc > 0 && c.transition) ev.push(acc); acc += d; }
+  const E = [...new Set(ev.map(r2))].filter(t => t >= 0 && t <= D).sort((a, b) => a - b);
+  for (let k = 1; k < E.length; k++) if (E[k] - E[k - 1] > 6) out.push({ t: r2(E[k - 1]), t1: r2(E[k]), kind: 'empty', severity: E[k] - E[k - 1] > 9 ? 'high' : 'med', target: null, msg: `${(E[k] - E[k - 1]).toFixed(1)}s liền (${E[k - 1].toFixed(1)}–${E[k].toFixed(1)}s) không có graphic/hiệu ứng nào — dễ chán` });
+  return out;
+}
 export function staticIssues(tl, caps, dir) {
-  const out = [], D = tl.duration || 0, sc = (tl.scenes || []).map((s, i) => ({ s, i })).filter(({ s }) => !s.hidden);
+  const out = [], sc = (tl.scenes || []).map((s, i) => ({ s, i })).filter(({ s }) => !s.hidden);
   const over = sc.filter(({ s }) => !isBase(s, tl));
   // same-layer overlap
   const byTrack = {};
@@ -322,14 +361,14 @@ export function staticIssues(tl, caps, dir) {
       if (ov > .25 && b.s.t0 < a.s.t1) out.push({ t: r2(b.s.t0), kind: 'overlap', severity: 'med', target: `s${a.i}`, other: `s${b.i}`, msg: `“${sceneLabel(a.s)}” và “${sceneLabel(b.s)}” chồng nhau ${ov.toFixed(1)}s trên cùng một lớp` });
     }
   }
-  // stretches without a visual event (> 6 s)
-  const ev = [0, D];
-  for (const { s } of over) ev.push(s.t0, s.t1);
-  for (const f of tl.fx || []) ev.push(f.t);
-  for (const z of tl.zoom || []) ev.push(z.t0);
-  let acc = 0; for (const c of tl.clips || []) { if (c.hidden) continue; const d = ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1); if (acc > 0 && c.transition) ev.push(acc); acc += d; }
-  const E = [...new Set(ev.map(r2))].filter(t => t >= 0 && t <= D).sort((a, b) => a - b);
-  for (let k = 1; k < E.length; k++) if (E[k] - E[k - 1] > 6) out.push({ t: r2(E[k - 1]), t1: r2(E[k]), kind: 'empty', severity: E[k] - E[k - 1] > 9 ? 'high' : 'med', target: null, msg: `${(E[k] - E[k - 1]).toFixed(1)}s liền (${E[k - 1].toFixed(1)}–${E[k].toFixed(1)}s) không có graphic/hiệu ứng nào — dễ chán` });
+  out.push(...emptyGaps(tl));
+  // S13 · M106: empty cards and numbers the speaker never said (same rule as the AI plan check, ai_edit.mjs inventedNumbers)
+  const said = saidNumbers(caps);
+  for (const { s, i } of over) {
+    if (emptyCard(s)) { out.push({ t: r2(s.t0), kind: 'empty_card', severity: 'med', target: `s${i}`, msg: `“${s.type}” là thẻ trống (không có chữ, ảnh hay b-roll)` }); continue; }
+    const made = inventedNumbers(s, said);
+    if (made.length) out.push({ t: r2(s.t0), kind: 'invented_number', severity: 'high', target: `s${i}`, msg: `“${sceneLabel(s)}”: số “${made.slice(0, 3).join('”, “')}” không có trong lời thoại` });
+  }
   // too dense: > 3 overlay starts inside 4 s
   const starts = over.map(o => o.s.t0).sort((a, b) => a - b);
   for (let k = 0, last = -9; k < starts.length; k++) { const n = starts.filter(t => t >= starts[k] && t < starts[k] + 4).length; if (n > 3 && starts[k] - last > 4) { out.push({ t: r2(starts[k]), kind: 'dense', severity: 'low', target: null, msg: `${n} graphic bật lên trong 4 giây — hơi rối mắt` }); last = starts[k]; } }
@@ -476,7 +515,7 @@ Chỉ trả về DUY NHẤT một object JSON (không markdown):
 {"scores":{"hook":0,"readability":0,"spelling":0,"variety":0,"pacing":0,"brand":0},"summary":"2–3 câu tiếng Việt","issues":[{"t":1.2,"kind":"hook|readability|spelling|variety|pacing|brand|other","severity":"high|med|low","msg":"mô tả ngắn tiếng Việt","fix":{…} hoặc null}]}
 Tối đa 10 issues, chỉ nêu vấn đề thật (video ổn thì để ít). Chính tả sai thì severity "high" và luôn kèm fix "text".`;
 }
-function validatePatch(f, tl, caps, styles) {
+export function validatePatch(f, tl, caps, styles) {
   if (!f || typeof f !== 'object') return null;
   const D = tl.duration || 0, sc = id => (/^s\d+$/.test(id || '') ? tl.scenes[+id.slice(1)] : null), cp = id => (/^c\d+$/.test(id || '') ? caps[+id.slice(1)] : null);
   const num = (v, a, b) => (Number.isFinite(+v) ? clamp(+v, a, b) : null);
@@ -485,8 +524,10 @@ function validatePatch(f, tl, caps, styles) {
       const from = String(f.from || ''), to = String(f.to || '').slice(0, Math.max(12, Math.ceil(from.length * 1.6) + 8));
       if (!from || !to || from === to) return null;
       const s = sc(f.target), c = cp(f.target);
-      if (s) return JSON.stringify(s).includes(JSON.stringify(from).slice(1, -1)) ? { op: 'text', target: f.target, from, to } : null;
-      if (c) { const n1 = from.trim().split(/\s+/).length, n2 = to.trim().split(/\s+/).length; return n1 === n2 && capText(c).toLowerCase().includes(from.toLowerCase()) ? { op: 'text', target: f.target, from, to } : null; }
+      if (s && JSON.stringify(s).includes(JSON.stringify(from).slice(1, -1))) return { op: 'text', target: f.target, from, to };
+      // S13 · M106: a caption fix is checked like an "AI soát lời thoại" edit (captionEdit); the caption Claude named may be
+      // off by one, or the words are in the captions and not in the scene it named: look in every caption
+      if (captionEdit(deep(caps), from, to)) return { op: 'text', target: c ? f.target : 'caps', from, to };
       return null;
     }
     case 'move': { const s = sc(f.target); const dx = num(f.dx || 0, -900, 900), dy = num(f.dy || 0, -900, 900); return s && !isBase(s, tl) && (dx || dy) ? { op: 'move', target: f.target, dx, dy } : null; }
@@ -562,17 +603,77 @@ function freeY(tl, P, t0, t1) {
   if (!f) return DH * .2;
   return f.y > DH * .3 ? Math.max(DH * .12, f.y - DH * .08) : Math.min(DH * .62, f.y + f.h + DH * .07);
 }
+// S13 · M106: fill a stretch a..b with no visual event: a keyword pop from the most "contentful" caption starting < 5.8 s into it
+// (highlighted words, long non-filler words; nearer ~4.5 s wins ties), then the parts left on both sides, until none is > 6 s.
+// No caption to take words from → a zoom punch. `out` collects what was added ({t, text?}).
+function fillGap(tl, caps, P, a, b, out, depth = 0) {
+  if (b - a <= 6 || depth > 12) return;
+  const want = a + Math.min(4.5, (b - a) / 2), cand = caps.filter(c => !c.hidden && c.words?.length && c.t0 > a + .8 && c.t0 < b - 2);
+  const val = c => c.words.reduce((s, w) => s + (w.hl ? 3 : 0) + (STOP.has(w.w.toLowerCase()) ? -1 : w.w.length >= 4 ? 1.2 : .4), 0) - Math.abs(c.t0 - want) * .3;
+  const near = cand.filter(c => c.t0 - a < 5.8), c = (near.length ? near : cand).sort((x, y) => val(y) - val(x))[0];
+  if (!c) {
+    const t = r2(a + Math.min(5.5, (b - a) / 2));
+    tl.fx = [...(tl.fx || []), mark({ t, type: 'punch' })]; out.push({ t });
+    return fillGap(tl, caps, P, t, b, out, depth + 1);
+  }
+  let ws = c.words.map(w => w.w); while (ws.length > 1 && STOP.has(ws[0].toLowerCase())) ws.shift(); while (ws.length > 1 && STOP.has(ws[ws.length - 1].toLowerCase())) ws.pop();
+  const k0 = c.words.findIndex(w => w.w === ws[0]), t0 = r2(c.words[Math.max(0, k0)].s), t1 = r2(Math.min(t0 + 2, b - .05)), txt = ws.slice(0, 4).join(' ');
+  tl.scenes.push(textScene(tl, t0, t1, txt, freeY(tl, P, t0, t1), 'white', 'slide_l'));
+  tl.fx = [...(tl.fx || []), mark({ t: t0, type: 'punch' })];
+  out.push({ t: t0, text: txt });
+  fillGap(tl, caps, P, a, t0, out, depth + 1);
+  fillGap(tl, caps, P, t1, b, out, depth + 1);
+}
 
-function applyClaude(tl, caps, patches, P) {
+// ---------- caption spelling (S13 · M106): the "AI soát lời thoại" (M90) check and re-timing ----------
+const capWords = caps => { const W = []; caps.forEach((c, ci) => { if (!c.hidden) (c.words || []).forEach((w, wi) => W.push({ ci, wi, w })); }); return W; };
+// from → to in the captions: every place it occurs, or only inside caption `target` when it is there, or only starting within
+// 2 s of `near`. Checked like a transcript edit (txCheckEdit: the old words found word for word, ≤ 3 words more or less,
+// letters changed ≤ 45 %, no case-only change). Same word count keeps each word's timing; otherwise the new words share the
+// old span, caption by caption (TranscriptCore.planEdit, as the Lời thoại panel does). → number of places changed
+export function captionEdit(caps, from, to, { target, near } = {}) {
+  const toks = TC.tokenize(to); if (!toks.length) return 0;
+  // AI reads the words, it does not hear them: a "spelling" fix never changes a number ("15 đến 3" → "1 đến 3", M90)
+  const nums = s => (String(s).match(/\d+(?:[.,]\d+)*/g) || []).join(' ');
+  if (nums(from) !== nums(to)) return 0;
+  const W = capWords(caps), flat = W.map(x => x.w);
+  let hits = TC.findMatches(flat.map(w => w.w), from);
+  const ci = /^c\d+$/.test(target || '') ? +target.slice(1) : -1, inT = hits.filter(h => W.slice(h.i, h.i + h.n).some(x => x.ci === ci));
+  if (inT.length) hits = inT;
+  if (near != null) hits = hits.filter(h => Math.abs(flat[h.i].s - near) <= 2);
+  hits = hits.filter(h => txCheckEdit({ start: h.i, end: h.i + h.n - 1, old: from, new: to, kind: 'chính tả' }, flat, { a: 0, b: flat.length - 1 }).ok);
+  for (const h of [...hits].reverse()) { // from the end: earlier word indices stay valid
+    const groups = [];
+    for (const x of W.slice(h.i, h.i + h.n)) { const g = groups[groups.length - 1]; if (g && g.ci === x.ci) g.list.push(x); else groups.push({ ci: x.ci, list: [x] }); }
+    const plan = TC.planEdit(groups.map(g => g.list.map(x => x.w)), toks);
+    groups.forEach((g, k) => { const c = caps[g.ci]; c.words.splice(g.list[0].wi, g.list.length, ...plan[k]); if (!c.words.length) c.hidden = true; mark(c); });
+  }
+  return hits.length;
+}
+// Suggestions of the transcript assistant (assist.mjs `transcript`, M90; its own checks already passed) for the words W it was
+// sent: QC takes only those at a spelling issue it still has open (±2.5 s, or naming the same words), never punctuation-only
+// ones; the issues they cover are marked fixed. → number of suggestions applied
+export function spellFromTranscript(caps, issues, sugs, W) {
+  const open = issues.filter(i => i.kind === 'spelling' && !i.fixed), F = s => ' ' + TC.tokenize(s).map(x => TC.fold(x)).join(' ') + ' ';
+  let n = 0;
+  for (const g of sugs || []) {
+    if (g.kind === 'dấu câu' || !W[g.start] || !W[g.end]) continue;
+    const t = W[g.start].s, f = F(g.old);
+    const hit = open.filter(i => Math.abs((+i.t || 0) - t) <= 2.5 || (f.trim() && F(i.msg || '').includes(f)));
+    if (!hit.length || !captionEdit(caps, g.old, g.new, { near: t })) continue;
+    n++;
+    for (const i of hit) Object.assign(i, { fixed: true, fix: { op: 'text', target: 'caps', from: g.old, to: g.new }, note: 'sửa theo AI soát lời thoại' });
+  }
+  return n;
+}
+
+export function applyClaude(tl, caps, patches, P) {
   const done = [];
   for (const p of patches) {
     const s = /^s\d+$/.test(p.target || '') ? tl.scenes[+p.target.slice(1)] : null, c = /^c\d+$/.test(p.target || '') ? caps[+p.target.slice(1)] : null;
     let ok = false;
     if (p.op === 'text' && s) ok = replaceStr(s, p.from, p.to) > 0 && !!mark(s);
-    if (p.op === 'text' && c) {
-      const A = p.from.trim().split(/\s+/), B = p.to.trim().split(/\s+/), W = c.words.map(w => w.w.toLowerCase());
-      for (let i = 0; i + A.length <= W.length && !ok; i++) if (A.every((a, j) => W[i + j] === a.toLowerCase())) { B.forEach((b, j) => (c.words[i + j].w = b)); mark(c); ok = true; }
-    }
+    if (p.op === 'text' && !s && (c || p.target === 'caps')) ok = captionEdit(caps, p.from, p.to, { target: p.target }) > 0;
     if (p.op === 'move' && s) { kfMove(s, p.dx, p.dy); ok = true; }
     if (p.op === 'resize' && s) { const b = bbox(P.samples.flatMap(x => (x.m.scenes[p.target.slice(1)]?.els || []).concat(x.m.scenes[p.target.slice(1)]?.texts || []))); kfMove(s, 0, 0, p.scale, b ? [b.x + b.w / 2, b.y + b.h / 2] : undefined); ok = true; }
     if (p.op === 'retime' && s) { const d = p.t0 - s.t0; for (const L of s.lines || []) if (typeof L.t === 'number') L.t = r2(L.t + d); s.t0 = p.t0; s.t1 = p.t1; mark(s); ok = true; }
@@ -598,21 +699,27 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
   for (const is of issues) if (['text_offcanvas', 'face_cover', 'caption_overlap', 'text_unsafe'].includes(is.kind) && /^s\d+$/.test(is.target || '')) (byScene[is.target] = byScene[is.target] || []).push(is);
   for (const [id, list] of Object.entries(byScene)) {
     const i = +id.slice(1), s = tl.scenes[i];
-    const qcKf = s.kf?.length === 1 && s._qc && s.kf[0].ease === 'hold'; // a keyframe QC (or a Claude move) added: can be adjusted again
-    if (!s || touched.has(id) || (s.kf?.length && !qcKf) || s._orig) continue;
+    if (!s || touched.has(id) || s._orig) continue;
+    // S13 · M106: a scene with its own motion (keyframes QC did not add) moves as a whole: every key shifts by the same amount,
+    // so the path keeps its shape; B below is the box of the whole path (every sample of the scene)
+    const ownKf = s.kf?.length && !(s.kf.length === 1 && s._qc && s.kf[0].ease === 'hold');
     const R = sceneRects(i), B = bbox(R.flatMap(r => r.rects).filter(r => r.s == null || r.s.length >= 1));
     if (!B) continue;
     const avoid = [];
     // S13 · M104: whatever the issue, never move a graphic onto the speaking face or the captions (a fix for one used to cause the other)
     avoid.push(...R.filter(r => r.face && speakingAt(caps, r.t)).map(r => r.face));
-    const capB = bbox(R.map(r => r.cap).filter(Boolean));
-    if (capB) avoid.push(grow(capB, 6));
+    const capB = bbox(R.map(r => r.cap).filter(Boolean)), capA = capB && grow(capB, 6);
+    if (capA) avoid.push(capA);
     // don't push it onto the base layer's own small furniture (logo badge, progress pill…)
     const seen = new Set();
     for (const smp of P.samples.filter(x => x.m.scenes[i])) for (const [j, o] of Object.entries(smp.m.scenes)) if (tl.scenes[j] && isBase(tl.scenes[j], tl))
       for (const r of o.els) { const k = [r.x, r.y, r.w, r.h].map(Math.round).join(','); if (r.w * r.h < DW * DH * .12 && !seen.has(k)) { seen.add(k); avoid.push(r); } }
     // text outside the platform safe zone → place inside it; no room there → at least inside the frame
-    const sol = (list.some(x => x.kind === 'text_unsafe') && solve(B, safeOf(tl), avoid)) || solve(B, M, avoid);
+    let sol = (list.some(x => x.kind === 'text_unsafe') && solve(B, safeOf(tl), avoid)) || solve(B, M, avoid), hideCap = false;
+    // S13 · M106: a big card over the face with no room between face and captions (vertical selfie): a short one (≤ 3.6 s) may
+    // sit on the captions, which it hides while it is on screen (the card carries the words)
+    if (!sol && capA && s.t1 - s.t0 <= 3.6 && list.some(x => x.kind === 'face_cover')) { sol = solve(B, M, avoid.filter(a => a !== capA)); hideCap = !!sol; }
+    if (hideCap) { s.hideCaptions = true; mark(s); }
     const minK = sizeKey(s) ? Math.min(1, 30 / Math.max(...(sizeKey(s) === 'size' ? [s.size] : s.lines.map(L => L.size || 48)))) : .55;
     if ((!sol || (sol.k < Math.max(.55, minK) && !(sizeKey(s) && sol.k >= minK))) && list.some(x => x.kind === 'text_offcanvas')) {
       // too long to shrink readably: reflow a plain one-line text graphic into a 2-line text at the same height
@@ -623,7 +730,7 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
       } else list.forEach(x => (x.note = 'chữ quá dài — cần viết ngắn lại'));
       continue;
     }
-    if (sol && (sol.dx || sol.dy || sol.k !== 1)) { if (sol.k !== 1 && sizeKey(s)) { scaleSize(s, sol.k); kfMove(s, sol.dx, sol.dy, 1, sol.anchor); } else kfMove(s, sol.dx, sol.dy, sol.k, sol.anchor); list.forEach(x => { x.fix = { op: 'move', dx: sol.dx, dy: sol.dy, scale: sol.k }; fixed.add(x); }); }
+    if (sol && (sol.dx || sol.dy || sol.k !== 1)) { if (ownKf && !s.anchor) s.anchor = [s.x ?? DW / 2, s.y ?? DH / 2]; /* the engine's default: same picture, a scale stays put */ if (sol.k !== 1 && sizeKey(s)) { scaleSize(s, sol.k); kfMove(s, sol.dx, sol.dy, 1, sol.anchor); } else kfMove(s, sol.dx, sol.dy, sol.k, sol.anchor); list.forEach(x => { x.fix = { op: 'move', dx: sol.dx, dy: sol.dy, scale: sol.k }; fixed.add(x); }); }
     else if (list.some(x => x.kind === 'caption_overlap') && s.t1 - s.t0 <= 3.5) { s.hideCaptions = true; mark(s); list.filter(x => x.kind === 'caption_overlap').forEach(x => { x.fix = { op: 'hide_captions' }; fixed.add(x); }); }
   }
   // caption off canvas → captions back to the style default position (drop manual y), then smaller words via split
@@ -641,6 +748,15 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
     if (/^a\d+$/.test(is.target || '')) { const x = tl.audio.sfx[+is.target.slice(1)]; if (x) { x._qc_drop = true; is.fix = { op: 'drop_sfx' }; fixed.add(is); } }
   }
   if (tl.audio?.sfx) tl.audio.sfx = tl.audio.sfx.filter(x => !x._qc_drop);
+  // 3b. S13 · M106: an empty card is hidden; a graphic with a number never said is hidden when the machine made it (AI dựng giúp
+  // _ai, Tự động _auto); a user's own graphic is only flagged
+  let hid = false;
+  for (const is of issues.filter(x => x.kind === 'empty_card' || x.kind === 'invented_number')) {
+    const s = /^s\d+$/.test(is.target || '') && tl.scenes[+is.target.slice(1)];
+    if (!s || s.hidden || isBase(s, tl) || touched.has(is.target)) continue;
+    if (is.kind === 'invented_number' && (s._orig || !(s._ai || s._auto))) { is.note = 'số liệu không có trong lời thoại: kiểm lại hoặc sửa chữ'; continue; }
+    s.hidden = true; mark(s); is.fix = { op: 'delete' }; fixed.add(is); hid = true;
+  }
   // 4. hook missing → hook text (Claude's hook if any)
   for (const is of issues.filter(x => x.kind === 'hook_missing')) {
     // an opening overlay whose text became too small to work as a hook (shrunk to fit) → replace it by a big 2-line text
@@ -652,20 +768,16 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
     tl.fx = [...(tl.fx || []), mark({ t: .05, type: 'punch' })];
     is.fix = { op: 'hook', text: txt }; fixed.add(is);
   }
-  // 5. long dead stretch → keyword pop (caption words near the middle of the gap) + punch
-  for (const is of issues.filter(x => x.kind === 'empty')) {
-    if ((tl.scenes || []).some(s => !s.hidden && !isBase(s, tl) && s.t0 > is.t + .5 && s.t0 < is.t1 - .5)) { is.fix = { op: 'filled', t: r2(tl.scenes.find(s => !s.hidden && !isBase(s, tl) && s.t0 > is.t + .5 && s.t0 < is.t1 - .5).t0) }; fixed.add(is); continue; } // already filled (e.g. a Claude retime); the re-check confirms
-    // the most "contentful" caption in the gap (highlighted words, long non-filler words), nearer the middle wins ties
-    const mid = (is.t + is.t1) / 2, cand = caps.filter(c => !c.hidden && c.t0 > is.t + .8 && c.t0 < is.t1 - 2);
-    const val = c => c.words.reduce((a, w) => a + (w.hl ? 3 : 0) + (STOP.has(w.w.toLowerCase()) ? -1 : w.w.length >= 4 ? 1.2 : .4), 0) - Math.abs((c.t0 + c.t1) / 2 - mid) * .15;
-    const splits = cand.filter(c => c.t0 - is.t < 5.8 && is.t1 - c.t0 - 2 < 5.8); // both halves of the gap end up < 6 s
-    const c = (splits.length ? splits : cand).sort((a, b) => val(b) - val(a))[0];
-    if (!c) continue;
-    let ws = c.words.map(w => w.w); while (ws.length > 1 && STOP.has(ws[0].toLowerCase())) ws.shift(); while (ws.length > 1 && STOP.has(ws[ws.length - 1].toLowerCase())) ws.pop();
-    const k0 = c.words.findIndex(w => w.w === ws[0]), t0 = c.words[Math.max(0, k0)].s, txt = ws.slice(0, 4).join(' ');
-    tl.scenes.push(textScene(tl, t0, Math.min(t0 + 2, is.t1 - .05), txt, freeY(tl, P, t0, t0 + 2), 'white', 'slide_l'));
-    tl.fx = [...(tl.fx || []), mark({ t: r2(t0), type: 'punch' })];
-    is.fix = { op: 'add_text', text: txt, t: r2(t0) }; fixed.add(is);
+  // 5. long dead stretch → keyword pops + punch until no stretch is > 6 s (S13 · M106: a single pop used to leave one side of a
+  // 12 s gap still > 6 s); no speech there → a zoom punch. Gaps the hides above opened are filled in the same pass.
+  const gapIs = issues.filter(x => x.kind === 'empty');
+  if (hid) for (const g of emptyGaps(tl)) if (!gapIs.some(x => x.t < g.t1 && g.t < x.t1)) gapIs.push(g);
+  for (const is of gapIs) {
+    const added = [];
+    for (const g of emptyGaps(tl).filter(g => g.t < is.t1 && is.t < g.t1)) fillGap(tl, caps, P, g.t, g.t1, added);
+    if (added.length) { const w = added.filter(x => x.text); is.fix = { op: 'add_text', text: w.map(x => x.text).join(' · ') || undefined, t: (w[0] || added[0]).t, n: added.length }; }
+    else is.fix = { op: 'filled' }; // already filled (e.g. a Claude retime); the re-check confirms
+    if (issues.includes(is)) fixed.add(is);
   }
   // 6. music masking speech → lower the music bed
   for (const is of issues.filter(x => x.kind === 'music_masking')) if (!touched.has('gain')) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) - is.need_db); mark(m); } is.fix = { op: 'gain', db: -is.need_db }; fixed.add(is); }
@@ -821,13 +933,27 @@ export async function runQC(src, o = {}) {
       patches = cIssues.filter(i => i.fix && pick(i) && !superseded.includes(i)).map(i => i.fix);
       applied = applyClaude(tl, caps, patches, P);
       for (const i of cIssues) if (i.fix && applied.includes(i.fix)) i.fixed = true;
+      // S13 · M106: caption spelling Claude flagged but gave no fix that passed → the transcript assistant (M90, same Claude/Ollama
+      // choice as the Lời thoại panel) proposes word-level fixes through its own checks; QC takes those at the flagged spots
+      const spell = cIssues.filter(i => i.kind === 'spelling' && !i.fixed && pick(i));
+      if (spell.length && claude.used) {
+        say(.79, 'AI soát lời thoại cho chỗ sai chính tả');
+        try {
+          const [{ runAssist, check }, { dictSources }] = await Promise.all([import('./assist.mjs'), import('./dict.mjs')]);
+          const W = capWords(caps).map(x => ({ w: x.w.w, s: x.w.s, e: x.w.e })), ds = dictSources({ dir, timeline: tl });
+          const input = check('transcript', { words: W, dict: [...ds.brand, ...ds.project], names: [...new Set([ds.kit?.title, ...ds.auto.map(e => e.to)].filter(Boolean))], industry: tl.ads?.industry || '' });
+          const r = await runAssist('transcript', input, { model: o.model || 'sonnet' });
+          const n = spellFromTranscript(caps, spell, r.suggestions, W);
+          if (n) applied.push({ op: 'transcript', n });
+        } catch (e) { console.error('[qc] soát lời thoại: ' + String(e.message).slice(0, 200)); }
+      }
       const touched = new Set(applied.map(p => (p.op === 'hook' ? 'hook' : p.op === 'gain' ? 'gain' : ['move', 'resize', 'delete', 'retime', 'text'].includes(p.op) ? p.target : null)).filter(Boolean));
       const fixedDet = applyDeterministic(tl, caps, detSel, P, touched);
       for (const i of det) if (fixedDet.has(i)) i.fixed = true;
       // re-check on the patched timeline (stills at the same times + every issue time); a 2nd placement round uses the new boxes
       const issueTimes = before.flatMap(i => [i.t, (i.fix?.t ?? i.fix?.t0) != null ? (i.fix.t ?? i.fix.t0) + .6 : null]).filter(x => x != null);
       let P2 = null, recheck = [];
-      const PLACE = new Set(['text_offcanvas', 'face_cover', 'caption_overlap', 'hook_missing']);
+      const PLACE = new Set(['text_offcanvas', 'face_cover', 'caption_overlap', 'hook_missing', 'empty']); // empty: a gap a hide opened
       for (let round = 0; round < 3; round++) {
         say(.8 + round * .05, round ? 'Sửa vị trí lần 2 rồi kiểm tra lại' : 'Kiểm tra lại sau khi sửa');
         P2 = await domPass(E, tl, caps, sampleTimes(tl, caps, issueTimes), stillDir, 'b', k => say(.8 + round * .05 + k * .04, `Kiểm tra lại… ${Math.round(k * 100)}%`));

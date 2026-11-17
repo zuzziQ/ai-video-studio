@@ -62,6 +62,8 @@ Kết quả `M105` (2026-11-17): `scripts/qc_quick.mjs` + job `qc_quick` (`/api/
 
 Kết quả `M107` (2026-11-17): thẻ Video nguồn đọc `source.json` qua `GET /api/source` (dự án cũ không có thì ghi "chưa ghi video gốc"); "Đổi video" mở hộp tạo dự án mới (dự án hiện tại giữ trong Kho), "Tạo dự án khác" mở trang chủ. Trạng thái AI dựng giúp rời bước Nguồn sang panel AI dựng ở bước Dựng, để `M108` gộp tiếp.
 
+Kết quả `M106` (2026-11-17, đo trên bản sao `sample/clip-mau`, chưa đo trên 82x): AI dựng giúp thật rồi QC đầy đủ có Claude: `face_cover` 0, thẻ trống 0, số bịa 0, điểm trước tự sửa 75 (đạt chỉ tiêu trên clip mẫu), sau tự sửa 89; bản có graphic giả: QC nhanh 7 lỗi → 0. Thẻ lớn che mặt trên khung dọc được đặt lên phụ đề và ẩn phụ đề lúc hiện (thẻ ≤ 3,6 s); sửa chính tả phụ đề không bao giờ đổi con số.
+
 Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M105` → `M106`; `M107` làm song song được (không đụng file của nhóm QC). `M104` và `M106` đều sửa `scripts/ai_qc.mjs` (tệp nóng): làm lần lượt.
 
 ## 4. Quyết định (chốt 2026-11-17: theo đề xuất)
