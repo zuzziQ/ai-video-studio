@@ -16,7 +16,8 @@ Gồm 3 lớp:
 | Việc | Đọc |
 |---|---|
 | **Kho theo thương hiệu** (một thư mục thật: `Nguon/ Anh/ BRoll/ Nhac/ Thuong hieu/ Du an/ Thanh pham/`): mọi bước lấy nguồn từ Kho, dự án mới vào `Du an/`, bản xuất giao vào `Thanh pham/<YYYY-MM>/`, chuyển file cũ vào Kho có hỏi trước (`scripts/workspace.mjs`, `kho_deliver.mjs`, `kho_media.mjs`, `kho_migrate.mjs`) | `references/studio.md` mục "Thư mục", `docs/plans/S12-kho-du-an.md` |
-| AI dựng giúp (`scripts/ai_edit.mjs`), cắt lỗi nói (`fillers.py`), sửa video bằng chữ | `references/ai-edit.md` |
+| AI dựng giúp (`scripts/ai_edit.mjs`: né mặt + phụ đề + vùng an toàn bằng `placePlan`, bỏ thẻ trống, số không có trong lời thoại, emoji cờ; nút **AI dựng** của bước Dựng kèm Thêm b-roll / Thêm âm thanh), cắt lỗi nói (`fillers.py`, panel Làm sạch lời nói), sửa video bằng chữ | `references/ai-edit.md` |
+| QC đầy đủ (`scripts/ai_qc.mjs`: máy dò + Claude chấm + tự sửa) và **QC nhanh** sau AI dựng (`scripts/qc_quick.mjs`, không Claude, ~8 s, "Sửa ngay"); phụ đề cháy sẵn của video nguồn (`scripts/burnin.mjs`, thẻ Video nguồn: tắt / dời / che); nhiều phiên bản A/B | `references/qc-variants.md` |
 | Làm sạch giọng (`voice_clean.py`), tự hạ nhạc, nhiều track âm thanh (`TL.audio.clean/duck/tracks`) | `references/audio.md` |
 | Bám mặt đổi khung (`face_track.py`, `clip.reframe`), xuất nhiều khổ, dịch + lồng tiếng (`dub.py`, `TL.sub2`) | `references/reframe-dub.md` |
 | Giọng đọc `say` / edge-tts / VieNeu (tiếng Việt, máy chủ trên 127.0.0.1, `scripts/tts.py`, cài Windows `scripts/install_vieneu.ps1`) | `references/voice.md` |
@@ -24,7 +25,7 @@ Gồm 3 lớp:
 | Làm hàng loạt từ CSV/XLSX (`batch.mjs`), brand kit (`~/.ai-video-studio/brands.json`), gói đăng mạng xã hội | `references/batch-brands-publish.md` |
 | Render song song (`render.mjs --workers N --fast`), app Mac (`scripts/make_app.sh`) | `references/app-render.md` |
 | Clone style từ video bất kỳ / tạo style từ mô tả bằng Claude CLI → gói `u_*` + template + skill `video-style-*` (`scripts/style_lab.mjs clone|describe|apply`, panel "Tạo style") | `references/style-lab.md` |
-| Tự thêm b-roll + âm thanh 1 bấm: **9 mục tiêu video** × vai trò từng câu × **11 nguồn** (9.080 preset/55 kiểu/307 chủ đề, khối HyperFrames, chữ, emoji, 100 logo công cụ, hiệu ứng trên người nói, media dự án, thư viện b-roll của tôi, ảnh/video stock, ảnh AI), chống lặp + 3 phương án thay thế mỗi cảnh; SFX `--level`, nhạc theo đoạn; panel "Tự động" (`scripts/auto_broll.mjs --goal --variety`, `broll_lib.mjs`, `auto_sfx.py`) | `references/autofill.md` |
+| Tự thêm b-roll + âm thanh 1 bấm: **9 mục tiêu video** × vai trò từng câu × **11 nguồn** (9.080 preset/55 kiểu/307 chủ đề, khối HyperFrames, chữ, emoji, 100 logo công cụ, hiệu ứng trên người nói, media dự án, thư viện b-roll của tôi, ảnh/video stock, ảnh AI), chống lặp + 3 phương án thay thế mỗi cảnh; SFX `--level`, nhạc theo đoạn; tab "Tự động" của mục B-roll, hoặc chạy nối sau nút AI dựng (`scripts/auto_broll.mjs --goal --variety`, `broll_lib.mjs`, `auto_sfx.py`) | `references/autofill.md` |
 | ~200 khối HyperFrames (HeyGen, Apache-2.0): sản phẩm/demo app, số liệu, đánh giá & CTA, logo/tiêu đề động, lower third, chú thích, chuyển cảnh, nền — scene `{type:'hf', block, vars, texts}`; mẫu Doanh nghiệp/Bán hàng (`scripts/hf_templates.mjs`); 16 kiểu phụ đề `hf_*` (`engine/packs/captions_hf.js`) | `references/hyperframes.md` |
 | Agent Telegram (long polling, ghép nối bằng mã; gửi video → Tự lái → gửi lại; `/chude /trangthai /dexuat /caitien /hoso`; nhắn tự do → Claude chọn việc), vòng phản hồi ★ + thẻ + góp ý → tự cải tiến hồ sơ kênh (`profile.fb`), tự đề xuất + bản tin sáng; panel "Agent" (`scripts/telegram.mjs`, `feedback.mjs`) | `references/agent-telegram.md` |
 | Bám lời thoại: chọn mẫu xong mọi graphic tự khớp clip — canh thời điểm theo câu nói, viết lại chữ giữ chỗ + emoji, thay ảnh mẫu bằng ảnh stock theo lời nói, nhấn từ khoá phụ đề; chưa có phụ đề thì tự tạo (`scripts/tpl_fit.mjs`, `/api/tplfit`, nút "Bám lời thoại") | `references/tpl-fit.md` |
@@ -78,12 +79,14 @@ bash <skill>/studio.sh <thư mục dự án>
 ```
 Trong app, nút **Video mới** cho chọn: gói, tiêu đề, khổ dọc 9:16 hoặc ngang 16:9, độ chính xác nhận giọng. App tự làm các bước: nhận giọng → cắt lặng → cắt khung → phụ đề → **recipe của gói** (intro, graphic đặt theo từ khoá, CTA, nhạc). Claude chạy server ở nền rồi đưa link `http://localhost:5186`.
 
+Luồng 5 bước trong Studio (S13, chi tiết ở `references/studio.md` mục Màn hình): ① Chuẩn bị (thương hiệu, sản phẩm, Kho) → ② Nguồn (thẻ **Video nguồn**: đã tách lời thoại / phụ đề / mặt chưa, báo phụ đề cháy sẵn; Lời thoại + Làm sạch lời nói; Cắt clip khi video > 5 phút) → ③ Dựng (một nút **AI dựng**, xong tự chạy **QC nhanh** trong hộp Đã dựng xong) → ④ Kiểm tra (QC đầy đủ có Claude) → ⑤ Xuất và đăng. **Tự lái** (thả nhiều video, hàng đợi nền) là nút riêng trên thanh đầu, không thuộc bước nào.
+
 ## 2. Claude dựng bản chất lượng cao
 1. **Phần thô**: `node <skill>/studio/server.mjs --new raw.mp4 <dir> --port 5186`. Hoặc tự chạy `transcribe.py`, `cut.py`, trích frame, `captions.py`.
 2. **Phụ đề**: sửa lỗi whisper, viết chữ thường hoặc theo kiểu chữ của gói, đánh `hl` cho từ khoá, `br` để dòng ≤ 4 từ. Đặt `caption_style` = id của gói.
 3. **Brand kit** `TL.brand = {primary, accent, name, handle, phone, website, logo}`: hỏi người dùng nếu là video thương hiệu, BĐS hoặc khoá học. Mọi gói đều dùng chung.
 4. **Scenes**: đọc file `pack-<gói>.md`, áp bảng "lời nói → module". Mọi `t` lấy từ `word.s`. Mỗi 2–3 s có một sự kiện hình. Ảnh và clip của người dùng để vào `media/` rồi dùng trong module.
-5. **QC**: `node scripts/render.mjs timeline.json x --still <t> qc/<t>.jpg` tại mọi điểm vào cảnh, rồi xem ảnh.
+5. **QC**: `node scripts/qc_quick.mjs <dir>` (hình học, không Claude, `--fix` để tự dời) rồi `node scripts/ai_qc.mjs <dir>` (đầy đủ; `references/qc-variants.md`); xem thêm ảnh bằng `node scripts/render.mjs timeline.json x --still <t> qc/<t>.jpg` tại các điểm vào cảnh.
 6. **Âm thanh**: `$PY scripts/auto_sfx.py timeline.json --keep-manual`, nhạc theo `music` của gói, gain −18…−20.
 7. **Bàn giao**: mở Studio để người dùng chỉnh, hoặc xuất `mix_audio.py` + `render.mjs` → `final.mp4`.
 
@@ -95,5 +98,6 @@ Trong app, nút **Video mới** cho chọn: gói, tiêu đề, khổ dọc 9:16 
 ## 4. QC chung
 - [ ] Chữ không tràn khung, dấu tiếng Việt không bị cắt, nằm trong vùng an toàn (dọc: y 130–1000).
 - [ ] Graphic lớn không trùng nhau, không che mặt lúc đang nói chuyện quan trọng.
+- [ ] Không thẻ trống, chữ graphic không bị cắt "…" giữa từ khoá, không emoji cờ (hiện thành chữ trên Chrome Windows); video nguồn có phụ đề cháy sẵn thì đã chọn tắt / dời / che ở thẻ Video nguồn.
 - [ ] −14 LUFS, peak ≤ −1 dBFS (`ffmpeg -i final.mp4 -af ebur128=peak=true -f null -`).
 - [ ] Logo hãng chỉ dùng để nhắc đúng sản phẩm. Thông tin BĐS (giá, pháp lý), review (điểm số), khoá học (giá, cam kết) phải đúng như người dùng cung cấp, **không tự bịa số liệu**.

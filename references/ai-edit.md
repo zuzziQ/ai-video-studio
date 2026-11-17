@@ -1,8 +1,10 @@
 # AI dựng giúp · Cắt lỗi nói · Sửa video bằng chữ
 
-Ba công cụ trong Studio (rail **AI** và **Lời thoại**, nút **AI dựng giúp** trên thanh trên). Code: `studio/features/20_ai.js` (giao diện + cắt ripple), `studio/routes/20_ai.mjs` (API), `scripts/ai_edit.mjs`, `scripts/fillers.py`.
+Ba công cụ trong Studio: **AI dựng** (mục đầu của bước ③ Dựng, panel `wf-aihelp`), **Làm sạch lời nói** và **Lời thoại** (hai tab của mục Lời thoại ở bước ② Nguồn). Code: `studio/features/20_ai.js` (giao diện + cắt ripple), `studio/routes/20_ai.mjs` (API), `scripts/ai_edit.mjs`, `scripts/fillers.py`.
 
 ## 1. AI dựng giúp
+**Trong Studio** (S13 M108): panel AI dựng có một nút **AI dựng** và hai ô **Thêm b-roll**, **Thêm âm thanh** (bật sẵn; lưu ở `80_autofill.js` `ai_broll`/`ai_sfx`, thay công tắc `after_ai` cũ). Bấm nút mở hộp tuỳ chọn (dưới), chạy AI dựng giúp, áp kế hoạch, rồi chạy **Tự động** (`references/autofill.md`) nối ngay sau với chế độ `all`/`broll`/`sfx` theo hai ô, tất cả trong **một bước hoàn tác**. Xong mở hộp **Đã dựng xong**: thẻ kế hoạch (tóm tắt, số graphic, phần bị bỏ, `placed`), dòng kết quả b-roll/âm thanh, **QC nhanh** tự chạy (`C16`; `references/qc-variants.md` mục 1b) với 3 ô ảnh, danh sách lỗi bấm để tua, **Sửa ngay**, **Kiểm tra lại**; **Hoàn tác** gỡ cả cảnh AI, b-roll và SFX của Tự động. Cả luồng trên clip mẫu 31,6 s ~70 s (Claude ~31 s, Tự động, QC nhanh 13 s).
+
 Claude (lệnh `claude -p`, model `sonnet`, không cần API key) đọc lời thoại rồi:
 - chọn gói style và kiểu phụ đề (hoặc giữ gói đang dùng, hoặc theo gói người dùng chọn);
 - sửa phụ đề để hiển thị: lỗi nhận dạng, tên riêng, nhấn từ khoá (`hl`), xuống dòng (`br`). **Không đổi thời gian**: số từ mỗi dòng phải giữ nguyên, từ bị bỏ thì để `""` (bị xoá khi áp dụng);
@@ -13,7 +15,7 @@ Tuỳ chọn trong hộp thoại: mục tiêu (khoá học / BĐS / review / chi
 
 **Dữ liệu gửi cho Claude**: lời thoại có chỉ số từ, thời lượng, khổ hình, brand kit, danh sách gói kèm loại graphic và ví dụ params (lấy thật từ engine: `make(0)` của từng item, qua headless Chrome), kiểu phụ đề, danh sách mẫu, chủ đề và template b-roll, mood nhạc, tên SFX. Các gói cần cảnh quay đặc biệt (hypecam, beatslide, multicam, screencast, greenscreen, transform) chỉ dùng khi người dùng chọn đích danh. Item cần ảnh hoặc video của người dùng bị loại.
 
-**Kiểm tra kết quả** (`validate`): type không có trong gói thì bỏ. Thời gian lấy từ `words[w].s`, giới hạn trong video, dài 0,8–8 giây, không cho chồng nhau. Params trộn lên ví dụ của item, nên trường nào thiếu vẫn có giá trị mặc định. Thời gian lồng bên trong params được tính tương đối so với đầu cảnh. Chữ không dài quá khoảng 1,8 lần chữ ví dụ. Id b-roll sai thì chuyển về id gần nhất trong catalog. Mood và SFX lạ thì bỏ. JSON hỏng thì hỏi lại 1 lần. Những gì bị bỏ được ghi trong `dropped`.
+**Kiểm tra kết quả** (`validate`): type không có trong gói thì bỏ. Thời gian lấy từ `words[w].s`, giới hạn trong video, dài 0,8–8 giây, không cho chồng nhau. Params trộn lên ví dụ của item, nên trường nào thiếu vẫn có giá trị mặc định. Thời gian lồng bên trong params được tính tương đối so với đầu cảnh. Chữ dài theo trần của `cleanText` (S13 M111: ≥ 28 ký tự và 2,5 lần chữ ví dụ, tối đa 90, trường chữ dài 160; engine còn co chữ tới 70 % trước khi phải thêm "…"); quá trần thì dừng ở dấu ngắt câu nếu đủ xa, không thì ở ranh giới từ (không cắt giữa từ khoá), và các dòng bị cắt (`plan.cuts`) được gửi Claude **một lần** để viết ngắn lại (`shortenCuts`, ~3 s; câu trả lời không ngắn hơn, quá trần, còn "…" hay có cờ thì giữ bản cắt). Emoji cờ (🇯🇵 hiện thành "JP" trên Chrome Windows) bị bỏ khỏi chữ graphic (`stripFlags`). Id b-roll sai thì chuyển về id gần nhất trong catalog. Mood và SFX lạ thì bỏ. JSON hỏng thì hỏi lại 1 lần. Những gì bị bỏ được ghi trong `dropped`.
 
 **Plan** (`.studio/ai_plan.json`):
 ```json
@@ -35,11 +37,12 @@ Tuỳ chọn trong hộp thoại: mục tiêu (khoá học / BĐS / review / chi
 - thay nhạc phủ cả video và các SFX `_ai`;
 - sửa phụ đề theo `t0` + số từ.
 
-Chạy lại chỉ thay phần do AI tạo. Sau khi áp dụng có thể bấm **Render thử 3 khung** để render ảnh thật (`/api/still`) tại 3 cảnh AI.
+Chạy lại chỉ thay phần do AI tạo. Panel AI dựng còn hiện lượt gần nhất (số cảnh AI và cảnh Tự động trên timeline), **Render thử 3 khung** (chạy QC nhanh: 3 khung đầu / giữa / cuối các graphic AI, ảnh lấy từ chính các khung QC render, không qua `/api/still`) và **Xoá cảnh AI**.
 
 CLI: `node scripts/ai_edit.mjs <dự án> [--goal "Chia sẻ"] [--tone …] [--pack keep|auto|<id>] [--density thua|vua|day] [--extra "…"] [--out plan.json] [--apply]`. Prompt và câu trả lời thô được lưu ở `.studio/ai_prompt.txt` và `.studio/ai_raw.txt`.
 
 ## 2. Cắt lỗi nói (`scripts/fillers.py`)
+Trong Studio là panel **Làm sạch lời nói** (id `ai`, trước S13 tên "AI"), tab thứ hai của mục Lời thoại ở bước Nguồn: dò tiếng đệm, lặp, ngắt dài, chọn rồi cắt có ripple.
 `python fillers.py <words.json|captions.json> [out.json] [--pause 0.7] [--keep 0.25] [--gap 0.12] [--fillers "ờ,ừm,thì là"] [--claude]`
 - **filler**: tiếng đệm (ờ, ơ, ừ, ừm, ờm, à…) sát một chỗ ngắt ≥ `--gap`; cụm đệm (thì là, kiểu như, nói chung là, đại loại là…) có chỗ ngắt ở cả hai đầu. Danh sách có thể thay bằng `--fillers`. "à" và "ừ" có thể là từ thật nên độ tin thấp (mặc định không được chọn sẵn).
 - **repeat**: 1–4 từ nói lặp liền nhau, cắt lần nói đầu. Có danh sách từ láy hợp lệ (từ từ, dần dần…) để không bắt nhầm.
