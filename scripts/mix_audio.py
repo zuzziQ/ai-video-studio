@@ -200,6 +200,10 @@ for ti, tr in enumerate(tracks):
 
 mix_in = ["[voice]"]
 dk = A.get("duck", True)
+# S16 M119: video không lời (transcribe.py không còn lời thật): tiếng gốc là nhạc / tiếng ồn, hạ nhạc nền theo nó chỉ làm nhạc nhỏ suốt video
+if (tl.get("speech") or {}).get("none"):
+    dk = False
+    print("duck: tắt (video không lời)")
 duck_labels = music_labels + trk_duck
 env = None
 if isinstance(dk, dict):

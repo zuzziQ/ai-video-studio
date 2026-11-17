@@ -139,3 +139,15 @@ test('mỗi mục có id, nhãn, điểm bị trừ (lost) cộng lại bằng 1
     assert.ok(Math.abs(100 - st.score - lost) <= st.items.length, `${s}: ${st.score} + ${lost}`);
   }
 });
+
+test('S16 M119: video không lời không bị trừ điểm lời thoại, làm sạch, phụ đề', () => {
+  const r = C.score(fullIn({ caps: 0, fillers: false, tl: { speech: { none: true, dropped: 3 }, clips: [{ src: 'a.mp4' }] } }));
+  assert.equal(item(r, 'source', 'speech').ok, true);
+  assert.equal(item(r, 'source', 'speech').label, 'Video không lời');
+  assert.equal(item(r, 'source', 'clean').ok, true);
+  assert.equal(item(r, 'build', 'captions').ok, true);
+  assert.equal(r.steps.source.score, 100);
+  // có lời mà chưa tách: vẫn trừ như cũ
+  const r2 = C.score(fullIn({ caps: 0 }));
+  assert.equal(item(r2, 'source', 'speech').ok, false);
+});

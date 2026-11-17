@@ -82,7 +82,10 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
   const S = f => path.join(SKILL, 'scripts', f);
   onStep('Nhận dạng giọng nói (whisper)', .05);
   await run(PY, ['-I', '-X', 'utf8', S('transcribe.py'), src, path.join(d, 'work/words_raw.json'), '--model', model, ...(lang && lang !== 'vi' ? ['--lang', lang] : [])]);
-  onStep('Cắt khoảng lặng', .45);
+  // S16 M119: transcribe.py đã bỏ lời whisper bịa; không còn lời thật → dự án "không lời" (không phụ đề, không cắt theo lời)
+  let speech = null;
+  try { const m = JSON.parse(fs.readFileSync(path.join(d, 'work/words_raw.json.meta.json'), 'utf8')); if (m && m.speech === false) speech = { none: true, dropped: (m.dropped || []).length, ...(m.noAudio ? { noAudio: true } : {}) }; } catch { /* bản cũ của transcribe.py: không có meta */ }
+  onStep(speech ? 'Video không có lời nói: giữ nguyên cả clip' : 'Cắt khoảng lặng', .45);
   fs.rmSync(path.join(d, 'work/aroll.mp4'), { force: true }); // M54: không ghi đè tại chỗ (có thể là liên kết cứng của bản anh em)
   await run(PY, ['-I', '-X', 'utf8', S('cut.py'), src, path.join(d, 'work/words_raw.json'), path.join(d, 'work')]);
   onStep(`Trích khung hình ${orient === 'horizontal' ? '16:9' : '9:16'}`, .6);
@@ -107,7 +110,7 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
     width: orient === 'horizontal' ? 1920 : 1080, height: orient === 'horizontal' ? 1080 : 1920, fps: 30, duration: +(dur + 2.5).toFixed(2),
     pack, _starter: { pack, title, dur: +(dur + 2.5).toFixed(2) },
     aroll: { frames: 'work/frames/%05d.jpg' }, face, ...(faceTr ? { face_track: faceTr } : {}),
-    caption_style: 'slate', captions: 'work/captions.json',
+    caption_style: 'slate', captions: 'work/captions.json', ...(speech ? { speech } : {}),
     scenes: [
       // slate's card / title positions are laid out for 720x1280; a 1280x720 design needs its own (else they spill off the bottom)
       { type: 'frame_grid', t0: 0, t1: dur, ...(orient === 'horizontal' ? { card: { x: 120, y: 70, w: 1040, h: 585, r: 8 }, badge: { icon: 'si:claude', x: 640 } } : { badge: { icon: 'si:claude' } }) },

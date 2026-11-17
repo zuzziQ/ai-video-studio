@@ -296,6 +296,7 @@
     }
     const d = srcDur(), cap = (CAP || []).length, capOn = cap > 0 && TL.caption_style !== 'none' && TL.burnin?.mode !== 'off';
     const faceT = TL.face_track?.keys?.length > 0, face = faceT || !!TL.face;
+    const mute = !!TL.speech?.none; // S16 M119: transcribe.py không thấy lời thật (nhạc, tiếng ồn sự kiện)
     const st = (done, text) => `<li class="${done ? 'is-done' : ''}"><i class="ti ${done ? 'ti-circle-check' : 'ti-circle-dashed'}"></i>${text}</li>`;
     const where = !SRC ? 'Đang đọc…' : SRC.failed ? 'Không đọc được' : SRC.inKho ? `${esc(SRC.kho.title)} · <code>${esc(SRC.rel)}</code>${SRC.exists ? '' : ' (không còn file)'}`
       : SRC.name ? `Ngoài Kho${SRC.exists ? '' : ' (không còn file)'}` : 'Dự án cũ, chưa ghi video gốc';
@@ -312,11 +313,11 @@
     $('#libbody').innerHTML = `<div class="wf-card wf-src"><h4 class="wf-name"><i class="ti ti-movie"></i>${esc(SRC?.name || META.name || 'Dự án')}</h4>
       <dl><dt>Độ dài</dt><dd>${mmss(d)}${SRC?.size ? ` · ${mb(SRC.size)}` : ''}</dd>
         <dt>Vị trí</dt><dd>${where}${SRC?.inKho && SRC.exists ? ` <button class="wf-lnk" data-wf="src-reveal">Mở thư mục</button>` : ''}</dd></dl>
-      <ul class="wf-st">${st(cap, cap ? `Đã tách lời thoại (${cap} câu)` : 'Chưa tách lời thoại')}${st(capOn, capOn ? 'Phụ đề đang bật' : cap ? 'Phụ đề đang tắt' : 'Chưa có phụ đề')}${st(face, faceT ? 'Đã dò mặt theo thời gian' : face ? 'Đã dò vị trí mặt' : 'Chưa dò mặt')}${burnLi}</ul>
+      <ul class="wf-st">${mute ? st(true, `Video không có lời nói${TL.speech.dropped ? ` · đã bỏ ${TL.speech.dropped} đoạn whisper nghe nhầm` : ''}: không phụ đề, giữ nguyên cả clip`) : st(cap, cap ? `Đã tách lời thoại (${cap} câu)` : 'Chưa tách lời thoại') + st(capOn, capOn ? 'Phụ đề đang bật' : cap ? 'Phụ đề đang tắt' : 'Chưa có phụ đề')}${st(face, faceT ? 'Đã dò mặt theo thời gian' : face ? 'Đã dò vị trí mặt' : 'Chưa dò mặt')}${burnLi}</ul>
       ${burnBox}
       <div class="wf-acts"><button data-wf="src-change" title="Chọn video khác: Studio tạo dự án mới, dự án này vẫn giữ trong Kho"><i class="ti ti-replace"></i>Đổi video</button>
         <button data-wf="src-new" title="Trang chủ: mẫu, video dài, hàng loạt, dự án gần đây"><i class="ti ti-plus"></i>Tạo dự án khác</button></div></div>
-      ${cap || !S.ctaTranscribe ? '' : S.ctaTranscribe('')}
+      ${cap || mute || !S.ctaTranscribe ? '' : S.ctaTranscribe('')}
       ${d > LONG_SRC ? `<div class="wf-card"><h4><i class="ti ti-scissors"></i>Video dài ${Math.round(d / 60)} phút</h4><p>Cắt thành nhiều clip ngắn: AI chọn đoạn hay, mỗi đoạn thành một dự án.</p>
         <button data-wf="src-long"><i class="ti ti-scissors"></i>Cắt clip từ video dài</button></div>` : ''}
       <p class="wf-hint"><i class="ti ti-stack-2"></i> Có nhiều video? Thả vào <code>Nguon/Tha vao day/</code>${SRC?.kho ? ` trong Kho ${esc(SRC.kho.title)}` : ''} để Tự lái làm hết.</p>`;
