@@ -1,4 +1,5 @@
-// Rail panel "Tự động" (references/autofill.md): one click = automatic b-roll (scripts/auto_broll.mjs: goal × sentence role × 11
+// Rail panel "Tự động" (references/autofill.md; S13 M108: tab thứ ba của mục B-roll, chạy nối sau nút "AI dựng" theo hai tuỳ chọn
+// "Thêm b-roll" / "Thêm âm thanh" = O.ai_broll / O.ai_sfx): one click = automatic b-roll (scripts/auto_broll.mjs: goal × sentence role × 11
 // sources, alternatives on each scene — see 82_broll_alts.js; personal library via /api/brolllib) + richer sound
 // (scripts/auto_sfx.py --level, mood music per section). Server: studio/routes/80_autofill.mjs. Only items marked _auto are
 // replaced on a re-run; what you added or edited stays. Every run is one undo step (⌘Z) and a history snapshot.
@@ -49,10 +50,14 @@
   const loadMeta = () => S.api('/api/broll/meta').then(m => { META = m; if (S.panel === 'autofill' || document.querySelector('.af')) render(); }).catch(() => {});
   const loadLib = () => S.api('/api/brolllib').then(l => { LIB = l; if (document.querySelector('.af')) render(); }).catch(() => {});
   const LEVELS = [['nhe', 'Nhẹ', 'chỉ cảnh chính'], ['vua', 'Vừa', '+ riser, số, tiền'], ['phongphu', 'Phong phú', '+ từ khoá, cảm xúc']];
-  const DEF = { goal: 'auto', variety: .6, density: 'vua', src: ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'lib'], level: 'vua', music: true, after_ai: true };
+  const DEF = { goal: 'auto', variety: .6, density: 'vua', src: ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'lib'], level: 'vua', music: true, ai_broll: true, ai_sfx: true };
   let O = { ...DEF }, last = null, busy = false;
   try { O = { ...DEF, ...JSON.parse(localStorage.getItem('avs_autofill') || '{}') }; } catch {}
   if (!O.v5) { O.src = [...new Set([...O.src, 'hf', 'logo', 'aroll', 'lib'])]; O.v5 = 1; } // new sources on by default once
+  if (O.after_ai === false && !O.v6) { O.ai_broll = O.ai_sfx = false; } // M108: một công tắc cũ thành hai tuỳ chọn
+  delete O.after_ai; O.v6 = 1;
+  // chế độ Tự động chạy nối sau AI dựng: 'all' | 'broll' | 'sfx' | '' (không chạy)
+  const afterMode = () => (O.ai_broll && O.ai_sfx ? 'all' : O.ai_broll ? 'broll' : O.ai_sfx ? 'sfx' : '');
   const keep = () => { try { localStorage.setItem('avs_autofill', JSON.stringify(O)); } catch {} };
 
   const counts = () => {
@@ -104,7 +109,8 @@
       <section><div class="sh"><i class="ti ti-volume"></i>Âm thanh<span class="badge">309 SFX · 30 nhạc</span></div>
         <div class="seg">${LEVELS.map(([k, l, s]) => `<button data-afl="${k}" class="${O.level === k ? 'on' : ''}">${l}<small>${s}</small></button>`).join('')}</div>
         <label class="sw"><input type="checkbox" data-afm ${O.music ? 'checked' : ''}> Tự chọn nhạc nền theo nội dung từng đoạn (crossfade, tự hạ khi nói)</label>
-        <label class="sw"><input type="checkbox" data-afai ${O.after_ai ? 'checked' : ''}> Tự chạy sau “AI dựng giúp”</label>
+        <label class="sw"><input type="checkbox" data-afai="ai_broll" ${O.ai_broll ? 'checked' : ''}> Thêm b-roll sau “AI dựng”</label>
+        <label class="sw"><input type="checkbox" data-afai="ai_sfx" ${O.ai_sfx ? 'checked' : ''}> Thêm âm thanh sau “AI dựng”</label>
         <div class="help">Giới hạn số tiếng mỗi giây, tự giảm âm lượng SFX khi đang có giọng nói. Không có nhạc riêng của bạn thì nhạc cũ được thay bằng nhạc theo đoạn.</div>
       </section></div>`;
   }
@@ -171,8 +177,10 @@
     if (e.target.matches('.af [data-aftag]')) S.api('/api/brolllib/tags', { id: e.target.dataset.aftag, tags: e.target.value }).then(it => { if (it && !it.error) { const x = LIB?.find(i => i.id === it.id); if (x) x.tags = it.tags; } });
     if (e.target.matches('.af [data-afv]')) { O.variety = +e.target.value; keep(); }
     if (e.target.matches('.af [data-afm]')) { O.music = e.target.checked; keep(); }
-    if (e.target.matches('.af [data-afai]')) { O.after_ai = e.target.checked; keep(); }
+    if (e.target.matches('.af [data-afai]')) setAfter(e.target.dataset.afai, e.target.checked);
   });
-  S.autofill = { run, get opts() { return O; }, set afterAi(v) { O.after_ai = !!v; keep(); } };
+  function setAfter(k, v) { if (k === 'ai_broll' || k === 'ai_sfx') { O[k] = !!v; keep(); } }
+  // 20_ai.js: hai tuỳ chọn của nút AI dựng đọc/ghi ở đây (lưu theo máy cùng các tuỳ chỉnh khác của Tự động)
+  S.autofill = { run, setAfter, afterMode, get opts() { return O; } };
   S.addPanel('autofill', 'ti-bolt', 'Tự động', render);
 })();

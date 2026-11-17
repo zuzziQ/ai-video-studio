@@ -2,6 +2,8 @@
 // "Cắt lỗi nói" (fillers / repeats / pauses / false starts). The "Lời thoại" panel lives in 21_transcript.js (M89).
 // S13 M107: panel 'ai' = "Làm sạch lời nói" (bước Nguồn, tab thứ hai của mục Lời thoại); trạng thái AI dựng giúp
 // (kế hoạch, cảnh AI trên timeline, QC nhanh, xoá cảnh AI) vẽ trong panel 'wf-aihelp' của bước Dựng (S.ai.renderBuild).
+// S13 M108: panel 'wf-aihelp' = một nút "AI dựng" + hai tuỳ chọn "Thêm b-roll", "Thêm âm thanh" (= Tự động, 80_autofill.js,
+// chạy nối ngay sau trong cùng một bước hoàn tác); xong mở hộp "Đã dựng xong" có QC nhanh tự chạy (M105).
 // Every cut is a ripple on TL.clips (split + remove + remapAll from clips.js), so captions, scenes, sfx and music follow.
 'use strict';
 (() => {
@@ -17,6 +19,7 @@
   .ai-opts label.o { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); margin: var(--space-1) 0; cursor: pointer; background: rgb(var(--color-surface)); transition: border-color var(--duration-fast) var(--ease-standard); }
   .ai-opts label.o:has(input:checked) { border-color: rgb(var(--color-accent-text) / .5); background: rgb(var(--color-accent-soft) / .24); }
   .ai-opts select.ai-grow { width: auto; flex: 1; }
+  .ai-after { margin: var(--space-1) 0 var(--space-2); } .ai-after .ai-row { margin: var(--space-1) 0; }
   .ai-row { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; } .ai-row > * { flex: 1; min-width: 0; }
   .ai-row.ai-click { cursor: pointer; } .ai-row > .ai-nf { flex: none; } .ai-row > .ai-end { text-align: right; }
   p.ai-intro { margin: var(--space-050) 0 var(--space-2); } p.ai-note { font-size: var(--text-2xs); }
@@ -100,7 +103,7 @@
   function openAiModal() {
     if (!CAP.length && S.needCaptions) return S.needCaptions(openAiModal, 'AI dựng giúp');
     const cur = TL.pack || 'slate';
-    S.modal(`<h3><i class="ti ti-wand"></i> AI dựng giúp</h3>
+    S.modal(`<h3><i class="ti ti-wand"></i> AI dựng</h3>
       <p class="muted ai-intro">Claude đọc lời thoại (${CAP.length} dòng phụ đề, ${fmt(TL.duration)}) rồi chọn gói style, sửa phụ đề, viết hook, đặt graphic đúng lúc nói từ khoá, chọn nhạc và SFX. Mất khoảng 20–90 giây. Áp dụng xong vẫn hoàn tác được (⌘Z).</p>
       <div class="row2"><div><label class="lbl">Mục tiêu video</label><select id="aig">${GOALS.map(g => `<option>${g}</option>`).join('')}</select></div>
       <div><label class="lbl">Giọng điệu</label><select id="ait">${TONES.map(g => `<option>${g}</option>`).join('')}</select></div></div>
@@ -110,7 +113,7 @@
         <label class="o"><input type="radio" name="aip" value="pick"> Gói khác: <select id="aipk" class="ai-grow">${packs().filter(p => p.recipe).map(p => `<option value="${p.id}">${p.icon || ''} ${esc(p.name)}</option>`).join('')}</select></label></div>
       <label class="lbl">Mật độ graphic</label><div class="seg" id="aid">${DENS.map(([k, l, s]) => `<button data-d="${k}" class="${k === 'vua' ? 'on' : ''}" title="${s}">${l} <span class="muted">${s}</span></button>`).join('')}</div>
       <label class="lbl">Yêu cầu thêm (tuỳ chọn)</label><textarea id="aix" placeholder="VD: nhấn mạnh con số, CTA là “nhắn tin để nhận tài liệu”, không dùng emoji…"></textarea>
-      ${S.autofill ? `<label class="ai-row ai-click"><input type="checkbox" id="aiaf" class="ai-nf" ${S.autofill.opts.after_ai !== false ? 'checked' : ''}><span>Tự thêm b-roll + âm thanh sau khi dựng <span class="muted">· panel Tự động</span></span></label>` : ''}
+      ${afterOpts('aim')}
       <p class="muted ai-note">Cảnh do AI tạo được đánh dấu; chạy lại sẽ chỉ thay các cảnh AI chưa bị bạn chỉnh. Cảnh bạn đã sửa hoặc tự thêm được giữ nguyên.</p>
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="aigo"><i class="ti ti-sparkles"></i> Dựng</button></div>`);
     $('#aig').value = { course: 'Khoá học', realestate: 'Bất động sản', review: 'Review', share: 'Chia sẻ' }[cur] || 'Khác';
@@ -122,7 +125,8 @@
     if (!CAP.length) return S.needCaptions(openAiModal, 'AI dựng giúp');
     const pm = document.querySelector('[name=aip]:checked').value;
     const body = { goal: $('#aig').value, tone: $('#ait').value, pack: pm === 'pick' ? $('#aipk').value : pm, density: $('#aid .on')?.dataset.d || 'vua', extra: $('#aix').value.trim() };
-    const af = !!$('#aiaf')?.checked; if (S.autofill && $('#aiaf')) S.autofill.afterAi = af;
+    readAfter('aim');
+    const af = S.autofill?.afterMode() || '';
     await S.saveNow();
     const r = await S.api('/api/ai/edit', body);
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
@@ -133,9 +137,25 @@
       const plan = await S.api('/api/ai/plan');
       if (plan.error) return S.toast(plan.error);
       lastPlan = plan; applyPlan(plan);
-      if (af && S.autofill) await S.autofill.run('all', { noUndo: true }); // same undo step as the AI build
-      showResult(plan);
+      // M108: Thêm b-roll / Thêm âm thanh = Tự động chạy nối ngay, cùng bước hoàn tác với bản dựng AI
+      const out = af ? await S.autofill.run(af, { noUndo: true }) : undefined;
+      showResult(plan, af ? (out || { error: true }) : null);
+      if (panel === 'wf-aihelp') renderAi();
     });
+  }
+  // hai tuỳ chọn chạy nối sau AI dựng (lưu ở 80_autofill.js); pre: tiền tố id ô (panel / hộp)
+  const afterOpts = pre => S.autofill ? `<div class="ai-after"><label class="ai-row ai-click"><input type="checkbox" id="${pre}-broll" class="ai-nf" ${S.autofill.opts.ai_broll ? 'checked' : ''}><span>Thêm b-roll <span class="muted">· chữ nổi, emoji, ảnh của bạn đúng lúc nói</span></span></label>
+    <label class="ai-row ai-click"><input type="checkbox" id="${pre}-sfx" class="ai-nf" ${S.autofill.opts.ai_sfx ? 'checked' : ''}><span>Thêm âm thanh <span class="muted">· SFX theo cảnh, nhạc theo đoạn</span></span></label></div>` : '';
+  function readAfter(pre) {
+    if (!S.autofill) return;
+    for (const k of ['broll', 'sfx']) { const el = $(`#${pre}-${k}`); if (el) S.autofill.setAfter('ai_' + k, el.checked); }
+  }
+  // dòng kết quả của Tự động trong hộp "Đã dựng xong"
+  function afterNote(out) {
+    if (!out) return '';
+    if (out.error) return `<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa thêm được b-roll / âm thanh: thử lại ở mục B-roll → Tự động.</p>`;
+    const b = out.broll || {}, parts = [b.added != null ? `+${b.added} b-roll` : '', out.sfx ? 'âm thanh: ' + String(out.sfx).replace(/^level \d: /, '') : ''].filter(Boolean);
+    return parts.length ? `<p class="muted"><i class="ti ti-bolt"></i> ${esc(parts.join(' · '))}.</p>` : '';
   }
   function applyPlan(plan) {
     S.pushUndo();
@@ -176,7 +196,7 @@
       ${plan.dropped?.length ? `<ul class="ai-drop">${plan.dropped.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}</div>`;
   }
   function qcTimes() {
-    const sc = (TL.scenes || []).filter(s => s._ai && !s._base).sort((a, b) => a.t0 - b.t0);
+    const sc = (TL.scenes || []).filter(s => (s._ai || s._auto) && !s._base).sort((a, b) => a.t0 - b.t0);
     const pick = sc.length >= 3 ? [sc[0], sc[Math.floor(sc.length / 2)], sc[sc.length - 1]] : sc;
     return pick.map(s => r2(Math.min(s.t1 - .05, s.t0 + Math.min(1, (s.t1 - s.t0) * .5))));
   }
@@ -190,11 +210,11 @@
     $('#aiqcgo').onclick = () => quickQc(ts);
     quickQc(ts);
   }
-  function showResult(plan) {
+  function showResult(plan, af) {
     const ts = qcTimes();
-    S.modal(`<h3><i class="ti ti-circle-check ai-c-ok"></i> Đã dựng xong</h3>${planCard(plan, true)}${qcBlock(ts)}
+    S.modal(`<h3><i class="ti ti-circle-check ai-c-ok"></i> Đã dựng xong</h3>${planCard(plan, true)}${afterNote(af)}${qcBlock(ts)}
       <div class="actions"><button id="aiundo"><i class="ti ti-arrow-back-up"></i> Hoàn tác</button><button id="aiqcgo" hidden><i class="ti ti-refresh"></i> Kiểm tra lại</button><button class="primary" onclick="closeModal()">Xem trên timeline</button></div>`);
-    $('#aiundo').onclick = () => { undo(); S.closeModal(); S.toast('Đã hoàn tác bản dựng AI'); };
+    $('#aiundo').onclick = () => { undo(); S.closeModal(); S.toast('Đã hoàn tác bản dựng AI'); if (panel === 'wf-aihelp') renderAi(); };
     $('#aiqcgo').onclick = () => quickQc(ts);
     quickQc(ts);
   }
@@ -272,13 +292,14 @@
   function renderAi() {
     if (!AI_PANELS.includes(panel)) return; // dò lỗi nói xong khi người dùng đã sang panel khác
     if (panel === 'wf-aihelp') {
-      const nAi = (TL.scenes || []).filter(s => s._ai && !s._base).length, nEd = (TL.scenes || []).filter(s => s._ai && s._orig).length;
+      const sc = TL.scenes || [], nAi = sc.filter(s => s._ai && !s._base).length, nEd = sc.filter(s => s._ai && s._orig).length, nAuto = sc.filter(s => s._auto).length;
       // data-ai="build" (không phải "open"): thẻ QC của 16_qc.js chỉ chèn vào bước Kiểm tra
-      $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng giúp')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng giúp</button>
-        <div class="help">Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX. Cần Claude Code (lệnh <b>claude</b>) trên máy.</div>
+      $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng</button>
+        ${afterOpts('aip')}
+        <div class="help">Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX; rồi thêm b-roll, âm thanh nếu bạn chọn. Xong có QC nhanh 3 khung. Cần Claude Code (lệnh <b>claude</b>) trên máy.${S.autofill ? ' <button class="ai-lnk" data-ai="af">Tuỳ chỉnh b-roll, âm thanh</button>' : ''}</div>
         ${lastPlan ? planCard(lastPlan, true) : ''}
-        <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}.</p>
-        <div class="acts"><button class="mini" data-ai="qc" ${nAi ? '' : 'disabled'}><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="mini danger" data-ai="clear" ${nAi ? '' : 'disabled'}><i class="ti ti-trash"></i> Xoá cảnh AI</button></div></div>`;
+        <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}${nAuto ? `, ${nAuto} b-roll tự động` : ''}.</p>
+        <div class="acts"><button class="mini" data-ai="qc" ${nAi + nAuto ? '' : 'disabled'}><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="mini danger" data-ai="clear" ${nAi ? '' : 'disabled'}><i class="ti ti-trash"></i> Xoá cảnh AI</button></div></div>`;
       if (!lastPlan) S.api('/api/ai/plan').then(p => { if (!p.error && !lastPlan) { lastPlan = p; if (panel === 'wf-aihelp') renderAi(); } }).catch(() => {});
       return;
     }
@@ -301,11 +322,13 @@
   $('#libbody').addEventListener('click', e => {
     if (!AI_PANELS.includes(panel)) return;
     const t = e.target, b = t.closest('[data-ai],[data-flplay]');
+    if (t.matches('#aip-broll, #aip-sfx')) return readAfter('aip');
     if (t.matches('[data-fl]')) { const i = +t.dataset.fl; t.checked ? flSel.add(i) : flSel.delete(i); return renderAi(); }
     if (!b) return;
     if (b.dataset.flplay) { const c = fl.cuts[+b.dataset.flplay]; return previewRange(c.a, c.b); }
     const a = b.dataset.ai;
     if (a === 'open' || a === 'build') openAiModal();
+    if (a === 'af') openPanel('autofill');
     if (a === 'clear') removeAi();
     if (a === 'qc') openQuick();
     if (a === 'detect') detect();
@@ -313,7 +336,7 @@
     if (a === 'none') { flSel.clear(); renderAi(); }
     if (a === 'cut') cutSelected();
   });
-  S.onReady(() => S.addTopButton(`<button class="ghost" id="aibtn" title="Claude đọc lời thoại và dựng graphic, phụ đề, nhạc, SFX"><i class="ti ti-wand"></i> AI dựng giúp</button>`, openAiModal));
+  S.onReady(() => S.addTopButton(`<button class="ghost" id="aibtn" title="Claude đọc lời thoại và dựng graphic, phụ đề, nhạc, SFX"><i class="ti ti-wand"></i> AI dựng</button>`, openAiModal));
 
   // For tests / Claude: Studio.ai.cut([[a,b]]) etc.
   // features/21_transcript.js (panel Lời thoại) uses cutRanges, wordSpan, allWords and the filler flags.

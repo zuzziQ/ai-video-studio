@@ -9,7 +9,7 @@
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const click = id => () => { const el = document.getElementById(id); if (el) el.click(); else S.toast('Tính năng này chưa sẵn sàng'); };
   const W = () => S.workflow;
-  const STEP_N = { prep: '①', source: '②', build: '③', check: '④', ship: '⑤', settings: '⚙' };
+  const STEP_N = { prep: '①', source: '②', build: '③', check: '④', ship: '⑤', settings: '⚙', queue: 'Tự lái' };
 
   // lệnh: [nhãn, icon, từ khoá thêm, việc, điều kiện hiện]
   const COMMANDS = [
@@ -35,6 +35,7 @@
     text: 'phu de caption kieu phu de chu tieu de font', tpl: 'template mau video', media: 'anh video tai len upload file',
     audio: 'nhac nen sfx am nhac', audioplus: 'giong tron am luong ha nhac', brands: 'logo mau thuong hieu brand kit',
     trans: 'chuyen canh transition', filter: 'loc mau lut', fx: 'hieu ung graphic', words: 'loi thoai sua chu transcript',
+    'wf-aihelp': 'ai dung giup claude broll am thanh', autopilot: 'tu lai hang doi nhieu video', autofill: 'tu dong broll am thanh sfx nhac',
     longform: 'video dai cat clip ngan highlight', dub: 'long tieng dich', batch: 'hang loat excel csv', schedule: 'lich dang hen gio',
   };
 
