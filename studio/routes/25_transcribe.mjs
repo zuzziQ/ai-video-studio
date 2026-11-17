@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { projectFix, fixArgs } from '../../scripts/dict.mjs';
+import { applyScript } from '../../scripts/script_doc.mjs';
 
 export default ctx => async (req, res, p) => {
   if (p === '/api/transcribe/status') {
@@ -53,13 +54,16 @@ export async function transcribe(ctx, { model = 'large-v3-turbo', lang = 'vi', m
   const capF = P('.studio/captions_auto.json');
   // M89: the project's dictionary (brand + product names, brand kit `dict`, .studio/dict.json) fixes whisper mistakes.
   await ctx.run(ctx.PY, ['-I', '-X', 'utf8', S('captions.py'), words, capF, '--max', String(max), ...fixArgs(projectFix({ dir: ctx.project.dir, timeline: tl }))]);
-  const caps = JSON.parse(fs.readFileSync(capF, 'utf8')).filter(c => c.t0 < (tl.duration || 1e9));
+  let caps = JSON.parse(fs.readFileSync(capF, 'utf8')).filter(c => c.t0 < (tl.duration || 1e9));
+  // S17 M123: dự án có kịch bản → phụ đề theo đúng chữ kịch bản, lời vừa nhận dạng chỉ cho thời điểm (sao lưu làm bản "bỏ kịch bản")
+  const sr = caps.length ? applyScript(ctx.project.dir, { tl, caps, fresh: true }) : null;
+  if (sr && !sr.pending) caps = sr.caps;
   if (old.length) fs.writeFileSync(P(`.studio/captions_backup_${ctx.stamp()}.json`), JSON.stringify(old));
   fs.mkdirSync(P('work'), { recursive: true });
   fs.writeFileSync(P('work/words.json'), JSON.stringify(W, null, 1));
   if (typeof tl.captions !== 'string') tl.captions = 'work/captions.json';
   tl.asr = { model: used }; // M95: "Nghe lại bằng AI" dùng model lớn hơn model này
   ctx.save({ timeline: tl, captions: caps });
-  job.out = { captions: caps.length, words: W.length, replaced: old.length };
+  job.out = { captions: caps.length, words: W.length, replaced: old.length, ...(sr && !sr.pending ? { script: true } : {}) };
   job.step = `Xong: ${W.length} từ, ${caps.length} dòng phụ đề`;
 }

@@ -1,9 +1,10 @@
 // Tự lái (autopilot): one raw video → finished videos + cover + publish texts, following a channel profile (references/autopilot.md).
-// usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--brand <id>] [--product <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
+// usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--brand <id>] [--product <id>] [--script <id | file.txt|.docx>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
 //        [--qc-override "<lý do>"]   (QC chặn xuất vì lỗi claim / nguyên bản: ghi lý do rồi xuất tiếp; lỗi chính sách thì không)
 //        node scripts/autopilot.mjs --steps            (list step ids)
 // Chain (each optional step can be turned off in the profile; a failing optional step logs a warning and the chain goes on):
-//   new → brand → clean → fillers → ai → broll → sfx → qc → export → publish → cover → deliver
+//   new → brand → clean → fillers → script → ai → broll → sfx → qc → export → publish → cover → deliver
+// S17 M123: bước script áp kịch bản có sẵn (--script, hoặc .studio/script.json đã lưu ở bước Nguồn): phụ đề theo chữ kịch bản.
 // Resumable: state in <project>/.studio/autopilot.json; re-running continues after the last finished step. Steps that rewrite
 // timeline.json keep a backup (.studio/autopilot/pre_<step>.json) that is restored if that step was interrupted.
 // QC gate (scripts/export_gate.mjs): ad issues of high severity left after QC stop the chain at the qc step (step 'error' + blocked:true, run state 'blocked',
@@ -26,6 +27,7 @@ import { readGate, recordOverride, gateText } from './export_gate.mjs';
 import { workspaceFor, ensureWorkspace, workspaceOfProject, sub, safeName } from './workspace.mjs';
 import { deliverProject } from './kho_deliver.mjs';
 import { recordExport, updateExport } from './exports_log.mjs';
+import { applyScript, loadScriptArg, readScript, writeScript } from './script_doc.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const S = f => path.join(SKILL, 'scripts', f);
@@ -37,6 +39,7 @@ export const STEPS = [
   ['brand', 'Áp brand kit + CTA', 1],
   ['clean', 'Làm sạch giọng', 1],
   ['fillers', 'Cắt lỗi nói, từ lặp, chỗ ngắt dài', 4],
+  ['script', 'Áp kịch bản (phụ đề theo chữ kịch bản)', 1],
   ['ai', 'AI dựng giúp (graphic, phụ đề, nhạc)', 14],
   ['broll', 'B-roll tự động', 5],
   ['sfx', 'SFX + nhạc nền', 4],
@@ -46,7 +49,7 @@ export const STEPS = [
   ['cover', 'Ảnh bìa', 4],
   ['deliver', 'Gom kết quả + thông báo', 3, true],
 ];
-const MUTATES = new Set(['brand', 'clean', 'fillers', 'ai', 'broll', 'sfx', 'qc']);
+const MUTATES = new Set(['brand', 'clean', 'fillers', 'script', 'ai', 'broll', 'sfx', 'qc']);
 
 const rd = (f, d = null) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const wr = (f, o) => { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(o, null, 1)); fs.renameSync(t, f); };
@@ -188,7 +191,7 @@ async function exportProject(dir, { quality = '1080', aspects = [] }, say) {
 }
 
 // ---------- main ----------
-export async function autopilot(input, { profile: profId, brand: brandArg, product: productArg, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
+export async function autopilot(input, { profile: profId, brand: brandArg, product: productArg, script: scriptArg, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
   const t00 = Date.now();
   const abs = path.resolve(input.replace(/^~(?=\/)/, os.homedir()));
   if (!fs.existsSync(abs)) throw new Error(`Không thấy ${abs}`);
@@ -228,7 +231,8 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
   const res = st.result || (st.result = {});
 
   // S16 M119: transcribe.py không thấy lời thật (nhạc, tiếng ồn sự kiện) → new_project ghi timeline.speech.none
-  const noSpeech = () => { const { tl, caps } = loadTL(dir); return !!tl.speech?.none || !caps.length; };
+  // S17 M123: không lời nhưng có kịch bản (phụ đề chia đều theo đoạn) thì AI dựng / b-roll vẫn đọc được chữ
+  const noSpeech = () => { const { tl, caps } = loadTL(dir); return !caps.length || (!!tl.speech?.none && !readScript(dir)?.align); };
   const impl = {
     async new() {
       await newProject({ video: abs, dir, model: prof.whisper || 'large-v3-turbo', pack: !['auto', 'keep', ''].includes(prof.pack) ? prof.pack : autoPack(abs, prof.orient), title: '', orient: prof.orient || 'auto', lang: prof.lang },
@@ -282,6 +286,21 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       const kinds = {}; for (const c of cuts) kinds[c.kind] = (kinds[c.kind] || 0) + 1;
       res.fillers = { cuts: cuts.length, removed: r.removed, kinds };
       return `cắt ${r.n} đoạn (${Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ')}), ngắn đi ${r.removed.toFixed(1)}s`;
+    },
+    async script() {
+      // S17 M123: kịch bản gửi kèm job (--script: id kịch bản chờ của panel Tự lái, hoặc file) thắng kịch bản đã lưu trong dự án
+      if (typeof scriptArg === 'string' && scriptArg) { const s = loadScriptArg(scriptArg); writeScript(dir, s.text, { name: s.name }); }
+      if (!readScript(dir)) return { skip: 'không có kịch bản' };
+      const { tl, caps, capFile } = loadTL(dir);
+      const r = applyScript(dir, { tl, caps });
+      if (r.pending) return { skip: 'chưa có lời thoại để căn kịch bản' };
+      saveTL(dir, r.tl, r.caps, capFile);
+      const sc = r.script, A = sc.align, miss = sc.segments.filter(s => s.spoken === false).length;
+      res.script = { segments: sc.segments.length, mode: A.mode, words: A.words, matched: A.matched, unspoken: miss, offscript: A.offscript.length };
+      // dự án có sản phẩm (bước brand gắn timeline.ads): soát claim của chữ kịch bản; QC sẽ báo lại, bước này chỉ ghi chú
+      let gateNote = '';
+      try { const { gateScript } = await import('./script_doc.mjs'); const g = await gateScript(dir, r.tl); const hi = (g?.issues || []).filter(i => i.severity === 'high').length; if (hi) gateNote = ` · claim gate: ${hi} lỗi nặng trong kịch bản`; } catch (e) { gateNote = ` · chưa soát claim kịch bản (${e.message.slice(0, 80)})`; }
+      return `${sc.segments.length} đoạn · ${r.caps.length} dòng phụ đề theo kịch bản${A.mode === 'even' ? ' (video không lời: chia đều theo đoạn)' : ` · ${A.matched}/${A.words} chữ khớp lời nói`}${miss ? ` · ${miss} đoạn chưa nói` : ''}${gateNote}`;
     },
     async ai() {
       if (!prof.template && noSpeech()) return { skip: 'video không lời: AI dựng giúp đọc lời thoại' }; // S16 M119
@@ -491,8 +510,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { try { CUR?.kill('SIGTERM'); } catch {} process.exit(130); });
   if (args.includes('--steps')) { for (const [id, l, , r] of STEPS) console.log(`${id.padEnd(8)} ${l}${r ? ' (bắt buộc)' : ''}`); process.exit(0); }
   const input = args.find((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && !['--restart'].includes(args[i - 1])));
-  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--brand <id>] [--product <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
-  autopilot(input, { profile: opt('--profile'), brand: opt('--brand'), product: opt('--product'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
+  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--brand <id>] [--product <id>] [--script <id|file>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
+  autopilot(input, { profile: opt('--profile'), brand: opt('--brand'), product: opt('--product'), script: opt('--script'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
     .then(() => process.exit(0))
     .catch(e => { console.error('LỖI: ' + e.message); process.exit(1); });
 }

@@ -16,12 +16,15 @@ import { loadStore, getProfile, upsertProfile, duplicateProfile, deleteProfile, 
 import { STEPS } from '../../scripts/autopilot.mjs';
 import { openPath, revealPath } from '../../scripts/platform.mjs';
 import { uploadVideo } from './26_pick.mjs';
+import { STAGE_ID } from '../../scripts/script_doc.mjs';
 
 const VIDEO = /\.(mp4|mov|m4v|mkv|webm)$/i;
 const rd = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 
 // S16 M121: id thương hiệu / sản phẩm từ trình duyệt: '' (theo hồ sơ / không), '__none' (không thương hiệu) hoặc id an toàn
 const okRef = v => typeof v === 'string' && /^(|__none|[a-z0-9][a-z0-9_-]{0,63})$/.test(v);
+// S17 M123: kịch bản chờ (POST /api/script/stage → id), '' = không kịch bản
+const okScript = v => v === '' || (typeof v === 'string' && STAGE_ID.test(v));
 export default ctx => {
   const runner = process.env.AVS_NO_QUEUE ? null : new Runner({ role: 'server', daemon: true, log: m => console.log(m) }).start();
   if (runner) for (const s of ['SIGINT', 'SIGTERM']) process.once(s, () => runner.stop()); // server.mjs exits after every route has cleaned up (Telegram bot, jobs)
@@ -66,12 +69,14 @@ export default ctx => {
       if (p === '/api/autopilot/upload') {
         const profile = u.searchParams.get('profile') || undefined, name = path.basename(u.searchParams.get('name') || 'video.mp4');
         const pick = u.searchParams.get('brand') || '', product = u.searchParams.get('product') || ''; // S16 M121: chọn ở panel Tự lái
+        const script = u.searchParams.get('script') || '';
         if (!okRef(pick) || !okRef(product)) return J({ error: 'thương hiệu / sản phẩm không hợp lệ' }, 400);
+        if (!okScript(script)) return J({ error: 'kịch bản không hợp lệ' }, 400);
         if (!VIDEO.test(name)) return J({ error: 'Chỉ nhận tệp video (mp4, mov, m4v, mkv)' }, 400);
         let brand; try { brand = getProfile(profile).brand || ''; } catch (e) { return J({ error: e.message }, 404); } // hồ sơ lạ: báo trước khi chép
         if (pick) brand = pick === '__none' ? '' : pick;
         const r = await uploadVideo(req, brand, name);
-        const it = addItem({ kind: 'autopilot', input: r.path, opts: { profile, brand: pick === '__none' ? '__none' : brand, ...(product ? { product } : {}) }, source: 'upload' });
+        const it = addItem({ kind: 'autopilot', input: r.path, opts: { profile, brand: pick === '__none' ? '__none' : brand, ...(product ? { product } : {}), ...(script ? { script } : {}) }, source: 'upload' });
         it.title = name; return J({ ok: true, item: it });
       }
       const b = await ctx.body(req);
@@ -86,7 +91,10 @@ export default ctx => {
         }
         const opts = { ...(b.opts || {}) }; if (b.profile) opts.profile = b.profile;
         for (const k of ['brand', 'product']) if (k in opts && !okRef(opts[k])) return J({ error: `opts.${k} không hợp lệ` }, 400); // vào tham số tiến trình con
-        for (const k of ['brand', 'product']) if (k in b) { if (!okRef(b[k])) return J({ error: `${k} không hợp lệ` }, 400); if (b[k]) opts[k] = b[k]; } if (b.out) opts.out = path.resolve(String(b.out).replace(/^~(?=[\\/])/, os.homedir()).replace(/^"(.*)"$/, '$1'));
+        for (const k of ['brand', 'product']) if (k in b) { if (!okRef(b[k])) return J({ error: `${k} không hợp lệ` }, 400); if (b[k]) opts[k] = b[k]; }
+        if ('script' in opts && !okScript(opts.script)) return J({ error: 'opts.script không hợp lệ' }, 400);
+        if ('script' in b) { if (!okScript(b.script)) return J({ error: 'script không hợp lệ' }, 400); if (b.script) opts.script = b.script; }
+        if (b.out) opts.out = path.resolve(String(b.out).replace(/^~(?=[\\/])/, os.homedir()).replace(/^"(.*)"$/, '$1'));
         return J({ ok: true, item: addItem({ kind, input, opts, source: b.source || 'ui' }) });
       }
       if (p === '/api/autopilot/item') {

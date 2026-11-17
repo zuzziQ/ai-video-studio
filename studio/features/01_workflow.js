@@ -317,10 +317,12 @@
       ${burnBox}
       <div class="wf-acts"><button data-wf="src-change" title="Chọn video khác: Studio tạo dự án mới, dự án này vẫn giữ trong Kho"><i class="ti ti-replace"></i>Đổi video</button>
         <button data-wf="src-new" title="Trang chủ: mẫu, video dài, hàng loạt, dự án gần đây"><i class="ti ti-plus"></i>Tạo dự án khác</button></div></div>
+      <div class="wf-card"><h4><i class="ti ti-file-text"></i>Kịch bản</h4><div id="wf-script"></div></div>
       ${cap || mute || !S.ctaTranscribe ? '' : S.ctaTranscribe('')}
       ${d > LONG_SRC ? `<div class="wf-card"><h4><i class="ti ti-scissors"></i>Video dài ${Math.round(d / 60)} phút</h4><p>Cắt thành nhiều clip ngắn: AI chọn đoạn hay, mỗi đoạn thành một dự án.</p>
         <button data-wf="src-long"><i class="ti ti-scissors"></i>Cắt clip từ video dài</button></div>` : ''}
       <p class="wf-hint"><i class="ti ti-stack-2"></i> Có nhiều video? Thả vào <code>Nguon/Tha vao day/</code>${SRC?.kho ? ` trong Kho ${esc(SRC.kho.title)}` : ''} để Tự lái làm hết.</p>`;
+    S.scriptCard?.mount($('#wf-script')); // S17 M123: kịch bản có sẵn (studio/features/19_script.js)
   }
   $('#libbody').addEventListener('click', e => {
     if (panel !== 'wf-new') return;

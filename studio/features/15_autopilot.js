@@ -116,7 +116,9 @@
       <div class="help ap-mt">${kit ? `Logo, màu, CTA của <b>${esc(name(kit))}</b>; dự án và thành phẩm vào Kho của thương hiệu này.`
         : '<i class="ti ti-info-circle ap-warn"></i> Đang chạy không thương hiệu: video không có logo, màu, lời kết riêng; dự án và thành phẩm vào Kho Chung.'}
         ${S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''}
-        ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div></div>`;
+        ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div>
+      <label class="ap-lbl">Kịch bản (không bắt buộc, cho video kế tiếp)</label><div id="ap-script"></div></div>`;
+    Studio.scriptStage?.mount($('#ap-script')); // S17 M123 (studio/features/19_script.js)
     const save = () => api('/api/autopilot/settings', { brand: S.brand, product: S.product }).catch(() => {});
     $('#ap-brand').onchange = e => { S.brand = e.target.value; save(); renderPrep(); };
     $('#ap-product').onchange = e => { S.product = e.target.value; save(); renderPrep(); };
@@ -306,16 +308,20 @@
   }
   async function enqueuePath() {
     const p = $('#ap-path').value.trim(); if (!p) return Studio.toast('Nhập đường dẫn video');
-    const r = await api('/api/autopilot/enqueue', { input: p, profile: S.profile, brand: S.brand || '', product: S.product || '' });
+    let script = ''; try { script = await Studio.scriptStage?.take() || ''; } catch (e) { return Studio.toast(e.message); } // S17 M123
+    const r = await api('/api/autopilot/enqueue', { input: p, profile: S.profile, brand: S.brand || '', product: S.product || '', script });
     if (r.error) return Studio.toast(r.error);
+    if (script) Studio.scriptStage.clear();
     S.path = ''; Studio.toast('Đã thêm vào hàng đợi Tự lái'); refresh(true);
   }
   async function uploadFiles(files) {
+    let script = ''; // S17 M123: kịch bản chỉ đi kèm video đầu tiên
     for (const f of files) {
       if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name)) { Studio.toast('Bỏ qua (không phải video): ' + f.name); continue; }
+      if (script === '') { try { script = await Studio.scriptStage?.take() || null; } catch (e) { Studio.toast(e.message); break; } }
       S.uploading = f.name; $('#ap-upl') && ($('#ap-upl').innerHTML = `<div class="help"><i class="ti ti-loader-2 spin"></i> Đang chép ${esc(f.name)} (${(f.size / 1048576).toFixed(0)} MB)…</div>`);
-      const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(S.profile || '')}&brand=${encodeURIComponent(S.brand || '')}&product=${encodeURIComponent(S.product || '')}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
-      if (r.error) Studio.toast('Lỗi: ' + r.error); else Studio.toast('Đã thêm “' + f.name + '” vào hàng đợi');
+      const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(S.profile || '')}&brand=${encodeURIComponent(S.brand || '')}&product=${encodeURIComponent(S.product || '')}${script ? `&script=${encodeURIComponent(script)}` : ''}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
+      if (r.error) Studio.toast('Lỗi: ' + r.error); else { Studio.toast('Đã thêm “' + f.name + '” vào hàng đợi' + (script ? ' (kèm kịch bản)' : '')); if (script) { Studio.scriptStage.clear(); script = null; } }
     }
     S.uploading = null; if ($('#ap-upl')) $('#ap-upl').innerHTML = ''; refresh(true);
   }

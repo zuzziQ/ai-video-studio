@@ -153,7 +153,7 @@ export function clearFailed() { return mutate(q => { const n = q.items.length; q
 
 export function argsFor(it) {
   const o = it.opts || {}, k = it.kind, A = [];
-  if (k === 'autopilot') { A.push(it.input); if (o.profile) A.push('--profile', o.profile); if (o.out) A.push('--out', o.out); if (o.project) A.push('--project', o.project); if (typeof o.brand === 'string' && o.brand) A.push('--brand', o.brand === '__none' ? '' : o.brand); if (typeof o.product === 'string' && o.product) A.push('--product', o.product); if (o.qc_override) A.push('--qc-override', String(o.qc_override)); }
+  if (k === 'autopilot') { A.push(it.input); if (o.profile) A.push('--profile', o.profile); if (o.out) A.push('--out', o.out); if (o.project) A.push('--project', o.project); if (typeof o.brand === 'string' && o.brand) A.push('--brand', o.brand === '__none' ? '' : o.brand); if (typeof o.product === 'string' && o.product) A.push('--product', o.product); if (typeof o.script === 'string' && o.script) A.push('--script', o.script); if (o.qc_override) A.push('--qc-override', String(o.qc_override)); }
   else if (k === 'highlights') { A.push(it.input, '--out', o.out || khoTopicDir(o.brand, `${path.basename(it.input, path.extname(it.input)).slice(0, 50)} - clip ngắn ${it.id}`)); for (const f of ['n', 'min', 'max', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
   else if (k === 'topic') { A.push(it.input, '--out', o.out || khoTopicDir(o.brand, `${String(it.input).slice(0, 50)} ${it.id}`)); /* fresh folder per item: topic_video nests into an existing one */ for (const f of ['dur', 'voice', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
   else if (k === 'variants') { A.push(it.input, '--n', String(o.n || 3)); if (o.kind) A.push('--kind', o.kind); }
