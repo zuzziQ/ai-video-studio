@@ -18,7 +18,7 @@ import { findChrome, pyBin } from './platform.mjs';
 import { runLLM, parseLooseJSON } from './llm.mjs';
 import { qcHash } from './export_gate.mjs';
 import { createRequire } from 'node:module';
-import { saidNumbers, inventedNumbers } from './ai_edit.mjs'; // ai_edit imports ai_qc too: both only call each other's functions later
+import { saidNumbers, inventedNumbers, hasFlag, stripFlags, sceneStrings } from './ai_edit.mjs'; // ai_edit imports ai_qc too: both only call each other's functions later
 import { txCheckEdit } from './assist.mjs';
 const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
 
@@ -65,7 +65,7 @@ export const KIND_VI = {
   hook_missing: 'Thiếu hook', loudness: 'Độ to', true_peak: 'Đỉnh âm', music_masking: 'Nhạc át giọng', music_quiet: 'Nhạc quá nhỏ', silence: 'Im lặng',
   hook: 'Hook', readability: 'Dễ đọc', spelling: 'Chính tả', variety: 'Đa dạng', pacing: 'Nhịp', brand: 'Thương hiệu', other: 'Khác',
   ad_policy: 'Chính sách quảng cáo', ad_claim: 'Claim quảng cáo', ad_originality: 'Nguyên bản',
-  empty_card: 'Thẻ trống', invented_number: 'Số không có trong lời thoại',
+  empty_card: 'Thẻ trống', invented_number: 'Số không có trong lời thoại', text_cut: 'Chữ bị cắt', emoji_flag: 'Emoji cờ hiện sai',
 };
 
 // ---------- ad gates (references/ad-gates.md) ----------
@@ -188,6 +188,8 @@ export async function openEngine(dir, { scale = .75 } = {}) {
         const i = w.dataset.qs, o = res.scenes[i] || (res.scenes[i] = { texts: [], els: [], cover: false, words: '' });
         if (w.dataset.qcover) o.cover = true;
         o.texts.push(...texts(w)); o.els.push(...els(w));
+        // S13 · M111: text the engine still had to end in "…" after shrinking it (engine/fit.js last resort)
+        for (const e of w.querySelectorAll('*')) if (e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow === 'ellipsis' && e.textContent.trim()) (o.cut || (o.cut = [])).push(e.textContent.trim().slice(0, 60));
         o.words = (o.words + ' ' + w.textContent.replace(/\s+/g, ' ')).trim().slice(0, 300);
       }
       const cw = stage.querySelector('[data-qcap]');
@@ -312,6 +314,7 @@ export function domIssues(tl, caps, P) {
       const rects = [...o.els, ...o.texts];
       if (s.face && !o.cover && !LAYOUT.has(sc.type)) { const f = covered(rects, s.face); if (f > .15) hit('face_cover', i, s.t, { frac: r2(f) }); }
       if (capR && !o.cover) { const f = covered(rects.filter(r => r.h > 14), capR); if (f > .25) hit('caption_overlap', i, s.t, { frac: r2(f) }); }
+      if (o.cut?.length) hit('text_cut', i, s.t).s = o.cut[0];
     }
     if (s.m.cap) {
       let worst = 0; for (const r of s.m.cap.texts) worst = Math.max(worst, -r.x, -r.y, r.x + r.w - DW, r.y + r.h - DH);
@@ -325,6 +328,7 @@ export function domIssues(tl, caps, P) {
     if (o.kind === 'text_offcanvas') out.push({ t: o.ts[0], kind: o.kind, severity: 'high', target: sc ? `s${o.i}` : o.i, msg: `${name}: chữ tràn ra ngoài khung ${o.px}px` });
     if (o.kind === 'text_unsafe') out.push({ t: o.ts[0], kind: o.kind, severity: 'low', target: `s${o.i}`, msg: `${name}: chữ nằm ngoài vùng an toàn (có thể bị nút/caption của app che)` });
     if (o.kind === 'face_cover') out.push({ t: o.ts[0], kind: o.kind, severity: o.frac > .6 ? 'high' : 'med', target: `s${o.i}`, msg: `${name} che ${Math.round(o.frac * 100)}% khuôn mặt khi đang nói` });
+    if (o.kind === 'text_cut') out.push({ t: o.ts[0], kind: o.kind, severity: 'med', target: `s${o.i}`, msg: `${name}: chữ “${o.s}” không vừa khối, bị cắt “…”: viết ngắn lại` });
     if (o.kind === 'caption_overlap') out.push({ t: o.ts[0], kind: o.kind, severity: 'med', target: `s${o.i}`, msg: `Phụ đề bị ${name} đè lên (${Math.round(o.frac * 100)}%)` });
   }
   // hook: a big non-caption text or graphic in the first 2 s
@@ -368,6 +372,11 @@ export function staticIssues(tl, caps, dir) {
     if (emptyCard(s)) { out.push({ t: r2(s.t0), kind: 'empty_card', severity: 'med', target: `s${i}`, msg: `“${s.type}” là thẻ trống (không có chữ, ảnh hay b-roll)` }); continue; }
     const made = inventedNumbers(s, said);
     if (made.length) out.push({ t: r2(s.t0), kind: 'invented_number', severity: 'high', target: `s${i}`, msg: `“${sceneLabel(s)}”: số “${made.slice(0, 3).join('”, “')}” không có trong lời thoại` });
+    // S13 · M111: flag emoji show as letters ("JP") on Chrome Windows; machine text cut with "…" (a user's "…" is on purpose)
+    const strs = sceneStrings(s);
+    if (strs.some(hasFlag)) out.push({ t: r2(s.t0), kind: 'emoji_flag', severity: 'med', target: `s${i}`, msg: `“${sceneLabel(s)}”: emoji cờ hiện thành chữ (vd “JP”) trên Chrome Windows` });
+    const cut = (s._ai || s._auto) && strs.find(v => /\p{L}…$/u.test(v.trim()));
+    if (cut) out.push({ t: r2(s.t0), kind: 'text_cut', severity: 'med', target: `s${i}`, msg: `“${sceneLabel(s)}”: chữ “${cut.slice(0, 40)}” bị cắt giữa chừng: viết lại cho trọn ý` });
   }
   // too dense: > 3 overlay starts inside 4 s
   const starts = over.map(o => o.s.t0).sort((a, b) => a - b);
@@ -756,6 +765,13 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
     if (!s || s.hidden || isBase(s, tl) || touched.has(is.target)) continue;
     if (is.kind === 'invented_number' && (s._orig || !(s._ai || s._auto))) { is.note = 'số liệu không có trong lời thoại: kiểm lại hoặc sửa chữ'; continue; }
     s.hidden = true; mark(s); is.fix = { op: 'delete' }; fixed.add(is); hid = true;
+  }
+  // 3c. S13 · M111: flag emoji → dropped from the graphic's text
+  for (const is of issues.filter(x => x.kind === 'emoji_flag')) {
+    const s = /^s\d+$/.test(is.target || '') && tl.scenes[+is.target.slice(1)];
+    if (!s || touched.has(is.target)) continue;
+    const walk = o => { for (const [k, v] of Object.entries(o)) { if (hasFlag(v)) o[k] = stripFlags(v); else if (v && typeof v === 'object') walk(v); } };
+    walk(s); mark(s); is.fix = { op: 'strip_flag' }; fixed.add(is);
   }
   // 4. hook missing → hook text (Claude's hook if any)
   for (const is of issues.filter(x => x.kind === 'hook_missing')) {
