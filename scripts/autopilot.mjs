@@ -238,14 +238,17 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
     },
     async brand() {
       // S16 M121: thương hiệu chọn ở panel Tự lái (--brand; '' = không thương hiệu) thắng thương hiệu của hồ sơ; sản phẩm (--product) không bắt buộc
-      const kitId = typeof brandArg === 'string' ? brandArg : prof.brand || '', productId = typeof productArg === 'string' ? productArg : '';
+      const kitId = typeof brandArg === 'string' ? (brandArg === '__none' ? '' : brandArg) : prof.brand || '', productId = typeof productArg === 'string' ? productArg : '';
       if (!kitId && !prof.cta && !productId) return { skip: typeof brandArg === 'string' ? 'không thương hiệu (Kho Chung)' : 'hồ sơ không có brand kit / CTA' };
       const { tl, caps, capFile } = loadTL(dir); const notes = [];
       if (productId) {
         const { loadProduct } = await import('./products.mjs');
-        const pr = loadProduct(productId); // không thấy → lỗi rõ tên, bước này không bắt buộc nên Tự lái vẫn chạy tiếp
-        tl.ads = { ...(tl.ads || {}), on: true, product: pr.id, ...(pr.industry && !tl.ads?.industry ? { industry: pr.industry } : {}) };
-        notes.push(`sản phẩm ${pr.name || pr.id}`);
+        // hồ sơ sản phẩm bị xoá sau khi chọn: ghi chú rồi vẫn áp thương hiệu, không để cả bước thành lỗi
+        try {
+          const pr = loadProduct(productId);
+          tl.ads = { ...(tl.ads || {}), on: true, product: pr.id, ...(pr.industry && !tl.ads?.industry ? { industry: pr.industry } : {}) };
+          notes.push(`sản phẩm ${pr.name || pr.id}`);
+        } catch (e) { notes.push(`không gắn được sản phẩm: ${e.message}`); }
       }
       if (kitId) {
         const { loadBrand, brandFields } = await import('./batch.mjs');

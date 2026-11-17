@@ -85,6 +85,7 @@ export default ctx => {
           if (kind === 'autopilot' && !(VIDEO.test(input) || fs.existsSync(path.join(input, 'timeline.json')))) return J({ error: 'Chỉ nhận tệp video hoặc thư mục dự án' }, 400);
         }
         const opts = { ...(b.opts || {}) }; if (b.profile) opts.profile = b.profile;
+        for (const k of ['brand', 'product']) if (k in opts && !okRef(opts[k])) return J({ error: `opts.${k} không hợp lệ` }, 400); // vào tham số tiến trình con
         for (const k of ['brand', 'product']) if (k in b) { if (!okRef(b[k])) return J({ error: `${k} không hợp lệ` }, 400); if (b[k]) opts[k] = b[k]; } if (b.out) opts.out = path.resolve(String(b.out).replace(/^~(?=[\\/])/, os.homedir()).replace(/^"(.*)"$/, '$1'));
         return J({ ok: true, item: addItem({ kind, input, opts, source: b.source || 'ui' }) });
       }
