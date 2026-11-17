@@ -7,13 +7,15 @@ Cả hai là CLI chạy được không cần Studio, in tiến trình `@@ <0..1
 ```bash
 node scripts/highlights.mjs live.mp4 --out ~/Desktop/clips [--n 6] [--min 20 --max 60] [--orient vertical|horizontal]
      [--model large-v3-turbo|small] [--claude-model sonnet] [--chunk 480] [--min-score 40] [--pack slate] [--export] [--quality 1080]
+     [--brief "ưu tiên đoạn khoe sản phẩm, bỏ chào hỏi"] [--product <id>]
 node scripts/highlights.mjs --export ~/Desktop/clips [--only 1,3]      # xuất (trộn tiếng + render) các dự án trong highlights.json
 ```
 1. **Nhận giọng một lần** (`transcribe.py`), lưu ở `$AVS_HOME/cache/transcripts/<hash>.json` (theo đường dẫn + cỡ + giờ sửa file + model) kèm ranh giới câu của whisper (tiếng Việt gần như không có dấu câu). Khoảng lặng: `ffmpeg silencedetect`.
 2. **Chia phần** ≤ `--chunk` giây (mặc định 8 phút, ≤ 15k ký tự, gối 60 s) → mỗi phần một lần `claude -p` (3 phần song song), đề xuất k đoạn `[from..to]` theo số câu, kèm `title`, `hook` (chữ 2 giây đầu), `score`, `reason`. Video 90 phút ≈ 12 lần gọi + 1 lần **xếp hạng lại** (chỉ gửi tóm tắt ứng viên) → prompt luôn có giới hạn.
 3. **Kiểm tra**: số câu trong phần, nới/thu theo cả câu cho vừa `--min/--max`, bỏ đoạn trùng (chồng thời gian > 30 % hoặc trùng chữ > 60 % — nội dung lặp lại chỉ lấy một lần), lọc `score ≥ --min-score`. Mép cắt **bám từ + khoảng lặng** (không cắt giữa chữ).
 4. **Mỗi đoạn = một dự án** như “Video mới” (`newProject`): cắt nguồn chính xác → `cut.py` → khung hình → `captions.py`. Không nhận giọng lần hai (dùng lại từ đã có). Nguồn ngang + khung dọc → `TL.clips` + `clip.reframe` từ `face_track.py` (người nói luôn ở giữa); nguồn dọc + khung ngang → `fit: blurfill`; còn lại cắt giữa như cũ + `find_face.py`. Có `_starter` (Studio dựng theo gói khi mở) và `_highlight` {source, t0, t1, title, hook, score, reason, mode}.
-5. Ghi `<out>/highlights.json` `[{dir, title, hook, t0, t1, dur, score, reason, text, mode, thumb, mp4?}]`, `candidates.json` (mọi ứng viên + trả lời thô của Claude), ảnh xem trước `<dự án>/.studio/thumb.jpg`.
+**Hướng dẫn của người dùng** (S18 `M127`, không bắt buộc): `--brief` (≤ 600 ký tự, ô "Hướng dẫn cho Claude" ở tab Cắt clip) và `--product` (hồ sơ `53_products`: tên, thương hiệu, giá, claim đã duyệt, ghi chú) thành khối "Yêu cầu của người dùng" trong prompt chọn và xếp hạng lại, ưu tiên trên tiêu chí chung nhưng vẫn giữ hook và trọn ý; `reason` nói rõ khớp yêu cầu ở đâu. Trống thì prompt như cũ. Cắt lại với hướng dẫn khác dùng lại bản nhận giọng đã lưu.
+5. Ghi `<out>/highlights.json` `[{dir, title, hook, t0, t1, dur, score, reason, text, mode, thumb, mp4?, brief?, product?}]`, `candidates.json` (mọi ứng viên + trả lời thô của Claude), ảnh xem trước `<dự án>/.studio/thumb.jpg`.
 
 ## 2. Chủ đề → video
 ```bash
