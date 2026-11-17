@@ -3,7 +3,7 @@
 // trong Studio, không rời trang), Hiện trong thư mục / Finder, Mở Thành phẩm, Giao vào Thành phẩm, Chép đường dẫn.
 // Hộp "Xuất xong" (studio.js gọi Studio.exports.done khi job xuất xong) ghi lịch sử rồi hiện cùng các nút đó; giữ h3 "Xuất xong",
 // .path và .actions để 16_qc / 52_publish vẫn chèn được thẻ QC và nút Đăng.
-// Studio.exports: { render(), done(job, {quality, from, to}), refresh(), latest(), list() } — M113 dùng latest() cho cột phải.
+// Studio.exports: { render(), done(job, {quality, from, to}), refresh(), latest(), list(), loaded(), edited() } — M113 dùng latest()/edited() cho cột phải.
 (() => {
   const S = window.Studio, esc = S.esc, $ = S.$;
   const st = document.createElement('style');
@@ -159,5 +159,5 @@
     if ($('#libbody [data-exp]')) render();
     return true;
   }
-  S.exports = { render, done, refresh, latest: () => DATA?.items?.[0] || null, list: () => DATA?.items || [] };
+  S.exports = { render, done, refresh, latest: () => DATA?.items?.[0] || null, list: () => DATA?.items || [], loaded: () => DATA != null, edited: () => DATA?.edited || null };
 })();

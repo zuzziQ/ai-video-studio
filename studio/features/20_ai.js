@@ -340,5 +340,5 @@
 
   // For tests / Claude: Studio.ai.cut([[a,b]]) etc.
   // features/21_transcript.js (panel Lời thoại) uses cutRanges, wordSpan, allWords and the filler flags.
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, previewRange, detect: () => detect(), renderBuild: renderAi, get fillers() { return fl; } };
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, previewRange, detect: () => detect(), renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
 })();

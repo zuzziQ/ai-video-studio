@@ -99,6 +99,10 @@
   .wf-acts { display: flex; flex-wrap: wrap; gap: 8px; } .wf-card .wf-acts button { align-self: auto; }
   .wf-lnk { background: none; border: 0; padding: 0; height: auto; color: var(--acc); cursor: pointer; font-size: inherit; text-decoration: underline; }
   .wf-st .is-warn .ti { color: var(--warn); }
+  /* M113: chỗ cần làm khi mở panel từ cột phải (Studio.workflow.focus) */
+  .wf-flash { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: var(--rs); animation: wf-flash 1.8s ease-out; }
+  @keyframes wf-flash { 0%, 40% { box-shadow: 0 0 0 6px var(--acc-soft); } 100% { box-shadow: 0 0 0 0 transparent; } }
+  @media (prefers-reduced-motion: reduce) { .wf-flash { animation: none; } }
   .wf-burn { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--rs); background: var(--bg2); }
   .wf-burn-opts { display: flex; flex-wrap: wrap; gap: 6px; } .wf-card .wf-burn-opts button { align-self: auto; min-width: 0; white-space: normal; text-align: left; height: auto; min-height: 28px; }
   .wf-burn-opts button.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
@@ -387,8 +391,34 @@
   }
   const insp = $('#insp'); if (insp) new MutationObserver(fixInspTab).observe(insp, { childList: true });
 
-  // cho 03_nextstep / 04_cmdk: đổi bước, tra bước/nhóm của panel
-  S.workflow = { STEPS, SETTINGS, goStep, meta, groupOf, setLevel, get step() { return step; }, get level() { return level; }, openMore, closeMore };
+  // ---------- M113: mở đúng panel rồi tô sáng chỗ cần làm (cột phải 03_nextstep; nút sửa của M114) ----------
+  // focus(id, sel): id panel (tra bước qua PANELS/meta, nhóm có tab thì mở đúng tab); sel = selector hoặc mảng selector thử
+  // lần lượt trong #libbody (panel có thể vẽ muộn: thử lại tới ~2 s), không thấy thì tô thẻ đầu của panel.
+  let flashT = 0;
+  function focus(id, sel) {
+    if (RAIL.some(r => r[0] === id)) { if (level === 'basic' && meta(id).level === 'pro') setLevel('pro'); openPanel(id); }
+    else if (stepIds.includes(id)) return goStep(id);
+    else return S.toast('Chưa có công cụ này');
+    const sels = (Array.isArray(sel) ? sel : sel ? [sel] : []).filter(Boolean);
+    let n = 0; clearTimeout(flashT);
+    const hit = () => {
+      const root = $('#libbody'); if (!root || panel !== id) return;
+      let el = null; for (const q of sels) { try { el = root.querySelector(q); } catch { el = null; } if (el) break; }
+      if (!el && sels.length && n++ < 20) { flashT = setTimeout(hit, 100); return; }
+      el = el || root.querySelector('.wf-card, .ai-card, .bk-card, .xp-it') || root.firstElementChild; if (!el) return;
+      for (const o of document.querySelectorAll('.wf-flash')) o.classList.remove('wf-flash');
+      el.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      void el.offsetWidth; el.classList.add('wf-flash');
+      if (el.matches('button:not([disabled]), input, select, textarea')) el.focus({ preventScroll: true });
+      // panel vẽ lại ngay sau đó (vd. panel Xuất đọc xong lịch sử): tô lại phần tử mới, tối đa 3 lần
+      flashT = setTimeout(() => { if (!el.isConnected && redo++ < 3) { n = 0; hit(); } else flashT = setTimeout(() => el.classList.remove('wf-flash'), 1400); }, 600);
+    };
+    let redo = 0;
+    requestAnimationFrame(hit);
+  }
+
+  // cho 03_nextstep / 04_cmdk: đổi bước, tra bước/nhóm của panel, mở panel + tô sáng (focus)
+  S.workflow = { STEPS, SETTINGS, PANELS, goStep, focus, meta, groupOf, setLevel, get step() { return step; }, get level() { return level; }, openMore, closeMore };
   S.onReady(() => { if (want && meta(panel).step !== want) goStep(want); else renderRail(); });
   renderRail();
 })();

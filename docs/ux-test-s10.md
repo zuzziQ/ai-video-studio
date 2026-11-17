@@ -26,7 +26,7 @@ Mục `M87` soạn, chủ repo chạy ở `M88`. Đo xem đợt `S10` (5 bước
 
 | Bản | Cách lấy | Ghi chú |
 |---|---|---|
-| Trước S10 | `git worktree add ../avs-before ecb6e4d` (commit cuối trước `M81`/`M82`) | Không có thanh 5 bước, hướng dẫn lần đầu, thẻ Bước tiếp theo, ⌘K |
+| Trước S10 | `git worktree add ../avs-before ecb6e4d` (commit cuối trước `M81`/`M82`) | Không có thanh 5 bước, hướng dẫn lần đầu, thẻ Bước tiếp theo, ⌘K (từ `M113` cột phải theo bước đang mở thay thẻ Bước tiếp theo) |
 | Sau S10 | `main` sau khi `M81`–`M87` đã gộp (ghi mã commit vào bảng) | Chạy đúng như người dùng mới: chưa có `onboarding.json` |
 
 Chạy mỗi bản trong thư mục của nó với `AVS_HOME` tạm như mục 2. Cả hai bản dùng cùng clip, logo, ảnh.

@@ -16,6 +16,21 @@ Lập 2026-11-17. Mục ROADMAP: `M112`–`M114`, quyết định `C17`. Nguồn
 - Khi không chọn gì, `#insp` hiện thẻ "Bước tiếp theo" + thanh "Sẵn sàng x/6" (`studio/features/03_nextstep.js`, M84): 6 mục có/không (Thương hiệu, Video nguồn, Mẫu, Phụ đề, Kiểm tra, Xuất), một câu + một nút; phần Dự án / Thương hiệu cũ nằm trong "Cài đặt dự án" thu gọn.
 - Không đổi theo panel đang mở ở thanh trái (`#rail`, `#lib`), không cho biết mỗi bước làm tới đâu, trùng ý với thanh bước.
 
+Rà lại 2026-11-17 trước khi làm `M113` (sau `M105`–`M112`):
+
+| Khối ở `#insp` (không chọn gì) | Trùng / lệch với | Kết luận |
+|---|---|---|
+| Lưới 6 nút "Sẵn sàng" (Thương hiệu, Video nguồn, Mẫu, Phụ đề, Kiểm tra, Xuất), mỗi nút mở một panel | Thanh 5 bước `#wf-steps` trên header và `#rail` của bước đó mở đúng các panel này | Trùng: bỏ, thay bằng việc còn thiếu của **bước đang mở** |
+| Thanh tiến độ 6 ô "Sẵn sàng x/6" | Thanh bước đã cho biết đang ở đâu; dấu có/không sẽ thành điểm ở `M114` | Bỏ; chỉ giữ "x/y việc xong" của bước đang mở |
+| Thẻ "Bước tiếp theo" (một câu + một nút theo cả dự án) | Không theo bước đang mở: đang ở Xuất vẫn có thể bảo "Thêm thương hiệu" | Thay bằng nút đi tiếp theo bước đang mở |
+| Mục Kiểm tra đọc `GET /api/qc` (chỉ QC đầy đủ) | QC nhanh `M105` (`.studio/qc_quick.json`) chỉ xem được trong hộp "Đã dựng xong", đóng là mất | Cột phải hiện kết quả QC nhanh ở bước Dựng và Kiểm tra |
+| Mục Xuất đọc `GET /api/publish/videos` (file trong `out/`) | `M112` đã có `.studio/exports.json`, panel Xuất có bản gần nhất | Đọc `Studio.exports` (cùng dữ liệu panel Xuất); thêm `edited` (mtime `timeline.json`) vào `GET /api/exports` để báo "đã sửa sau lần xuất" |
+| "Cài đặt dự án và thương hiệu" thu gọn (tab Dự án / Thương hiệu của `projectPanel`, `studio/studio.js`) | Không trùng (tham số riêng của dự án) | Giữ nguyên trong mục thu gọn |
+| Trang chủ `#onb-home` (`02_onboarding.js`) | Chỉ hiện khi chưa mở dự án; cột phải chỉ vẽ khi đã có `TL` | Không trùng, không đổi |
+| Panel Video nguồn `wf-new` đã liệt kê lời thoại / phụ đề / mặt | Cùng dữ liệu với việc thiếu của bước Nguồn | Cột phải tóm tắt, bấm mở panel đó và tô sáng dòng tương ứng |
+
+`PANEL_STEP` trong ROADMAP là bảng `PANELS` của `01_workflow.js` (id panel → bước, thứ tự, mức); không có hằng tên `PANEL_STEP`. `M113` không đổi bước của panel nào, chỉ thêm `Studio.workflow.focus(id, chọn)` (mở panel qua bảng đó rồi tô sáng phần tử) để cột phải và nút sửa của `M114` dùng chung. Hướng dẫn người mới (`02_onboarding.js`) không nhắc tới cột phải; phần cần sửa là mô tả trong `references/studio.md` và bộ thử `docs/ux-test-s10.md`.
+
 ## 2. Hướng đi
 
 1. **Bản xuất là dữ liệu của dự án**, không phải một hộp thoại: lưu `.studio/exports.json`, panel Xuất đọc lại được bất cứ lúc nào; xem video trong Studio.
