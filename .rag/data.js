@@ -71,7 +71,7 @@ export const DOMAINS = {
         layer: "domain",
         title: "Hợp đồng plugin: route và feature",
         file_path: "references/studio.md",
-        lines: "181-206",
+        lines: "182-207",
         keywords: ["route", "renderBuild", "Studio.autofill", "afterMode", "queue", "feature", "ctx", "startJob", "addPanel", "addTopButton", "pollJob", "step", "level", "01_workflow", "GROUPS", "03_nextstep", "04_cmdk", "Studio.workflow", "focus", "21_transcript", "Studio.transcript"],
         content: "Chữ ký route (ctx => (req,res,p,u) => bool), các hàm của ctx và đối tượng Studio (addPanel/addTopButton nhận opts { step, level } để 01_workflow.js xếp vào 5 bước và chế độ Cơ bản/Chuyên nghiệp), danh sách tính năng có sẵn theo số thứ tự (gồm 03_nextstep cột phải theo bước đang mở, Studio.workflow.focus mở panel và tô sáng chỗ cần làm, 04_cmdk tìm công cụ Ctrl K dùng Studio.workflow).",
       },
@@ -82,7 +82,7 @@ export const DOMAINS = {
         file_path: "references/studio.md",
         lines: "22-35",
         keywords: ["bước", "5 bước", "PANELS", "GROUPS", "TOPS", "Video nguồn", "wf-new", "phụ đề cháy sẵn", "burnin", "Làm sạch lời nói", "Cắt clip", "longform", "AI dựng", "wf-aihelp", "Thêm b-roll", "Thêm âm thanh", "Đã dựng xong", "QC nhanh", "Tự lái", "queue", "C15", "C16"],
-        content: "01_workflow.js xếp panel vào 5 bước (Chuẩn bị, Nguồn, Dựng, Kiểm tra, Xuất và đăng) bằng PANELS, gộp việc trùng bằng GROUPS (Lời thoại = Lời thoại + Làm sạch lời nói; Âm thanh; B-roll = Kho & AI + B-roll động + Tự động). Nguồn: thẻ Video nguồn (route 14_source, source.json, trạng thái lời thoại/phụ đề/mặt, dò phụ đề cháy sẵn scripts/burnin.mjs và chọn tắt/dời/che ghi timeline.burnin), Cắt clip chỉ khi video > 300 s. Dựng: một nút AI dựng (wf-aihelp, 20_ai.js renderBuild) + Thêm b-roll/Thêm âm thanh (Tự động nối sau, một bước hoàn tác) → hộp Đã dựng xong có QC nhanh tự chạy. Tự lái: nút trên thanh đầu (TOPS bar), bước ẩn queue.",
+        content: "01_workflow.js xếp panel vào 5 bước (Chuẩn bị, Nguồn, Dựng, Kiểm tra, Xuất và đăng) bằng PANELS, gộp việc trùng bằng GROUPS (Lời thoại = Lời thoại + Làm sạch lời nói; Âm thanh; B-roll = Kho & AI + B-roll động + Tự động). Nguồn: thẻ Video nguồn (route 14_source, source.json, trạng thái lời thoại/phụ đề/mặt, dò phụ đề cháy sẵn scripts/burnin.mjs và chọn tắt/dời/che ghi timeline.burnin), Cắt clip chỉ khi video > 300 s. Dựng: một nút AI dựng (wf-aihelp, 20_ai.js renderBuild) + Thêm b-roll/Thêm âm thanh (Tự động nối sau, một bước hoàn tác) → hộp Đã dựng xong có QC nhanh tự chạy. Tự lái: bắt đầu ở thẻ Trang chủ (thả nhiều video, chọn thương hiệu); thanh đầu chỉ còn chỉ báo việc nền #ap-topbtn (TOPS bar, ẩn khi hàng đợi trống, S19 M132), bước ẩn queue.",
       },
       {
         id: "studio-transcript",

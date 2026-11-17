@@ -1,6 +1,9 @@
 // Lần đầu mở Studio (ROADMAP M83): trạng thái hướng dẫn 3 bước + danh sách dự án gần đây, lưu ở $AVS_HOME/onboarding.json.
-//   GET  /api/onboarding            → {done, skipped, step, purpose, aspect, platforms, brand, updated, recent:[{i, name, parent, t}], project}
-//                                     (có dự án đang mở thì ghi nó lên đầu `recent`, tối đa 8)
+//   GET  /api/onboarding            → {done, skipped, step, purpose, aspect, platforms, brand, updated, recent:[{i, name, parent, t, …thẻ}], project}
+//                                     (có dự án đang mở thì ghi nó lên đầu `recent`, tối đa 24). S19 M136: mỗi mục kèm thẻ của
+//                                     scripts/home_cards.mjs {dur, brand, kho, edited, exported, aspect, thumb:{v}|null, thumbPending,
+//                                     open (có trên thanh tab)}; chưa có ảnh bìa thì xếp hàng tạo nền (không chờ)
+//   GET  /api/onboarding/thumb?i=   → ảnh bìa của mục thứ i (đường dẫn lấy từ file, không nhận từ trình duyệt)
 //   POST /api/onboarding {…}        → gộp các khoá cho phép vào file; khoá lạ hoặc sai kiểu → 400, body > 8 KB → 413
 //   POST /api/onboarding/open {i}   → mở dự án thứ i của `recent` (đường dẫn lấy từ file, không nhận từ trình duyệt)
 //   POST /api/onboarding/sample     → S17 M125: chép dự án mẫu (sample/clip-mau của repo) vào $AVS_HOME/footage/clip-mau khi
@@ -11,12 +14,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AVS_HOME } from '../security.mjs';
+import { AVS_HOME, fileAllowed } from '../security.mjs';
+import { cardOf, queueThumb, thumbOf, thumbPending } from '../../scripts/home_cards.mjs';
 
 export const PURPOSES = ['bds', 'khoahoc', 'banhang', 'review', 'chiase', 'tintuc', 'doanhnghiep', 'khac'];
 export const ASPECTS = ['9:16', '16:9', '1:1'];
 export const PLATFORMS = ['tiktok', 'youtube', 'facebook', 'instagram', 'zalo'];
-const MAX_BODY = 8192, MAX_RECENT = 8;
+const MAX_BODY = 8192, MAX_RECENT = 24;
 const DEF = { done: false, skipped: false, step: 0, purpose: '', aspect: '', platforms: [], brand: '' };
 // Mỗi khoá: hàm kiểm trả về giá trị sạch, hoặc undefined khi sai kiểu.
 const CHECK = {
@@ -74,7 +78,7 @@ export function hiddenRecent(dir) {
 // Ghi dự án đang mở lên đầu danh sách (chỉ ghi file khi thứ tự đổi).
 function touchRecent(s, dir) {
   if (!dir || hiddenRecent(dir) || s.recent[0]?.dir === dir) return false;
-  // mục cũ bị ẩn (dự án mẫu, dự án tạm ghi trước M125) bỏ luôn khi ghi, để không chiếm chỗ trong 8 mục
+  // mục cũ bị ẩn (dự án mẫu, dự án tạm ghi trước M125) bỏ luôn khi ghi, để không chiếm chỗ trong danh sách
   s.recent = [{ dir, name: path.basename(dir), t: new Date().toISOString() }, ...s.recent.filter(r => r.dir !== dir && !hiddenRecent(r.dir))].slice(0, MAX_RECENT);
   return true;
 }
@@ -105,15 +109,22 @@ export async function ensureSample(skill) {
   finally { sampleBusy = false; }
   return dst;
 }
-const pub = (s, project) => ({
+const dkey = d => { const r = path.resolve(d); return process.platform === 'win32' ? r.toLowerCase() : r; };
+// S19 M136: thẻ của một mục (null khi thư mục không còn timeline.json); chưa có ảnh bìa thì xếp hàng tạo nền
+function card(dir, open) {
+  const c = cardOf(dir); if (!c) return { gone: true };
+  if (!c.thumb) queueThumb(dir);
+  return { ...c, thumbPending: !c.thumb && thumbPending(dir), open: open.has(dkey(dir)) };
+}
+const pub = (s, project, tabs) => { const open = new Set((tabs?.list?.() || []).map(t => dkey(t.dir))); return {
   done: s.done, skipped: s.skipped, step: s.step, purpose: s.purpose, aspect: s.aspect, platforms: s.platforms, brand: s.brand, updated: s.updated,
   isNew: !s.exists, project: !!project,
   // `i` giữ vị trí trong file (POST /open nhận nó) nên lọc sau khi đánh số
   // S18 M128: clip của một lần cắt (thư mục cha có highlights.json) mang `set` để trang chủ gom thành một bộ
   recent: s.recent.map((r, i) => ({ i, name: r.name, parent: path.basename(path.dirname(r.dir)), t: r.t, current: r.dir === project?.dir, hide: hiddenRecent(r.dir),
     ...(fs.existsSync(path.join(path.dirname(r.dir), 'highlights.json')) ? { set: path.basename(path.dirname(r.dir)) } : {}) }))
-    .filter(r => !r.hide).map(({ hide, ...r }) => r),
-});
+    .filter(r => !r.hide).map(r => { const { hide, ...x } = r; return { ...x, ...card(s.recent[r.i].dir, open) }; }),
+}; };
 
 export default ctx => async (req, res, p) => {
   if (p !== '/api/onboarding' && !p.startsWith('/api/onboarding/')) return false;
@@ -122,7 +133,13 @@ export default ctx => async (req, res, p) => {
     if (p === '/api/onboarding' && req.method === 'GET') {
       const s = loadState();
       if (ctx.project && touchRecent(s, ctx.project.dir)) storeState(s);
-      return J(pub(s, ctx.project));
+      return J(pub(s, ctx.project, ctx.tabs));
+    }
+    if (p === '/api/onboarding/thumb' && req.method === 'GET') {
+      const q = new URL(req.url, 'http://x').searchParams.get('i'), r = /^\d{1,3}$/.test(q || '') ? loadState().recent[+q] : null;
+      const f = r && !hiddenRecent(r.dir) ? thumbOf(r.dir) : null;
+      if (!f || !fileAllowed(f)) return J({ error: 'Chưa có ảnh bìa' }, 404);
+      ctx.sendFile(req, res, f); return true;
     }
     if (req.method !== 'POST') return false;
     if (+req.headers['content-length'] > MAX_BODY) { req.resume(); return J({ error: 'Dữ liệu gửi lên quá lớn' }, 413); }
@@ -130,7 +147,7 @@ export default ctx => async (req, res, p) => {
     if (p === '/api/onboarding') {
       const s = applyPatch(loadState(), body);
       storeState(s);
-      return J(pub(loadState(), ctx.project));
+      return J(pub(loadState(), ctx.project, ctx.tabs));
     }
     if (p === '/api/onboarding/open') {
       const s = loadState(), r = Number.isInteger(body?.i) ? s.recent[body.i] : null;

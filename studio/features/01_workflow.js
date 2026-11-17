@@ -64,9 +64,8 @@
   #wf-steps .ln { width: 12px; height: 1px; background: var(--line3); flex: none; }
   #wf-morebtn.on { background: var(--bg3); color: var(--tx); }
   #ap-topbtn.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
-  /* C15: Tự lái là lối vào riêng nên giữ chữ (studio.css thu nút thanh đầu về icon dưới 1760px); màn hẹp mới chỉ còn icon */
-  #top > #ap-topbtn { font-size: 12px; gap: 4px; }
-  @media (max-width: 1280px) { #top > #ap-topbtn { font-size: 0; gap: 0; } }
+  /* S19 M132: Tự lái thành chỉ báo việc nền nhỏ (biểu tượng + %), điểm bắt đầu ở trang chủ */
+  #top > #ap-topbtn { font-size: 12px; gap: 4px; padding: 0 8px; }
   #wf-more { position: fixed; z-index: 60; min-width: 240px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-raised); display: flex; flex-direction: column; gap: 4px; }
   #wf-more[hidden] { display: none; }
   #wf-more .wf-ver { padding: 2px 8px 4px; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
