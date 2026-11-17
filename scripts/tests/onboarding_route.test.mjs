@@ -11,7 +11,8 @@ import http from 'node:http';
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-onb-'));
 process.env.AVS_HOME = HOME;
 const FILE = path.join(HOME, 'onboarding.json');
-const PROJ = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-onb-proj-'));
+// S17 M125: dự án trong thư mục tạm của máy bị ẩn khỏi "gần đây", trừ khi nằm trong $AVS_HOME (như Kho)
+const PROJ = fs.mkdtempSync(path.join(HOME, 'avs-onb-proj-'));
 fs.writeFileSync(path.join(PROJ, 'timeline.json'), '{}');
 
 const { readJson } = await import('../../studio/security.mjs');

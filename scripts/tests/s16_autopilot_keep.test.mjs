@@ -39,7 +39,7 @@ test('bản xuất Tự lái ghi vào exports.json kèm file đã giao', () => {
 });
 
 test('addRecent: thêm dự án lên đầu, không tạo onboarding.json cho người mới', () => {
-  const dir = path.join(TMP, 'p3');
+  const dir = path.join(HOME, 'Kho', 'p3'); // S17 M125: dự án tạm ngoài $AVS_HOME không vào "gần đây"
   assert.equal(addRecent(dir), false);
   assert.equal(fs.existsSync(path.join(HOME, 'onboarding.json')), false);
   fs.mkdirSync(HOME, { recursive: true });

@@ -3,9 +3,13 @@
 //                                     (có dự án đang mở thì ghi nó lên đầu `recent`, tối đa 8)
 //   POST /api/onboarding {…}        → gộp các khoá cho phép vào file; khoá lạ hoặc sai kiểu → 400, body > 8 KB → 413
 //   POST /api/onboarding/open {i}   → mở dự án thứ i của `recent` (đường dẫn lấy từ file, không nhận từ trình duyệt)
+//   POST /api/onboarding/sample     → S17 M125: chép dự án mẫu (sample/clip-mau của repo) vào $AVS_HOME/footage/clip-mau khi
+//                                     chưa có, rồi mở nó (nút "Xem thử dự án mẫu" trên trang chủ; trình cài không tạo sẵn nữa)
+// "Dự án gần đây" không ghi và không hiện dự án mẫu (`clip-mau`) và dự án trong thư mục tạm của máy (ngoài $AVS_HOME).
 // Thương hiệu và sản phẩm ghi qua API sẵn có (/api/brands/*, /api/products/*); file này chỉ nhớ id kit đã chọn.
 // Không chứa token hay khoá; ghi qua file tạm rồi đổi tên để không để lại file dở.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { AVS_HOME } from '../security.mjs';
 
@@ -56,10 +60,22 @@ export function applyPatch(s, patch) {
   }
   return out;
 }
+export const SAMPLE_NAME = 'clip-mau';
+const norm = p => { const r = path.resolve(p); return process.platform === 'win32' ? r.toLowerCase() : r; };
+const inDir = (p, root) => { const a = norm(p), b = norm(root); return a === b || a.startsWith(b.endsWith(path.sep) ? b : b + path.sep); };
+/** S17 M125: dự án không đưa vào "Dự án gần đây": dự án mẫu, hoặc nằm trong thư mục tạm của máy (trừ khi ở trong $AVS_HOME). */
+export function hiddenRecent(dir) {
+  if (typeof dir !== 'string' || !dir) return true;
+  if (path.basename(path.resolve(dir)).toLowerCase() === SAMPLE_NAME) return true;
+  let tmp = os.tmpdir(); try { tmp = fs.realpathSync.native(tmp); } catch { /* giữ nguyên */ }
+  const cands = [path.resolve(dir)]; try { cands.push(fs.realpathSync.native(dir)); } catch { /* thư mục đã mất */ }
+  return cands.some(d => (inDir(d, os.tmpdir()) || inDir(d, tmp)) && !inDir(d, AVS_HOME()));
+}
 // Ghi dự án đang mở lên đầu danh sách (chỉ ghi file khi thứ tự đổi).
 function touchRecent(s, dir) {
-  if (!dir || s.recent[0]?.dir === dir) return false;
-  s.recent = [{ dir, name: path.basename(dir), t: new Date().toISOString() }, ...s.recent.filter(r => r.dir !== dir)].slice(0, MAX_RECENT);
+  if (!dir || hiddenRecent(dir) || s.recent[0]?.dir === dir) return false;
+  // mục cũ bị ẩn (dự án mẫu, dự án tạm ghi trước M125) bỏ luôn khi ghi, để không chiếm chỗ trong 8 mục
+  s.recent = [{ dir, name: path.basename(dir), t: new Date().toISOString() }, ...s.recent.filter(r => r.dir !== dir && !hiddenRecent(r.dir))].slice(0, MAX_RECENT);
   return true;
 }
 /** Thêm dự án vào "Dự án gần đây" từ ngoài Studio (Tự lái tạo dự án mà chưa mở lần nào, S16 M118). */
@@ -69,10 +85,32 @@ export function addRecent(dir) {
   const s = loadState(); if (!s.exists || !touchRecent(s, dir)) return false;
   storeState(s); return true;
 }
+/** Chép dự án mẫu của repo vào $AVS_HOME/footage/clip-mau. timeline.json và work/captions.json đã có thì giữ (người dùng đã sửa);
+ *  words.json, aroll.mp4 chép lại khi khác kích thước. Khung hình (work/frames) không chép: Studio hỏi dựng lại từ work/aroll.mp4
+ *  khi mở (M63). Chép bất đồng bộ (video vài MB không chặn server). Trả thư mục dự án. */
+let sampleBusy = false;
+export async function ensureSample(skill) {
+  const src = path.join(skill || '', 'sample', SAMPLE_NAME);
+  if (!skill || !fs.existsSync(path.join(src, 'timeline.json'))) throw Object.assign(new Error('Bản cài này không có dự án mẫu (thiếu sample/clip-mau)'), { status: 404 });
+  const dst = path.join(AVS_HOME(), 'footage', SAMPLE_NAME), w = path.join(dst, 'work');
+  fs.mkdirSync(path.join(w, 'frames'), { recursive: true });
+  const cp = async (rel, keep) => {
+    const a = path.join(src, rel), b = path.join(dst, rel); if (!fs.existsSync(a)) return;
+    let have = null; try { have = fs.statSync(b).size; } catch { /* chưa có */ }
+    if (have === null || (!keep && have !== fs.statSync(a).size)) await fs.promises.copyFile(a, b);
+  };
+  if (sampleBusy) throw Object.assign(new Error('Đang chép dự án mẫu, đợi một chút'), { status: 409 });
+  sampleBusy = true;
+  try { await cp('timeline.json', true); await cp('work/captions.json', true); await cp('work/words.json'); await cp('work/aroll.mp4'); }
+  finally { sampleBusy = false; }
+  return dst;
+}
 const pub = (s, project) => ({
   done: s.done, skipped: s.skipped, step: s.step, purpose: s.purpose, aspect: s.aspect, platforms: s.platforms, brand: s.brand, updated: s.updated,
   isNew: !s.exists, project: !!project,
-  recent: s.recent.map((r, i) => ({ i, name: r.name, parent: path.basename(path.dirname(r.dir)), t: r.t, current: r.dir === project?.dir })),
+  // `i` giữ vị trí trong file (POST /open nhận nó) nên lọc sau khi đánh số
+  recent: s.recent.map((r, i) => ({ i, name: r.name, parent: path.basename(path.dirname(r.dir)), t: r.t, current: r.dir === project?.dir, hide: hiddenRecent(r.dir) }))
+    .filter(r => !r.hide).map(({ hide, ...r }) => r),
 });
 
 export default ctx => async (req, res, p) => {
@@ -100,6 +138,11 @@ export default ctx => async (req, res, p) => {
         return J({ error: 'Thư mục dự án không còn trên máy — đã bỏ khỏi danh sách' }, 404);
       }
       ctx.openProject(r.dir); // từ chối (thư mục cấu hình, không có timeline) → lỗi có .status
+      return J({ ok: true });
+    }
+    if (p === '/api/onboarding/sample') {
+      const dir = await ensureSample(ctx.SKILL);
+      ctx.openProject(dir);
       return J({ ok: true });
     }
     return false;

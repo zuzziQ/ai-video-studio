@@ -9,7 +9,6 @@ $ErrorActionPreference = 'Stop'
 $REPO = $PSScriptRoot
 $SKILL_DIR = if ($env:AVS_SKILL_DIR) { $env:AVS_SKILL_DIR } else { Join-Path $HOME '.claude\skills\ai-video-studio' }
 $HOME_DIR = if ($env:AVS_HOME) { $env:AVS_HOME } else { Join-Path $HOME '.ai-video-studio' }
-$SAMPLE = Join-Path $HOME_DIR 'footage\clip-mau'
 
 function Say($m) { Write-Host "▸ $m" -ForegroundColor Magenta }
 function Die($m) { Write-Host "✗ $m" -ForegroundColor Red; exit 1 }
@@ -102,17 +101,7 @@ if (-not $NoSkill -and ((Resolve-Path $REPO).Path -ne $SKILL_DIR)) {
   Say "Skill: $SKILL_DIR → $REPO"
 }
 
-# 4. Dự án clip mẫu
-Say "Dựng dự án clip mẫu: $SAMPLE"
-$W = Join-Path $SAMPLE 'work'
-New-Item -ItemType Directory -Force (Join-Path $W 'frames') | Out-Null
-$SRC = Join-Path $REPO 'sample\clip-mau'
-if (-not (Test-Path "$SAMPLE\timeline.json")) { Copy-Item "$SRC\timeline.json" $SAMPLE }
-if (-not (Test-Path "$W\captions.json")) { Copy-Item "$SRC\work\captions.json" $W }   # giữ phụ đề bạn đã sửa
-Copy-Item "$SRC\work\words.json", "$SRC\work\aroll.mp4" $W -Force
-if ((Get-ChildItem (Join-Path $W 'frames') -Filter *.jpg).Count -lt 100) {
-  ffmpeg -v error -y -i "$W\aroll.mp4" -vf 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280' -q:v 3 "$W\frames\%05d.jpg"
-}
+# 4. Không dựng dự án mẫu nữa (S17 M125): Studio mở trang chủ; nút "Xem thử dự án mẫu" chép sample\clip-mau khi cần.
 
 # 5. Style người dùng (Tạo style) + skill video-style-* của chúng
 try { if ($NoSkill) { node (Join-Path $S 'style_lab.mjs') sync --no-skills *> $null } else { node (Join-Path $S 'style_lab.mjs') sync *> $null } } catch {}
@@ -132,7 +121,7 @@ if (-not $NoShortcut) {
 Write-Host ''
 Write-Host '✅ Cài xong AI Video Studio.' -ForegroundColor Green
 Write-Host ''
-Write-Host '  Mở Studio với clip mẫu:   bấm đúp "AI Video Studio" ngoài Desktop (hoặc studio.cmd)'
+Write-Host '  Mở Studio:                bấm đúp "AI Video Studio" ngoài Desktop (hoặc studio.cmd): trang chủ, lần đầu vào bước Chuẩn bị'
 Write-Host "  Mở với video của bạn:     `"$REPO\studio.cmd`" --new C:\đường\dẫn\video.mp4"
 Write-Host '  Trình duyệt sẽ mở http://localhost:5186 — giữ cửa sổ đen (server) mở trong lúc dùng.'
 Write-Host ''

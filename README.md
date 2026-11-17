@@ -106,6 +106,8 @@ Cài xong, **lần đầu mở Studio** sẽ đi qua ba màn theo thứ tự:
 2. **Kiểm tra máy**: liệt kê thư viện bắt buộc / nên có / tuỳ chọn, thiếu gì thì bấm **Cài giúp đủ một lần** hoặc nút **Cài** trên từng dòng, không phải gõ lệnh (xem [mục 2](#2-yêu-cầu)). Đủ mục bắt buộc thì mới dùng được hết tính năng.
 3. **Hướng dẫn 3 bước**: Thương hiệu (tên, logo, màu) → Tài nguyên (sản phẩm, ảnh, nhạc, tuỳ chọn) → Mục đích (lĩnh vực, khổ, nền tảng). Bỏ qua được, mở lại từ trang chủ.
 
+Studio không còn mở sẵn một dự án mẫu: mở Studio không kèm dự án là vào **trang chủ** (dự án gần đây, Video mới, Tự lái). Đã qua hướng dẫn mà chưa có thương hiệu nào thì trang chủ nhắc và tự mở bước **Chuẩn bị** (thương hiệu, Kho) một lần mỗi phiên. Muốn xem Studio làm được gì trên một video có sẵn: bấm **Xem thử dự án mẫu** cuối trang chủ (chép `sample/clip-mau` vào `~/.ai-video-studio/footage/clip-mau` rồi mở; lần đầu Studio hỏi dựng lại khung hình). Dự án mẫu và dự án trong thư mục tạm của máy không hiện ở "Dự án gần đây".
+
 ### 3.1. Cài trên macOS
 
 **Bước 1: Cài công cụ** (bỏ qua nếu đã có). Chưa có Homebrew thì cài tại <https://brew.sh>, rồi mở **Terminal** chạy:
@@ -131,14 +133,13 @@ bash install.sh
 1. Kiểm tra ffmpeg, Node, Python, Chrome và Claude CLI.
 2. Cài thư viện Python (faster-whisper, rembg, numpy, scipy…) vào `scripts/.venv`, cài `puppeteer-core`.
 3. Gắn thư mục này thành **skill của Claude Code** tại `~/.claude/skills/ai-video-studio` (dạng symlink, nên `git pull` là cập nhật luôn).
-4. Dựng **dự án clip mẫu** từ `sample/` vào `~/.ai-video-studio/footage/clip-mau`.
-5. Tạo app **AI Video Studio** trong `~/Applications`.
+4. Tạo app **AI Video Studio** trong `~/Applications`.
 
 Lần đầu mất khoảng 5–10 phút (tải thư viện Python). Tuỳ chọn:
 - `bash install.sh --no-app`: không tạo app;
 - `bash install.sh --no-skill`: không gắn vào Claude Code.
 
-**Bước 4: Mở Studio.** Bấm app **AI Video Studio** trong Launchpad hoặc `~/Applications`, hoặc chạy `bash studio.sh`. Trình duyệt mở <http://localhost:5186> với clip mẫu.
+**Bước 4: Mở Studio.** Bấm app **AI Video Studio** trong Launchpad hoặc `~/Applications`, hoặc chạy `bash studio.sh`. Trình duyệt mở <http://localhost:5186> ở trang chủ (lần đầu vào bước Chuẩn bị).
 - Lần đầu macOS có thể báo *"không xác định nhà phát triển"*. Chuột phải vào app → **Open** → **Open**. Chỉ cần làm một lần.
 - Kéo video thả vào icon app là tạo dự án mới.
 
@@ -161,8 +162,7 @@ Lần đầu mất khoảng 5–10 phút (tải thư viện Python). Tuỳ chọ
 1. Kiểm tra và tự cài ffmpeg (`Gyan.FFmpeg`), Node.js LTS, Python 3.12; tìm Chrome hoặc Edge để render.
 2. Tạo `scripts\.venv`, cài thư viện Python và `puppeteer-core`.
 3. Gắn thư mục thành skill của Claude Code tại `%USERPROFILE%\.claude\skills\ai-video-studio`. Dùng *junction* nên không cần quyền admin.
-4. Dựng dự án clip mẫu vào `%USERPROFILE%\.ai-video-studio\footage\clip-mau`.
-5. Tạo lối tắt **AI Video Studio** ngoài Desktop và trong Start Menu.
+4. Tạo lối tắt **AI Video Studio** ngoài Desktop và trong Start Menu.
 
 Tuỳ chọn khi chạy từ PowerShell:
 - `.\install.cmd -Yes`: tự cài mọi thứ, không hỏi;
@@ -226,7 +226,7 @@ Mở Studio:
 - **macOS:** bấm app **AI Video Studio** trong Launchpad hoặc `~/Applications`, hoặc chạy `bash studio.sh` trong thư mục repo.
 - **Windows:** bấm đúp lối tắt **AI Video Studio** ngoài Desktop, hoặc `studio.cmd`. Giữ cửa sổ đen (server) mở trong lúc dùng.
 
-Trình duyệt mở **http://localhost:5186**. Lần đầu sẽ có màn **Kiểm tra máy** và **hướng dẫn 3 bước** ([mục 3](#3-cài-đặt)). Chưa mở dự án thì hiện **trang chủ** với 4 cách bắt đầu: Thả video → video hoàn chỉnh (Tự lái), Dựng theo mẫu, Cắt clip từ video dài, Hàng loạt.
+Trình duyệt mở **http://localhost:5186**. Lần đầu sẽ có màn **Kiểm tra máy** và **hướng dẫn 3 bước** ([mục 3](#3-cài-đặt)). Chưa mở dự án thì hiện **trang chủ** với 4 cách bắt đầu: Thả video → video hoàn chỉnh (Tự lái), Dựng theo mẫu, Cắt clip từ video dài, Hàng loạt. Chưa có thương hiệu thì trang chủ dẫn vào bước **Chuẩn bị** trước; nút **Xem thử dự án mẫu** mở clip mẫu đi kèm.
 
 Thanh trên có **5 bước** làm theo thứ tự. Bấm một bước thì thanh icon bên trái chỉ còn công cụ của bước đó. **Cột phải** (khi không chọn gì trên khung hình) cho biết bước đang mở còn thiếu gì, **điểm 0–100** của từng bước và nút **Sửa** dẫn thẳng tới chỗ cần làm.
 
@@ -788,6 +788,7 @@ node $S/scripts/style_lab.mjs list | delete <id>
 node $S/scripts/batch.mjs --help                                   # làm hàng loạt
 $PY  $S/scripts/dub.py --help                                      # dịch + lồng tiếng
 $PY  $S/scripts/face_track.py --help                               # bám mặt
+# 3 lệnh dưới cần dự án mẫu: bấm "Xem thử dự án mẫu" trên trang chủ một lần (trình cài không tạo sẵn nữa)
 node $S/scripts/build_templates.mjs ~/.ai-video-studio/footage/clip-mau   # render lại preview mẫu
 node $S/scripts/selftest.mjs $S/engine/index.html ~/.ai-video-studio/footage/clip-mau/timeline.json
 node $S/scripts/fx_audit.mjs ~/.ai-video-studio/footage/clip-mau --frames   # quét mọi mẫu: cảnh quá dài, chỗ chuyển cảnh giật
@@ -914,7 +915,7 @@ ai-video-studio/
 └─ docs/images/            ảnh chụp màn hình
 ```
 
-Dữ liệu của bạn nằm ngoài repo, ở `~/.ai-video-studio/` (Windows: `%USERPROFILE%\.ai-video-studio`): clip mẫu, brand kit, hồ sơ kênh, style đã tạo, key API, token Telegram, phản hồi và đề xuất. Vì vậy `git pull` không làm mất gì.
+Dữ liệu của bạn nằm ngoài repo, ở `~/.ai-video-studio/` (Windows: `%USERPROFILE%\.ai-video-studio`): clip mẫu (khi đã bấm Xem thử dự án mẫu), brand kit, hồ sơ kênh, style đã tạo, key API, token Telegram, phản hồi và đề xuất. Vì vậy `git pull` không làm mất gì.
 
 ---
 

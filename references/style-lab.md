@@ -17,7 +17,7 @@ Claude Code CLI (`claude -p`) chạy trên máy người dùng ngay lúc bấm. 
    contact sheet. Prompt gồm hợp đồng gói (`packs.md`), nguyên văn `engine/packs/cinema.js` làm ví dụ, danh sách hàm có sẵn,
    font, mood nhạc, `analysis.json`. Claude trả 3 phần: `META` (tên, mô tả, `seen` = điều nó thấy trong ảnh, mô tả skill),
    `SPEC` (markdown: màu, font, phụ đề, graphic, chuyển cảnh, nhạc/SFX, nhịp, bảng module) và `PACK_JS` (`P = 'u_<slug>'`, IIFE, 3–8 module).
-3. **Kiểm tra trong engine thật** (headless Chrome, footage `~/.ai-video-studio/footage/clip-mau`, khung 360×640):
+3. **Kiểm tra trong engine thật** (headless Chrome, footage `~/.ai-video-studio/footage/clip-mau` nếu đã bấm "Xem thử dự án mẫu" (S17 M125: trình cài không tạo sẵn), không có thì dự án đang mở hoặc phụ đề mẫu, khung 360×640):
    cú pháp; cấm `Date.now/Math.random/setTimeout/fetch…`; có IIFE; PACKS entry đúng id; type có tiền tố `u_<slug>_`; mỗi item
    `make(T)` render ở 3 thời điểm không lỗi, có `data-cid`, **không trống** (so pixel với khung không có cảnh); kiểu phụ đề có
    `#cap` + `data-cid` + chữ; `recipe` trên phụ đề thật ≥ 3 cảnh, type hợp lệ, t0 < t1, chạy được khi phụ đề rỗng, render 6 thời
