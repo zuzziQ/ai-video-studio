@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadProject, callClaude, parseJson } from './ai_edit.mjs';
 import { sentences, search as stockSearch, fetchMedia } from './ai_broll.mjs';
 import { keywordsOf, queriesOf, rankImages, slotOrientation, mediaHashes, fileHash, dropMedia } from './fit_images.mjs';
+import { readScript, scriptMarks, scriptPrompt } from './script_doc.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const r2 = v => Math.round(v * 100) / 100;
@@ -130,7 +131,8 @@ export async function fitProject(src, { claude = false, model = 'sonnet', images
   if (fs.existsSync(ex)) for (const f of fs.readdirSync(ex)) samples.add('media/' + f);
   // every template scene gets speech text; only the ones that are not full-length frames / keep:true are re-timed
   const scenes = (tl.scenes || []).filter(mine).sort((a, b) => a.t0 - b.t0);
-  const sum = { fit: scenes.length, texts: 0, images: 0, hl: 0, claude: null, missing: [], picks: [] };
+  const sum = { fit: scenes.length, texts: 0, images: 0, hl: 0, claude: null, missing: [], picks: [], script: 0 };
+  const sc0 = readScript(dir), script = sc0?.align ? sc0 : null, marks = script ? scriptMarks(script) : []; // S17 M123
   if (!scenes.length) { say(1, 'Không có cảnh mẫu cần bám lời thoại'); return sum; }
   const info = scenes.map((s, i) => ({ i, s, fixed: FRAME(s, dur), texts: textSlots(s), imgs: images ? imageSlots(s, samples) : [] })).filter(x => !x.fixed || x.texts.length || x.imgs.length);
   const wordT = (c, w) => { const cap = caps[+c]; if (!cap) return null; const ws = cap.words; return (ws[Math.min(ws.length - 1, Math.max(0, +w || 0))] || {}).s ?? cap.t0; };
@@ -154,7 +156,11 @@ ${transcript}
 # Các cảnh của mẫu (giữ thứ tự xuất hiện), các trường chữ cần viết lại và ảnh cần thay
 ${list}
 
-# Việc cần làm
+${script ? `# Kịch bản của người dùng (phụ đề đã đúng nguyên văn; giờ đã khớp lời nói)
+${scriptPrompt(script)}
+LUẬT KỊCH BẢN: mẫu quyết định giao diện, kịch bản quyết định nội dung. Ô chữ của cảnh nằm trong khoảng giờ có dấu [HOOK] / CHỮ / [CTA] ghi đúng chữ đó; ảnh của cảnh trong khoảng giờ có B-ROLL tả đúng mô tả đó. Không tự nghĩ nội dung khác cho chỗ đã có dấu.
+
+` : ''}# Việc cần làm
 1. Mỗi cảnh S<i>: chọn thời điểm bắt đầu "c","w" = dòng/từ mà người nói bắt đầu nói tới nội dung của cảnh (cảnh mở đầu đặt ở câu đầu, cảnh kêu gọi/kết ở câu cuối). Giữ đúng thứ tự cảnh, không chồng nhau, "dur" 1.5–8 giây (gợi ý giữ gần độ dài hiện tại, cảnh cuối có thể kéo tới hết video).
 2. "texts": viết lại MỌI trường chữ bằng nội dung lấy từ lời thoại (tên sản phẩm, con số, ưu/nhược điểm, giá, lời kêu gọi… đúng như người nói nói; sửa lỗi chính tả). KHÔNG vượt số ký tự TỐI ĐA của trường (graphic thiết kế cho độ dài chữ mẫu, dài hơn sẽ bị cắt mất chữ) — thà viết gọn hơn mẫu, giữ kiểu viết HOA nếu mẫu viết hoa, giữ định dạng (dấu phẩy ngăn các mục, *nhấn*, \\n xuống dòng). Nếu lời thoại không nhắc tới thông tin đó thì viết nội dung chung hợp với chủ đề clip — KHÔNG để lại chữ mẫu như "Tên sản phẩm", "ví dụ", "mẫu".
 3. "images": với mỗi ẢNH, cho 2–4 từ khoá TIẾNG ANH để tìm ảnh stock minh hoạ đúng câu đang nói lúc đó. Từ khoá phải tả thứ CHỤP ĐƯỢC: người đang làm gì, đồ vật, nơi chốn (vd "woman editing video laptop", "hands typing keyboard", "office desk clock"); KHÔNG dùng từ trừu tượng hay khái niệm ("AI", "artificial intelligence", "success", "productivity", "growth") — muốn nói về AI thì tả cảnh như "robot hand laptop"; từ quan trọng nhất đặt trước. Ảnh không khớp sẽ bị bỏ, giữ ảnh mẫu.
@@ -205,6 +211,22 @@ Chỉ trả về DUY NHẤT một object JSON:
     prevEnd = s.t1;
   });
 
+  // 2b. dấu kịch bản → cảnh của mẫu (S17 M123): [HOOK] vào cảnh mở đầu, [CTA] vào cảnh cuối, CHỮ / B-ROLL vào cảnh trùng giờ nhiều nhất.
+  //     Chữ theo kịch bản, kiểu theo mẫu: chữ dấu thay ô chữ đầu tiên (các ô sau theo thứ tự), vẫn cắt theo độ dài ô.
+  const forced = new Map(), brollQ = new Map();
+  if (marks.length) {
+    const withText = info.filter(x => x.texts.some(t => !t.emoji)).sort((a, b) => a.s.t0 - b.s.t0), withImg = info.filter(x => x.imgs.length);
+    const ov = (x, m) => Math.min(x.s.t1, m.t1 + .5) - Math.max(x.s.t0, m.t0 - .5);
+    const best = (pool, m) => pool.reduce((a, x) => (ov(x, m) > (a ? ov(a, m) : 0) ? x : a), null);
+    const add = (x, text) => { if (x) forced.set(x.i, [...(forced.get(x.i) || []), text]); };
+    for (const m of marks) {
+      if (m.kind === 'hook') add(withText.find(x => !x.fixed) || withText[0], m.text);
+      else if (m.kind === 'cta') add(withText[withText.length - 1], m.text);
+      else if (m.kind === 'screen') add(best(withText.filter(x => x !== withText[withText.length - 1] || !marks.some(k => k.kind === 'cta')), m), m.text);
+      else if (m.kind === 'broll') { const x = best(withImg.filter(y => !brollQ.has(y.i)), m); if (x) brollQ.set(x.i, m.text); }
+    }
+  }
+
   // 3. texts ------------------------------------------------------------------------------
   say(.8, 'Viết lại chữ của mẫu theo lời thoại');
   const sentAt = t => sents.find(x => x.t1 > t + .05) || sents[sents.length - 1];
@@ -223,8 +245,10 @@ Chỉ trả về DUY NHẤT một object JSON:
     const pool = sents.filter(x => x.t1 > s.t0 && x.t0 < s.t1);
     let ws = wordsFrom(s.t0);
     if (ws.length < 6) ws = caps.flatMap(c => c.words.map(w => w.w)).slice(-40);
+    const mk = [...(forced.get(i) || [])];
     for (const t of texts) {
       let v = given[key(t.path)];
+      if (!t.emoji && mk.length) { v = mk.shift(); sum.script++; } // S17 M123: chữ của dấu kịch bản thắng chữ Claude / tự động
       if (t.emoji) { if (isEmoji(v)) { setP(s, t.path, v); sum.texts++; } continue; } // offline: emojis stay
       if (typeof v !== 'string' || !v.trim()) {
         const money = /đ|tr|tỷ|k\b|\$/i.test(t.ex), pct = /%/.test(t.ex);
@@ -244,11 +268,12 @@ Chỉ trả về DUY NHẤT một object JSON:
       else setP(s, t.path, v);
       sum.texts++;
     }
+    for (const m of mk) sum.missing.push(`dấu kịch bản “${String(m).slice(0, 40)}” (cảnh mẫu hết ô chữ)`); // S17 M123
   }
 
   // 4. images ----------------------------------------------------------------------------
   // A photo replaces a sample only when its title/tags contain the keywords (fit_images.mjs); otherwise the sample stays.
-  const want = info.flatMap(({ i, s, imgs }) => imgs.map(m => ({ s, m, q: byI.get(i)?.images?.[key(m.path)] || sentAt(s.t0)?.text || '' })));
+  const want = info.flatMap(({ i, s, imgs }) => imgs.map((m, k) => ({ s, m, q: (!k && brollQ.get(i)) || byI.get(i)?.images?.[key(m.path)] || sentAt(s.t0)?.text || '' })));
   if (want.length && !dry) {
     const vertical = (tl.height || 1920) > (tl.width || 1080), used = new Set(), hashes = mediaHashes(dir);
     let n = 0;

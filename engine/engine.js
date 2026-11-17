@@ -129,6 +129,7 @@ function reframePos(ox, oy, ar, boxAr, flip) {
   return [`${px.toFixed(2)}% ${py.toFixed(2)}%`, `${flip ? 50 : sx.toFixed(2)}% ${sy.toFixed(2)}%`];
 }
 function reframeCss(c, srcT) {
+  if (c.crop_manual && (!c.fit || c.fit === 'cover')) return `object-position:${c.ox ?? 50}% ${c.oy ?? 45}%;transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`; // S17 M124: khung cắt chỉnh tay đè bám mặt
   if (!c.reframe?.length || c.reframe_off || (c.fit && c.fit !== 'cover')) return '';
   const f = reframeAt(c.reframe, srcT), ar = c.ar || 16 / 9, [op, to] = reframePos(f.ox, f.oy, ar, FRAME_AR, c.flip);
   // --rf lets renderFrame() redo this for the real box when a module draws the clip in a card that is not full-frame
@@ -138,7 +139,7 @@ function reframeCss(c, srcT) {
 // (url(fmtSeq(TL.aroll.frames…)) with object-fit:cover and no object-position of their own, e.g. slate's frame_grid card).
 function fixReframe(stage, t) {
   const k = CLIPS.length ? clipAt(t) : null, c = k?.c;
-  const live = c && c.reframe?.length && !c.reframe_off && (!c.fit || c.fit === 'cover') && typeof c.src !== 'string';
+  const live = c && c.reframe?.length && !c.reframe_off && !c.crop_manual && (!c.fit || c.fit === 'cover') && typeof c.src !== 'string';
   const abs = p => new URL(url(p), document.baseURI).href;
   const srcs = live ? [abs(srcFrame(c, k.src)), c.cutouts ? abs(srcFrame(c, k.src, true)) : null] : [];
   for (const im of stage.querySelectorAll('img')) {
@@ -335,7 +336,21 @@ function sceneFx(s, html, t) {
   return html;
 }
 // Text lines with kf are moved after render (any module draws them; the line keeps its own entrance anim inside).
-let STAGE_WH = [720, 1280], KF_LINES = [];
+let STAGE_WH = [720, 1280], KF_LINES = [], ROT = [];
+// S17 M124: xoay tay (độ) cho cảnh, chữ graphic, node: obj.rot → CSS rotate (cộng với transform riêng của module, quanh tâm phần tử).
+// Cảnh tự đọc s.rot theo nghĩa riêng thì để module lo. cid được gán ở init() như KF_LINES nên render.mjs cũng xoay.
+const NATIVE_ROT = new Set(['stamp', 'ui_showcase', 'broll']);
+function collectRot(scenes) {
+  const has = o => o && Number.isFinite(+o.rot) && +o.rot !== 0, tag = (o, id) => Object.assign(o, { cid: o.cid || id });
+  return scenes.flatMap((s, i) => [
+    ...(has(s) && !NATIVE_ROT.has(s.type) ? [tag(s, `r${i}`)] : []),
+    ...(s.lines || []).filter(has).map((L, j) => tag(L, `r${i}l${j}`)),
+    ...(s.nodes || []).filter(has).map((n, j) => tag(n, `r${i}n${j}`)),
+  ]);
+}
+function applyRot(stage) {
+  for (const o of ROT) { const el = stage.querySelector(`[data-cid="${o.cid}"]`); if (el) el.style.rotate = `${(+o.rot).toFixed(2)}deg`; }
+}
 function applyLineKf(stage, t) {
   for (const L of KF_LINES) {
     const el = stage.querySelector(`[data-cid="${L.cid}"]`); if (!el) continue;
@@ -452,6 +467,7 @@ window.init = async (timeline) => {
     TL.aroll = { ...(TL.aroll || {}), frames: '@clip', cutouts: TL.clips.some(c => c.cutouts) ? '@cut' : undefined, count: Math.ceil(d * TL.fps) + 1 };
   } else CLIPS = [];
   KF_LINES = (TL.scenes || []).flatMap((s, i) => (s.lines || []).map((L, j) => (L.kf?.length ? Object.assign(L, { cid: L.cid || `kf${i}_${j}` }) : null))).filter(Boolean);
+  ROT = collectRot(TL.scenes || []);
   const stage = document.getElementById('stage');
   // Design space: 1280x720 landscape, 720x1280 vertical (TL.design overrides); output size = TL.width x TL.height.
   const vert = (TL.height || 720) > (TL.width || 1280);
@@ -494,6 +510,7 @@ window.renderFrame = async (t) => {
   fixReframe(stage, t);
   if (window.fitStage) fitStage(stage); // M94: .fit texts of pack modules shrink to their box (engine/fit.js)
   if (KF_LINES.length) applyLineKf(stage, t);
+  if (ROT.length) applyRot(stage);
   if (window.hfMount) await hfMount(stage, t); // HyperFrames blocks: live iframes beside #stage (engine/hf.js)
   // Chat panes and other .autoscroll boxes always show their newest content (deterministic per frame).
   for (const el of stage.querySelectorAll('.autoscroll')) el.scrollTop = el.scrollHeight;

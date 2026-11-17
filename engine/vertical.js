@@ -259,7 +259,7 @@ const VMOD = {
   hook_card(s, t, lt) {
     const c = { x: 50, y: 78, w: 620, h: 407, r: 38, ...(s.card || {}) };
     const ck = E.outBack(prog(t, s.card_t ?? s.t0, .35), 1.4);
-    const card = `<div class="abs" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;border-radius:${c.r}px;overflow:hidden;background:#fff;border:3px solid #111;
+    const card = `<div class="abs"${cidOf(s)} style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;border-radius:${c.r}px;overflow:hidden;background:#fff;border:3px solid #111;
       box-shadow:0 14px 34px rgba(0,0,0,.28);transform:translateY(${((1 - ck) * -60).toFixed(1)}px) scale(${lerp(.9, 1, ck).toFixed(3)});opacity:${clamp(ck * 2).toFixed(2)}">${screenContent(s.screen, t, c.w, c.h, s)}</div>`;
     const p = { dy: 450, z: 1, ...(s.speaker || {}) };
     const f = FACE();
@@ -270,7 +270,7 @@ const VMOD = {
   // Layout B — screen share: grid bg, face bubble (top), bordered screen card (bottom half).
   bubble_screen(s, t, lt) {
     const c = { x: 8, y: 545, w: 704, h: 455, ...(s.card || {}) };
-    const card = `<div class="abs" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;overflow:hidden;background:#fff;border:3px solid #0f0e0a;box-shadow:0 12px 30px rgba(60,0,0,.35)">
+    const card = `<div class="abs"${cidOf(s)} style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;overflow:hidden;background:#fff;border:3px solid #0f0e0a;box-shadow:0 12px 30px rgba(60,0,0,.35)">
       ${screenContent(s.screen, t, c.w - 6, c.h - 6, s)}</div>`;
     const body = gridBg(t, s) + card;
     const bubble = faceCircle(t, s, 'bubble');
@@ -313,7 +313,7 @@ const VMOD = {
   follow_cta(s, t, lt) {
     const y = s.y ?? 858, w = s.w ?? 306, h = s.h ?? 98;
     const k = E.outCubic(prog(lt, 0, .35)), tk = prog(lt, .25, .25);
-    const pill = `<div class="abs" style="left:${360 - w / 2}px;top:${y - h / 2}px;width:${w}px;height:${h}px;transform:scaleX(${lerp(.25, 1, k).toFixed(3)}) scaleY(${lerp(.6, 1, k).toFixed(3)});
+    const pill = `<div class="abs"${cidOf(s)} style="left:${360 - w / 2}px;top:${y - h / 2}px;width:${w}px;height:${h}px;transform:scaleX(${lerp(.25, 1, k).toFixed(3)}) scaleY(${lerp(.6, 1, k).toFixed(3)});
       background:#0b0b0b;border:3px solid #fff;border-radius:22px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;gap:16px;opacity:${clamp(lt / .08).toFixed(2)}">
       <div style="position:relative;width:52px;height:52px;border-radius:50%;background:radial-gradient(circle at 50% 36%,#f2f2f2 0 17%,transparent 18%),radial-gradient(ellipse 34% 26% at 50% 86%,#f2f2f2 0 98%,transparent 100%),#9a9a9a;opacity:${tk.toFixed(2)}">
         <div style="position:absolute;right:-4px;bottom:-4px;width:24px;height:24px;border-radius:50%;background:#22c55e;border:2px solid #0b0b0b;color:#fff;font-size:15px;line-height:20px;text-align:center;font-weight:900;transform:scale(${E.outBack(prog(lt, .6, .25), 2.5).toFixed(3)})">✓</div></div>
