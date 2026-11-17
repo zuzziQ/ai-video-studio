@@ -1,4 +1,4 @@
-// Author card shown every time the Studio opens (+ "Tác giả" chip next to the logo to see it again).
+// Author card shown every time the Studio opens (+ "Tác giả: Nguyễn Tất Kiểm" in the header ⋯ menu to see it again).
 // Required credit — see NOTICE / AGENTS.md: keep the author name and course link when modifying or redistributing.
 // M85: a small card in the bottom-right corner (above the timeline, clear of the top bar's "Xuất"), not a centred dialog:
 // it slides in, closes by itself after 3 s (the count pauses while the pointer or keyboard focus is on it), never blocks
@@ -69,14 +69,16 @@
     }
     document.body.appendChild(el);
   }
-  // "Tác giả" chip beside the logo
-  const logo = document.querySelector('.logo');
-  if (logo) {
+  // Nút "Tác giả" để xem lại màn này: mục "Tác giả: Nguyễn Tất Kiểm" trong menu ⋯ của thanh trên (01_workflow.js gọi
+  // Studio.showAuthor); thanh trên không còn logo để gắn chip. Thiếu menu (bản rút gọn) thì gắn chip vào đầu thanh trên.
+  setTimeout(() => {
+    if (document.querySelector('[data-wf="author"]')) return;
+    const top = document.querySelector('#top'); if (!top) return;
     const b = document.createElement('button');
     b.className = 'au-chip ui-chip'; b.title = `Tác giả: ${AUTHOR} · Tặng khoá học AI miễn phí`; b.innerHTML = '<i class="ti ti-user-heart"></i> Tác giả';
     b.onclick = () => show(false);
-    logo.appendChild(b);
-  }
+    top.prepend(b);
+  }, 3000);
   show(true);
   window.Studio && (Studio.showAuthor = () => show(false));
 })();

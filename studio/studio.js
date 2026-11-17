@@ -108,7 +108,8 @@ function touch(obj, key) {
   pushUndo(key ? obj.cid + key : '');
   if (!obj._orig) obj._orig = JSON.parse(JSON.stringify(obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
 }
-function markDirty() { dirty = true; $('#status').textContent = 'Chưa lưu'; $('#status').classList.add('dirty'); }
+const setStatus = (t, d) => { const s = $('#status'); s.textContent = t; s.title = d ? `${t} (⌘S để lưu)` : t; s.setAttribute('aria-label', t); s.classList.toggle('dirty', d); };
+function markDirty() { dirty = true; setStatus('Chưa lưu', true); }
 function changed(inspector = false) {
   markDirty();
   if (T > TL.duration) { T = TL.duration; $('#time').textContent = fmt(T); }
@@ -1136,7 +1137,7 @@ async function api(path, body) {
 async function saveNow() {
   if (newBusy) return; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
   const r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir }); // dir: server từ chối khi đã sang dự án khác (S17 M126)
-  if (r.ok) { dirty = false; $('#status').textContent = 'Đã lưu'; $('#status').classList.remove('dirty'); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); }
+  if (r.ok) { dirty = false; setStatus('Đã lưu', false); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); }
   else toast('Lỗi lưu: ' + (r.error || ''));
 }
 $('#save').addEventListener('click', saveNow);

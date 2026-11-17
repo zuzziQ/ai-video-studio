@@ -480,10 +480,10 @@
   Studio.logoColors = logoColors; // M91: ô Gợi ý bằng AI của panel Thương hiệu đo màu logo cùng một cách
   Studio.onboardingPurpose = async () => purpose((await loadState())?.purpose)?.[2] || '';
   Studio.openHome = openHome;
-  // Home button right after the logo (not addTopButton: 01_workflow moves step-less header buttons into the ⋯ menu).
+  // Home button first in the header (logo removed to save space) (not addTopButton: 01_workflow moves step-less header buttons into the ⋯ menu).
   { const b = document.createElement('button'); b.id = 'onb-btn'; b.className = 'icon'; b.title = 'Trang chủ: cách bắt đầu nhanh, dự án gần đây, hướng dẫn';
     b.setAttribute('aria-label', 'Trang chủ'); b.innerHTML = '<i class="ti ti-home"></i>'; b.addEventListener('click', openHome);
-    const logo = document.querySelector('#top .logo'); if (logo) logo.after(b); else Studio.addTopButton(b.outerHTML, openHome); }
+    const top = document.querySelector('#top'); if (top) top.prepend(b); else Studio.addTopButton(b.outerHTML, openHome); }
   Studio.onReady(() => {
     let pid = null; try { pid = sessionStorage.getItem('avs-onb-tpl'); sessionStorage.removeItem('avs-onb-tpl'); } catch { /* không có sessionStorage */ }
     if (pid) openTemplates(pid === '-' ? '' : pid);
