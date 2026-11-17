@@ -1,5 +1,5 @@
 // Lịch sử xuất của dự án (S14 M112, docs/plans/S14-xuat-cot-phai-diem.md; dữ liệu và hàm đọc: scripts/exports_log.mjs).
-//   GET  /api/exports               → { os: 'win'|'mac'|'linux', items: bản xuất mới → cũ (exportsView) }
+//   GET  /api/exports               → { os: 'win'|'mac'|'linux', items: bản xuất mới → cũ (exportsView), edited: mtime timeline.json (M113) }
 //                                     Job xuất vừa xong mà chưa ghi (tab bị đóng, trang bị thay) thì ghi luôn ở đây.
 //                                     Dự án chưa có exports.json: nhặt video cũ trong out/ (legacy).
 //   POST /api/exports/record {quality?, from?, to?} → ghi job xuất vừa xong (giao diện gọi khi pollJob báo done) → { ok, item }
@@ -55,7 +55,9 @@ export default ctx => {
     if (p === '/api/exports' && req.method === 'GET') {
       await recordJob(dir).catch(e => console.error('exports:', e.message));
       if (!hasLog(dir)) await seedFromOut(dir).catch(e => console.error('exports seed:', e.message));
-      return J({ os: OS, items: view() });
+      // M113: lần lưu cuối của timeline, cột phải so với bản xuất gần nhất ("đã sửa sau lần xuất này")
+      let edited = null; try { edited = fs.statSync(path.join(dir, 'timeline.json')).mtime.toISOString(); } catch { /* dự án chưa lưu */ }
+      return J({ os: OS, items: view(), edited });
     }
     if (req.method !== 'POST') return false;
     const b = await ctx.body(req);
