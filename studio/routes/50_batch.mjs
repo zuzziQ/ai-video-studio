@@ -58,7 +58,7 @@ export default ctx => {
     const focus = Math.max(0, all.findIndex(r => r.state === 'running') >= 0 ? all.findIndex(r => r.state === 'running') : all.findIndex(r => r.state !== 'done'));
     const pg = page == null ? null : Math.min(pages - 1, Math.max(0, page === 'auto' ? Math.floor(focus / size) : +page || 0));
     const rows = pg == null ? all : all.slice(pg * size, pg * size + size);
-    return { ...st, count: n, counts: counts(all), page: pg, pages, size, rows: rows.map(r => ({ ...r, url: r.out && r.state === 'done' ? '/project/' + rel(r.out) : null, rdir: r.dir ? rel(r.dir) : null, rout: r.out ? rel(r.out) : null })) };
+    return { ...st, count: n, counts: counts(all), page: pg, pages, size, rows: rows.map(r => ({ ...r, url: r.out && r.state === 'done' ? ctx.purl(rel(r.out)) : null, rdir: r.dir ? rel(r.dir) : null, rout: r.out ? rel(r.out) : null })) };
   };
   const runningHere = dir => ctx.job?.kind === 'batch' && ctx.job.state === 'running' && CTRL.dir === dir;
   const writeJob = (dir, b) => {
@@ -109,7 +109,7 @@ export default ctx => {
         execFile('node', [BATCH, '--job', jf, '--preview', String(b.row || 0), '--t', String(b.t ?? 2.5), '--out', out], { maxBuffer: 1 << 24, timeout: 180000 }, (e, so, se) => {
           if (e) return ctx.json(res, { error: ((se || '') + (so || '')).split('\n').filter(l => l && !l.startsWith('@@')).slice(-3).join(' ') || e.message }, 500);
           let r; try { r = JSON.parse(so.trim().split('\n').pop()); } catch { return ctx.json(res, { error: 'Bản xem trước không trả kết quả: ' + so.slice(-200) }, 500); }
-          ctx.json(res, { img: '/project/' + rel(out), t: r.t, duration: r.duration });
+          ctx.json(res, { img: ctx.purl(rel(out)), t: r.t, duration: r.duration });
         });
       } catch (e) { ctx.json(res, { error: e.message }, 400); }
       return true;

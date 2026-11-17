@@ -121,7 +121,7 @@
         const t0 = it.t0 || 0, t1 = t0 + itemLen(it);
         if (T < t0 || T >= t1) continue;
         live.add(it);
-        let a = els.get(it); if (!a) els.set(it, (a = new Audio('/project/' + it.file)));
+        let a = els.get(it); if (!a) els.set(it, (a = new Audio(Studio.purl('') + it.file)));
         a.volume = Math.min(1, Math.pow(10, ((it.gain || 0) + (t.gain || 0)) / 20));
         const want = (it.in || 0) + T - t0;
         if (a.paused || Math.abs(a.currentTime - want) > .3) { a.currentTime = want; a.play().catch(() => {}); }
@@ -168,7 +168,7 @@
       </section>
       <section><div class="sh"><i class="ti ti-player-play"></i>Trộn thử</div>
         <div class="acts ap-flush"><button data-mix="1"><i class="ti ti-adjustments-alt"></i> Lưu & trộn (-14 LUFS)</button></div>
-        ${S.META.mixed ? `<audio controls src="/project/${esc(S.META.mixed)}"></audio>` : '<div class="help">Trộn đúng như khi xuất (giọng sạch, hạ nhạc, track phụ) để nghe trước.</div>'}
+        ${S.META.mixed ? `<audio controls src="${Studio.pbase}${esc(S.META.mixed)}"></audio>` : '<div class="help">Trộn đúng như khi xuất (giọng sạch, hạ nhạc, track phụ) để nghe trước.</div>'}
       </section></div>
       <input type="file" id="xaup" hidden accept="audio/*,video/*">`;
     $('#libbody').querySelectorAll('.trk[data-ci]').forEach(el => el.style.setProperty('--c', COLORS[+el.dataset.ci]));
@@ -194,7 +194,7 @@
     if (abEl && abEl.dataset.k === k && !abEl.paused) { abEl.pause(); return rerender(); }
     const at = abEl && !abEl.paused ? abEl.currentTime : 0;
     abEl?.pause();
-    abEl = new Audio('/project/' + ab[k] + '?' + Date.now()); abEl.dataset.k = k; abEl.currentTime = at;
+    abEl = new Audio(Studio.purl('') + ab[k] + '?' + Date.now()); abEl.dataset.k = k; abEl.currentTime = at;
     abEl.onended = abEl.onpause = rerender; abEl.play().catch(() => {}); rerender();
   }
   async function addFile(i, file) {

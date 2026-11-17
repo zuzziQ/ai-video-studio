@@ -7,6 +7,8 @@ let DW = 720, DH = 1280; const FPS = 30;
 
 let TL = null, CAP = [], META = {}, LIB = { sfx: [], music: [] }, WAVE = [];
 let T = 0, playing = false, sel = null, comps = [], dirty = false, undoStack = [], redoStack = [];
+// S18 M129: gốc URL file của dự án trong tab này (/p/<mã tab>/ do server cấp; chưa nạp thì /project/ = dự án mặc định)
+const PB = () => META?.base || '/project/';
 let multi = [], guides = null; // S17 M124: element chọn thêm bằng Shift (sel là element chính); đường gióng khi kéo
 let query = '', K = .5, win = null, needInit = true, busy = false, pending = false, SNAP = true;
 const ITAB = {};
@@ -124,7 +126,7 @@ function changed(inspector = false) {
 // ---------- preview ----------
 function previewTL() {
   const o = JSON.parse(JSON.stringify(TL));
-  o.captions = JSON.parse(JSON.stringify(CAP)); o.base = '/project/'; o.width = DW; o.height = DH;
+  o.captions = JSON.parse(JSON.stringify(CAP)); o.base = PB(); o.width = DW; o.height = DH;
   if (o.aroll) o.aroll.count = META.frames || undefined;
   // Track "hide" toggles only affect the preview, never the saved timeline.
   if (TRK.video.hide) for (const c of o.clips || []) c.filter = { ...(c.filter || {}), brightness: 0 };
@@ -1018,7 +1020,7 @@ let musicEls = [], lastT = 0, clock0 = 0, curClip = -1;
 const clipAud = new Map();
 // Preview from the AAC copy the server extracts (browsers play iPhone .mov audio silently); export keeps the original.
 const previewSrc = src => (typeof MEDIA !== 'undefined' && MEDIA.find(m => m.path === src)?.preview_audio) || src;
-const audFor = src => { const p = previewSrc(src); if (!clipAud.has(p)) clipAud.set(p, Object.assign(new Audio('/project/' + p), { preload: 'auto' })); return clipAud.get(p); };
+const audFor = src => { const p = previewSrc(src); if (!clipAud.has(p)) clipAud.set(p, Object.assign(new Audio(PB() + p), { preload: 'auto' })); return clipAud.get(p); };
 // Main-track audio follows the clips: right source time, speed (pitch kept), volume, mute.
 function syncClipAudio(force) {
   let want = null;
@@ -1051,7 +1053,7 @@ function play() {
   playing = true; setPlayIcon(); lastT = T; clock0 = performance.now() / 1000 - T;
   if (useClipAudio()) syncClipAudio(true);
   else if (META.audio) { voice.currentTime = T; voice.play().catch(() => {}); }
-  musicEls = TRK.audio.hide ? [] : (TL.audio?.music || []).filter(m => !m.hidden).map(m => ({ m, el: Object.assign(new Audio(m.file ? '/project/' + m.file : `/assets/music/${m.mood}.mp3`), { loop: true, volume: dbVol((m.gain ?? -16) + 4) }) }));
+  musicEls = TRK.audio.hide ? [] : (TL.audio?.music || []).filter(m => !m.hidden).map(m => ({ m, el: Object.assign(new Audio(m.file ? PB() + m.file : `/assets/music/${m.mood}.mp3`), { loop: true, volume: dbVol((m.gain ?? -16) + 4) }) }));
   nextFrame(tick);
 }
 function stop() {
@@ -1193,7 +1195,7 @@ $('#export').addEventListener('click', () => {
     <div class="acts acts--spaced"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
     <p class="muted">Âm thanh được trộn lại (giọng + nhạc + SFX, chuẩn −14 LUFS) rồi render từng khung bằng đúng engine của preview.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="xgo"><i class="ti ti-upload"></i> Xuất</button></div>`);
-  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T, deliver: $('#xgive').checked }); if (r.out) { window.open('/project/' + r.out); api('/api/reveal', { path: r.out }); if (giveNote(r)) toast('Ảnh bìa' + giveNote(r)); } else toast('Lỗi: ' + r.error); };
+  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T, deliver: $('#xgive').checked }); if (r.out) { window.open(PB() + r.out); api('/api/reveal', { path: r.out }); if (giveNote(r)) toast('Ảnh bìa' + giveNote(r)); } else toast('Lỗi: ' + r.error); };
   $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', { deliver: $('#xgive').checked }); toast('Đã lưu ' + r.out + giveNote(r)); api('/api/reveal', { path: r.out }); };
   $('#xgive').onchange = e => giveSet(e.target.checked);
   $('#xgo').onclick = async () => {
@@ -1208,7 +1210,7 @@ $('#export').addEventListener('click', () => {
       if (j.state !== 'done') return modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
       // S14 M112: ghi .studio/exports.json + hộp Xuất xong có trình phát trong Studio (features/55_exports.js); không có thì hộp cũ
       if (Studio.exports && await Studio.exports.done(j, xo).catch(() => false)) return;
-      modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="/project/${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}${j.delivered?.length ? `<p class="muted"><i class="ti ti-package"></i> Đã giao ${j.delivered.length} file vào Thành phẩm: ${j.delivered.map(f => esc(f.split(/[\\/]/).pop())).join(', ')}</p>` : j.deliverError ? `<p class="ui-text-warn"><i class="ti ti-alert-triangle"></i> Chưa giao được vào Thành phẩm: ${esc(j.deliverError)}</p>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> ${/Mac/.test(navigator.platform) ? 'Hiện trong Finder' : 'Hiện trong thư mục'}</button>${j.delivered?.length ? `<button id="xkho"><i class="ti ti-package"></i> Mở Thành phẩm</button>` : ''}<a href="/project/${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
+      modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="${PB()}${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}${j.delivered?.length ? `<p class="muted"><i class="ti ti-package"></i> Đã giao ${j.delivered.length} file vào Thành phẩm: ${j.delivered.map(f => esc(f.split(/[\\/]/).pop())).join(', ')}</p>` : j.deliverError ? `<p class="ui-text-warn"><i class="ti ti-alert-triangle"></i> Chưa giao được vào Thành phẩm: ${esc(j.deliverError)}</p>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> ${/Mac/.test(navigator.platform) ? 'Hiện trong Finder' : 'Hiện trong thư mục'}</button>${j.delivered?.length ? `<button id="xkho"><i class="ti ti-package"></i> Mở Thành phẩm</button>` : ''}<a href="${PB()}${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
       if ($('#xkho')) $('#xkho').onclick = () => api('/api/thanhpham/open', { path: j.delivered[0] }).then(r => r.ok || toast(r.error || 'Không mở được Thành phẩm'));
     });
   };
@@ -1357,7 +1359,7 @@ window.addEventListener('resize', fit);
 // ---------- feature API (studio/features/*.js) ----------
 // Features are plain scripts loaded after boot; they read/mutate TL/CAP through this object and call changed() after edits.
 const Studio = window.Studio = {
-  get TL() { return TL; }, set TL(v) { TL = v; }, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
+  get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
   $, esc, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),
@@ -1373,20 +1375,46 @@ const Studio = window.Studio = {
   addInspectorTab(fn) { Studio._insp.push(fn); },
   onReady(fn) { if (Studio._isReady) fn(); else Studio._ready.push(fn); },
   // reload project from disk (after a server-side job rewrote timeline.json)
-  async reload() { const p = await api('/api/project'); TL = p.timeline; CAP = p.captions; META = p.meta; TL.scenes = TL.scenes || []; migrateClips(); needInit = true; build(); renderTimeline(); renderInspector(); renderPanel(); draw(); $('#durtc').textContent = '/ ' + fmt(TL.duration); if (META.audio) voice.src = '/project/' + META.audio + '?' + Date.now(); WAVE = await api('/api/waveform'); renderTimeline(); },
+  async reload() { const p = await api('/api/project'); TL = p.timeline; CAP = p.captions; META = p.meta; TL.scenes = TL.scenes || []; migrateClips(); needInit = true; build(); renderTimeline(); renderInspector(); renderPanel(); draw(); $('#durtc').textContent = '/ ' + fmt(TL.duration); if (META.audio) voice.src = PB() + META.audio + '?' + Date.now(); WAVE = await api('/api/waveform'); renderTimeline(); },
 };
 // All feature scripts download in parallel; async=false keeps them executing in file order.
 async function loadFeatures() {
   await Promise.all((await api('/api/features')).map(f => new Promise(ok => { const s = document.createElement('script'); s.async = false; s.src = '/studio/features/' + f; s.onload = s.onerror = ok; document.body.appendChild(s); })));
 }
+// S18 M129: trạng thái giao diện từng tab (playhead, zoom timeline, cuộn, panel trái, element đang chọn, hoàn tác / làm lại),
+// giữ khi chuyển tab (trang tải lại với ?p=<mã>) hoặc tải lại trang. sessionStorage: riêng cửa sổ trình duyệt, mất khi đóng cửa sổ.
+const tabKey = () => (META?.pid ? 'avs.tabui.' + META.pid : null);
+function saveTabUI() {
+  const k = tabKey(); if (!k || !TL) return;
+  const ui = { t: T, pps: PPS, sx: $('#tlscroll')?.scrollLeft || 0, panel: document.querySelector('#rail .on')?.dataset.p || '', sel: sel?.obj?.cid || null, at: Date.now() };
+  for (const n of [30, 10, 0]) { // hoàn tác lớn quá chỗ thì giữ ít bước hơn, cuối cùng chỉ giữ vị trí
+    try { sessionStorage.setItem(k, JSON.stringify({ ...ui, undo: undoStack.slice(-n), redo: redoStack.slice(-n), saved: META.saved })); return; } catch { /* đầy */ }
+  }
+}
+function loadTabUI() {
+  const k = tabKey(); if (!k) return;
+  let ui = null; try { ui = JSON.parse(sessionStorage.getItem(k) || 'null'); } catch { /* không có sessionStorage */ }
+  if (!ui) return;
+  // hoàn tác chỉ dùng lại khi timeline trên đĩa vẫn là bản tab này đã thấy (không bị tab / cửa sổ khác sửa)
+  if (ui.saved === META.saved && Array.isArray(ui.undo)) { undoStack = ui.undo.filter(x => typeof x === 'string'); redoStack = (ui.redo || []).filter(x => typeof x === 'string'); }
+  if (ui.panel) document.querySelector(`#rail [data-p="${CSS.escape(ui.panel)}"]`)?.click();
+  if (+ui.pps > 0) setZoom(+ui.pps);
+  if (ui.sel) { const c = compByCid(ui.sel); if (c) select(c); }
+  if (+ui.t >= 0) setTime(Math.min(+ui.t, TL.duration || 0));
+  requestAnimationFrame(() => { const sc = $('#tlscroll'); if (sc && +ui.sx >= 0) sc.scrollLeft = +ui.sx; });
+}
+window.addEventListener('pagehide', saveTabUI);
 async function boot() {
   renderRail();
   const proj = fetch('/api/project'), lib = api('/api/library').catch(() => ({ sfx: [], music: [] }));
   await loadFeatures().catch(e => console.error(e));
   const r = await proj;
+  // S18 M129: tab của địa chỉ này đã đóng (hay bị đẩy ra khi quá 8 tab) → mở dự án mặc định thay vì báo lỗi
+  if (r.status === 409 && window.avsProject?.id) { location.replace(window.avsProject.url('')); return; }
   if (!r.ok) { modal(`<h3>Chưa mở dự án</h3><p>Chạy <code>node studio/server.mjs &lt;thư mục dự án&gt;</code> hoặc bấm “Video mới”.</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`); return; }
   const p = await r.json();
   TL = p.timeline; CAP = p.captions; META = p.meta;
+  if (META.pid) window.avsProject?.set(META.pid); // S18 M129: mã tab lên thanh địa chỉ, các request sau mang X-AVS-Project
   TL.scenes = TL.scenes || [];
   if ((TL.width || 1080) > (TL.height || 1920)) { DW = 1280; DH = 720; SAFE = { x: 60, y: 40, w: 1160, h: 620 }; document.body.classList.add('landscape'); }
   migrateClips();
@@ -1394,7 +1422,7 @@ async function boot() {
   { const k = $('#pkho'); if (k && META.kho) { k.hidden = false; k.textContent = 'Kho ' + (META.kho.brand ? META.kho.title : 'Chung'); k.title = `${khoLabel(META.kho)}\n${META.kho.root}\n${META.dir}`; } }
   for (const a of ['#aspect', '#aspect2']) $(a).textContent = DW > DH ? '16:9' : '9:16';
   $('#durtc').textContent = '/ ' + fmt(TL.duration);
-  if (META.audio) voice.src = '/project/' + META.audio;
+  if (META.audio) voice.src = PB() + META.audio;
   // The waveform can take ffmpeg a few seconds on a new project: draw the editor first, add the wave when it arrives.
   LIB = await lib;
   api('/api/waveform').then(w => { WAVE = Array.isArray(w) ? w : []; renderTimeline(); }).catch(() => {});
@@ -1405,7 +1433,7 @@ async function boot() {
   const ready = () => {
     win = f.contentWindow; needInit = true; FLU = null; build(); renderPanel(); renderTimeline(); renderInspector(); draw();
     MEDIA_LOAD();
-    if (!Studio._isReady) { Studio._isReady = true; Studio._ready.splice(0).forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
+    if (!Studio._isReady) { Studio._isReady = true; loadTabUI(); Studio._ready.splice(0).forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
     // S16 M118: chỉ áp công thức gói lên bản khởi tạo còn nguyên; timeline đã có cảnh máy dựng (Tự lái, AI dựng, b-roll, QC)
     // hoặc SFX thì bỏ _starter trong bộ nhớ, không áp lại, không lưu (lưu sẽ coi bản xuất là cũ).
     if (TL._starter) {
