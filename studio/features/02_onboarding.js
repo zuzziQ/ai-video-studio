@@ -4,7 +4,7 @@
 //   S12/M97: Kho của thương hiệu vừa lưu, không cần dự án đang mở)
 //   + /api/products/save (53_products); (c) Mục đích → /api/onboarding (02_onboarding.mjs).
 //   Bước (a) có "Gợi ý bằng AI" (trợ lý brand), bước (b) có "Điền bằng AI" (trợ lý product): 05_assist.js, M91. Chỉ ghi khi bấm Nhận.
-// - Trang chủ (#onb-home): 4 cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Tự lái, Video mới + Mẫu, Video dài, Hàng loạt)
+// - Trang chủ (#onb-home): 4 cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Tự lái, Video mới + Mẫu, Cắt clip từ video dài, Hàng loạt)
 //   + dự án gần đây. Tự hiện khi chưa mở dự án; nút nhà trên thanh trên mở lại. Studio.openOnboarding() / Studio.openHome().
 'use strict';
 (() => {
@@ -421,7 +421,7 @@
       ${ST?.project ? '<button class="ghost" data-h="close" title="Về trình chỉnh sửa (Esc)"><i class="ti ti-x"></i> Đóng</button>' : ''}</div>
       <div class="cards">${card('auto', 'ti-rocket', 'Thả video → video hoàn chỉnh', 'Thả video quay sẵn, AI tự cắt, thêm phụ đề, hiệu ứng, nhạc và xuất video.', 'Tự lái')}
         ${card('tpl', 'ti-layout-grid', 'Dựng theo mẫu', 'Chọn một mẫu đẹp sẵn rồi thay chữ, ảnh, video của bạn.', p ? `Gợi ý cho ${p[2]}` : 'Gần 90 mẫu theo lĩnh vực')}
-        ${card('long', 'ti-scissors', 'Video dài → clip ngắn', 'Đưa video dài (livestream, podcast, buổi học), AI chọn đoạn hay làm clip ngắn.', 'Video dài')}
+        ${card('long', 'ti-scissors', 'Cắt clip từ video dài', 'Đưa video dài (livestream, podcast, buổi học), AI chọn đoạn hay làm clip ngắn.', 'Cắt clip')}
         ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ một file Excel hoặc CSV, làm nhiều video cùng mẫu trong một lần.', 'Hàng loạt')}</div>
       <h3>Dự án gần đây</h3><div class="rec">${rec.length ? rec.map(r => `<button data-r="${r.i}" ${r.current ? 'disabled' : ''}><i class="ti ti-folder"></i><span class="nm">${esc(r.name)}</span><small>${r.current ? 'đang mở' : esc(r.parent)}${r.t && !r.current ? ' · ' + esc(fmtDay(r.t)) : ''}</small></button>`).join('')
         : '<div class="empty">Chưa có dự án nào. Bắt đầu bằng một trong 4 cách ở trên.</div>'}</div>

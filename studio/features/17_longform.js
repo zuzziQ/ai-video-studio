@@ -1,4 +1,4 @@
-// "Video dài / Chủ đề": video dài → nhiều clip ngắn (scripts/highlights.mjs) · chủ đề → video không cần quay (scripts/topic_video.mjs).
+// "Cắt clip từ video dài" (S13 M107, trước là "Video dài") / Chủ đề: video dài → nhiều clip ngắn (scripts/highlights.mjs) · chủ đề → video không cần quay (scripts/topic_video.mjs).
 // Server: studio/routes/17_longform.mjs (references/longform-topic.md). "Tự lái tất cả" uses the Tự lái queue (/api/autopilot/enqueue) when present.
 'use strict';
 (() => {
@@ -54,7 +54,7 @@
     const body = $('#libbody'); if (!body) return;
     const BR = S.brands || [];
     body.innerHTML = `<label class="lf-lbl">Thương hiệu (Kho lấy video và lưu kết quả)</label><select id="lf-brand"><option value="">Chung (không thương hiệu)</option>${BR.map(b => `<option value="${esc(b.id)}" ${b.id === S.brand ? 'selected' : ''}>${esc(b.title || b.name || b.id)}</option>`).join('')}</select>
-      <div class="seg" id="lf-tabs"><button data-t="long" class="${S.tab === 'long' ? 'on' : ''}"><i class="ti ti-scissors"></i> Video dài</button>
+      <div class="seg" id="lf-tabs"><button data-t="long" class="${S.tab === 'long' ? 'on' : ''}"><i class="ti ti-scissors"></i> Cắt clip</button>
       <button data-t="topic" class="${S.tab === 'topic' ? 'on' : ''}"><i class="ti ti-bulb"></i> Chủ đề</button></div>
       <div id="lf-body">${S.tab === 'long' ? longHTML() : topicHTML()}</div>`;
     body.querySelectorAll('#lf-tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.t; LSset('tab', S.tab); render(); });
@@ -190,5 +190,5 @@
     progress('Đang tạo video từ chủ đề…', async j => { Studio.closeModal(); S.topicOut = j.out; await refresh(); Studio.toast('Đã tạo video'); });
   }
 
-  Studio.addPanel('longform', 'ti-scissors', 'Video dài', () => { render(); refresh(); });
+  Studio.addPanel('longform', 'ti-scissors', 'Cắt clip từ video dài', () => { render(); refresh(); });
 })();
