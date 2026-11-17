@@ -11,6 +11,7 @@ import { findChrome } from './platform.mjs';
 import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
 import { faceZone } from './face_track_project.mjs';
 import { safeOf, designOf } from './ai_qc.mjs'; // ai_qc runs its CLI only when executed directly; Chrome opens only in placePlan
+import { readScript, scriptMarks, scriptPrompt, markMissing } from './script_doc.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -72,7 +73,7 @@ function compact(o, top = true) {
 }
 const usesMedia = ex => /"(?:src|media|image)":""|"(?:media|broll|ui)\/[^"]+\.(?:jpe?g|png|mp4)"|"src":"media\//.test(JSON.stringify(ex));
 
-export function buildPrompt({ tl, caps, cat, lib, o }) {
+export function buildPrompt({ tl, caps, cat, lib, o, script }) {
   const vertical = (tl.height || 1920) > (tl.width || 1080);
   const keep = o.pack && o.pack !== 'auto';
   const want = keep ? (o.pack === 'keep' ? tl.pack || 'slate' : o.pack) : null;
@@ -92,13 +93,25 @@ export function buildPrompt({ tl, caps, cat, lib, o }) {
   const [DW, DH] = designOf(tl), SF = safeOf(tl), pc = (v, d) => Math.round(v / d * 100);
   const safe = `Vùng an toàn để đặt chữ (ngoài vùng này bị nút / mô tả của app che): x ${pc(SF.x, DW)}–${pc(SF.x + SF.w, DW)}%, y ${pc(SF.y, DH)}–${pc(SF.y + SF.h, DH)}%. Phụ đề nằm ở phần dưới khung (khoảng y ${vertical ? '62–80' : '75–92'}%).`;
   const layout = (fz ? `Mặt người nói nằm khoảng x ${fz.x0}–${fz.x1}%, y ${fz.y0}–${fz.y1}% của khung (tính từ góc trên trái). ` : 'Không dò được mặt người nói. ') + safe;
+  // S17 M123: kịch bản có sẵn của người dùng — nội dung và dấu của nó thắng việc tự nghĩ
+  const scr = script ? `
+# Kịch bản của người dùng (phụ đề đã đúng NGUYÊN VĂN kịch bản; mỗi đoạn Đ có giờ đã khớp lời nói)
+${scriptPrompt(script)}
+LUẬT KỊCH BẢN (bắt buộc, thắng các mục bên dưới khi mâu thuẫn): mẫu/gói quyết định GIAO DIỆN (bố cục, màu, kiểu chữ, hiệu ứng), kịch bản quyết định NỘI DUNG.
+- Đoạn [HOOK]: "hook" lấy đúng chữ CHỮ của đoạn đó (không có thì rút gọn lời của đoạn), không tự nghĩ câu khác.
+- Mỗi dòng CHỮ: một cảnh graphic chữ bắt đầu trong khoảng giờ của đoạn đó, ghi ĐÚNG nguyên văn chữ đó (chỉ rút gọn khi dài hơn ô cho phép).
+- Mỗi dòng B-ROLL: một cảnh b-roll / hình minh hoạ trong khoảng giờ của đoạn đó, chủ đề khớp mô tả.
+- Đoạn [CTA]: cảnh cuối là CTA/kết, chữ lấy từ đoạn CTA.
+- Trong khoảng giờ của đoạn đã có dấu, KHÔNG thêm graphic chữ khác do bạn tự nghĩ. Đoạn không dấu thì dựng như bình thường.
+- KHÔNG sửa chữ phụ đề ("captions" chỉ dùng để đặt "hl" / "br", giữ nguyên "words").
+` : '';
   return `Bạn là editor video ngắn tiếng Việt chuyên nghiệp. Hãy lên bản dựng cho video người nói (talking-head) ${vertical ? 'dọc 9:16' : 'ngang 16:9'}, dài ${tl.duration}s.
 Mục tiêu video: ${o.goal || 'khác'}. Giọng điệu: ${o.tone || 'tự nhiên'}. Mật độ graphic: ${n[0]}–${n[1]} cảnh.${o.extra ? `\nYêu cầu thêm của người dùng: ${o.extra}` : ''}
 Brand: ${JSON.stringify(tl.brand || {})}
 
-# Lời thoại (mỗi dòng là một phụ đề C<chỉ số> [giây bắt đầu–kết thúc], từng từ dạng <chỉ số từ>:<từ>; giọng nói nhận dạng tự động nên có thể sai chính tả)
+# Lời thoại (mỗi dòng là một phụ đề C<chỉ số> [giây bắt đầu–kết thúc], từng từ dạng <chỉ số từ>:<từ>; ${script ? 'chữ theo kịch bản của người dùng' : 'giọng nói nhận dạng tự động nên có thể sai chính tả'})
 ${transcript}
-
+${scr}
 # Gói style ${keep ? `(BẮT BUỘC dùng gói "${want}")` : '(chọn 1 gói hợp nhất với nội dung)'}
 ${packList}
 Tham khảo mẫu có sẵn (tên mẫu → gói): ${tpl}
@@ -274,7 +287,7 @@ export function inventedNumbers(scene, said) {
   walk(scene);
   return bad;
 }
-export function validate(raw, { tl, caps, cat, lib, o }) {
+export function validate(raw, { tl, caps, cat, lib, o, script }) {
   const dropped = [], cuts = []; // cuts: graphic text cut to fit (S13 · M111, shortenCuts)
   const dur = tl.duration;
   const keep = o.pack && o.pack !== 'auto';
@@ -293,7 +306,8 @@ export function validate(raw, { tl, caps, cat, lib, o }) {
     const i = +e.c, cap = caps[i];
     if (!cap || !Array.isArray(e.words) || e.words.length !== cap.words.length) { dropped.push(`phụ đề C${e.c}: sai số từ`); continue; }
     const hl = new Set((e.hl || []).map(Number)), br = new Set((e.br || []).map(Number));
-    const words = e.words.map((w, j) => ({ w: String(w ?? '').trim().slice(0, 24), ...(hl.has(j) ? { hl: true } : {}), ...(br.has(j) && j < e.words.length - 1 ? { br: true } : {}) }));
+    // S17 M123: phụ đề theo kịch bản giữ nguyên chữ, chỉ nhận nhấn từ (hl) và xuống dòng (br)
+    const words = e.words.map((w, j) => ({ w: script ? cap.words[j].w : String(w ?? '').trim().slice(0, 24), ...(hl.has(j) ? { hl: true } : {}), ...(br.has(j) && j < e.words.length - 1 ? { br: true } : {}) }));
     if (words.every(w => !w.w)) { dropped.push(`phụ đề C${i}: rỗng`); continue; }
     capOut.push({ i, t0: cap.t0, n: cap.words.length, words });
   }
@@ -341,8 +355,14 @@ export function validate(raw, { tl, caps, cat, lib, o }) {
     if (!name || t == null || t >= dur) { dropped.push(`SFX "${x.name}" không hợp lệ`); continue; }
     sfx.push({ t: r2(Math.max(0, t - .05)), name, gain: -12, _ai: true });
   }
-  const hook = String(raw.hook || '').slice(0, 60);
-  return { pack, caption_style, hook, captions: capOut, scenes: [...base, ...scenes], music, sfx, summary: String(raw.summary || '').slice(0, 400), dropped, cuts, created: new Date().toISOString() };
+  const marks = script ? scriptMarks(script) : [], hookMark = marks.find(m => m.kind === 'hook');
+  const cut60 = s => { s = String(s).trim(); if (s.length <= 60) return s; const w = s.slice(0, 61).split(/\s+/); w.pop(); return w.join(' ') || s.slice(0, 60); };
+  const hook = hookMark ? cut60(hookMark.text) : String(raw.hook || '').slice(0, 60); // S17 M123: hook theo [HOOK] của kịch bản
+  // S17 M123: dấu của kịch bản chưa có cảnh tương ứng → ghi lại (QC báo "dấu kịch bản chưa đặt")
+  const miss = script ? markMissing(marks, [...base, ...scenes], { strings: sceneStrings, title: hook }) : [];
+  for (const m of miss) dropped.push(`kịch bản: dấu ${m.kind === 'broll' ? 'B-ROLL' : m.kind === 'screen' ? 'CHỮ' : m.kind.toUpperCase()} “${String(m.text).slice(0, 40)}” @${m.t0}s chưa có cảnh`);
+  return { pack, caption_style, hook, captions: capOut, scenes: [...base, ...scenes], music, sfx, summary: String(raw.summary || '').slice(0, 400), dropped, cuts, created: new Date().toISOString(),
+    ...(script ? { script: { marks: marks.length, missing: miss.map(m => ({ kind: m.kind, text: m.text, t0: m.t0 })) } } : {}) };
 }
 
 // Apply a plan: earlier AI items (and untouched recipe items) are replaced; anything the user edited (_orig) or added stays.
@@ -376,7 +396,8 @@ async function main() {
   say(.05, 'Đọc danh sách gói style từ engine');
   const cat = await engineCatalog(tl, caps, dir);
   const lib = libraries();
-  const ctx = { tl, caps, cat, lib, o };
+  const sc = readScript(dir), script = sc?.align ? sc : null; // S17 M123: chỉ kịch bản đã căn với phụ đề
+  const ctx = { tl, caps, cat, lib, o, script };
   const prompt = buildPrompt(ctx);
   fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
   fs.writeFileSync(path.join(dir, '.studio/ai_prompt.txt'), prompt);

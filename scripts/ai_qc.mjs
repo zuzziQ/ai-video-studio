@@ -21,6 +21,7 @@ import { createRequire } from 'node:module';
 import { saidNumbers, inventedNumbers, hasFlag, stripFlags, sceneStrings } from './ai_edit.mjs'; // ai_edit imports ai_qc too: both only call each other's functions later
 import { txCheckEdit } from './assist.mjs';
 import { burnBand, burnIssues } from './burnin.mjs'; // S13 M110: phụ đề mới chồng phụ đề cháy sẵn của video gốc
+import { readScript, scriptMarks, markMissing, gateScript } from './script_doc.mjs'; // S17 M123: kịch bản có sẵn
 const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
 
 export const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,6 +68,7 @@ export const KIND_VI = {
   hook: 'Hook', readability: 'Dễ đọc', spelling: 'Chính tả', variety: 'Đa dạng', pacing: 'Nhịp', brand: 'Thương hiệu', other: 'Khác',
   ad_policy: 'Chính sách quảng cáo', ad_claim: 'Claim quảng cáo', ad_originality: 'Nguyên bản',
   empty_card: 'Thẻ trống', invented_number: 'Số không có trong lời thoại', text_cut: 'Chữ bị cắt', emoji_flag: 'Emoji cờ hiện sai',
+  script_unspoken: 'Kịch bản chưa nói', script_drift: 'Nói lệch kịch bản', script_mark: 'Dấu kịch bản chưa đặt',
 };
 
 // ---------- ad gates (references/ad-gates.md) ----------
@@ -83,7 +85,7 @@ export function adsPass(dir) {
 export const adIssue = (i, D) => ({ t: r2(clamp(+i.t || 0, 0, D || 0)), kind: i.kind, severity: i.severity, target: null, msg: i.msg, code: i.code, note: i.ref || undefined, src: 'auto' });
 export function recheckAds(det, ads2, D) {
   const fresh = (ads2.issues || []).map(i => adIssue(i, D)), used = new Set();
-  for (const i of det.filter(x => String(x.kind).startsWith('ad_') && !x.new)) {
+  for (const i of det.filter(x => String(x.kind).startsWith('ad_') && !x.new && !x.script)) { // x.script: soát kịch bản (M123), ad_gates.py không chạy lại phần này
     const k = fresh.findIndex((r, j) => !used.has(j) && r.kind === i.kind && r.code === i.code && Math.abs(r.t - i.t) < 1.5);
     if (k < 0) { i.fixed = true; i.note = 'soát lại sau khi sửa: không còn'; continue; }
     used.add(k); Object.assign(i, { msg: fresh[k].msg, severity: fresh[k].severity, fixed: false });
@@ -411,6 +413,24 @@ export function staticIssues(tl, caps, dir) {
   // b-roll ids must exist in the library catalog
   let cat = null; try { cat = new Set(JSON.parse(fs.readFileSync(path.join(SKILL, 'assets/broll/catalog.json'), 'utf8')).map(b => b.id)); } catch {}
   if (cat) (tl.scenes || []).forEach((s, i) => { const id = s.broll?.id || s.screen?.broll?.id || (s.type === 'broll' ? s.id : null); if (id && !cat.has(id)) out.push({ t: r2(s.t0), kind: 'missing_media', severity: 'high', target: `s${i}`, file: id, msg: `B-roll “${id}” không có trong thư viện` }); });
+  out.push(...scriptIssues(tl, dir));
+  return out;
+}
+
+// S17 M123: dự án có kịch bản (.studio/script.json, scripts/script_doc.mjs) → đoạn chưa nói, đoạn nói lệch, lời ngoài kịch bản,
+// dấu [HOOK] / [CHỮ] / [B-ROLL] / [CTA] chưa có cảnh trên timeline. Chỉ báo, không tự sửa.
+export function scriptIssues(tl, dir) {
+  const sc = dir ? readScript(dir) : null; if (!sc?.align) return [];
+  const out = [], cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
+  sc.segments.forEach((s, k) => {
+    const prev = sc.segments.slice(0, k).reverse().find(x => x.t1 != null);
+    if (s.spoken === false) out.push({ t: r2(prev?.t1 ?? 0), kind: 'script_unspoken', severity: 'med', target: null, msg: `Đoạn ${k + 1} của kịch bản chưa nói: “${cut(s.say, 70)}” (không có phụ đề cho đoạn này)` });
+    else if (sc.align.mode === 'whisper' && s.ratio != null && s.ratio < .75) out.push({ t: r2(s.t0 ?? 0), kind: 'script_drift', severity: s.ratio < .5 ? 'med' : 'low', target: null, msg: `Đoạn ${k + 1} nói khác kịch bản (${Math.round(s.ratio * 100)}% chữ khớp): “${cut(s.say, 60)}”: phụ đề vẫn theo kịch bản, nghe lại cho chắc` });
+  });
+  for (const o of sc.align.offscript || []) out.push({ t: r2(o.t0), t1: r2(o.t1), kind: 'script_drift', severity: 'low', target: null, msg: `Nói ngoài kịch bản ${o.t0.toFixed(1)}–${o.t1.toFixed(1)}s: “${cut(o.text, 60)}” (phụ đề theo lời nghe được)` });
+  const name = { hook: 'HOOK', screen: 'CHỮ', broll: 'B-ROLL', cta: 'CTA' };
+  for (const m of markMissing(scriptMarks(sc), tl.scenes || [], { strings: sceneStrings, title: tl.title || '' }))
+    out.push({ t: r2(m.t0), kind: 'script_mark', severity: 'low', target: null, msg: `Dấu [${name[m.kind]}${m.kind === 'hook' || m.kind === 'cta' ? '' : ': ' + cut(m.text, 40)}] của kịch bản chưa có cảnh quanh ${m.t0.toFixed(1)}s` });
   return out;
 }
 
@@ -903,6 +923,11 @@ export async function runQC(src, o = {}) {
     let ads = { enabled: false, issues: [] };
     if (proj.tl.ads?.on) { say(.43, 'Soát chính sách quảng cáo, claim, độ nguyên bản'); ads = await adsPass(dir); if (ads.error) console.error('[qc] ads: ' + ads.error); }
     const adIssues = (ads.issues || []).map(i => adIssue(i, tl.duration));
+    // S17 M123: claim gate cho chữ màn hình của kịch bản ([CHỮ: …], hook, CTA); lời nói đã soát qua phụ đề (= chữ kịch bản)
+    if (proj.tl.ads?.on) try {
+      const g = await gateScript(dir, proj.tl);
+      for (const i of g?.issues || []) if (i.screen && !adIssues.some(a => a.code === i.code)) adIssues.push({ ...adIssue(i, tl.duration), msg: `Kịch bản (${i.where}): ${i.msg}`, script: true });
+    } catch (e) { console.error('[qc] kịch bản: ' + String(e.message).slice(0, 200)); }
     let det = [...stat, ...dom, ...audio.issues, ...adIssues].map(i => ({ ...i, src: 'auto' }));
     det.sort((a, b) => a.t - b.t);
     // Claude review
