@@ -136,7 +136,7 @@
         el.querySelectorAll('[data-asc]').forEach(s => s.style.setProperty('--as-c', s.dataset.asc));
       } else {
         el.innerHTML = `${needHtml()}${st.state === 'error' || st.state === 'cancelled' ? `<p class="as-err"><i class="ti ti-alert-circle"></i><span>${esc(st.error)}</span></p>` : ''}
-          ${pasteHtml()}<div class="as-head"><button data-as="go"><i class="ti ti-sparkles"></i> ${esc(st.state === 'error' ? 'Thử lại' : o.label || 'Gợi ý bằng AI')}</button><span class="as-hint">${esc(o.hint || 'AI chỉ đề xuất, bạn chọn Nhận hoặc Bỏ từng mục.')}</span></div>`;
+          ${pasteHtml()}<div class="as-head"><button data-as="go"><i class="ti ti-sparkles"></i> ${esc(st.need && canPaste ? 'Hỏi lại với phần dán' : st.state === 'error' ? 'Thử lại' : o.label || 'Gợi ý bằng AI')}</button><span class="as-hint">${esc(o.hint || 'AI chỉ đề xuất, bạn chọn Nhận hoặc Bỏ từng mục.')}</span></div>`;
       }
       el.querySelector('[data-as=go]')?.addEventListener('click', start);
       el.querySelector('[data-as=stop]')?.addEventListener('click', cancel);
