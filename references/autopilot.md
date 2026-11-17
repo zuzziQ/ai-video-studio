@@ -17,7 +17,7 @@ Dữ liệu nằm trong `~/.ai-video-studio/` (đổi bằng `AVS_HOME`): `profi
 
 ## 1. Chuỗi tự lái
 ```bash
-node scripts/autopilot.mjs <video | thư mục dự án> [--profile <id>] [--out <thư mục giao>] [--project <dir>] [--restart] [--from <bước>]
+node scripts/autopilot.mjs <video | thư mục dự án> [--profile <id>] [--script <id | kịch bản.txt|.docx>] [--out <thư mục giao>] [--project <dir>] [--restart] [--from <bước>]
 node scripts/autopilot.mjs --steps
 ```
 | Bước | Làm gì | Tắt bằng (hồ sơ) |
@@ -26,6 +26,7 @@ node scripts/autopilot.mjs --steps
 | `brand` | brand kit (`brand`) + CTA (`cta` → `brand.outro`) | để trống cả hai |
 | `clean` | `TL.audio.clean = {preset}` (áp khi trộn) | `clean: off` |
 | `fillers` | `fillers.py` (+ `--claude`), cắt các chỗ conf ≥ 0,6 (đúng mức UI chọn sẵn) bằng ripple trên `TL.clips` | `fillers: false` |
+| `script` | kịch bản có sẵn (S17 M123, `references/script.md`): `--script` (id kịch bản chờ của panel, hoặc file) hoặc `.studio/script.json` đã lưu ở bước Nguồn → phụ đề theo chữ kịch bản (căn với phụ đề sau `fillers`; không lời thì chia đều), claim gate khi có sản phẩm | không có kịch bản |
 | `ai` | `ai_edit.mjs --apply` (mục tiêu, giọng điệu, gói, mật độ, yêu cầu thêm + CTA) **hoặc** template (`template`) qua `window.applyTemplate` trong Chrome headless; ép `caption_style` nếu có | `ai: false` và không có template |
 | `broll` | `auto_broll.mjs --density --src [--claude]` | `broll_density: off` |
 | `sfx` | `auto_sfx.py --level` (+ `--music auto` khi AI chưa chọn nhạc), nhạc `off`/mood cố định, chỉnh dB đã học | `sound: off` |
