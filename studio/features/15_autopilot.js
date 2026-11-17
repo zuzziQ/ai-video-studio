@@ -318,10 +318,11 @@
     let script = ''; // S17 M123: kịch bản chỉ đi kèm video đầu tiên
     for (const f of files) {
       if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name)) { Studio.toast('Bỏ qua (không phải video): ' + f.name); continue; }
-      if (script === '') { try { script = await Studio.scriptStage?.take() || null; } catch (e) { Studio.toast(e.message); break; } }
+      const first = script === ''; if (first) { try { script = await Studio.scriptStage?.take() || null; } catch (e) { Studio.toast(e.message); break; } }
       S.uploading = f.name; $('#ap-upl') && ($('#ap-upl').innerHTML = `<div class="help"><i class="ti ti-loader-2 spin"></i> Đang chép ${esc(f.name)} (${(f.size / 1048576).toFixed(0)} MB)…</div>`);
       const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(S.profile || '')}&brand=${encodeURIComponent(S.brand || '')}&product=${encodeURIComponent(S.product || '')}${script ? `&script=${encodeURIComponent(script)}` : ''}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
-      if (r.error) Studio.toast('Lỗi: ' + r.error); else { Studio.toast('Đã thêm “' + f.name + '” vào hàng đợi' + (script ? ' (kèm kịch bản)' : '')); if (script) { Studio.scriptStage.clear(); script = null; } }
+      if (r.error) Studio.toast('Lỗi: ' + r.error); else { Studio.toast('Đã thêm “' + f.name + '” vào hàng đợi' + (script ? ' (kèm kịch bản)' : '')); if (script) Studio.scriptStage.clear(); }
+      script = null; // lỗi thì ô vẫn giữ chữ, nhưng không gắn sang video sau
     }
     S.uploading = null; if ($('#ap-upl')) $('#ap-upl').innerHTML = ''; refresh(true);
   }
