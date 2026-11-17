@@ -150,4 +150,11 @@ test('S16 M119: video không lời không bị trừ điểm lời thoại, làm
   // có lời mà chưa tách: vẫn trừ như cũ
   const r2 = C.score(fullIn({ caps: 0 }));
   assert.equal(item(r2, 'source', 'speech').ok, false);
+test('S16 M120: QC đầy đủ còn mới thay cho QC nhanh; QC đầy đủ cũ thì vẫn cần QC nhanh', () => {
+  const r = C.score(fullIn({ quick: null, qc: { score: 94, issues: [], stale: false } }));
+  assert.equal(item(r, 'check', 'quick').ok, true);
+  assert.ok(r.steps.check.score >= 90, String(r.steps.check.score));
+  const r2 = C.score(fullIn({ quick: null, qc: { score: 94, issues: [], stale: true } }));
+  assert.equal(item(r2, 'check', 'quick').ok, false);
+  assert.ok(r2.steps.check.score < 60, String(r2.steps.check.score));
 });
