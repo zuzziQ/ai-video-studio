@@ -43,7 +43,8 @@ test('clipSet: dự án thường (không có highlights.json) hoặc không thu
 
 test('route: GET trả bộ không lộ đường dẫn thư mục; POST mở theo số thứ tự, chặn clip đã xoá, số lạ, đang có job', async () => {
   const out = []; let opened = null;
-  const ctx = { project: { dir: B }, job: null, json: (r, o, c) => out.push({ o, c }), body: async q => q.b, openProject: d => { opened = d; } };
+  let how = null;
+  const ctx = { project: { dir: B }, pid: 'b0b0b0b0b0b0', job: null, json: (r, o, c) => out.push({ o, c }), body: async q => q.b, openProject: (d, o) => { opened = d; how = o; return 'a0a0a0a0a0a0'; } };
   const R = route(ctx);
   assert.equal(await R({ method: 'GET' }, {}, '/api/khac'), false);
   await R({ method: 'GET' }, {}, '/api/clipset');
@@ -54,12 +55,18 @@ test('route: GET trả bộ không lộ đường dẫn thư mục; POST mở th
     assert.equal(out.at(-1).c, code, JSON.stringify(b));
   }
   assert.equal(opened, null);
-  ctx.job = { state: 'running' };
+  // S18 M129: job giữ dự án của nó nên chuyển clip được cả khi tab đang chạy tác vụ; khi đó tab cũ giữ lại (không thay tại chỗ)
+  ctx.job = { state: 'running', tab: ctx.pid };
   await R({ method: 'POST', b: { i: 0 } }, {}, '/api/clipset/open');
-  assert.equal(out.at(-1).c, 409); assert.equal(opened, null);
-  ctx.job = null;
+  assert.equal(out.at(-1).o.ok, true); assert.equal(opened, A); assert.equal(how, undefined);
+  ctx.job = null; opened = null;
   await R({ method: 'POST', b: { i: 0 } }, {}, '/api/clipset/open');
-  assert.equal(out.at(-1).o.ok, true); assert.equal(opened, A);
+  assert.equal(out.at(-1).o.ok, true); assert.equal(opened, A); assert.deepEqual(how, { replace: ctx.pid }, 'thay tab đang xem tại chỗ');
+  assert.equal(out.at(-1).o.id, 'a0a0a0a0a0a0');
+  // keep: chỉ thêm tab cho cửa sổ mới, trang này không đổi dự án
+  opened = null; ctx.tabs = { open: d => ({ id: 'c0c0c0c0c0c0', d }) };
+  await R({ method: 'POST', b: { i: 0, keep: true } }, {}, '/api/clipset/open');
+  assert.equal(out.at(-1).o.id, 'c0c0c0c0c0c0'); assert.equal(opened, null);
   ctx.project = null; await R({ method: 'GET' }, {}, '/api/clipset');
   assert.equal(out.at(-1).o.set, null, 'chưa mở dự án');
 });

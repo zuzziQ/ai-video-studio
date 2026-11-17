@@ -2,6 +2,8 @@
 // 2 dự án trở lên. Bấm tab = lưu dự án đang sửa rồi mở tab kia trong cửa sổ này (trạng thái giao diện từng tab giữ ở
 // Studio.saveTabUI); Ctrl/⌘ + bấm hoặc bấm chuột giữa = mở trong cửa sổ trình duyệt mới, sửa song song. × đóng tab (không xoá
 // dự án). + mở trang chủ để mở thêm dự án. Kéo thả để đổi thứ tự. Chấm xoay = dự án đang chạy tác vụ (xuất, QC…).
+// Clip cắt từ cùng một video dài là một NHÓM (kiểu nhóm tab của Chrome): nhãn màu "tên bộ n/N" có ‹ › sang clip trước / sau
+// (thay tab đang xem tại chỗ, nhóm không phình ra) và mở danh sách cả bộ (57_clipset.js); tab của nhóm gạch chân cùng màu.
 // Server: studio/routes/58_tabs.mjs + studio/tabs.mjs; mỗi request mang mã tab (studio/auth.js, X-AVS-Project).
 'use strict';
 (() => {
@@ -26,7 +28,17 @@
   .ptab .x:hover { opacity: 1; background: rgb(var(--color-surface-raised)); }
   .ptab .busy { flex: none; color: rgb(var(--color-accent-text)); }
   #ptabs .padd { flex: none; border: 0; background: transparent; color: rgb(var(--color-fg-subtle)); padding: 0 var(--space-2); cursor: pointer; }
-  #ptabs .padd:hover { color: rgb(var(--color-fg)); }`;
+  #ptabs .padd:hover { color: rgb(var(--color-fg)); }
+  .pgrp { --g: var(--color-accent); flex: none; display: inline-flex; align-items: center; gap: 0; margin: 4px 2px 4px var(--space-2); padding: 0 2px; border-radius: var(--radius-pill);
+    background: rgb(var(--g) / .16); color: rgb(var(--color-fg)); font-size: var(--text-2xs); }
+  .pgrp:first-child { margin-left: 0; }
+  .pgrp button { border: 0; background: transparent; color: inherit; height: 22px; padding: 0 var(--space-1); display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; border-radius: var(--radius-pill); white-space: nowrap; }
+  .pgrp button:hover:not(:disabled) { background: rgb(var(--g) / .22); }
+  .pgrp button:disabled { opacity: .35; cursor: default; }
+  .pgrp .gl { max-width: 160px; overflow: hidden; text-overflow: ellipsis; } .pgrp b { font-weight: 600; }
+  .ptab.ing { box-shadow: inset 0 -2px 0 rgb(var(--g) / .7); }
+  .ptab.ing.on { box-shadow: inset 0 2px 0 rgb(var(--color-accent)), inset 0 -2px 0 rgb(var(--g) / .7); }
+  .g0 { --g: var(--color-accent); } .g1 { --g: var(--color-audio); } .g2 { --g: var(--color-success); } .g3 { --g: var(--color-warning); }`;
   document.head.appendChild(css);
 
   const bar = document.createElement('div');
@@ -34,15 +46,37 @@
   document.querySelector('#top')?.after(bar);
 
   const me = () => window.avsProject?.id || S.META?.pid || '';
-  function paint() {
-    const show = TABS.length >= 2 || (TABS.length === 1 && TABS[0].id !== me());
-    bar.hidden = !show; document.body.classList.toggle('has-ptabs', show);
-    if (!show) return requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-    bar.innerHTML = TABS.map(t => `<div class="ptab ${t.id === me() ? 'on' : ''} ${t.exists ? '' : 'gone'}" role="tab" tabindex="0" draggable="true"
+  // màu nhóm cố định theo mã bộ (4 màu token)
+  const gcls = key => 'g' + (parseInt(String(key).slice(0, 6), 16) % 4);
+  const tabHTML = (t, g) => `<div class="ptab ${t.id === me() ? 'on' : ''} ${t.exists ? '' : 'gone'} ${g ? 'ing ' + g : ''}" role="tab" tabindex="0" draggable="true"
         aria-selected="${t.id === me()}" data-id="${t.id}" title="${esc(t.name)} · ${esc(t.parent)}${t.busy ? `\nĐang chạy: ${esc(t.busy)}` : ''}${t.exists ? '\nCtrl/⌘ + bấm: mở trong cửa sổ mới' : '\nThư mục dự án không còn'}">
         ${t.busy ? '<i class="ti ti-loader-2 spin busy"></i>' : ''}<span class="nm">${esc(t.name)}</span>
-        <span class="x" role="button" aria-label="Đóng tab ${esc(t.name)}" title="Đóng tab (dự án vẫn còn trên máy)"><i class="ti ti-x"></i></span></div>`).join('')
-      + '<button class="padd" title="Mở thêm dự án (trang chủ)" aria-label="Mở thêm dự án"><i class="ti ti-plus"></i></button>';
+        <span class="x" role="button" aria-label="Đóng tab ${esc(t.name)}" title="Đóng tab (dự án vẫn còn trên máy)"><i class="ti ti-x"></i></span></div>`;
+  function groupHTML(set, tabs) {
+    const g = gcls(set.key), here = tabs.some(t => t.id === me()), cs = here ? S.clipset?.set : null;
+    const cur = cs ? cs.cur : set.cur, n = cs ? cs.n : set.n;
+    const nav = d => here && S.clipset?.step(d);
+    return `<div class="pgrp ${g}" data-key="${esc(set.key)}" role="group" aria-label="Bộ clip ${esc(set.name)}">
+        ${here ? `<button data-g="prev" title="Clip trước trong bộ" aria-label="Clip trước" ${nav(-1) ? '' : 'disabled'}><i class="ti ti-chevron-left"></i></button>` : ''}
+        <button data-g="list" aria-haspopup="dialog" title="${n} clip cắt từ “${esc(set.name)}”${here ? ' — bấm để xem cả bộ' : ' — bấm để mở'}"><i class="ti ti-stack-2"></i><span class="gl">${esc(set.name)}</span>
+          <b>${here ? `${cur + 1}/${n}` : `${tabs.length}/${n}`}</b>${here ? '<i class="ti ti-chevron-down"></i>' : ''}</button>
+        ${here ? `<button data-g="next" title="Clip sau trong bộ" aria-label="Clip sau" ${nav(1) ? '' : 'disabled'}><i class="ti ti-chevron-right"></i></button>` : ''}</div>`
+      + tabs.map(t => tabHTML(t, g)).join('');
+  }
+  function paint() {
+    const inSet = !!(S.clipset?.set) || TABS.some(t => t.id === me() && t.set);
+    const show = TABS.length >= 2 || inSet || (TABS.length === 1 && TABS[0].id !== me());
+    bar.hidden = !show; document.body.classList.toggle('has-ptabs', show);
+    if (!show) return requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    // tab liền nhau cùng bộ → một nhóm (server đã xếp chúng đứng cạnh nhau)
+    let html = '';
+    for (let i = 0; i < TABS.length;) {
+      const t = TABS[i];
+      if (!t.set) { html += tabHTML(t, ''); i++; continue; }
+      let j = i; while (j < TABS.length && TABS[j].set?.key === t.set.key) j++;
+      html += groupHTML(t.set, TABS.slice(i, j)); i = j;
+    }
+    bar.innerHTML = html + '<button class="padd" title="Mở thêm dự án (trang chủ)" aria-label="Mở thêm dự án"><i class="ti ti-plus"></i></button>';
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); // sân khấu / timeline đo lại khi thanh tab hiện / ẩn
   }
   async function refresh() {
@@ -78,6 +112,13 @@
 
   bar.addEventListener('click', e => {
     if (e.target.closest('.padd')) return S.openHome?.();
+    const gb = e.target.closest('.pgrp [data-g]');
+    if (gb) {
+      const grp = gb.closest('.pgrp'), a = gb.dataset.g, mine = TABS.filter(t => t.set?.key === grp.dataset.key), here = mine.some(t => t.id === me());
+      if (!here) return mine[0] && go(mine[0].id, e.ctrlKey || e.metaKey); // nhóm khác: sang tab đầu của nhóm
+      if (a === 'list') return S.clipset?.open(grp);
+      return S.clipset?.go(S.clipset.step(a === 'next' ? 1 : -1));
+    }
     const tab = e.target.closest('.ptab'); if (!tab) return;
     if (e.target.closest('.x')) return close(tab.dataset.id);
     if (tab.classList.contains('gone')) return toast('Thư mục dự án này không còn trên máy — đóng tab đi');
@@ -106,7 +147,7 @@
     if (n) { e.preventDefault(); go(n.id); }
   });
   window.addEventListener('focus', refresh); // cửa sổ khác vừa mở / đóng tab
-  S.tabs = { refresh, get list() { return TABS; } };
+  S.tabs = { refresh, paint, get list() { return TABS; } };
   refresh();
   const wait = setInterval(() => { if (S.META?.pid) { clearInterval(wait); refresh(); } }, 300);
   setTimeout(() => clearInterval(wait), 30000);

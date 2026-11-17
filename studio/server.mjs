@@ -36,17 +36,21 @@ const als = new AsyncLocalStorage();
 const cur = () => { const st = als.getStore(); return st ? st.project : active; };
 const curPid = () => als.getStore()?.pid || null;
 const setCur = (pr, pid) => { active = pr; const st = als.getStore(); if (st) { st.project = pr; st.pid = pid || null; if (pid) st.opened = pid; } };
-const TABS = new TabRegistry({ file: path.join(AVS_HOME(), 'studio-tabs.json'), resolve: resolveProject });
+// chỉ dự án của request này (không đổi dự án mặc định của CLI / tab khác): newProject đóng / khôi phục dự án cũ trong lúc tạo
+const setReq = (pr, pid) => { const st = als.getStore(); if (st) { st.project = pr; st.pid = pid || null; } else active = pr; };
+const TABS = new TabRegistry({ file: path.join(AVS_HOME(), 'studio-tabs.json'), resolve: resolveProject,
+  busy: id => job?.state === 'running' && job.tab === id, // tab đang chạy tác vụ không bị đẩy ra khi quá 8 tab
+  onClose: id => { if (active && tabId(active.dir) === id) active = null; } }); // CLI không còn ghi vào dự án đã đóng tab
 // Only real projects (a timeline.json), never the config folder with the Telegram / YouTube / Claude tokens (studio/security.mjs).
-function openProject(p) {
-  const { id, project } = TABS.open(p);
+function openProject(p, o) {
+  const { id, project } = TABS.open(p, Date.now(), o);
   fs.mkdirSync(path.join(project.dir, '.studio/history'), { recursive: true });
   setCur(project, id);
   console.log(`project: ${project.dir}`);
   return id;
 }
 // Trước M129 mở dự án khác bị chặn khi có job chạy (job đọc biến dự án toàn cục). Nay job giữ dự án của nó (als), nên mở được.
-const switchProject = p => openProject(p);
+const switchProject = (p, o) => openProject(p, o);
 
 // ---------- helpers ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -375,19 +379,19 @@ async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
 // không route nào ghi vào dự án cũ. Tạo hỏng thì mở lại dự án cũ để người dùng không bị bỏ ở màn trống.
 async function newProject(o) {
   const { newProject: build } = await import(pathToFileURL(path.join(SKILL, 'scripts/new_project.mjs')).href);
-  const prev = cur(), prevPid = curPid(); setCur(null);
+  const prev = cur(), prevPid = curPid(); setReq(null);
   try {
     const d = await build(o, { run, onStep: (s, p) => { job.step = s; job.progress = p; } });
     job.pid = openProject(d); // tab đã tạo chuyển sang mã này khi job xong (X-AVS-Opened ở /api/job)
     job.out = d;
   } catch (e) {
-    if (!cur() && prev) setCur(prev, prevPid);
+    if (!cur() && prev) setReq(prev, prevPid);
     throw e;
   }
 }
 function startJob(kind, fn, payload) {
   if (job?.state === 'running') return false;
-  job = { kind, state: 'running', progress: 0, step: 'Bắt đầu', log: '', out: null, started: Date.now(), tab: curPid() };
+  job = { kind, state: 'running', progress: 0, step: 'Bắt đầu', log: '', out: null, started: Date.now(), tab: curPid(), dir: cur()?.dir || null };
   fn(payload).then(() => { job.state = 'done'; job.progress = 1; job.step = 'Xong'; })
     .catch(e => {
       // A stop the user asked for is not a failure: 'cancelled' / 'paused' (e.stopped from a route) so the UI shows it in amber, not red.
@@ -401,7 +405,7 @@ function startJob(kind, fn, payload) {
 // Server stopped (app quit, Ctrl+C) while a job runs: stop it (render.mjs then closes its Chromes) and drop this run's temp timelines.
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => {
   if (job?.state === 'running') killTree(job.proc);
-  if (active) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) fs.rmSync(path.join(active.dir, f), { force: true });
+  for (const d of new Set([active?.dir, job?.dir].filter(Boolean))) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) fs.rmSync(path.join(d, f), { force: true });
   dropTokenFile();
   setTimeout(() => process.exit(0), 300);
 });
@@ -572,7 +576,8 @@ async function handle(req, res) {
     }
     if (p === '/api/job') {
       // job tạo dự án (Video mới) xong: tab đã khởi chạy nó chuyển sang dự án mới (auth.js đọc X-AVS-Opened)
-      if (job?.state === 'done' && job.pid && job.tab === curPid() && job.pid !== curPid()) res.setHeader('X-AVS-Opened', job.pid);
+      // chỉ một lần: trang mở lại tab cũ sau đó (boot gọi /api/job) không bị kéo sang dự án mới
+      if (job?.state === 'done' && job.pid && !job.openedSent && job.tab === curPid() && job.pid !== curPid()) { res.setHeader('X-AVS-Opened', job.pid); job.openedSent = true; }
       return json(res, job ? { ...job, proc: undefined } : null);
     }
     if (p === '/api/job/cancel' && req.method === 'POST') { if (job?.state === 'running') job.cancelled = true; killTree(job?.proc); return json(res, { ok: true }); }

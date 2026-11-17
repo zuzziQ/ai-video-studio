@@ -13,8 +13,8 @@ export const tabId = dir => crypto.createHash('sha1').update(norm(dir)).digest('
 
 export class TabRegistry {
   /** @param {{file: string, resolve: (dir: string) => {dir: string, tlFile: string}, max?: number}} o */
-  constructor({ file, resolve, max = MAX_TABS }) {
-    this.file = file; this.resolve = resolve; this.max = max;
+  constructor({ file, resolve, max = MAX_TABS, busy = () => false, onClose = () => {} }) {
+    this.file = file; this.resolve = resolve; this.max = max; this.busy = busy; this.onClose = onClose;
     this.live = new Map(); // id → project {dir, tlFile} (đã kiểm trong phiên này)
     this.tabs = this.#load(); // [{id, dir, t}] theo thứ tự trên thanh tab
   }
@@ -33,18 +33,23 @@ export class TabRegistry {
       fs.renameSync(tmp, this.file);
     } catch { /* không ghi được thì chỉ mất danh sách tab lần sau */ }
   }
-  /** Mở (hoặc đưa lên dùng) dự án `p` (đường dẫn do server có, không phải trình duyệt) → {id, project, evicted?}. Lỗi resolve ném ra nguyên vẹn. */
-  open(p, now = Date.now()) {
+  /** Mở (hoặc đưa lên dùng) dự án `p` (đường dẫn do server có, không phải trình duyệt) → {id, project, evicted?}. Lỗi resolve ném ra nguyên vẹn.
+   *  `replace`: mã tab được thay tại chỗ (chuyển clip trong nhóm Cùng bộ), tab mới đứng đúng vị trí đó. */
+  open(p, now = Date.now(), { replace } = {}) {
     const project = this.resolve(p), id = tabId(project.dir);
     this.live.set(id, project);
-    const i = this.tabs.findIndex(x => x.id === id);
+    const i = this.tabs.findIndex(x => x.id === id), r = replace && replace !== id ? this.tabs.findIndex(x => x.id === replace) : -1;
     let evicted = null;
-    if (i >= 0) this.tabs[i] = { id, dir: project.dir, t: now };
+    if (r >= 0) { // thay tab `replace` tại chỗ (không cần đẩy tab nào ra)
+      if (i >= 0) this.tabs.splice(i, 1);
+      this.tabs.splice(this.tabs.findIndex(x => x.id === replace), 1, { id, dir: project.dir, t: now });
+      this.live.delete(replace);
+    } else if (i >= 0) this.tabs[i] = { id, dir: project.dir, t: now };
     else {
       this.tabs.push({ id, dir: project.dir, t: now });
       if (this.tabs.length > this.max) { // đóng tab dùng lâu nhất (không phải tab vừa mở)
-        const old = this.tabs.filter(x => x.id !== id).sort((a, b) => a.t - b.t)[0];
-        evicted = old.id; this.close(old.id, { store: false });
+        const old = this.tabs.filter(x => x.id !== id && !this.busy(x.id)).sort((a, b) => a.t - b.t)[0];
+        if (old) { evicted = old.id; this.close(old.id, { store: false }); }
       }
     }
     this.#store();
@@ -53,7 +58,8 @@ export class TabRegistry {
   /** Dự án của mã `id` (tab đã lưu từ phiên trước thì kiểm lại thư mục) → project | null. */
   get(id) {
     if (!ID_RE.test(String(id || ''))) return null;
-    if (this.live.has(id)) return this.live.get(id);
+    // thư mục dự án bị xoá khi tab còn mở: không trả dự án (lưu sẽ dựng lại thư mục, "hồi sinh" dự án đã xoá)
+    if (this.live.has(id)) { const pr = this.live.get(id); if (fs.existsSync(pr.tlFile)) return pr; this.live.delete(id); return null; }
     const tab = this.tabs.find(x => x.id === id);
     if (!tab) return null;
     try { const pr = this.resolve(tab.dir); if (tabId(pr.dir) !== id) return null; this.live.set(id, pr); return pr; } catch { return null; }
@@ -62,6 +68,7 @@ export class TabRegistry {
   close(id, { store = true } = {}) {
     const n = this.tabs.length;
     this.tabs = this.tabs.filter(x => x.id !== id); this.live.delete(id);
+    if (n !== this.tabs.length) this.onClose(id);
     if (store && n !== this.tabs.length) this.#store();
     return n !== this.tabs.length;
   }

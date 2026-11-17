@@ -53,6 +53,21 @@ test('TabRegistry: quá giới hạn thì đẩy tab dùng lâu nhất; đóng, 
   assert.equal(MAX_TABS, 8);
 });
 
+test('TabRegistry: tab đang chạy tác vụ không bị đẩy ra; thư mục bị xoá khi tab đang mở → get null; đóng tab gọi onClose', () => {
+  const closed = [], E = mkProj('Clip E', 'E'), F = mkProj('Clip F', 'F'), G = mkProj('Clip G', 'G');
+  let busyId = null;
+  const r = new TabRegistry({ file: path.join(TMP, 'reg4.json'), resolve: fakeResolve, max: 2, busy: id => id === busyId, onClose: id => closed.push(id) });
+  const e = r.open(E, 1), f = r.open(F, 2); busyId = e.id;
+  const g = r.open(G, 3);
+  assert.equal(g.evicted, f.id, 'E cũ nhất nhưng đang chạy tác vụ → đẩy F');
+  assert.deepEqual(closed, [f.id]);
+  // chuyển clip tại chỗ: G thay E ở đúng vị trí, không đẩy tab nào
+  const f2 = r.open(F, 4, { replace: g.id });
+  assert.equal(f2.evicted, null); assert.deepEqual(r.list().map(x => x.id), [e.id, f.id]);
+  fs.rmSync(F, { recursive: true });
+  assert.equal(r.get(f.id), null, 'không "hồi sinh" dự án đã xoá');
+});
+
 test('TabRegistry: file danh sách bị sửa tay (mã không khớp đường dẫn, đường dẫn tương đối) bị bỏ; thư mục mất → get null', () => {
   const file = path.join(TMP, 'reg3.json'), D = mkProj('Clip D', 'D');
   fs.writeFileSync(file, JSON.stringify({ tabs: [{ id: tabId(A), dir: B }, { id: tabId('x'), dir: 'x' }, { id: tabId(D), dir: D }] }));
@@ -132,4 +147,10 @@ test('server: hai tab đọc / lưu xen kẽ hai dự án, không ghi nhầm; fi
   assert.equal((await api(`/p/${idB}/media/a.png`)).status, 404);
   assert.equal((await api('/api/project', undefined, 'ffffffffffff')).status, 409, 'mã lạ');
   assert.equal((await api('/api/tabs', undefined, idB)).status, 200, '/api/tabs vẫn trả lời để trang đó tự mở lại');
+
+  // đóng tab của dự án mặc định (dự án mở gần nhất là B, đã đóng ở trên): request không mã (CLI) không còn ghi vào nó
+  assert.equal((await api('/api/project')).status, 404);
+  // /api/job: X-AVS-Opened của job Video mới chỉ gửi một lần (mở lại tab cũ sau đó không bị kéo sang dự án mới)
+  const src = fs.readFileSync(path.join(SKILL, 'studio/server.mjs'), 'utf8');
+  assert.match(src, /!job\.openedSent && job\.tab === curPid\(\).*job\.openedSent = true/);
 });
