@@ -75,6 +75,7 @@ Chạy khi Studio/app mở. **Chạy cả khi tắt app**: cài `~/Library/Launc
 
 ## 5. Giao diện
 Rail **Tự lái** (biểu tượng tên lửa): vùng thả lớn + **Chọn file** + đường dẫn, chọn hồ sơ; thẻ **Đang làm** với danh sách 12 bước (✓ / đang chạy / bỏ qua / cảnh báo, thời gian từng bước); **Hàng đợi**; **Thư mục tự động** (bật/tắt, ô đường dẫn + Mở trong Finder, hồ sơ cho từng thư mục, Chạy cả khi tắt app, Thông báo, Thả vào app = tự lái); **Hồ sơ kênh** + điều đã học. Nút **Tự lái** trên thanh trên hiện % việc đang chạy. Mở thẳng: `http://localhost:5186/#tu-lai`.
+**Chuẩn bị trước khi chạy** (S16 M121): thẻ trong panel chọn **Thương hiệu · Kho** (`''` = theo hồ sơ, `__none` = không thương hiệu, Kho Chung, hoặc id brand kit) và **Sản phẩm** (không bắt buộc). Lựa chọn nhớ ở `autopilot.json` (`brand`, `product`), gửi kèm mỗi video (`/api/autopilot/enqueue` thân `brand`/`product`, `/api/autopilot/upload?brand=&product=`), thành `--brand` / `--product` của `autopilot.mjs`. Bước `brand` dùng thương hiệu đã chọn thay cho thương hiệu của hồ sơ (logo, màu, thẻ kết) và gắn sản phẩm vào `timeline.ads` (`on`, `product`, `industry`), nên QC kiểm claim quảng cáo. Không chọn gì thì panel nói rõ đang chạy không thương hiệu. Máy thiếu Claude CLI thì panel báo trước các bước sẽ bị bỏ qua (M120).
 **Thả vào app = tự lái**: thả video vào biểu tượng AI Video Studio → `launcher.sh new` đưa vào hàng đợi (`/api/autopilot/enqueue`) rồi mở Studio ở panel Tự lái.
 
 ## 6. Giới hạn

@@ -2,7 +2,7 @@
 // Server: studio/routes/15_autopilot.mjs · scripts/autopilot.mjs, queue.mjs, profile.mjs (references/autopilot.md).
 (() => {
   const { $, esc } = Studio;
-  const S = { st: null, profile: '', path: '', uploading: null, open: {}, sig: '' };
+  const S = { st: null, profile: '', brand: null, product: null, path: '', uploading: null, open: {}, sig: '' };
   const css = document.createElement('style');
   css.textContent = `
   .ap-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
@@ -59,6 +59,7 @@
     const sig = JSON.stringify([st.items, st.runner, st.learn]);
     const first = !S.st; S.st = st;
     if (!S.profile) S.profile = st.settings.profile || defProfile();
+    if (S.brand == null) { S.brand = st.settings.brand || ''; S.product = st.settings.product || ''; } // S16 M121: lựa chọn gần nhất
     topBadge();
     if (!active()) return;
     if (first || force) return render();
@@ -82,6 +83,7 @@
       <input type="file" id="ap-file" accept="video/*,.mov,.mkv,.m4v" multiple hidden></div>
     <div id="ap-upl"></div>
     <div id="ap-claude"></div>
+    <div id="ap-prep"></div>
     <div class="ap-row2"><select id="ap-prof">${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === S.profile ? 'selected' : ''}>${esc(p.name)}${p.id === defProfile() ? ' (mặc định)' : ''}</option>`).join('')}</select>
       <button id="ap-pick"><i class="ti ti-file-upload"></i> Chọn file</button></div>
     <label class="ap-lbl">Hoặc đường dẫn video / thư mục dự án trên máy</label>
@@ -89,7 +91,35 @@
     <div id="ap-live"></div>
     <div id="ap-watch"></div>
     <div id="ap-profiles"></div>`;
-    bindTop(); renderLive(); renderWatch(); renderProfiles(); renderClaude();
+    bindTop(); renderLive(); renderWatch(); renderProfiles(); renderClaude(); renderPrep();
+  }
+  // S16 M121: chuẩn bị trước khi chạy: thương hiệu (brand kit + Kho chứa dự án và Thành phẩm) và sản phẩm (không bắt buộc).
+  // brand '' = theo hồ sơ đang chọn, '__none' = không thương hiệu (Kho Chung); gửi kèm mỗi video (enqueue / upload), nhớ ở autopilot.json.
+  let PREP = null;
+  function renderPrep() {
+    const box = $('#ap-prep'); if (!box) return;
+    if (!PREP) {
+      PREP = { brands: [], products: [], loading: true };
+      Promise.all([api('/api/brands').catch(() => []), api('/api/products').catch(() => [])])
+        .then(([b, p]) => { PREP = { brands: Array.isArray(b) ? b : [], products: Array.isArray(p) ? p : [] }; renderPrep(); });
+    }
+    const prof = profiles().find(p => p.id === S.profile), byProf = PREP.brands.find(b => b.id === prof?.brand);
+    if (S.brand && S.brand !== '__none' && !PREP.loading && !PREP.brands.some(b => b.id === S.brand)) S.brand = ''; // thương hiệu đã xoá
+    if (S.product && !PREP.loading && !PREP.products.some(p => p.id === S.product)) S.product = '';
+    const kit = S.brand === '__none' ? null : S.brand ? PREP.brands.find(b => b.id === S.brand) : byProf;
+    const name = b => b.title || b.name || b.id, opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
+    box.innerHTML = `<div class="ap-card"><h4><i class="ti ti-building-store"></i>Chuẩn bị trước khi chạy</h4>
+      <label class="ap-lbl">Thương hiệu · Kho</label>
+      <select id="ap-brand">${opt('', `Theo hồ sơ (${byProf ? name(byProf) : 'không thương hiệu'})`, S.brand)}${opt('__none', 'Không thương hiệu · Kho Chung', S.brand)}${PREP.brands.map(b => opt(b.id, name(b), S.brand)).join('')}</select>
+      <label class="ap-lbl">Sản phẩm (không bắt buộc)</label>
+      <select id="ap-product">${opt('', '— Không gắn sản phẩm —', S.product)}${PREP.products.map(p => opt(p.id, p.name || p.id, S.product)).join('')}</select>
+      <div class="help ap-mt">${kit ? `Logo, màu, CTA của <b>${esc(name(kit))}</b>; dự án và thành phẩm vào Kho của thương hiệu này.`
+        : '<i class="ti ti-info-circle ap-warn"></i> Đang chạy không thương hiệu: video không có logo, màu, lời kết riêng; dự án và thành phẩm vào Kho Chung.'}
+        ${S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''}
+        ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div></div>`;
+    const save = () => api('/api/autopilot/settings', { brand: S.brand, product: S.product }).catch(() => {});
+    $('#ap-brand').onchange = e => { S.brand = e.target.value; save(); renderPrep(); };
+    $('#ap-product').onchange = e => { S.product = e.target.value; save(); renderPrep(); };
   }
   // S16 M120: báo trước khi chạy: máy không có Claude CLI thì "AI dựng giúp" và "Viết nội dung đăng" sẽ bị bỏ qua
   let claudeAsked = false;
@@ -276,7 +306,7 @@
   }
   async function enqueuePath() {
     const p = $('#ap-path').value.trim(); if (!p) return Studio.toast('Nhập đường dẫn video');
-    const r = await api('/api/autopilot/enqueue', { input: p, profile: S.profile });
+    const r = await api('/api/autopilot/enqueue', { input: p, profile: S.profile, brand: S.brand || '', product: S.product || '' });
     if (r.error) return Studio.toast(r.error);
     S.path = ''; Studio.toast('Đã thêm vào hàng đợi Tự lái'); refresh(true);
   }
@@ -284,7 +314,7 @@
     for (const f of files) {
       if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name)) { Studio.toast('Bỏ qua (không phải video): ' + f.name); continue; }
       S.uploading = f.name; $('#ap-upl') && ($('#ap-upl').innerHTML = `<div class="help"><i class="ti ti-loader-2 spin"></i> Đang chép ${esc(f.name)} (${(f.size / 1048576).toFixed(0)} MB)…</div>`);
-      const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(S.profile || '')}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
+      const r = await fetch(`/api/autopilot/upload?name=${encodeURIComponent(f.name)}&profile=${encodeURIComponent(S.profile || '')}&brand=${encodeURIComponent(S.brand || '')}&product=${encodeURIComponent(S.product || '')}`, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
       if (r.error) Studio.toast('Lỗi: ' + r.error); else Studio.toast('Đã thêm “' + f.name + '” vào hàng đợi');
     }
     S.uploading = null; if ($('#ap-upl')) $('#ap-upl').innerHTML = ''; refresh(true);
@@ -298,7 +328,7 @@
     dz.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('over'); });
     dz.addEventListener('dragleave', () => dz.classList.remove('over'));
     dz.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); uploadFiles([...e.dataTransfer.files]); });
-    $('#ap-prof').onchange = e => { S.profile = e.target.value; api('/api/autopilot/settings', { profile: S.profile }); };
+    $('#ap-prof').onchange = e => { S.profile = e.target.value; api('/api/autopilot/settings', { profile: S.profile }); renderPrep(); };
     $('#ap-path').oninput = e => (S.path = e.target.value);
     $('#ap-path').onkeydown = e => e.key === 'Enter' && enqueuePath();
     $('#ap-add').onclick = enqueuePath;

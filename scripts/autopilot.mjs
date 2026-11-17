@@ -1,5 +1,5 @@
 // Tự lái (autopilot): one raw video → finished videos + cover + publish texts, following a channel profile (references/autopilot.md).
-// usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--brand <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
+// usage: node scripts/autopilot.mjs <video | project_dir> [--profile <id>] [--brand <id>] [--product <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>]
 //        [--qc-override "<lý do>"]   (QC chặn xuất vì lỗi claim / nguyên bản: ghi lý do rồi xuất tiếp; lỗi chính sách thì không)
 //        node scripts/autopilot.mjs --steps            (list step ids)
 // Chain (each optional step can be turned off in the profile; a failing optional step logs a warning and the chain goes on):
@@ -188,7 +188,7 @@ async function exportProject(dir, { quality = '1080', aspects = [] }, say) {
 }
 
 // ---------- main ----------
-export async function autopilot(input, { profile: profId, brand: brandArg, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
+export async function autopilot(input, { profile: profId, brand: brandArg, product: productArg, out: outDir, project: projArg, restart, from, qcOverride } = {}) {
   const t00 = Date.now();
   const abs = path.resolve(input.replace(/^~(?=\/)/, os.homedir()));
   if (!fs.existsSync(abs)) throw new Error(`Không thấy ${abs}`);
@@ -237,12 +237,23 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
       return `${caps.length} dòng phụ đề · ${tl.duration}s · ${tl.height > tl.width ? 'dọc' : 'ngang'}`;
     },
     async brand() {
-      if (!prof.brand && !prof.cta) return { skip: 'hồ sơ không có brand kit / CTA' };
+      // S16 M121: thương hiệu chọn ở panel Tự lái (--brand; '' = không thương hiệu) thắng thương hiệu của hồ sơ; sản phẩm (--product) không bắt buộc
+      const kitId = typeof brandArg === 'string' ? (brandArg === '__none' ? '' : brandArg) : prof.brand || '', productId = typeof productArg === 'string' ? productArg : '';
+      if (!kitId && !prof.cta && !productId) return { skip: typeof brandArg === 'string' ? 'không thương hiệu (Kho Chung)' : 'hồ sơ không có brand kit / CTA' };
       const { tl, caps, capFile } = loadTL(dir); const notes = [];
-      if (prof.brand) {
+      if (productId) {
+        const { loadProduct } = await import('./products.mjs');
+        // hồ sơ sản phẩm bị xoá sau khi chọn: ghi chú rồi vẫn áp thương hiệu, không để cả bước thành lỗi
+        try {
+          const pr = loadProduct(productId);
+          tl.ads = { ...(tl.ads || {}), on: true, product: pr.id, ...(pr.industry && !tl.ads?.industry ? { industry: pr.industry } : {}) };
+          notes.push(`sản phẩm ${pr.name || pr.id}`);
+        } catch (e) { notes.push(`không gắn được sản phẩm: ${e.message}`); }
+      }
+      if (kitId) {
         const { loadBrand, brandFields } = await import('./batch.mjs');
-        const kit = loadBrand(prof.brand);
-        if (!kit) throw new Error(`không thấy brand kit "${prof.brand}"`);
+        const kit = loadBrand(kitId);
+        if (!kit) throw new Error(`không thấy brand kit "${kitId}"`);
         tl.brand = { ...(tl.brand || {}), ...brandFields(kit, dir), kit: kit.id }; notes.push(kit.title || kit.name);
         const card = (tl.scenes || []).filter(s => s.type === 'title_card' && !s._ai && !s._auto).pop(); if (card) Object.assign(card, endCard(tl.brand)); // S16 M120
       }
@@ -480,8 +491,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.re
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { try { CUR?.kill('SIGTERM'); } catch {} process.exit(130); });
   if (args.includes('--steps')) { for (const [id, l, , r] of STEPS) console.log(`${id.padEnd(8)} ${l}${r ? ' (bắt buộc)' : ''}`); process.exit(0); }
   const input = args.find((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && !['--restart'].includes(args[i - 1])));
-  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--brand <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
-  autopilot(input, { profile: opt('--profile'), brand: opt('--brand'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
+  if (!input) { console.error('usage: node scripts/autopilot.mjs <video|project_dir> [--profile <id>] [--brand <id>] [--product <id>] [--out <dir>] [--project <dir>] [--restart] [--from <step>] [--qc-override "<lý do>"]'); process.exit(2); }
+  autopilot(input, { profile: opt('--profile'), brand: opt('--brand'), product: opt('--product'), out: opt('--out'), project: opt('--project'), restart: args.includes('--restart'), from: opt('--from'), qcOverride: opt('--qc-override') })
     .then(() => process.exit(0))
     .catch(e => { console.error('LỖI: ' + e.message); process.exit(1); });
 }
