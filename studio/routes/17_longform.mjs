@@ -6,7 +6,7 @@
 //   GET  /api/longform/list?dir=                    → highlights.json of a run (+ thumb / mp4 urls)
 //   GET  /api/longform/file?p=<abs path>            → image / video under $AVS_HOME or a Kho's Du an/ (thumbs, exported mp4)
 //   POST /api/longform/upload?name=&brand=          → raw body saved to <Kho>/Nguon/ → {path}
-//   POST /api/longform/highlights {video, n, min, max, orient, model, brand}   job → job.out = {dir, items}; + source.json
+//   POST /api/longform/highlights {video, n, min, max, orient, model, brand, brief?, product?}   job (S18 M127: brief/product dẫn Claude chọn) → job.out = {dir, items}; + source.json
 //   POST /api/longform/topic {topic, dur, voice, orient, export, brand}        job → job.out = {dir, mp4}
 //   POST /api/longform/export {dir, only?, quality?}                      job: render every project of a highlights run
 //   POST /api/longform/open {dir}                   → open that project in Studio
@@ -16,6 +16,8 @@ import path from 'node:path';
 import { workspaceFor, ensureWorkspace, projectDirFor, allWorkspaces, sub, inWorkspace, writeSource, hashFile } from '../../scripts/workspace.mjs';
 import { forbiddenDir } from '../security.mjs';
 import { uploadVideo, brandParam } from './26_pick.mjs';
+import { cleanBrief } from '../../scripts/highlights.mjs';
+import { validId, loadProduct } from '../../scripts/products.mjs';
 
 export default ctx => {
   const HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -90,6 +92,12 @@ export default ctx => {
         const { ws, dir: out } = khoOut(b.brand, `${path.basename(video, path.extname(video))} - clip ngắn`);
         const argv = [HL, video, '--out', out, '--n', String(Math.max(1, Math.min(12, +b.n || 6))), '--min', String(+b.min || 20), '--max', String(+b.max || 60),
           '--orient', b.orient === 'horizontal' ? 'horizontal' : 'vertical', '--model', ['small', 'medium', 'large-v3-turbo', 'large-v3'].includes(b.model) ? b.model : 'large-v3-turbo'];
+        // S18 M127: hướng dẫn cho Claude + sản phẩm ưu tiên (không bắt buộc)
+        const brief = cleanBrief(b.brief), product = String(b.product || '');
+        if (product && !validId(product)) return J({ ok: false, error: 'Mã sản phẩm không hợp lệ' }, 400);
+        if (product) { try { loadProduct(product); } catch (e) { return J({ ok: false, error: e.message }, 400); } }
+        if (brief) argv.push('--brief', brief);
+        if (product) argv.push('--product', product);
         // source.json của lần chạy: video dài gốc theo đường dẫn tương đối với Kho (S12 mục 2.2)
         const ok = ctx.startJob('highlights', async () => { const sha = hashFile(video).catch(() => null); await runCli(argv, r => { ctx.job.out = { dir: out, n: r?.n || 0 }; }); writeSource(out, ws, video, { size: fs.statSync(video).size, sha256: await sha }); }, b);
         return ok ? J({ ok, dir: out }) : busy();

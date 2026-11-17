@@ -2,6 +2,7 @@
 // usage:
 //   node scripts/highlights.mjs <long_video> --out <dir> [--n 6] [--min 20 --max 60] [--orient vertical|horizontal]
 //        [--model large-v3-turbo] [--claude-model sonnet] [--chunk 480] [--min-score 40] [--pack slate] [--export] [--quality 1080]
+//        [--brief "<hướng dẫn cho Claude>"] [--product <id sản phẩm>]   (S18 M127: ưu tiên theo ý người dùng, trống = tự chọn)
 //   node scripts/highlights.mjs --export <out_dir> [--only 1,3] [--quality 720|1080]      (render projects listed in highlights.json)
 // 1. Transcribe the whole video once (transcribe.py, cached in $AVS_HOME/cache/transcripts/), silences via ffmpeg silencedetect.
 // 2. Sentences → chunks of ≤ --chunk seconds (bounded prompt) → `claude -p` picks self-contained moments per chunk (JSON),
@@ -113,12 +114,32 @@ function chunkSentences(sents, chunkSec, maxChars = 15000) {
   }
   return chunks;
 }
+// S18 M127: hướng dẫn của người dùng (+ sản phẩm) — để trống thì Claude tự chọn như cũ
+export const BRIEF_MAX = 600;
+export function cleanBrief(s) {
+  return String(s || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, BRIEF_MAX);
+}
+export function productBrief(p) {
+  if (!p || !p.name) return '';
+  const ok = (p.claims || []).filter(c => c.status === 'approved').map(c => c.text).slice(0, 6);
+  return [`Sản phẩm: ${p.name}${p.brand ? ` (thương hiệu ${p.brand})` : ''}${p.price ? `, giá ${p.price}` : ''}.`,
+    ok.length ? `Điểm nổi bật đã duyệt: ${ok.join('; ')}.` : '',
+    p.notes ? `Ghi chú: ${String(p.notes).replace(/\s+/g, ' ').slice(0, 300)}` : ''].filter(Boolean).join('\n');
+}
+export function briefBlock(o = {}) {
+  const brief = cleanBrief(o.brief), prod = o.product ? productBrief(o.product) : '';
+  if (!brief && !prod) return '';
+  return `
+YÊU CẦU CỦA NGƯỜI DÙNG (ưu tiên trên các tiêu chí chung, nhưng vẫn phải giữ hook mạnh và ý trọn vẹn):
+${prod ? `${prod}\nƯu tiên khoảnh khắc nhắc tới, dùng thử, khoe hoặc so sánh sản phẩm này; đoạn không liên quan sản phẩm thì chấm điểm thấp hơn.\n` : ''}${brief ? `Hướng dẫn: """${brief.replace(/"""/g, '"')}"""\n` : ''}Trong "reason", nói rõ khoảnh khắc khớp yêu cầu này ở chỗ nào (hoặc ghi "ít liên quan" nếu chỉ chọn vì nội dung hay).
+`;
+}
 function pickPrompt(chunk, o, k, total) {
   const lines = chunk.map(s => `[${s.i}] ${mmss(s.s)} (${(s.e - s.s).toFixed(1)}s) ${s.text}`).join('\n');
   return `Bạn là biên tập viên video ngắn (TikTok/Reels/Shorts) người Việt. Dưới đây là lời thoại (đã nhận dạng tự động, có thể sai chính tả) của MỘT ĐOẠN trong một video dài ${mmss(total)}. Mỗi dòng: [số câu] thời điểm bắt đầu (độ dài) nội dung.
 
 ${lines}
-
+${briefBlock(o)}
 Nhiệm vụ: đề xuất ${k} khoảnh khắc TỰ ĐỨNG ĐƯỢC (xếp theo chất lượng, chấm điểm thật thà — đoạn yếu thì điểm thấp, máy sẽ lọc theo điểm) để cắt thành video ngắn, mỗi khoảnh khắc là một dải câu liên tiếp [from..to], tổng độ dài ${o.min}–${o.max} giây (cộng độ dài các câu).
 Tiêu chí bắt buộc:
 - 3 giây đầu là HOOK mạnh: câu mở là câu hỏi, khẳng định gây tò mò, con số, mâu thuẫn hoặc lời hứa lợi ích. Không mở bằng câu chào, câu nối ("và", "thì", "còn nữa", "thứ hai là").
@@ -133,12 +154,12 @@ Với mỗi khoảnh khắc, viết:
 
 Chỉ trả về DUY NHẤT JSON (không markdown): {"clips":[{"from":12,"to":19,"title":"…","hook":"…","score":82,"reason":"…"}]}`;
 }
-function rerankPrompt(cands, n) {
+function rerankPrompt(cands, n, o = {}) {
   const lines = cands.map((c, i) => `#${i} (${Math.round(c.dur)}s, điểm ${c.score}) ${c.title} | hook: ${c.hook}\n   ${c.text.slice(0, 260)}${c.text.length > 260 ? '…' : ''}`).join('\n');
   return `Bạn là biên tập viên video ngắn. Đây là các ứng viên clip ngắn cắt từ cùng một video dài (điểm do từng lượt chấm riêng, chưa đồng đều):
 
 ${lines}
-
+${briefBlock(o)}
 Chọn ${n} clip TỐT NHẤT (hook mạnh trong 3 giây đầu, ý trọn vẹn, không tham chiếu treo, không trùng nội dung nhau) và chấm lại điểm 0–100 trên cùng thang. Có thể sửa title/hook cho hay hơn (title ≤ 60 ký tự, hook ≤ 40 ký tự).
 Chỉ trả về JSON: {"picks":[{"id":3,"score":88,"title":"…","hook":"…"}]} theo thứ tự tốt nhất trước.`;
 }
@@ -219,7 +240,7 @@ export async function findHighlights(src, o) {
     say(.64, `Claude xếp hạng lại ${cands.length} ứng viên`);
     const pool2 = cands.slice(0, Math.min(cands.length, o.n * 3));
     try {
-      const r = await ask(rerankPrompt(pool2, o.n), o.claudeModel, 'Claude xếp hạng lại', .64);
+      const r = await ask(rerankPrompt(pool2, o.n, o), o.claudeModel, 'Claude xếp hạng lại', .64);
       const sel = [];
       for (const p of r.picks || []) { const c = pool2[+p.id]; if (c && !sel.includes(c)) sel.push(Object.assign(c, { score: Math.round(+p.score || c.score), title: String(p.title || c.title).slice(0, 80), hook: String(p.hook || c.hook).slice(0, 60) })); }
       if (sel.length) picks = sel.slice(0, o.n);
@@ -344,6 +365,9 @@ async function main() {
   const o = { n: Math.max(1, Math.min(20, +opt('--n', 6))), min: +opt('--min', 20), max: +opt('--max', 60), orient: opt('--orient', 'vertical'),
     model: opt('--model', 'large-v3-turbo'), claudeModel: opt('--claude-model', 'sonnet'), chunk: Math.max(60, +opt('--chunk', 480)), pack: opt('--pack', 'slate'), minScore: +opt('--min-score', 40) };
   if (!(o.min > 3 && o.max > o.min)) throw new Error('--min/--max không hợp lệ');
+  o.brief = cleanBrief(opt('--brief', ''));
+  const pid = opt('--product', '');
+  if (pid) { const { loadProduct } = await import('./products.mjs'); o.product = loadProduct(pid); } // id sai → lỗi rõ, không chạy mù
   const out = path.resolve(opt('--out', path.join(path.dirname(src), path.basename(src, path.extname(src)) + '_highlights')));
   fs.mkdirSync(out, { recursive: true });
   const r = await findHighlights(src, o);
@@ -355,7 +379,8 @@ async function main() {
     const base = .66 + .33 * i / r.picks.length;
     const b = await buildProject(src, h, dir, o, r.info, r.words, s => say(base, `Dự án ${i + 1}/${r.picks.length}: ${s}`));
     const { w0, w1, ...rest } = h;
-    list.push({ dir, title: h.title, hook: h.hook, t0: h.t0, t1: h.t1, dur: b.dur, score: h.score, reason: h.reason, text: h.text, mode: b.mode, thumb: path.join(dir, '.studio/thumb.jpg'), source: src });
+    list.push({ dir, title: h.title, hook: h.hook, t0: h.t0, t1: h.t1, dur: b.dur, score: h.score, reason: h.reason, text: h.text, mode: b.mode, thumb: path.join(dir, '.studio/thumb.jpg'), source: src,
+      ...(o.brief || o.product ? { brief: o.brief, product: o.product?.id || '' } : {}) });
     fs.writeFileSync(path.join(out, 'highlights.json'), JSON.stringify(list, null, 1));
   }
   if (args.includes('--export')) await exportAll(out, { quality: opt('--quality', '1080') });

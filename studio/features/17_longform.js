@@ -6,7 +6,7 @@
   const LS = k => { try { return localStorage.getItem('lf_' + k); } catch { return null; } };
   const LSset = (k, v) => { try { localStorage.setItem('lf_' + k, v); } catch {} };
   // S12 M98: video lấy từ Kho của thương hiệu (bộ chọn dùng chung Studio.videoPicker), kết quả vào <Kho>/Du an/
-  const S = { tab: LS('tab') || 'long', video: LS('video') || '', dir: LS('dir') || '', list: null, runs: [], queue: false, topicOut: null, brand: LS('brand'), brands: null };
+  const S = { tab: LS('tab') || 'long', video: LS('video') || '', dir: LS('dir') || '', list: null, runs: [], queue: false, topicOut: null, brand: LS('brand'), brands: null, products: null, product: LS('product') || '' };
   const css = document.createElement('style');
   css.textContent = `
   .lf-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
@@ -31,8 +31,13 @@
   .lf-it .rs { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin-top: var(--space-1); line-height: 1.4; }
   .lf-it .b { display: flex; gap: var(--space-1); margin-top: var(--space-1); }
   .lf-bulk { display: flex; gap: var(--space-2); } .lf-bulk button { flex: 1; justify-content: center; font-size: var(--text-xs); }
-  .lf-runs { width: 100%; font-size: var(--text-2xs); }`;
+  .lf-runs { width: 100%; font-size: var(--text-2xs); }
+  #lf-brief { width: 100%; resize: vertical; font: inherit; font-size: var(--text-xs); }
+  .lf-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+  .lf-chips .chip { width: auto; flex: 0 0 auto; font-size: var(--text-2xs); padding: 2px var(--space-2); border-radius: var(--radius-pill); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-hover)); }
+  .lf-card .bf, .lf-it .bf { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-1) 0; font-style: italic; }`;
   document.head.appendChild(css);
+  const BRIEF_CHIPS = ['Ưu tiên khoảnh khắc nói về sản phẩm', 'Ưu tiên mẹo, kiến thức cụ thể', 'Ưu tiên đoạn hài, cảm xúc', 'Bỏ phần chào hỏi, giới thiệu đầu', 'Có số liệu, kết quả thật'];
   const active = () => document.querySelector('#rail .on')?.dataset.p === 'longform';
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const api = (u, b) => Studio.api(u, b).catch(e => ({ error: e.message }));
@@ -41,6 +46,7 @@
     if (!S.brands) {
       const [b, onb] = await Promise.all([api('/api/brands'), S.brand == null ? api('/api/onboarding') : null]);
       S.brands = Array.isArray(b) ? b : [];
+      api('/api/products').then(p => { S.products = Array.isArray(p) ? p : []; if (S.product && !S.products.some(x => x.id === S.product)) S.product = ''; if (active() && S.tab === 'long') render(); });
       if (S.brand == null) S.brand = onb?.brand || (S.brands.length === 1 ? S.brands[0].id : '');
       if (S.brand && !S.brands.some(x => x.id === S.brand)) S.brand = '';
     }
@@ -74,6 +80,11 @@
         <div><label class="lf-lbl">Dài tối đa (giây)</label><input id="lf-max" type="number" min="10" max="180" value="${LS('max') || 60}"></div>
         <div class="full"><label class="lf-lbl">Nhận giọng</label><select id="lf-model"><option value="large-v3-turbo">Chính xác (large-v3-turbo)</option><option value="small" ${LS('model') === 'small' ? 'selected' : ''}>Nhanh (small, sai nhiều hơn)</option></select></div>
       </div>
+      <label class="lf-lbl" for="lf-brief">Hướng dẫn cho Claude (không bắt buộc — để trống thì Claude tự chọn)</label>
+      <textarea id="lf-brief" rows="3" maxlength="600" placeholder="Ví dụ: ưu tiên đoạn khoe sản phẩm, đoạn chia sẻ mẹo, bỏ phần chào hỏi và hỏi đáp cuối">${esc(LS('brief') || '')}</textarea>
+      <div class="lf-chips">${BRIEF_CHIPS.map(c => `<button type="button" class="chip" data-chip="${esc(c)}">+ ${esc(c)}</button>`).join('')}</div>
+      <label class="lf-lbl" for="lf-product">Sản phẩm ưu tiên (không bắt buộc)</label>
+      <select id="lf-product"><option value="">— Không ưu tiên sản phẩm —</option>${(S.products || []).map(p => `<option value="${esc(p.id)}" ${p.id === S.product ? 'selected' : ''}>${esc(p.name || p.id)}</option>`).join('')}</select>
       <button class="primary lf-go" id="lf-go"><i class="ti ti-sparkles"></i> Tìm khoảnh khắc hay</button>
       <div class="lf-help">Máy nghe cả video một lần (lưu lại, lần sau không nghe lại), Claude chọn các đoạn tự đứng được — hook mạnh 3 giây đầu, trọn ý — rồi dựng mỗi đoạn thành một dự án (cắt lặng, phụ đề; video ngang vào khung dọc thì tự bám mặt).</div></div>
       ${hl.length ? `<label class="lf-lbl">Lần chạy trước</label><select class="lf-runs" id="lf-runs"><option value="">— chọn —</option>${hl.map(r => `<option value="${esc(r.dir)}" ${r.dir === S.dir ? 'selected' : ''}>${esc(r.name)} · ${r.n} clip · ${new Date(r.at).toLocaleString('vi-VN')}</option>`).join('')}</select>` : ''}
@@ -85,6 +96,7 @@
     return `<div class="lf-card"><h4><i class="ti ti-list-check"></i> ${L.length} khoảnh khắc <span class="r">${L.filter(x => x.mp4).length} đã xuất</span></h4>
       <div class="lf-bulk"><button id="lf-auto" ${S.queue ? '' : 'disabled title="Chưa có tính năng Tự lái (hàng đợi)"'}><i class="ti ti-rocket"></i> Tự lái tất cả</button>
       <button id="lf-exp"><i class="ti ti-upload"></i> Xuất tất cả</button></div>
+      ${L[0]?.brief || L[0]?.product ? `<div class="bf" title="Hướng dẫn đã dùng khi cắt"><i class="ti ti-message-2"></i> ${L[0].product ? `Sản phẩm: ${esc((S.products || []).find(p => p.id === L[0].product)?.name || L[0].product)}. ` : ''}${esc(L[0].brief || '')}</div>` : ''}
       ${L.map(it => `<div class="lf-it ${it.mode === 'blurfill' || (it.mode === 'crop' && LS('or') === 'horizontal') ? 'h' : ''}">
         ${it.thumbUrl ? `<img src="${avsUrl(it.thumbUrl)}" alt="">` : '<div class="ph"></div>'}
         <div><div class="tt">${esc(it.title)}</div>${it.hook ? `<div class="hk">“${esc(it.hook)}”</div>` : ''}
@@ -95,6 +107,11 @@
   function bindLong() {
     S.picker = Studio.videoPicker($('#lf-vp'), { brand: S.brand || '', value: S.video, onChange: p => { S.video = p; LSset('video', S.video); } });
     $('#lf-go').onclick = startLong;
+    const bf = $('#lf-brief');
+    document.querySelectorAll('#lf-body [data-chip]').forEach(c => c.onclick = () => { // S18 M127: gợi ý nhanh nối vào ô hướng dẫn
+      const t = c.dataset.chip, cur = bf.value.trim();
+      if (!cur.includes(t)) bf.value = (cur ? cur.replace(/[.;,]?$/, '; ') : '') + t; bf.focus();
+    });
     const runs = $('#lf-runs'); if (runs) runs.onchange = async () => { S.dir = runs.value; LSset('dir', S.dir); S.list = null; await refresh(); };
     const auto = $('#lf-auto'); if (auto) auto.onclick = autopilotAll;
     const exp = $('#lf-exp'); if (exp) exp.onclick = exportAll;
@@ -116,7 +133,9 @@
   async function startLong() {
     const video = (S.picker?.value || S.video).trim();
     if (!video) return Studio.toast('Chọn video dài trước');
-    const b = { video, brand: S.brand || '', n: +$('#lf-n').value, min: +$('#lf-min').value, max: +$('#lf-max').value, orient: $('#lf-or').value, model: $('#lf-model').value };
+    const b = { video, brand: S.brand || '', n: +$('#lf-n').value, min: +$('#lf-min').value, max: +$('#lf-max').value, orient: $('#lf-or').value, model: $('#lf-model').value,
+      brief: $('#lf-brief').value.trim(), product: $('#lf-product').value };
+    LSset('brief', b.brief); LSset('product', b.product); S.product = b.product;
     if (!(b.min > 3 && b.max > b.min)) return Studio.toast('Độ dài tối đa phải lớn hơn tối thiểu');
     for (const [k, v] of [['video', video], ['n', b.n], ['min', b.min], ['max', b.max], ['or', b.orient], ['model', b.model]]) LSset(k, v);
     S.video = video;
