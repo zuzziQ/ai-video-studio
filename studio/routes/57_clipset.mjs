@@ -2,7 +2,8 @@
 // để chuyển sang clip khác mà không phải quay lại tab Cắt clip. Đường dẫn clip lấy từ file trên máy (thư mục cha + tên thư mục
 // trong highlights.json), không nhận đường dẫn từ trình duyệt; Kho bị dời chỗ vẫn tìm đúng.
 //   GET  /api/clipset            → {set: null} | {set: {name, dir, n, cur, items: [{i, title, hook, score, dur, thumbUrl, exported, current, exists}]}}
-//   POST /api/clipset/open {i}   → lưu ở trình duyệt trước; server mở clip thứ i của bộ đang mở
+//   POST /api/clipset/open {i, keep?} → lưu ở trình duyệt trước; server mở clip thứ i của bộ đang mở. S18 M129: thay tab đang xem tại
+//                                  chỗ (nhóm tab của bộ không phình ra); keep: chỉ thêm tab (mở ở cửa sổ mới) → {ok, id}
 import fs from 'node:fs';
 import path from 'node:path';
 import { readExports } from '../../scripts/exports_log.mjs';
@@ -47,9 +48,11 @@ export default ctx => async (req, res, p) => {
       const b = await ctx.body(req), it = set && Number.isInteger(b?.i) ? set.items[b.i] : null;
       if (!it) return J({ ok: false, error: 'Không thấy clip này trong bộ' }, 400);
       if (!it.exists) return J({ ok: false, error: 'Thư mục clip không còn trên máy' }, 404);
-      if (ctx.job?.state === 'running') return J({ ok: false, error: 'Đang có tác vụ khác chạy — đợi xong rồi chuyển clip' }, 409);
-      ctx.openProject(it.dir);
-      return J({ ok: true });
+      if (b.keep === true && ctx.tabs) return J({ ok: true, id: ctx.tabs.open(it.dir).id }); // cửa sổ mới: trang này giữ nguyên dự án
+      const old = ctx.pid, job = ctx.job;
+      // thay tab đang xem tại chỗ; tab cũ đang chạy tác vụ (xuất…) thì giữ lại, thêm tab mới
+      const id = ctx.openProject(it.dir, old && !(job?.state === 'running' && job.tab === old) ? { replace: old } : undefined);
+      return J({ ok: true, id });
     }
     return false;
   } catch (e) { return J({ ok: false, error: e.message }, e.status || 500); }

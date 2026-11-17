@@ -94,7 +94,7 @@
         <div class="slrow"><span>Giọng gốc</span><input type="range" data-db="vg" min="0" max="100" step="5" value="${vg}"><b>${vg}%</b></div>
         <div class="acts"><button data-dba="dub" class="primary"><i class="ti ti-microphone-2"></i> Tạo lồng tiếng</button></div>
         ${dub ? `<div class="dubfile"><i class="ti ti-wave-sine"></i> ${esc(dub.file)} · ${esc(dub.voice || '')}${trk ? `<label class="check"><input type="checkbox" data-db="dubon" ${trk.mute ? '' : 'checked'}> Dùng khi xuất</label>` : ''}</div>
-          <audio controls preload="none" src="/project/${esc(dub.file)}?${Studio.META?.saved || ''}"></audio>` : ''}
+          <audio controls preload="none" src="${Studio.pbase}${esc(dub.file)}?${Studio.META?.saved || ''}"></audio>` : ''}
         <div class="help">Mỗi câu đọc riêng, nhanh lên tối đa 1,35× để khớp chỗ trống; câu quá dài sẽ lấn sang câu sau (có báo). Giọng lồng tiếng là một track âm thanh;
         giọng gốc giảm theo thanh trên khi <b>xuất</b> (preview vẫn phát giọng gốc — nghe thử bản lồng tiếng ở đây). ${s.tts === 'say' ? 'Thêm giọng macOS: Cài đặt › Trợ năng › Nội dung được đọc.' : s.tts === 'vieneu' ? 'VieNeu chỉ đọc tiếng Việt; máy chủ không chạy hoặc dịch sang tiếng khác thì lùi về edge-tts (có báo).' : 'edge-tts gửi câu chữ lên dịch vụ đọc của Microsoft.'}</div>`, 'ti-microphone-2')}
       ${nTr ? sect('Bản dịch', `<div class="trlist">${CAP.map((c, i) => c.hidden ? '' : `<div><small>${esc(c.words.map(w => w.w).join(' '))}</small><input data-tri="${i}" value="${esc(c.tr || '')}"></div>`).join('')}</div>`, 'ti-list') : ''}

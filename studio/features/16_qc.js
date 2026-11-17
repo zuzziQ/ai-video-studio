@@ -124,8 +124,8 @@
         <span class="bd"><span class="src">${i.src === 'claude' ? 'Claude' : 'máy'}</span><b>${esc(i.kind_vi)}</b> — ${esc(i.msg)}${i.new ? '<span class="nw">phát sinh sau khi sửa</span>' : ''}${i.note ? `<small>(${esc(i.note)})</small>` : ''}
         ${g ? `<span class="sg"><i class="ti ti-wand"></i> Gợi ý: ${esc(g)}</span>` : ''}</span>
         ${i.fixed ? '<span class="ok"><i class="ti ti-check"></i> đã sửa</span>' : ''}</div>`; }).join('')}</div>
-      ${q.compare_sheet ? `<details><summary class="muted qc-sumt">Ảnh trước / sau khi sửa (${q.compare.length} cặp)</summary><img class="qc-cmp" src="/project/${q.compare_sheet}?${Date.now()}"></details>` : ''}
-      <div class="qc-imgs">${q.sheet ? `<a href="/project/${q.sheet}" target="_blank"><i class="ti ti-layout-grid"></i> Ảnh tổng quan các khung</a>` : ''}</div>
+      ${q.compare_sheet ? `<details><summary class="muted qc-sumt">Ảnh trước / sau khi sửa (${q.compare.length} cặp)</summary><img class="qc-cmp" src="${Studio.pbase}${q.compare_sheet}?${Date.now()}"></details>` : ''}
+      <div class="qc-imgs">${q.sheet ? `<a href="${Studio.pbase}${q.sheet}" target="_blank"><i class="ti ti-layout-grid"></i> Ảnh tổng quan các khung</a>` : ''}</div>
       <div class="actions">${q.can_undo && q.fix && !q.undone ? '<button id="qcundo"><i class="ti ti-arrow-back-up"></i> Hoàn tác sửa</button>' : ''}
         <button id="qcagain"><i class="ti ti-refresh"></i> Kiểm tra lại</button>
         ${sug.length ? '<button class="primary" id="qcfix"><i class="ti ti-wand"></i> <span>Áp dụng gợi ý đã chọn</span></button>' : ''}<button onclick="closeModal()">Đóng</button></div>`);

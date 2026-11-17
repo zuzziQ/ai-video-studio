@@ -242,7 +242,7 @@
     figs.forEach((fg, k) => {
       const st = (q.stills || [])[k], ph = fg.querySelector('.ph, img');
       if (!st) { ph.outerHTML = '<div class="ph"><i class="ti ti-photo-off"></i></div>'; return; }
-      ph.outerHTML = `<img src="/project/${esc(st.file)}?${Date.now()}" title="Bấm để tới ${fmt(st.t)}">`;
+      ph.outerHTML = `<img src="${Studio.pbase}${esc(st.file)}?${Date.now()}" title="Bấm để tới ${fmt(st.t)}">`;
       fg.querySelector('img').onclick = () => { S.closeModal(); S.setTime(st.t); };
     });
     const is = q.issues || [], sec = Math.round((q.ms || 0) / 1000);

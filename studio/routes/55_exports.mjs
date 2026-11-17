@@ -62,6 +62,8 @@ export default ctx => {
     if (req.method !== 'POST') return false;
     const b = await ctx.body(req);
     if (p === '/api/exports/record') {
+      // S18 M129: job xuất của tab khác (pollJob của trang này nhận nhầm) không được ghi vào dự án của tab này
+      if (ctx.job?.tab && ctx.pid && ctx.job.tab !== ctx.pid) return J({ ok: false, error: 'Bản xuất vừa xong thuộc dự án ở tab khác' }, 409);
       const it = await recordJob(dir, { quality: b.quality, from: b.from, to: b.to });
       if (!it) return J({ ok: false, error: 'Không có bản xuất vừa xong để ghi' }, 404);
       return J({ ok: true, item: view().find(x => x.id === it.id) || null });

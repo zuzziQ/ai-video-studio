@@ -93,8 +93,9 @@ test('/api/save kèm dir của dự án khác (tab cũ sau Video mới) → 409,
 
 test('server: newProject đóng dự án đang mở trước khi dựng, khôi phục khi lỗi', () => {
   const s = read('studio/server.mjs'), f = s.slice(s.indexOf('async function newProject'), s.indexOf('function startJob'));
-  assert.match(f, /const prev = project; project = null;[\s\S]*await build\(/);
-  assert.match(f, /catch \(e\) \{\s*if \(!project && prev\) project = prev;\s*throw e;/);
+  // S18 M129: dự án của request (cur / setReq: chỉ dự án của request) thay cho biến toàn cục `project`; cùng hành vi
+  assert.match(f, /const prev = cur\(\), prevPid = curPid\(\); setReq\(null\);[\s\S]*await build\(/);
+  assert.match(f, /catch \(e\) \{\s*if \(!cur\(\) && prev\) setReq\(prev, prevPid\);\s*throw e;/);
 });
 
 test('hộp Video mới: lưu dự án đang mở rồi che trình chỉnh sửa; dòng Thương hiệu · Kho; nhắc khi Kho khác, cho đổi lại', () => {

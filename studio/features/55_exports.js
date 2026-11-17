@@ -40,7 +40,7 @@
   const mb = b => (b == null ? '' : b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB');
   const dur = s => (s == null ? '' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`);
   const when = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); };
-  const url = rel => '/project/' + rel.split('/').map(encodeURIComponent).join('/');
+  const url = rel => Studio.purl('') + rel.split('/').map(encodeURIComponent).join('/');
   const base = f => f.file.split('/').pop();
   const meta = (x, f = x.files[0]) => [f.aspect, x.quality ? QL[x.quality] : f.w && f.h ? `${f.w}×${f.h}` : '', dur(f.dur), mb(f.size), x.range ? `đoạn ${x.range.from ?? 0}–${x.range.to ?? 'hết'} s` : ''].filter(Boolean).join(' · ');
   const find = id => DATA?.items.find(x => x.id === id);

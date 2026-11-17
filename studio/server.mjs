@@ -3,18 +3,20 @@
 //        node studio/server.mjs --new raw.mp4 [project_dir]      (build a starter project, then open it)
 // Serves the editor UI (studio/, incl. studio/thumbs/), the render engine (engine/), the skill's sound/music library (assets/),
 // the template gallery (templates/, override with --templates <dir>)
-// and the project's files (/project/...). Saves timeline.json with history snapshots in <project>/.studio/.
+// and the project's files (/project/... = default project, /p/<tab id>/... = a tab's project, S18 M129). Saves timeline.json with history snapshots in <project>/.studio/.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
 import { shortErr } from '../scripts/err_text.mjs';
 import { resolvePerf, PROFILES } from '../scripts/perf_profile.mjs';
 import { workspaceOfProject } from '../scripts/workspace.mjs';
-import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson, cookieOk, sessionCookie, launchKeyOk, launchUrl } from './security.mjs';
+import { TabRegistry, tabId } from './tabs.mjs';
+import { AVS_HOME, resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson, cookieOk, sessionCookie, launchKeyOk, launchUrl } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
@@ -26,19 +28,29 @@ const VERSION = '4.0';
 // Template gallery (GET /api/templates): <skill>/templates/*.json + templates/user/*.json, previews in templates/previews/.
 const TPL_DIR = path.resolve(opt('--templates', process.env.AVS_TEMPLATES || path.join(SKILL, 'templates')));
 
-let project = null; // { dir, tlFile }
+// S18 M129: nhiều dự án mở cùng lúc. Mỗi request chạy trong `als` với dự án của tab gửi nó (header X-AVS-Project = mã tab do
+// server cấp, xem studio/tabs.mjs); job chạy nền giữ dự án của request đã khởi chạy nó, nên chuyển tab / mở dự án khác không làm
+// job ghi nhầm chỗ. Request không gửi mã (CLI, script cũ) dùng dự án mặc định `active` (dự án mở gần nhất), như trước.
+let active = null; // { dir, tlFile }
+const als = new AsyncLocalStorage();
+const cur = () => { const st = als.getStore(); return st ? st.project : active; };
+const curPid = () => als.getStore()?.pid || null;
+const setCur = (pr, pid) => { active = pr; const st = als.getStore(); if (st) { st.project = pr; st.pid = pid || null; if (pid) st.opened = pid; } };
+// chỉ dự án của request này (không đổi dự án mặc định của CLI / tab khác): newProject đóng / khôi phục dự án cũ trong lúc tạo
+const setReq = (pr, pid) => { const st = als.getStore(); if (st) { st.project = pr; st.pid = pid || null; } else active = pr; };
+const TABS = new TabRegistry({ file: path.join(AVS_HOME(), 'studio-tabs.json'), resolve: resolveProject,
+  busy: id => job?.state === 'running' && job.tab === id, // tab đang chạy tác vụ không bị đẩy ra khi quá 8 tab
+  onClose: id => { if (active && tabId(active.dir) === id) active = null; } }); // CLI không còn ghi vào dự án đã đóng tab
 // Only real projects (a timeline.json), never the config folder with the Telegram / YouTube / Claude tokens (studio/security.mjs).
-function openProject(p) {
-  project = resolveProject(p);
+function openProject(p, o) {
+  const { id, project } = TABS.open(p, Date.now(), o);
   fs.mkdirSync(path.join(project.dir, '.studio/history'), { recursive: true });
+  setCur(project, id);
   console.log(`project: ${project.dir}`);
+  return id;
 }
-
-// Switching projects from the UI while a job runs would make that job write into the newly opened project.
-function switchProject(p) {
-  if (job?.state === 'running') throw Object.assign(new Error('Đang có tác vụ chạy (' + (job.step || job.kind) + ') — đợi xong hoặc huỷ rồi mới mở dự án khác'), { status: 409 });
-  openProject(p);
-}
+// Trước M129 mở dự án khác bị chặn khi có job chạy (job đọc biến dự án toàn cục). Nay job giữ dự án của nó (als), nên mở được.
+const switchProject = (p, o) => openProject(p, o);
 
 // ---------- helpers ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -70,9 +82,14 @@ function under(root, rel) {
   const p = path.resolve(root, r.replace(/^\/+/, ''));
   return p === root || p.startsWith(root + path.sep) ? p : null;
 }
-const json = (res, obj, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); };
+const json = (res, obj, code = 200) => {
+  // S18 M129: request này vừa mở một dự án (tab mới) → trình duyệt ghi mã lên thanh địa chỉ trước khi tải lại (studio/auth.js)
+  const st = als.getStore(); if (st?.opened && st.opened !== st.asked && !res.headersSent) res.setHeader('X-AVS-Opened', st.opened);
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); };
 const body = req => readJson(req);
-const P = rel => path.resolve(project.dir, rel);
+const P = rel => path.resolve(cur().dir, rel);
+// URL tới file của dự án đang xử lý request: tab có mã → /p/<mã>/, không thì /project/ (dự án mặc định)
+const purl = rel => (curPid() ? `/p/${curPid()}/` : '/project/') + rel;
 
 function frameCount(tl) {
   if (!tl.aroll?.frames) return 0;
@@ -80,20 +97,20 @@ function frameCount(tl) {
   return fs.existsSync(d) ? fs.readdirSync(d).filter(f => /\.(jpe?g|png)$/i.test(f)).length : 0;
 }
 function readProject() {
-  const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
+  const tl = JSON.parse(fs.readFileSync(cur().tlFile, 'utf8'));
   let captions = tl.captions;
   if (typeof captions === 'string' && fs.existsSync(P(captions))) captions = JSON.parse(fs.readFileSync(P(captions), 'utf8'));
   const audioSrc = [tl.audio?.voice, tl.audio?.mix].find(a => a && fs.existsSync(P(a))) || null;
   return { timeline: tl, captions: Array.isArray(captions) ? captions : [], meta: {
-    name: path.basename(project.dir), dir: project.dir, version: VERSION, frames: frameCount(tl), audio: audioSrc,
+    name: path.basename(cur().dir), dir: cur().dir, version: VERSION, frames: frameCount(tl), audio: audioSrc,
     mix: tl.audio?.mix && fs.existsSync(P(tl.audio.mix)) ? tl.audio.mix : null,
-    saved: fs.statSync(project.tlFile).mtimeMs, notes: fs.existsSync(P('.studio/notes.md')),
+    saved: fs.statSync(cur().tlFile).mtimeMs, notes: fs.existsSync(P('.studio/notes.md')),
   } };
 }
 // S17 M126: Kho (và thương hiệu) của dự án đang mở cho thanh trên và hộp "Video mới" (chỉ GET /api/project, không phải mọi
 // readProject của route); lỗi đọc Kho không làm hỏng việc mở dự án.
 function khoOf(tl) {
-  try { const ws = workspaceOfProject(project.dir, tl); return { brand: ws.brand || '', title: ws.title, root: ws.root, found: ws.found }; } catch { return null; }
+  try { const ws = workspaceOfProject(cur().dir, tl); return { brand: ws.brand || '', title: ws.title, root: ws.root, found: ws.found }; } catch { return null; }
 }
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 function writeNotes(tl, captions) {
@@ -108,7 +125,7 @@ function writeNotes(tl, captions) {
   captions.forEach((c, k) => c.note && out.push(`- captions[${k}] "${c.words.map(w => w.w).join(' ')}" ${fmt(c.t0)}: ${c.note}`));
   (tl.audio?.sfx || []).forEach((x, k) => x.note && out.push(`- audio.sfx[${k}] ${x.name} @${fmt(x.t)}: ${x.note}`));
   const f = P('.studio/notes.md');
-  if (out.length) fs.writeFileSync(f, `# Ghi chú cho Claude (từ AI Video Studio)\nDự án: ${project.dir}\nCập nhật: ${new Date().toLocaleString('vi-VN')}\n\n${out.join('\n')}\n`);
+  if (out.length) fs.writeFileSync(f, `# Ghi chú cho Claude (từ AI Video Studio)\nDự án: ${cur().dir}\nCập nhật: ${new Date().toLocaleString('vi-VN')}\n\n${out.join('\n')}\n`);
   else if (fs.existsSync(f)) fs.unlinkSync(f);
   return out.length;
 }
@@ -117,16 +134,16 @@ function save({ timeline, captions, dir }) {
   // khác) thì từ chối, không ghi timeline cũ đè lên dự án mới. Không gửi dir (script cũ) thì như trước.
   if (dir != null) {
     const k = d => { const r = path.resolve(String(d)); return process.platform === 'win32' ? r.toLowerCase() : r; };
-    if (typeof dir !== 'string' || k(dir) !== k(project.dir)) throw Object.assign(new Error('Studio đã chuyển sang dự án khác — tải lại trang trước khi lưu'), { status: 409 });
+    if (typeof dir !== 'string' || k(dir) !== k(cur().dir)) throw Object.assign(new Error('Studio đã chuyển sang dự án khác — tải lại trang trước khi lưu'), { status: 409 });
   }
   if (!timeline || typeof timeline !== 'object' || Array.isArray(timeline)) throw Object.assign(new Error('Thiếu timeline — không lưu'), { status: 400 });
   if (captions != null && !Array.isArray(captions)) throw Object.assign(new Error('captions phải là danh sách'), { status: 400 });
   const tl = timeline;
   const capFile = typeof tl.captions === 'string' ? tl.captions : (captions?.length ? 'work/captions.json' : null);
   if (capFile) { fs.mkdirSync(path.dirname(P(capFile)), { recursive: true }); fs.writeFileSync(P(capFile), JSON.stringify(captions || [], null, 1)); tl.captions = capFile; }
-  fs.writeFileSync(project.tlFile, JSON.stringify(tl, null, 1));
-  fs.mkdirSync(path.join(project.dir, '.studio/history'), { recursive: true });
-  const snap = path.join(project.dir, '.studio/history', `${stamp()}.json`);
+  fs.writeFileSync(cur().tlFile, JSON.stringify(tl, null, 1));
+  fs.mkdirSync(path.join(cur().dir, '.studio/history'), { recursive: true });
+  const snap = path.join(cur().dir, '.studio/history', `${stamp()}.json`);
   fs.writeFileSync(snap, JSON.stringify({ timeline: tl, captions }));
   // keep the newest 60 snapshots
   const all = fs.readdirSync(path.dirname(snap)).sort();
@@ -144,7 +161,7 @@ function library() {
 
 // ---------- waveform (peaks per 1/50 s) ----------
 function waveform(cb) {
-  const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
+  const tl = JSON.parse(fs.readFileSync(cur().tlFile, 'utf8'));
   const src = [tl.audio?.voice, tl.audio?.mix].find(a => a && fs.existsSync(P(a)));
   if (!src) return cb([]);
   const cache = P('.studio/wave.json');
@@ -219,11 +236,11 @@ function srt(captions) {
 }
 function still(t, dest) {
   return new Promise((ok, bad) => {
-    const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
+    const tl = JSON.parse(fs.readFileSync(cur().tlFile, 'utf8'));
     // Same source check as exportVideo: a moved project / deleted work/ must not surface as an fs.readdir stack.
     for (const f of [tl.aroll?.frames && path.dirname(tl.aroll.frames)]) if (f && !fs.existsSync(P(f))) return bad(Object.assign(new Error(`Thiếu file nguồn: ${f} — dự án bị di chuyển hoặc đã xoá thư mục work/`), { status: 400 }));
     const vert = (tl.height || 720) > (tl.width || 1280);
-    const tmp = path.join(project.dir, `.still_${process.pid}.json`);
+    const tmp = path.join(cur().dir, `.still_${process.pid}.json`);
     fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? 1080 : 1920, height: vert ? 1920 : 1080 }));
     fs.mkdirSync(P('out'), { recursive: true });
     const out = dest || `out/cover_${String(t).replace('.', '_')}s.jpg`;
@@ -283,7 +300,7 @@ async function saveTemplate({ tpl, t = 1 }) {
 let job = null; // { kind, state: running|done|error, progress 0..1, step, log, out }
 function run(cmd, argv, onLine) {
   return new Promise((ok, bad) => {
-    const p = spawn(cmd, argv, { cwd: project?.dir || process.cwd() });
+    const p = spawn(cmd, argv, { cwd: cur()?.dir || process.cwd() });
     job.proc = p;
     // Lines are reassembled across chunks so a long progress/JSON line never reaches onLine cut in half.
     let own = ''; // this process's output only (job.log spans every command of the job)
@@ -301,7 +318,7 @@ function run(cmd, argv, onLine) {
   });
 }
 async function exportVideo({ quality = '1080', from, to, aspects, profile, deliver: give }) {
-  const tl = JSON.parse(fs.readFileSync(project.tlFile, 'utf8'));
+  const tl = JSON.parse(fs.readFileSync(cur().tlFile, 'utf8'));
   // Missing source files (project moved / work/ deleted): say which one instead of a python/node stack trace.
   for (const f of [tl.aroll?.frames && path.dirname(tl.aroll.frames), tl.audio?.voice]) if (f && !fs.existsSync(P(f))) throw new Error(`Thiếu file nguồn: ${f} — dự án bị di chuyển hoặc đã xoá thư mục work/`);
   const [W, H] = quality === '720' ? [720, 1280] : quality === '4k' ? [2160, 3840] : [1080, 1920];
@@ -312,17 +329,17 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
   let mix = null;
   if (tl.audio?.voice || tl.audio?.music?.length || tl.audio?.sfx?.length || tl.audio?.tracks?.length || tl.clips?.some(c => c.audio)) {
     job.step = 'Trộn âm thanh (giọng + nhạc + SFX, -14 LUFS)';
-    await run(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/mix_audio.py'), project.tlFile]);
+    await run(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/mix_audio.py'), cur().tlFile]);
     mix = P(tl.audio?.mix || 'work/mix.wav');
-    if (!fs.existsSync(mix)) throw new Error('Trộn âm thanh không tạo ra file ' + path.relative(project.dir, mix));
+    if (!fs.existsSync(mix)) throw new Error('Trộn âm thanh không tạo ra file ' + path.relative(cur().dir, mix));
   }
   fs.mkdirSync(P('out'), { recursive: true });
-  const out = `out/${path.basename(project.dir)}_${stamp()}.mp4`;
+  const out = `out/${path.basename(cur().dir)}_${stamp()}.mp4`;
   fs.rmSync(P(out), { force: true }); // same minute, same name: never render over a copy already hard-linked into Thanh pham/ (M100)
   job.step = 'Render khung hình';
   const total = (to ?? tl.duration) - (from ?? 0);
   // render.mjs resolves media against the timeline's folder, so the temp copy lives next to it via a relative symlink-free path.
-  const tmpTl = path.join(project.dir, `.export_${process.pid}.json`);
+  const tmpTl = path.join(cur().dir, `.export_${process.pid}.json`);
   fs.renameSync(tmp, tmpTl);
   try {
     // M64: profile hiệu năng (body.profile khi hợp lệ, không thì $AVS_HOME/config.json); render.mjs chờ lượt khi máy đang render.
@@ -338,7 +355,7 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
   if (aspects?.length) {
     const { deriveAspects } = await import(pathToFileURL(path.join(SKILL, 'scripts/export_multi.mjs')).href);
     const r = await deriveAspects(P(out), aspects, { run, py: PY, onStep: s => { job.step = s; job.progress = 0; }, onProgress: k => { job.progress = Math.min(.99, k); } });
-    job.outs = [{ aspect: r.native, out, note: 'Bản gốc (render thật)' }, ...r.outs.map(o => ({ ...o, out: path.relative(project.dir, o.out) }))];
+    job.outs = [{ aspect: r.native, out, note: 'Bản gốc (render thật)' }, ...r.outs.map(o => ({ ...o, out: path.relative(cur().dir, o.out) }))];
   }
   // S12 M100: bản giao vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng). Lỗi giao không làm hỏng bản đã xuất trong out/.
   if (give !== false) {
@@ -351,7 +368,7 @@ async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
   try {
     const K = await import(pathToFileURL(path.join(SKILL, 'scripts/kho_deliver.mjs')).href);
     const list = typeof outs === 'function' ? outs() : outs; // built inside the try: a bad entry fails the delivery, not the export
-    const r = files ? await K.deliverProjectAsync(project.dir, list, { tl }) : await K.deliverExportsAsync(project.dir, list, { tl, range });
+    const r = files ? await K.deliverProjectAsync(cur().dir, list, { tl }) : await K.deliverExportsAsync(cur().dir, list, { tl, range });
     into.delivered = r.items.filter(x => x.dst).map(x => x.dst); into.deliveredDir = r.dir;
     const bad = r.items.find(x => x.error); if (bad) into.deliverError = bad.error;
   } catch (e) { into.deliverError = e.message; console.error('deliver:', e.message); }
@@ -362,19 +379,19 @@ async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
 // không route nào ghi vào dự án cũ. Tạo hỏng thì mở lại dự án cũ để người dùng không bị bỏ ở màn trống.
 async function newProject(o) {
   const { newProject: build } = await import(pathToFileURL(path.join(SKILL, 'scripts/new_project.mjs')).href);
-  const prev = project; project = null;
+  const prev = cur(), prevPid = curPid(); setReq(null);
   try {
     const d = await build(o, { run, onStep: (s, p) => { job.step = s; job.progress = p; } });
-    openProject(d);
+    job.pid = openProject(d); // tab đã tạo chuyển sang mã này khi job xong (X-AVS-Opened ở /api/job)
     job.out = d;
   } catch (e) {
-    if (!project && prev) project = prev;
+    if (!cur() && prev) setReq(prev, prevPid);
     throw e;
   }
 }
 function startJob(kind, fn, payload) {
   if (job?.state === 'running') return false;
-  job = { kind, state: 'running', progress: 0, step: 'Bắt đầu', log: '', out: null, started: Date.now() };
+  job = { kind, state: 'running', progress: 0, step: 'Bắt đầu', log: '', out: null, started: Date.now(), tab: curPid(), dir: cur()?.dir || null };
   fn(payload).then(() => { job.state = 'done'; job.progress = 1; job.step = 'Xong'; })
     .catch(e => {
       // A stop the user asked for is not a failure: 'cancelled' / 'paused' (e.stopped from a route) so the UI shows it in amber, not red.
@@ -388,7 +405,7 @@ function startJob(kind, fn, payload) {
 // Server stopped (app quit, Ctrl+C) while a job runs: stop it (render.mjs then closes its Chromes) and drop this run's temp timelines.
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => {
   if (job?.state === 'running') killTree(job.proc);
-  if (project) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) fs.rmSync(path.join(project.dir, f), { force: true });
+  for (const d of new Set([active?.dir, job?.dir].filter(Boolean))) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) fs.rmSync(path.join(d, f), { force: true });
   dropTokenFile();
   setTimeout(() => process.exit(0), 300);
 });
@@ -397,7 +414,7 @@ for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => {
 // Each module: export default (ctx) => async (req, res, p, u) => true if handled. ctx gives access to the project, jobs and helpers.
 const ctx = {
   HERE, SKILL, PY, json, body, under, sendFile, run, stamp, startJob, readProject, save, openProject: switchProject,
-  get project() { return project; }, get job() { return job; }, P: rel => P(rel),
+  get project() { return cur(); }, get job() { return job; }, P: rel => P(rel), purl, get pid() { return curPid(); }, tabs: TABS,
 };
 const ROUTES = [];
 for (const f of fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.mjs')).sort()) {
@@ -432,7 +449,16 @@ function sendLocked(res) {
 <p class="note">Mã phiên nằm ở ~/.ai-video-studio/studio-${PORT}.token (chỉ tài khoản của bạn đọc được), đổi mỗi lần bật Studio.</p>
 <p class="note">Tác giả: Nguyễn Tất Kiểm · <a href="https://nguyentatkiem.com.vn/aiplusntk/">Tặng khoá học AI miễn phí</a></p></body>`);
 }
-const server = http.createServer(async (req, res) => {
+// S18 M129: dự án của request theo mã tab trong header X-AVS-Project; không có mã thì dự án mặc định. Mã của tab đã đóng (hay
+// quá 8 tab nên bị đẩy ra) → 409 tabClosed với mọi /api trừ /api/tabs, để trang đó biết mà mở lại, không đọc / ghi nhầm dự án khác.
+const server = http.createServer((req, res) => {
+  const want = req.headers['x-avs-project'];
+  let st;
+  if (want) { const pr = TABS.get(String(want)); st = { project: pr, pid: pr ? String(want) : null, asked: String(want), closed: !pr }; if (pr) TABS.touch(st.pid); }
+  else st = { project: active, pid: active ? tabId(active.dir) : null, asked: null };
+  return als.run(st, () => handle(req, res));
+});
+async function handle(req, res) {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname;
   // Local-only: this origin only (no other website, no other localhost port, no DNS-rebinding host).
@@ -440,6 +466,7 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/') && !tokenOk(req, u, TOKEN)) return json(res, { error: 'Thiếu hoặc sai token phiên — tải lại trang Studio' }, 401);
   const bs = bodyStatus(req, p);
   if (bs) { res.setHeader('Connection', 'close'); return json(res, { error: bs === 413 ? 'Dữ liệu gửi lên quá lớn' : 'Cần Content-Length' }, bs); }
+  if (als.getStore()?.closed && p.startsWith('/api/') && !p.startsWith('/api/tabs')) return json(res, { error: 'Tab dự án này đã đóng — mở lại từ thanh tab hoặc trang chủ', tabClosed: true }, 409);
   try {
     if (p === '/' || p === '/index.html') {
       // launch link ?k=<token> → session cookie, then drop the key from the address bar (history, screenshots)
@@ -457,19 +484,19 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/templates' && req.method === 'GET') return json(res, templateList());
     // Everything below that reads or writes project files needs an open project (plugin routes included).
-    if (!project && /^\/api\/(save|history|waveform|export|autosfx|media|upload|still|srt|reveal|templates\/media|transcribe|reframe|dub(?!\/voices)|stock\/fetch|genimage|segment|sticker|audio|broll\/suggest)(\/|$)/.test(p)) return json(res, { error: 'Chưa mở dự án' }, 400);
+    if (!cur() && /^\/api\/(save|history|waveform|export|autosfx|media|upload|still|srt|reveal|templates\/media|transcribe|reframe|dub(?!\/voices)|stock\/fetch|genimage|segment|sticker|audio|broll\/suggest)(\/|$)/.test(p)) return json(res, { error: 'Chưa mở dự án' }, 400);
     if (p === '/api/templates/media' && req.method === 'POST') {
       // Copy every "media/…" file a template references from the skill's examples/media into the project (never overwrites).
       const { id } = await body(req);
       const f = [path.join(SKILL, 'templates', `${id}.json`), path.join(SKILL, 'templates/user', `${id}.json`)].find(x => fs.existsSync(x));
       let copied = 0;
       if (f) for (const m of new Set(fs.readFileSync(f, 'utf8').match(/media\/[^"%]+?\.(?:jpe?g|png|webp)/g) || [])) {
-        const src = under(path.join(SKILL, 'examples'), m), dst = under(project.dir, m);
+        const src = under(path.join(SKILL, 'examples'), m), dst = under(cur().dir, m);
         if (src && dst && fs.existsSync(src) && !fs.existsSync(dst)) { fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.copyFileSync(src, dst); copied++; }
       }
       // Frame-sequence folders ("media/sc_demo/%03d.jpg") are copied whole.
       if (f) for (const dir of new Set((fs.readFileSync(f, 'utf8').match(/media\/[^"%]+\/(?=%0\dd)/g) || []))) {
-        const src = under(path.join(SKILL, 'examples'), dir), dst = under(project.dir, dir);
+        const src = under(path.join(SKILL, 'examples'), dir), dst = under(cur().dir, dir);
         if (src && dst && fs.existsSync(src) && !fs.existsSync(dst)) { fs.cpSync(src, dst, { recursive: true }); copied++; }
       }
       return json(res, { copied });
@@ -478,22 +505,32 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/project/')) {
       // project files: the editor's cookie (img/video/iframe/links send it) or the API token (CLI clients)
       if (!cookieOk(req, PORT, SESSION) && !tokenOk(req, u, TOKEN)) return json(res, { error: 'Thiếu phiên Studio — mở lại bằng lối tắt' }, 401);
-      if (!project) return json(res, { error: 'no project' }, 404);
-      const f = under(project.dir, p.slice(9));
+      if (!cur()) return json(res, { error: 'no project' }, 404);
+      const f = under(cur().dir, p.slice(9));
+      return f && fileAllowed(f) ? sendFile(req, res, f) : json(res, {}, 403);
+    }
+    if (/^\/p\/[a-f0-9]{12}\//.test(p)) { // S18 M129: file của dự án một tab (img/video/audio không gửi được header)
+      if (!cookieOk(req, PORT, SESSION) && !tokenOk(req, u, TOKEN)) return json(res, { error: 'Thiếu phiên Studio — mở lại bằng lối tắt' }, 401);
+      const pr = TABS.get(p.slice(3, 15));
+      if (!pr) return json(res, { error: 'Tab này đã đóng' }, 404);
+      const f = under(pr.dir, p.slice(16));
       return f && fileAllowed(f) ? sendFile(req, res, f) : json(res, {}, 403);
     }
     if (p === '/api/project' && req.method === 'GET') {
-      if (!project) return json(res, { error: 'Chưa mở dự án' }, 404);
-      const rp = readProject(); rp.meta.kho = khoOf(rp.timeline); return json(res, rp);
+      if (!cur()) return json(res, { error: 'Chưa mở dự án' }, 404);
+      const rp = readProject(); rp.meta.kho = khoOf(rp.timeline);
+      // mã tab của dự án này (trang mở không có ?p= nhận mã ở đây rồi ghi lên thanh địa chỉ) + gốc URL file của nó
+      rp.meta.pid = curPid() || TABS.open(cur().dir).id; rp.meta.base = `/p/${rp.meta.pid}/`;
+      return json(res, rp);
     }
     if (p === '/api/save' && req.method === 'POST') return json(res, save(await body(req)));
     if (p === '/api/history') {
-      const d = path.join(project.dir, '.studio/history');
+      const d = path.join(cur().dir, '.studio/history');
       if (!fs.existsSync(d)) return json(res, []);
       return json(res, fs.readdirSync(d).filter(f => f.endsWith('.json')).sort().reverse().map(f => f.replace('.json', '')));
     }
     if (p.startsWith('/api/history/')) {
-      const f = under(path.join(project.dir, '.studio/history'), p.slice(13) + '.json');
+      const f = under(path.join(cur().dir, '.studio/history'), p.slice(13) + '.json');
       return f && fs.existsSync(f) ? json(res, JSON.parse(fs.readFileSync(f, 'utf8'))) : json(res, {}, 404);
     }
     if (p === '/api/library') return json(res, library());
@@ -519,7 +556,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/autosfx' && req.method === 'POST') {
       const b = await body(req);
-      return execFile(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/auto_sfx.py'), project.tlFile, ...(b.keep ? ['--keep-manual'] : [])], (e, out, err) =>
+      return execFile(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/auto_sfx.py'), cur().tlFile, ...(b.keep ? ['--keep-manual'] : [])], (e, out, err) =>
         e ? json(res, { error: (err || e.message).slice(-500) }, 500) : json(res, readProject()));
     }
     if (p === '/api/media') return json(res, mediaList());
@@ -528,24 +565,29 @@ const server = http.createServer(async (req, res) => {
     // b.deliver: giao kèm vào Thanh pham/ của Kho (S12 M100)
     if (p === '/api/still' && req.method === 'POST') {
       const b = await body(req), t = Math.max(0, +b.t || 0);
-      return still(t).then(async out => json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, { files: true }) : { out }))
+      return still(t).then(async out => json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(cur().dir)} - ảnh bìa ${String(+t.toFixed(1)).replace('.', '_')}s.jpg` }], readProject().timeline, { files: true }) : { out }))
         .catch(e => json(res, { error: e.message }, e.status || 500));
     }
     if (p === '/api/srt' && req.method === 'POST') {
       const b = await body(req), { captions, timeline } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
       // a delivered .srt is a hard link to this file: write a new file (rm, then write), never in place
-      const out = `out/${path.basename(project.dir)}.srt`; fs.rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
-      return json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(project.dir)}.srt` }], timeline, { files: true }) : { out });
+      const out = `out/${path.basename(cur().dir)}.srt`; fs.rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
+      return json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(cur().dir)}.srt` }], timeline, { files: true }) : { out });
     }
-    if (p === '/api/job') return json(res, job ? { ...job, proc: undefined } : null);
+    if (p === '/api/job') {
+      // job tạo dự án (Video mới) xong: tab đã khởi chạy nó chuyển sang dự án mới (auth.js đọc X-AVS-Opened)
+      // chỉ một lần: trang mở lại tab cũ sau đó (boot gọi /api/job) không bị kéo sang dự án mới
+      if (job?.state === 'done' && job.pid && !job.openedSent && job.tab === curPid() && job.pid !== curPid()) { res.setHeader('X-AVS-Opened', job.pid); job.openedSent = true; }
+      return json(res, job ? { ...job, proc: undefined } : null);
+    }
     if (p === '/api/job/cancel' && req.method === 'POST') { if (job?.state === 'running') job.cancelled = true; killTree(job?.proc); return json(res, { ok: true }); }
     if (p === '/api/open' && req.method === 'POST') { const b = await body(req); switchProject(b.path); return json(res, { ok: true }); } // refused → 400/403
-    if (p === '/api/reveal' && req.method === 'POST') { const b = await body(req); const f = under(project.dir, b.path || ''); if (f) revealPath(f); return json(res, { ok: !!f }); }
+    if (p === '/api/reveal' && req.method === 'POST') { const b = await body(req); const f = under(cur().dir, b.path || ''); if (f) revealPath(f); return json(res, { ok: !!f }); }
     if (p === '/api/features') return json(res, FEATURES());
     for (const r of ROUTES) if (await r(req, res, p, u)) return;
     json(res, { error: 'not found' }, 404);
   } catch (e) { if (!e.status) console.error(e); if (!res.headersSent) json(res, { error: e.message }, e.status || 500); }
-});
+}
 
 if (args[0] === '--new') {
   job = { kind: 'new', state: 'running', progress: 0, step: '', log: '' };
@@ -553,7 +595,7 @@ if (args[0] === '--new') {
   // không để lỗi bay ra ngoài làm sập server kèm stack trace
   try {
     await newProject({ video: args[1], dir: args[2] && !args[2].startsWith('--') ? args[2] : undefined });
-    console.log(`starter project: ${project.dir}`);
+    console.log(`starter project: ${active.dir}`);
   } catch (e) {
     console.error(`Không tạo được dự án từ ${path.basename(String(args[1] || ''))}: ${e.message}`);
     console.error(/Thiếu thư viện|Không tìm thấy|chạy lại bộ cài/.test(e.message)
