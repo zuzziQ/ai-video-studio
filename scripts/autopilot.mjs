@@ -94,7 +94,7 @@ function saveTL(dir, tl, caps, capFile = 'work/captions.json') {
   if (caps) { fs.mkdirSync(path.dirname(path.join(dir, capFile)), { recursive: true }); fs.writeFileSync(path.join(dir, capFile), JSON.stringify(caps, null, 1)); tl.captions = capFile; }
   fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl, null, 1));
 }
-// S16 M118: Tự lái tự dựng cả video, nên bỏ `_starter` trước bước sửa timeline đầu tiên. Còn giữ thì lần đầu mở trong Studio
+// S16 M118: Tự lái tự dựng cả video, nên bỏ `_starter` trước bước sửa timeline đầu tiên sau bước `ai`. Còn giữ thì lần đầu mở trong Studio
 // sẽ áp lại công thức gói (studio.js boot) và xoá b-roll / chữ / SFX đã dựng.
 export function dropStarter(dir) {
   const f = path.join(dir, 'timeline.json'), tl = rd(f);
@@ -434,7 +434,8 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
     say(0, prev?.state === 'running' || prev?.state === 'error' ? 'chạy tiếp' : '');
     const t0 = Date.now();
     try {
-      if (MUTATES.has(id)) dropStarter(dir);
+      // bước `ai` (ai_edit.mjs applyPlan) cần `_starter` để thay cảnh khởi tạo và tự xoá nó; các bước sau thì bỏ hẳn
+      if (MUTATES.has(id) && STEPS.findIndex(s => s[0] === id) > STEPS.findIndex(s => s[0] === 'ai')) dropStarter(dir);
       if (MUTATES.has(id) && fs.existsSync(P('timeline.json'))) { const b = backup(dir, id); if (b === 'restored') console.log(`(khôi phục timeline trước bước ${id} sau lần chạy bị dừng)`); }
       const r = await impl[id]();
       const sec = +((Date.now() - t0) / 1000).toFixed(2);
