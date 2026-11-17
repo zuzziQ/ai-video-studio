@@ -51,17 +51,18 @@
       ${(A?.offscript || []).slice(0, 3).map(o => li(true, 'ti-alert-triangle', `Nói ngoài kịch bản ${o.t0.toFixed(1)}s: “${esc(o.text.slice(0, 50))}…”`)).join('')}
       ${(sc.gate?.issues || []).filter(i => i.severity !== 'low').slice(0, 4).map(i => li(true, 'ti-shield-x', `Claim quảng cáo · ${esc(i.where)}: ${esc(i.msg.slice(0, 120))}`)).join('')}</ul>`;
   }
-  function renderCard(el) {
-    if (!el?.isConnected) return;
+  // luôn vẽ vào phần tử đang gắn (P.el): Studio.reload() vẽ lại panel Nguồn giữa lúc lưu, phần tử cũ bị gỡ
+  function renderCard() {
+    const el = P.el; if (!el?.isConnected) return;
     const sc = P.data?.script, text = P.draft ?? sc?.text ?? '';
     const { ta, pick } = frame(el, { text, status: P.data ? statusOf(P.data) : '',
       extra: `${sc ? '<button data-sc="clear" title="Bỏ kịch bản, lấy lại phụ đề nhận dạng tự động"><i class="ti ti-trash"></i>Bỏ</button>' : ''}
         <button class="primary" data-sc="save" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy ? 'ti-loader-2 spin' : 'ti-device-floppy'}"></i>${sc ? 'Lưu lại' : 'Dùng kịch bản'}</button>` });
     ta.oninput = () => { P.draft = ta.value; };
-    pick.onchange = async () => { const f = pick.files[0]; if (!f) return; try { P.draft = await fileText(f); P.name = f.name; renderCard(el); } catch (e) { Studio.toast(e.message); } };
+    pick.onchange = async () => { const f = pick.files[0]; if (!f) return; try { P.draft = await fileText(f); P.name = f.name; renderCard(); } catch (e) { Studio.toast(e.message); } };
     el.querySelector('[data-sc="save"]').onclick = async () => {
       const t = (P.draft ?? ta.value).trim(); if (!t) return Studio.toast('Kịch bản đang trống');
-      P.busy = true; renderCard(el);
+      P.busy = true; renderCard();
       try {
         await Studio.saveNow?.(); // phụ đề đang sửa trong trình duyệt vào đĩa trước khi server thay
         const r = await Studio.api('/api/script', { text: t, name: P.name || sc?.name || '' });
@@ -70,7 +71,7 @@
         if (!r.pending) await Studio.reload?.();
         Studio.toast(r.pending ? 'Đã lưu kịch bản: phụ đề theo kịch bản khi tạo lời thoại' : `Đã lưu kịch bản: ${r.captions} dòng phụ đề theo đúng chữ kịch bản`);
       } catch (e) { Studio.toast(e.message); }
-      P.busy = false; renderCard(el);
+      P.busy = false; renderCard();
     };
     const clr = el.querySelector('[data-sc="clear"]');
     if (clr) clr.onclick = async () => {
@@ -79,15 +80,15 @@
       const r = await Studio.api('/api/script/clear', {});
       if (r.error) return Studio.toast(r.error);
       P.data = { ...(P.data || {}), script: null }; P.draft = ''; if (r.restored) await Studio.reload?.();
-      Studio.toast(r.restored ? 'Đã bỏ kịch bản, phụ đề quay về bản nhận dạng' : 'Đã bỏ kịch bản'); renderCard(el);
+      Studio.toast(r.restored ? 'Đã bỏ kịch bản, phụ đề quay về bản nhận dạng' : 'Đã bỏ kịch bản'); renderCard();
     };
   }
   Studio.scriptCard = {
     mount(el) {
       const dir = Studio.META?.dir || '';
       if (P.dir !== dir) { P = { dir, data: null, busy: false, draft: null, name: '' }; }
-      renderCard(el);
-      if (!P.data) Studio.api('/api/script').then(r => { if (P.dir === dir && !r.error) { P.data = r; renderCard(el); } }).catch(() => {});
+      P.el = el; renderCard();
+      if (!P.data) Studio.api('/api/script').then(r => { if (P.dir === dir && !r.error) { P.data = r; renderCard(); } }).catch(() => {});
     },
   };
 
