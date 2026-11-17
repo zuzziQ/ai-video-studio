@@ -33,11 +33,19 @@ export default ctx => {
       if (mode === 'all' || mode === 'broll') {
         if (!src.length) throw new Error('Chọn ít nhất một nguồn b-roll');
         ctx.job.step = 'Chọn b-roll theo lời thoại'; ctx.job.progress = .05;
-        const k = mode === 'all' ? .7 : 1;
+        const k = mode === 'all' ? .6 : .7; // phần còn lại: đặt chỗ (S13 · M104), rồi SFX
         await ctx.run('node', [S('auto_broll.mjs'), tlf, '--goal', goal, '--variety', String(variety), '--density', density, '--src', src.join(','), ...(b.claude ? ['--claude'] : [])], l => {
           const m = /^@@ ([\d.]+) (.*)$/.exec(l), o = parse(l);
           if (m) { ctx.job.progress = +m[1] * k; ctx.job.step = m[2]; } else if (o) sum.broll = o; else if (/^LỖI: /.test(l)) ctx.job.error = l.slice(5);
         }).catch(e => { throw new Error(ctx.job.error || e.message); });
+        // S13 · M104: b-roll vừa thêm (_auto, chưa bị chỉnh) được đặt né mặt đang nói, phụ đề, mép khung; graphic người dùng không bị dời.
+        // Tiến trình con (Huỷ dừng được Chrome), đọc và ghi đúng tlf của dự án lúc bắt đầu job; lỗi chỉ bỏ qua bước này.
+        const [p0, p1] = mode === 'all' ? [.6, .74] : [.7, .99];
+        ctx.job.step = 'Đặt b-roll né mặt và phụ đề'; ctx.job.progress = p0;
+        await ctx.run('node', [S('place_auto.mjs'), tlf], l => {
+          const m = /^@@ ([\d.]+) (.*)$/.exec(l), o = parse(l);
+          if (m) { ctx.job.progress = p0 + (p1 - p0) * +m[1]; ctx.job.step = m[2]; } else if (o && o.moved != null) sum.placed = o.moved;
+        }).catch(e => { if (ctx.job.cancelled) throw e; console.error('autofill place:', String(e.message).slice(0, 200)); });
       }
       if (mode === 'all' || mode === 'sfx') {
         ctx.job.step = b.music ? 'Đặt SFX + chọn nhạc theo đoạn' : 'Đặt SFX'; ctx.job.progress = mode === 'all' ? .75 : .2;

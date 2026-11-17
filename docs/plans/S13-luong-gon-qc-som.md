@@ -52,7 +52,11 @@ Chỉ tiêu nghiệm thu trên dự án mẫu (dựng lại bằng gói Review):
 | `M106` | qc | QC tự sửa mạnh hơn: dời cả cảnh có keyframe (dời cả đường đi), ẩn thẻ trống, đánh dấu số không có trong lời thoại, lấp khoảng trống dài bằng chữ nhấn từ khoá, nhận sửa chính tả từ AI soát lời thoại (`M90`/`M96`) | `M104` |
 | `M107` | infra | Bước Nguồn theo trạng thái: thẻ "Video nguồn" (tên, độ dài, chỗ trong Kho, đã tách lời thoại/phụ đề/mặt chưa, nút Đổi video, Tạo dự án khác); chưa có dự án mới hiện bộ chọn. Panel "AI" đổi thành "Làm sạch lời nói" và gộp vào tab Lời thoại. "Video dài" đổi tên "Cắt clip từ video dài", chỉ gợi ý khi video nguồn > 5 phút (vẫn mở được từ ⋯) | — |
 | `M108` | infra | Bước Dựng một nút "AI dựng": AI dựng giúp + tuỳ chọn "Thêm b-roll", "Thêm âm thanh" (chính là Tự động, chạy nối sau); xong mở hộp `M105`. Tự lái ra khỏi bước Dựng theo `C15` | `M105`, `C15` |
+| `M110` | qc | Video nguồn có phụ đề cháy sẵn: dò, báo ở thẻ Video nguồn, chọn tắt / dời phụ đề mới hoặc che dải chữ cũ (phát sinh khi đo `M104`) | `M107` |
+| `M111` | qc | Chữ graphic không bị cắt "…" giữa từ khoá; emoji cờ hiện thành chữ trên Chrome Windows (phát sinh khi đo `M104`) | — |
 | `M109` | docs | `references/studio.md` (bước, panel), `references/ai-edit.md`, `references/qc-variants.md`, `references/autofill.md`, hướng dẫn người mới (`S10`), `SKILL.md` | `M103`–`M108` |
+
+Kết quả `M103`–`M104` (2026-11-17): new_project đã có `timeline.face_track` nên `M103` chỉ thêm `faceZone`; `M104` không tách `layout_solve.mjs` (dùng thẳng `applyDeterministic` qua `placePlan`), vùng mặt gửi Claude là của cả video. Trên dự án mẫu: che mặt 11 → 0, QC đầy đủ có Claude 48 (chính tả phụ đề, khoảng trống, phụ đề cháy sẵn, chữ bị cắt) → phần nghiệm thu còn lại ở `M106`, `M110`, `M111`.
 
 Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M105` → `M106`; `M107` làm song song được (không đụng file của nhóm QC). `M104` và `M106` đều sửa `scripts/ai_qc.mjs` (tệp nóng): làm lần lượt.
 

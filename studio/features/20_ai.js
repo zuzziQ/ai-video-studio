@@ -154,11 +154,19 @@
     plan._applied = n;
     S.changed(true);
   }
+  // S13 · M104: what the placement step did (ai_edit.mjs placePlan)
+  function placedNote(p) {
+    if (!p) return '';
+    if (p.error) return `<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa đặt được graphic né mặt (${esc(p.error)}): xem lại ở bước Kiểm tra.</p>`;
+    const parts = [p.moved ? `Đã dời ${p.moved} graphic khỏi mặt, phụ đề, mép khung` : '', p.left?.length ? `còn ${p.left.length} chỗ nên xem lại ở bước Kiểm tra` : ''].filter(Boolean);
+    return parts.length ? `<p class="muted"><i class="ti ti-user-check"></i> ${parts.join(' · ')}.</p>` : '';
+  }
   function planCard(plan, full) {
     const kinds = {}; for (const s of plan.scenes.filter(s => !s._base)) kinds[S.typeName(s.type)] = (kinds[S.typeName(s.type)] || 0) + 1;
     return `<div class="ai-card"><h4><i class="ti ti-sparkles ai-c-acc"></i> ${esc(plan.hook || 'Bản dựng AI')}</h4>
       <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(plan.music?.kho ? `${plan.music.title || plan.music.kho} (Kho)` : plan.music?.mood || '—')}</span><span>${plan.sfx.length} SFX</span></div>
       ${plan.summary ? `<p>${esc(plan.summary)}</p>` : ''}
+      ${placedNote(plan.placed)}
       ${full ? `<div class="ai-kv">${Object.entries(kinds).map(([k, v]) => `<span>${esc(k)}${v > 1 ? ' ×' + v : ''}</span>`).join('')}</div>` : ''}
       ${plan.dropped?.length ? `<ul class="ai-drop">${plan.dropped.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}</div>`;
   }
