@@ -17,6 +17,7 @@ Mở **một** Chrome headless, nạp engine, render ảnh tại: đầu/giữa/
 | `text_unsafe` | chữ ngoài vùng an toàn của Studio (chỉ báo) | thấp |
 | `face_cover` | phần tử graphic phủ > 30 % **hộp mặt** khi đang nói. Hộp mặt = YuNet (`face_track.py`) chạy trên ảnh chỉ có lớp nền (không graphic, không phụ đề) | vừa/cao |
 | `caption_overlap` | graphic phủ > 25 % dòng phụ đề | vừa |
+| `readability` (`code: burnin`) | phụ đề mới chồng > 30 % chiều cao lên dải phụ đề cháy sẵn của video gốc (dò bằng `scripts/burnin.mjs`, lưu `.studio/burnin.json`). Không báo khi đã chọn Che dải chữ cũ / Tắt phụ đề mới (`timeline.burnin.mode`); chọn Dời thì đo vị trí phụ đề thật. Chọn cách xử lý ở thẻ Video nguồn, không tự sửa | cao |
 | `hook_missing` | 2 giây đầu không có chữ cao ≥ 2,8 % khung hoặc graphic lớn | cao |
 | `overlap` | 2 cảnh cùng lớp (cùng nhóm track như timeline Studio) chồng > 0,25 s | vừa |
 | `empty` | > 6 s không có sự kiện hình (graphic vào/ra, fx, zoom, chuyển cảnh) | vừa/cao |
