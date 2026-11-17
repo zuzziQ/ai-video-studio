@@ -2,7 +2,7 @@
 
 > **Dựa trên AI Video Studio của Nguyễn Tất Kiểm** — repo gốc: <https://github.com/nguyentatkiem/ai-video-studio> (giấy phép MIT).
 >
-> Bản này giữ nguyên phần mềm gốc và thêm: **cổng quảng cáo trong QC** (kiểm chính sách nền tảng, claim sản phẩm, tính nguyên bản trước khi xuất) và lộ trình gộp dần phần nghiệp vụ quảng cáo của AI Video Factory (sinh nhiều biến thể creative) vào Studio, giữ nguyên engine và editor gốc. Danh sách việc và trạng thái ở [docs/ROADMAP.md](docs/ROADMAP.md); cách kéo bản mới từ repo gốc ở [AGENTS.md](AGENTS.md).
+> Bản này (`zuzziQ/ai-video-studio`, riêng tư) phát triển độc lập từ phần mềm gốc và thêm: **cổng quảng cáo trong QC** (kiểm chính sách nền tảng, claim sản phẩm, tính nguyên bản trước khi xuất), **luồng 5 bước** Chuẩn bị → Nguồn → Dựng → Kiểm tra → Xuất và đăng có **điểm cho từng bước**, **Kho dự án theo thương hiệu**, **AI dựng né mặt và phụ đề**, **QC nhanh ngay sau khi dựng**, **lịch sử xuất** và màn **Kiểm tra máy** có nút cài giúp. Danh sách việc và trạng thái ở [docs/ROADMAP.md](docs/ROADMAP.md).
 
 > **Tác giả: Nguyễn Tất Kiểm** · 🎁 **Tặng khoá học AI miễn phí:** <https://nguyentatkiem.com.vn/aiplusntk/>
 >
@@ -73,7 +73,7 @@ Giao diện tối kiểu editor chuyên nghiệp. Phần mềm có **28 gói sty
 | **Python ≥ 3.10** | `brew install python` | trình cài tự cài bằng `winget` |
 | **Claude Code CLI** *(mô hình AI mặc định)* | trình cài tự cài bằng `npm` nếu thiếu (hoặc theo <https://docs.claude.com/claude-code>) | như macOS |
 | Mạng | lúc cài và lần đầu dùng một font/emoji/logo; sau đó lấy từ bộ nhớ đệm `~/.ai-video-studio/cache/net` (icon giao diện và thư viện của khối HyperFrames đã có sẵn trong app) | như macOS |
-| Ổ đĩa | khoảng 1,5 GB (gồm thư viện Python) | khoảng 1,5 GB |
+| Ổ đĩa | khoảng 1,5 GB thư viện + khoảng 4,9 GB mô hình tải sẵn (bỏ được bằng `--no-models`), cộng chỗ cho video của bạn | như macOS (`-NoModels`) |
 | RAM | 8 GB trở lên (render nhiều luồng: 16 GB) | như macOS |
 
 **Claude Code CLI** bật các tính năng AI: dựng giúp, cắt lỗi nói, tạo style, dịch, gợi ý b-roll, viết caption, agent Telegram. Cài xong thì chạy `claude` một lần để đăng nhập; app dùng tài khoản Claude của bạn, không cần API key riêng. Không có Claude thì app vẫn edit, dùng mẫu, render được bình thường.
@@ -97,9 +97,14 @@ Linux chạy được phần lõi (dùng `install.sh`), nhưng không có app ha
 
 ## 3. Cài đặt
 
-Repo **công khai**, ai cũng tải được. Có hai cách lấy mã nguồn:
-- **File zip:** trên trang GitHub của repo bấm **Code → Download ZIP** (hoặc dùng file `ai-video-studio-full.zip` được gửi cho bạn). Không cần tài khoản GitHub.
-- **`git clone`:** dễ cập nhật bản mới về sau bằng `git pull`.
+Repo này **riêng tư**. Có hai cách lấy mã nguồn:
+- **File zip** được gửi cho bạn (`ai-video-studio-full.zip`), hoặc tải ở trang GitHub của repo: **Code → Download ZIP** (cần tài khoản được mời vào repo).
+- **`git clone`** bằng tài khoản GitHub đã được mời: dễ cập nhật bản mới về sau bằng `git pull`.
+
+Cài xong, **lần đầu mở Studio** sẽ đi qua ba màn theo thứ tự:
+1. **Thẻ tác giả** (góc dưới phải, tự tắt sau 3 giây).
+2. **Kiểm tra máy**: liệt kê thư viện bắt buộc / nên có / tuỳ chọn, thiếu gì thì bấm **Cài giúp đủ một lần** hoặc nút **Cài** trên từng dòng, không phải gõ lệnh (xem [mục 2](#2-yêu-cầu)). Đủ mục bắt buộc thì mới dùng được hết tính năng.
+3. **Hướng dẫn 3 bước**: Thương hiệu (tên, logo, màu) → Tài nguyên (sản phẩm, ảnh, nhạc, tuỳ chọn) → Mục đích (lĩnh vực, khổ, nền tảng). Bỏ qua được, mở lại từ trang chủ.
 
 ### 3.1. Cài trên macOS
 
@@ -115,7 +120,7 @@ brew install --cask google-chrome
 cd ~/Downloads && unzip ai-video-studio-full.zip && cd ai-video-studio
 
 # cách 2: git clone
-git clone https://github.com/nguyentatkiem/ai-video-studio.git && cd ai-video-studio
+git clone https://github.com/zuzziQ/ai-video-studio.git && cd ai-video-studio
 ```
 
 **Bước 3: Chạy trình cài**
@@ -144,7 +149,7 @@ Lần đầu mất khoảng 5–10 phút (tải thư viện Python). Tuỳ chọ
 - **Hoặc git clone**, trong PowerShell:
   ```powershell
   winget install --id Git.Git -e
-  git clone https://github.com/nguyentatkiem/ai-video-studio.git C:\AI\ai-video-studio
+  git clone https://github.com/zuzziQ/ai-video-studio.git C:\AI\ai-video-studio
   ```
 
 **Bước 2: Bấm đúp `install.cmd`** trong thư mục `ai-video-studio`.
@@ -217,25 +222,26 @@ Sau đó xoá thư mục repo. Style bạn đã tạo còn là skill riêng tron
 
 ## 4. Bắt đầu trong 5 phút
 
-### Bước 1: Mở Studio
+Mở Studio:
 - **macOS:** bấm app **AI Video Studio** trong Launchpad hoặc `~/Applications`, hoặc chạy `bash studio.sh` trong thư mục repo.
-- **Windows:** bấm đúp lối tắt **AI Video Studio** ngoài Desktop, hoặc `studio.cmd`.
+- **Windows:** bấm đúp lối tắt **AI Video Studio** ngoài Desktop, hoặc `studio.cmd`. Giữ cửa sổ đen (server) mở trong lúc dùng.
 
-Trình duyệt mở **http://localhost:5186** với clip mẫu.
+Trình duyệt mở **http://localhost:5186**. Lần đầu sẽ có màn **Kiểm tra máy** và **hướng dẫn 3 bước** ([mục 3](#3-cài-đặt)). Chưa mở dự án thì hiện **trang chủ** với 4 cách bắt đầu: Thả video → video hoàn chỉnh (Tự lái), Dựng theo mẫu, Cắt clip từ video dài, Hàng loạt.
 
-### Bước 2: Chọn mẫu
-Bấm **Mẫu** ở thanh trái, rồi bấm **Xem lớn** để mở thư viện. Rê chuột lên mẫu để xem video, bấm vào mẫu để xem chi tiết, sau đó bấm **Dùng mẫu này**. Không ưng thì bấm ⌘Z.
+Thanh trên có **5 bước** làm theo thứ tự. Bấm một bước thì thanh icon bên trái chỉ còn công cụ của bước đó. **Cột phải** (khi không chọn gì trên khung hình) cho biết bước đang mở còn thiếu gì, **điểm 0–100** của từng bước và nút **Sửa** dẫn thẳng tới chỗ cần làm.
 
-Chọn mẫu xong, phần mềm tự **bám lời thoại**: tạo phụ đề nếu chưa có, canh từng graphic đúng lúc nói, viết lại chữ mẫu và thay ảnh mẫu theo nội dung clip. Chi tiết ở [mục 5](#5-hệ-thống-template).
+### ① Chuẩn bị
+**Thương hiệu** (tên, logo, màu, font), **Sản phẩm** (khi làm video bán hàng / quảng cáo) và **Kho**: mỗi thương hiệu một thư mục thật trên máy, mặc định `Videos/AI Video Studio/<tên>` (macOS: `Movies/…`), gồm `Nguon/` (video quay), `Du an/` (dự án), `Thanh pham/<tháng>/` (bản giao).
 
-### Bước 3: Dùng video của bạn
-Bấm **Video mới** trên thanh trên → **Chọn video từ máy…** (trên Mac còn có thể kéo video thả vào icon app). Chọn gói style, tiêu đề, khổ dọc hoặc ngang. App tự làm phần còn lại:
-- nhận giọng nói,
-- cắt khoảng lặng,
-- tạo phụ đề,
-- dựng bản đầu theo gói.
+### ② Nguồn
+Chưa có dự án: chọn video trong Kho, **Chọn từ máy…** (video được chép vào `Nguon/` của Kho), dán đường dẫn, hoặc kéo thả. App tự nhận giọng nói, cắt khoảng lặng, tạo phụ đề và dựng bản đầu theo gói.
 
-Có thể làm cùng việc đó bằng lệnh:
+Đã có dự án: thẻ **Video nguồn** cho biết tên, độ dài, vị trí trong Kho, đã tách lời thoại / phụ đề / mặt chưa, có nút **Đổi video** và **Tạo dự án khác**.
+- Video tải từ Reels / TikTok có **phụ đề cháy sẵn**: thẻ báo và cho chọn tắt phụ đề mới, dời phụ đề mới lên vùng khác, hoặc che dải chữ cũ.
+- **Lời thoại**: sửa video bằng chữ; tab **Làm sạch lời nói** cắt tiếng đệm, câu lặp, ngắt dài.
+- **Cắt clip** chỉ hiện khi video dài hơn 5 phút (luôn mở được từ menu ⋯).
+
+Có thể tạo dự án bằng lệnh:
 ```bash
 bash studio.sh --new ~/Downloads/video-cua-ban.mp4          # macOS
 ```
@@ -243,13 +249,22 @@ bash studio.sh --new ~/Downloads/video-cua-ban.mp4          # macOS
 studio.cmd --new C:\Users\ban\Videos\video-cua-ban.mp4      :: Windows
 ```
 
-### Bước 4: Tinh chỉnh
-- Bấm **AI dựng giúp** để Claude tự dựng, **hoặc** chọn mẫu.
-- Mở mục **Tự động** ở thanh trái, bấm **Tự thêm B-roll + âm thanh**.
-- Bấm vào bất kỳ chữ hay graphic nào trên khung hình để sửa: kéo để di chuyển, chỉnh ở bảng bên phải.
+### ③ Dựng
+- Bấm **AI dựng** (tick **Thêm b-roll**, **Thêm âm thanh** nếu muốn). Claude đặt graphic đúng lúc nói, **né mặt người nói, phụ đề và vùng an toàn của nền tảng**, không bịa số liệu; rồi máy tự thêm b-roll, SFX, nhạc. Toàn bộ là **một bước hoàn tác** (⌘Z / Ctrl Z).
+- Xong là hộp **Đã dựng xong** tự chạy **QC nhanh** (~10–20 giây, không tốn lượt Claude): 3 khung xem trước và danh sách lỗi (che mặt, chữ ngoài vùng an toàn, đè phụ đề, khoảng trống dài). Bấm **Sửa ngay** để máy tự dời, bấm lỗi để tua tới.
+- **Hoặc** chọn **Mẫu** (bấm **Xem lớn**, rê chuột để xem, **Dùng mẫu này**): mẫu tự bám lời thoại, chi tiết ở [mục 5](#5-hệ-thống-template).
+- Bấm bất kỳ chữ hay graphic nào trên khung hình để sửa: kéo để di chuyển, chỉnh ở cột phải.
 
-### Bước 5: Xuất
-Bấm **Xuất** và chọn chất lượng (720p, 1080p hoặc 4K). Muốn có nhiều khổ thì tick thêm 1:1 hoặc 16:9. File nằm trong thư mục `out/` của dự án. Sau đó bấm **Đăng** để AI viết caption cho từng nền tảng.
+### ④ Kiểm tra
+**Kiểm tra chất lượng** đầy đủ có Claude soi thêm hook, chính tả có dấu, nhịp; ra điểm 0–100. **Kiểm tra & tự sửa** tự dời graphic (kể cả cảnh có keyframe), ẩn thẻ trống, đánh dấu số liệu không có trong lời thoại, lấp khoảng trống dài, sửa chính tả phụ đề, có **Hoàn tác sửa**.
+
+### ⑤ Xuất và đăng
+Bấm **Xuất** (nút chính trên thanh trên), chọn chất lượng 720p / 1080p / 4K, tick thêm khổ 1:1 hoặc 16:9 nếu cần, và **Giao vào Thành phẩm** (bản xong được đưa vào `Thanh pham/<tháng>/` của Kho). Nếu bước Kiểm tra dưới 60 điểm, Studio cảnh báo kèm chỗ thiếu và nút **Vẫn xuất** (không chặn).
+
+Mọi bản đã xuất nằm trong panel **Xuất** (lưu ở `.studio/exports.json` của dự án): bản mới nhất và các bản trước, mỗi bản có **Xem** (phát ngay trong Studio), **Mở thư mục**, **Mở Thành phẩm**, **Chép đường dẫn**. Đóng hộp hay tải lại trang cũng không mất. File gốc nằm ở `out/` của dự án. Sau đó mở **Đăng** để AI viết caption cho từng nền tảng.
+
+### Tự lái (không theo 5 bước)
+Nút **Tự lái** trên thanh trên mở màn hàng đợi riêng: thả nhiều video vào (hoặc vào `Nguon/Tha vao day/` của Kho) là máy tự làm hết tới thành phẩm. Xem [Tự lái](#tự-lái-thả-video-vào-nhận-video-hoàn-chỉnh).
 
 ![Xuất video](docs/images/11-xuat.jpg)
 
@@ -466,15 +481,30 @@ Chi tiết kỹ thuật (các bước phân tích, cách kiểm tra, file đư�
 ## 7. Hướng dẫn giao diện
 
 ```
-┌ Thanh trên: Hoàn tác · Lịch sử · Video mới · Lưu · AI dựng giúp · Thương hiệu · Đăng · Xuất ┐
-│ Thanh │ Thư viện của  │        Khung xem trước          │ Bảng thuộc tính (Inspector) │
-│ trái  │ mục đang chọn │   (bấm và kéo trực tiếp)        │ của thứ đang chọn           │
+┌ Thanh trên: Dự án · ↶ ↷ · ① Chuẩn bị ② Nguồn ③ Dựng ④ Kiểm tra ⑤ Xuất và đăng · Tự lái · ⋯ · Lưu · Xuất ┐
+│ Thanh │ Thư viện của  │        Khung xem trước          │ Cột phải: thuộc tính thứ đang chọn, │
+│ trái  │ mục đang chọn │   (bấm và kéo trực tiếp)        │ hoặc việc + điểm của bước đang mở   │
 ├───────┴───────────────┴─────────────────────────────────┴─────────────────────────────┤
 │ Timeline: Phụ đề · Chữ · Graphic · B-roll · Cảnh · Video chính · Âm thanh · Giọng        │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Các mục ở thanh trái (22 mục)
+### Thanh trái theo bước
+
+Thanh trái chỉ hiện công cụ của bước đang mở (tối đa 7, phần còn lại trong **Thêm…**). Tìm nhanh mọi công cụ bằng **⌘K / Ctrl K**.
+
+| Bước | Công cụ |
+|---|---|
+| ① Chuẩn bị | Thương hiệu · Sản phẩm · Kho |
+| ② Nguồn | Video nguồn · Lời thoại (tab Lời thoại / Làm sạch lời nói) · Cắt clip (khi video > 5 phút) |
+| ③ Dựng | AI dựng · Media · Mẫu · Chữ · Âm thanh (Nhạc & SFX / Giọng & trộn) · B-roll (Kho & AI / B-roll động / Tự động) · Hiệu ứng · Sticker · Thêm… (Chuyển cảnh, Bộ lọc, Lồng tiếng) |
+| ④ Kiểm tra | Kiểm tra chất lượng · Nhiều phiên bản (A/B) · Thành phần (chế độ Chuyên nghiệp) |
+| ⑤ Xuất và đăng | Xuất (lịch sử xuất) · Đăng · Lịch đăng · Hàng loạt |
+| Cài đặt (menu ⋯) | Giao diện Cơ bản / Chuyên nghiệp · Mô hình & giọng · Hiệu năng · Agent · Tạo style · **Kiểm tra máy…** |
+
+Chế độ **Cơ bản** ẩn công cụ nâng cao (Keyframe, Mặt nạ, sửa JSON, Agent, Tạo style, Hiệu năng, Thành phần); đổi ở ⋯ bất cứ lúc nào.
+
+Chi tiết từng công cụ:
 
 | Mục | Dùng để |
 |---|---|
@@ -487,19 +517,21 @@ Chi tiết kỹ thuật (các bước phân tích, cách kiểm tra, file đư�
 | **Chuyển cảnh** | 15 kiểu, kéo thả vào chỗ nối giữa 2 clip |
 | **Bộ lọc** | 8 bộ màu, xem trước ngay trên khung hình |
 | **Thành phần** | Danh sách mọi thứ đang có trong video, bật hoặc tắt từng cái |
-| **Tự lái** | Thả video vào là tự dựng đến thành phẩm; hàng đợi, thư mục tự động, hồ sơ kênh |
-| **Video dài** | Video dài thành nhiều clip ngắn; gõ chủ đề ra video không cần quay |
+| **Tự lái** (nút trên thanh trên) | Thả video vào là tự dựng đến thành phẩm; hàng đợi, thư mục tự động, hồ sơ kênh |
+| **Cắt clip** | Video dài thành nhiều clip ngắn; gõ chủ đề ra video không cần quay |
 | **Lịch đăng** | Lịch tuần kéo thả, tự xếp lịch, tự đăng YouTube, nhắc giờ đăng các nền tảng khác |
 | **Agent** | Cổng Telegram (gửi video qua chat → nhận lại video đã dựng), chấm điểm video, tự cải tiến hồ sơ kênh, đề xuất việc nên làm |
-| **AI** | Dựng giúp, Cắt lỗi nói |
-| **Lời thoại** | Sửa video bằng chữ: bôi đen chữ rồi bấm Xoá là video bị cắt theo |
+| **AI dựng** | Một nút: AI dựng giúp, kèm tuỳ chọn thêm b-roll và âm thanh; xong tự chạy QC nhanh |
+| **Lời thoại** | Sửa video bằng chữ: bôi đen chữ rồi bấm Xoá là video bị cắt theo; tab **Làm sạch lời nói** cắt lỗi nói |
 | **Âm thanh+** | Lọc ồn giọng, hạ nhạc khi nói, thêm track âm thanh (lời dẫn, nhạc phụ, tiếng nền) |
 | **Lồng tiếng** | Dịch phụ đề, phụ đề song ngữ, lồng tiếng bằng giọng máy |
 | **Hàng loạt** | Nhiều video từ một file Excel/CSV |
 | **Thương hiệu** | Lưu nhiều brand kit (màu, font, logo, SĐT…) |
 | **B-roll AI** | Tìm ảnh stock, Claude gợi ý b-roll, tạo ảnh AI (cần key) |
 | **Tạo style** | Clone style từ video, hoặc tạo style từ mô tả |
-| **Tự động** | Tự thêm B-roll và âm thanh chỉ bằng một nút |
+| **Tự động** (tab của B-roll) | Tuỳ chỉnh b-roll và âm thanh tự động (mục tiêu, nguồn, độ dày) |
+| **Kho** | Thư mục của thương hiệu: Nguồn, Dự án, Thành phẩm; chuyển file cũ trước khi có Kho |
+| **Sản phẩm** | Tên, giá, điểm mạnh (claim) của sản phẩm; **Điền bằng AI** từ ảnh hoặc link |
 
 ![Mục Hiệu ứng](docs/images/10-hieu-ung.jpg)
 
@@ -510,7 +542,7 @@ Chi tiết kỹ thuật (các bước phân tích, cách kiểm tra, file đư�
 - ⌘ + cuộn chuột để phóng to hoặc thu nhỏ timeline.
 
 ### Bảng thuộc tính (bên phải)
-- **Không chọn gì:** cài đặt dự án (gói style, kiểu phụ đề, vị trí mặt, thương hiệu).
+- **Không chọn gì:** việc của **bước đang mở bên trái** (xong / còn thiếu, kết quả gần nhất như QC nhanh hay bản xuất mới nhất) và **điểm 0–100 từng bước**. Bấm một bước để xem tiêu chí đạt / thiếu; bấm **Sửa** là mở đúng công cụ bên trái và tô sáng chỗ cần làm. Cài đặt dự án (gói style, kiểu phụ đề, vị trí mặt, thương hiệu) nằm trong mục thu gọn **Cài đặt dự án** bên dưới.
 - **Chọn clip:** các tab Cơ bản / Tốc độ / Âm thanh / Màu / Chuyển cảnh / Mặt nạ / Bám mặt.
 - **Chọn chữ:** Cơ bản / Hoạt ảnh / Vị trí / Keyframe.
 - **Chọn graphic:** Cơ bản / Vị trí / Keyframe / Nâng cao (sửa JSON).
@@ -522,19 +554,21 @@ Chi tiết kỹ thuật (các bước phân tích, cách kiểm tra, file đư�
 
 Các tính năng này gọi lệnh `claude -p` ngay trên máy, dùng **tài khoản Claude của chính bạn**. Không cần API key riêng.
 
-### AI dựng giúp
-Bấm nút **AI dựng giúp** trên thanh trên, chọn mục tiêu video, giọng điệu, mật độ graphic và gõ yêu cầu thêm. Mất khoảng 30–60 giây. Claude sẽ:
+### AI dựng
+Ở bước **③ Dựng**, mục đầu tiên là **AI dựng**: chọn mục tiêu video, giọng điệu, mật độ graphic, gõ yêu cầu thêm, tick **Thêm b-roll** / **Thêm âm thanh**, rồi bấm **AI dựng**. Mất khoảng 30–60 giây (thêm b-roll và âm thanh thì lâu hơn). Claude sẽ:
 - chọn gói style,
 - sửa lỗi nhận giọng trong phụ đề (giữ nguyên thời gian từng chữ),
-- đặt 6–15 graphic đúng lúc nói từ khoá,
+- đặt 6–15 graphic đúng lúc nói từ khoá, **né mặt người nói theo từng thời điểm, phụ đề và vùng an toàn**; trước khi áp, máy render thử và dời graphic còn chạm mặt hay phụ đề,
+- bỏ thẻ không có nội dung và con số không có trong lời thoại,
+- chữ dài thì cắt ở ranh giới từ hoặc nhờ Claude viết ngắn lại, không cắt "…" giữa từ khoá; emoji cờ bị bỏ (Chrome trên Windows hiện thành chữ),
 - chọn nhạc và SFX.
 
-Không ưng thì Hoàn tác.
+Xong là hộp **Đã dựng xong** với QC nhanh tự chạy (xem [AI tự kiểm tra](#ai-tự-kiểm-tra--nhiều-phiên-bản-ab)). Không ưng thì Hoàn tác: cả lượt là một bước.
 
 ![AI dựng giúp](docs/images/04-ai-dung-giup.jpg)
 
 ### Cắt lỗi nói và sửa video bằng chữ
-- **AI → Cắt lỗi nói**: tìm câu lặp, chỗ ngắt dài và (nếu tick Claude) câu nói vấp. Tick những chỗ muốn bỏ rồi bấm **Cắt tất cả đã chọn**.
+- **Lời thoại → Làm sạch lời nói** (bước ② Nguồn): tìm câu lặp, chỗ ngắt dài và (nếu tick Claude) câu nói vấp. Tick những chỗ muốn bỏ rồi bấm **Cắt tất cả đã chọn**.
 - **Lời thoại**: toàn bộ lời nói hiện thành chữ. Bôi đen đoạn thừa và bấm **Xoá đoạn**, video tự cắt và tiếng hình vẫn khớp.
 
 ![Lời thoại](docs/images/07-loi-thoai.jpg)
@@ -598,23 +632,24 @@ Một bấm, máy đọc lời thoại rồi chèn b-roll đúng lúc nói, đ�
 ![B-roll AI](docs/images/09-broll-ai.jpg)
 
 ### Tự lái: thả video vào, nhận video hoàn chỉnh
-- Bấm **Tự lái** (biểu tượng tên lửa) rồi thả video thô vào ô lớn, hoặc **Chọn file**. Studio tự làm hết: phụ đề, cắt lỗi nói, AI dựng giúp, b-roll, SFX + nhạc, AI kiểm tra lỗi, xuất MP4 (thêm 1:1 / 16:9 nếu muốn), ảnh bìa, phụ đề .srt và nội dung đăng cho từng nền tảng. Khoảng 1,5–2 phút cho clip 30–45 giây.
+- Bấm nút **Tự lái** trên thanh trên (cạnh ⋯; không thuộc 5 bước) rồi thả video thô vào ô lớn, hoặc **Chọn file**. Studio tự làm hết: phụ đề, cắt lỗi nói, AI dựng giúp, b-roll, SFX + nhạc, AI kiểm tra lỗi, xuất MP4 (thêm 1:1 / 16:9 nếu muốn), ảnh bìa, phụ đề .srt và nội dung đăng cho từng nền tảng. Khoảng 1,5–2 phút cho clip 30–45 giây.
 - Chạy **nền, theo hàng đợi**: vẫn chỉnh video khác được trong lúc chờ. Xem từng bước đang chạy, huỷ, thử lại (chạy tiếp từ bước dừng), đổi thứ tự, mở dự án ra chỉnh tay.
 - **Hồ sơ kênh**: mỗi kênh một bộ cài đặt (thương hiệu, gói hoặc “AI chọn”, mật độ b-roll, mức âm thanh, nhạc, làm sạch giọng, cắt lỗi nói, khổ xuất, CTA, nền tảng đăng, giờ đăng). **Học từ chỉnh sửa**: khi bạn sửa lại video Tự lái làm (xoá emoji, đổi kiểu phụ đề, tắt nhạc…), hồ sơ ghi nhận và sau ít nhất 2 video sẽ tự điều chỉnh; xem và xoá được điều đã học.
-- **Thư mục tự động**: bật lên rồi thả video vào `~/Movies/AI Video Studio/Thả video vào đây` (Finder, AirDrop…), kết quả ra `…/Đã xong/<tên>/`. Có thể **chạy cả khi tắt app** và bật **Thả vào app = tự lái** (thả video vào biểu tượng app).
+- **Thư mục tự động**: bật lên rồi thả video vào `Nguon/Tha vao day/` trong Kho của thương hiệu (Finder, Explorer, AirDrop…); dự án nằm ở `Du an/`, bản xong giao vào `Thanh pham/<tháng>/`. Có thể **chạy cả khi tắt app** và bật **Thả vào app = tự lái** (thả video vào biểu tượng app).
 - Dòng lệnh: `node scripts/autopilot.mjs clip.mov --out ~/Desktop/xong`. Chi tiết: [references/autopilot.md](references/autopilot.md).
 
 ![Tự lái](docs/images/12-tu-lai.jpg)
 
 ### Video dài → clip ngắn · Chủ đề → video (không cần quay)
-- Bấm **Video dài** (biểu tượng cây kéo). Tab **Video dài**: thả video dài (livestream, podcast 30–90 phút), chọn số clip, độ dài, khung. Máy nghe cả video một lần, Claude chọn các đoạn tự đứng được (hook mạnh 3 giây đầu, trọn ý, không nhắc “như tôi vừa nói”), mỗi đoạn thành một dự án có phụ đề; video ngang vào khung dọc thì tự bám mặt. Danh sách có tiêu đề, hook, mốc thời gian, điểm, ảnh xem trước + nút **Mở**, **Tự lái tất cả** (đưa vào hàng đợi Tự lái), **Xuất tất cả**.
+- Mở **Cắt clip từ video dài** (thanh trái bước ② Nguồn khi video nguồn dài hơn 5 phút, hoặc menu ⋯, hoặc trang chủ). Tab **Video dài**: thả video dài (livestream, podcast 30–90 phút), chọn số clip, độ dài, khung. Máy nghe cả video một lần, Claude chọn các đoạn tự đứng được (hook mạnh 3 giây đầu, trọn ý, không nhắc “như tôi vừa nói”), mỗi đoạn thành một dự án có phụ đề; video ngang vào khung dọc thì tự bám mặt. Danh sách có tiêu đề, hook, mốc thời gian, điểm, ảnh xem trước + nút **Mở**, **Tự lái tất cả** (đưa vào hàng đợi Tự lái), **Xuất tất cả**.
 - Tab **Chủ đề**: gõ chủ đề (vd “3 mẹo dùng ChatGPT cho người bán hàng online”). Claude viết kịch bản, giọng Linh đọc (offline trên macOS; Windows dùng giọng HoaiMy của edge-tts, cần mạng), phụ đề khớp từng chữ, hình là b-roll động + chữ kinetic + nhạc/SFX. Khoảng 1 phút cho video 45 giây.
 - Dòng lệnh: `node scripts/highlights.mjs video.mp4 --out dir --n 6`, `node scripts/topic_video.mjs "chủ đề" --out dir --export`. Chi tiết: [references/longform-topic.md](references/longform-topic.md).
 
 ![Video dài và Chủ đề](docs/images/13-video-dai.jpg)
 
 ### AI tự kiểm tra · Nhiều phiên bản (A/B)
-- Panel **AI** → thẻ **Kiểm tra chất lượng**: máy render các khung bằng đúng engine rồi dò chữ tràn khung, graphic che mặt lúc đang nói, phụ đề bị đè, đoạn > 6 giây không có gì, phụ đề quá dài, file thiếu, hook 2 giây đầu, độ to âm thanh và nhạc át giọng; sau đó Claude xem ảnh để soi hook, **chính tả có dấu**, nhịp, độ đồng bộ. Ra điểm 0–100 và danh sách lỗi (bấm để tua tới). **Kiểm tra & tự sửa** tự dời/thu nhỏ graphic, sửa chữ sai, thêm hook, lấp đoạn trống, tách phụ đề dài, hạ nhạc… rồi kiểm tra lại; có ảnh trước/sau và nút **Hoàn tác sửa**.
+- **QC nhanh** (tự chạy sau AI dựng, hoặc bấm **Kiểm tra lại**): render 3 khung rồi kiểm hình học, không gọi Claude, khoảng 10–20 giây: graphic che mặt, chữ ngoài vùng an toàn hoặc ra ngoài khung, đè phụ đề, khoảng trống dài, chữ bị cắt "…", emoji cờ, hai lớp chữ chồng nhau khi video gốc có phụ đề cháy sẵn. **Sửa ngay** tự dời / thu nhỏ trong một bước hoàn tác.
+- Bước **④ Kiểm tra** → thẻ **Kiểm tra chất lượng** (QC đầy đủ): máy render các khung bằng đúng engine rồi dò chữ tràn khung, graphic che mặt lúc đang nói, phụ đề bị đè, đoạn > 6 giây không có gì, phụ đề quá dài, file thiếu, hook 2 giây đầu, độ to âm thanh và nhạc át giọng; sau đó Claude xem ảnh để soi hook, **chính tả có dấu**, nhịp, độ đồng bộ. Ra điểm 0–100 và danh sách lỗi (bấm để tua tới). **Kiểm tra & tự sửa** tự dời/thu nhỏ graphic (kể cả cảnh có keyframe, dời cả đường đi), ẩn thẻ trống, đánh dấu số không có trong lời thoại, nhận sửa chính tả từ bước soát lời thoại, sửa chữ sai, thêm hook, lấp đoạn trống, tách phụ đề dài, hạ nhạc… rồi kiểm tra lại; có ảnh trước/sau và nút **Hoàn tác sửa**.
 - Hộp **Xuất** có ô **AI kiểm tra & sửa trước khi xuất**; hộp “Xuất xong” hiện điểm trước → sau.
 - Thẻ **Nhiều phiên bản (A/B)** → **Tạo 3 phiên bản**: 3 dự án anh em với hook mở đầu khác nhau do Claude viết (có bản mở bằng câu nói mạnh nhất kéo lên đầu) và/hoặc gói style khác; tick để xuất luôn 720p; bảng **So sánh** phát cạnh nhau, nút **Mở** từng bản.
 - Dòng lệnh: `node scripts/ai_qc.mjs du-an [--fix] [--no-claude]`, `node scripts/variants.mjs du-an --n 3 --kind hook|style|both [--export]`. Chi tiết: [references/qc-variants.md](references/qc-variants.md).
@@ -809,6 +844,18 @@ Server chưa chạy.
 - **macOS:** bấm app, hoặc chạy `bash studio.sh`. Nhật ký của app nằm ở `~/Library/Logs/AIVideoStudio.log`.
 - **Windows:** bấm lối tắt **AI Video Studio**. Xem lỗi trong cửa sổ đen (server); nếu cửa sổ tự đóng, mở `studio.cmd` từ PowerShell để đọc lỗi.
 
+**Một tính năng báo thiếu thư viện, hoặc máy mới chưa chắc đã cài đủ?**
+Mở ⋯ → **Kiểm tra máy…**. Màn này liệt kê từng thư viện (có / thiếu / phiên bản) và tính năng nào cần nó. Bấm **Cài giúp đủ một lần** hoặc nút **Cài** trên dòng còn thiếu; Windows có thể hỏi quyền cài đặt, bấm **Yes**. Cài mới Node, Chrome hoặc ffmpeg thì đóng Studio rồi mở lại. Nút ⋯ có chấm đỏ nghĩa là còn thiếu mục bắt buộc.
+
+**Xuất xong, mở video rồi quay lại thì không thấy file ở đâu?**
+Mở bước **⑤ Xuất và đăng** → **Xuất**: mọi bản đã xuất của dự án nằm ở đó (bản mới nhất ở trên), có **Xem**, **Mở thư mục**, **Mở Thành phẩm**, **Chép đường dẫn**. File bị xoá ngoài Studio thì được đánh dấu.
+
+**Video tải từ Reels / TikTok bị hai lớp phụ đề chồng nhau?**
+Ở bước **② Nguồn**, thẻ **Video nguồn** báo "Video gốc có phụ đề cháy sẵn": chọn tắt phụ đề mới, dời phụ đề mới lên vùng khác, hoặc che dải chữ cũ.
+
+**Điểm của một bước thấp?**
+Không chọn gì trên khung hình rồi xem cột phải: bấm vào bước đó để thấy tiêu chí còn thiếu, bấm **Sửa** để tới đúng chỗ. Điểm chỉ để nhắc; điểm Kiểm tra dưới 60 thì Xuất hỏi lại, bấm **Vẫn xuất** vẫn được.
+
 **macOS báo "không mở được app vì không xác định nhà phát triển"?**
 App được tạo ngay trên máy bạn và chưa được Apple xác thực. Chuột phải vào app, chọn **Open**, rồi chọn **Open** lần nữa. Chỉ cần làm một lần.
 
@@ -834,7 +881,7 @@ Cài Claude Code CLI và chạy `claude` một lần để đăng nhập. Kiểm
 - Video gửi lên phải ≤ 20 MB; video kết quả > 50 MB thì bot chỉ báo đường dẫn file.
 
 **Phụ đề nhận giọng sai chữ?**
-Lúc tạo dự án, chọn độ chính xác cao hơn (model whisper lớn hơn). Hoặc bấm **AI dựng giúp** để Claude sửa lỗi chính tả mà vẫn giữ thời gian từng chữ. Cũng có thể sửa tay trong tab phụ đề.
+Lúc tạo dự án, chọn độ chính xác cao hơn (model whisper lớn hơn). Hoặc bấm **AI dựng** để Claude sửa lỗi chính tả mà vẫn giữ thời gian từng chữ. Cũng có thể sửa tay trong tab phụ đề.
 
 **Render chậm hoặc máy nóng?**
 Giảm số luồng: `--workers 2`. Mỗi luồng tốn khoảng 300 MB RAM. Render tự dùng GPU khi máy có (`node scripts/render_hw.mjs` cho biết máy đang dùng gì); nếu khung hình bị lỗi hoặc đen trên GPU, đặt `AVS_RENDER_GPU=0` để dựng bằng CPU như cũ.
