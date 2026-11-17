@@ -40,7 +40,8 @@ const shiftT = (o, T) => JSON.parse(JSON.stringify(o), (k, v) => (['t', 't0', 't
     ],
     recipe: ctx => ({
       caption_style: 'slate', music: 'tech',
-      scenes: [{ type: 'frame_grid', t0: 0, t1: ctx.dur - 2.5, badge: { icon: ctx.brand.logo || 'si:claude' } }, { type: 'title_card', t0: ctx.dur - 2.5, t1: ctx.dur, question: 'Bạn thấy sao?' }],
+      scenes: [{ type: 'frame_grid', t0: 0, t1: ctx.dur - 2.5, badge: ctx.brand.logo ? { icon: ctx.brand.logo } : false }, { type: 'title_card', t0: ctx.dur - 2.5, t1: ctx.dur, question: 'Bạn thấy sao?',
+        title: ctx.brand.name || ctx.title || [{ text: '' }], pill: ctx.brand.name ? { icon: ctx.brand.logo || '', text: ctx.brand.name } : false }],
     }),
   });
   PACKS.push({

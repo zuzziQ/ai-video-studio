@@ -31,6 +31,11 @@ export function runCmd(cmd, argv, onLine, { cwd } = {}) {
 }
 
 // Display orientation of a video (rotation metadata included): 'vertical' | 'horizontal'.
+/** Tiêu đề + viên thương hiệu cho thẻ kết (title_card) theo brand kit; không có thì tiêu đề trống, không viên. S16 M120. */
+export function endCard(brand, title = '') {
+  const name = String(brand?.name || '').trim();
+  return { title: name || String(title || '').trim() || [{ text: '' }], pill: name ? { icon: brand.logo || '', text: name } : false };
+}
 export function videoOrient(src) {
   try {
     const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:stream_side_data=rotation:stream_tags=rotate', '-of', 'json', src]).toString());
@@ -113,13 +118,19 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
     caption_style: 'slate', captions: 'work/captions.json', ...(speech ? { speech } : {}),
     scenes: [
       // slate's card / title positions are laid out for 720x1280; a 1280x720 design needs its own (else they spill off the bottom)
-      { type: 'frame_grid', t0: 0, t1: dur, ...(orient === 'horizontal' ? { card: { x: 120, y: 70, w: 1040, h: 585, r: 8 }, badge: { icon: 'si:claude', x: 640 } } : { badge: { icon: 'si:claude' } }) },
+      // S16 M120: khung thẻ trên nền lưới chỉ thuộc gói slate; gói khác để a-roll tràn khung. Huy hiệu = logo thương hiệu (thêm ở dưới), không có thì không hiện
+      ...(pack === 'slate' ? [{ type: 'frame_grid', t0: 0, t1: dur, badge: false, ...(orient === 'horizontal' ? { card: { x: 120, y: 70, w: 1040, h: 585, r: 8 } } : {}) }] : []),
       { type: 'title_card', t0: dur, t1: +(dur + 2.5).toFixed(2), question: 'Bạn thấy sao?', ...(orient === 'horizontal' ? { y: 210 } : {}) },
     ],
     audio: { voice: 'work/aroll.mp4', mix: 'work/mix.wav', music: [{ t0: 0, t1: +(dur + 2.5).toFixed(2), mood: 'tech', gain: -20 }], sfx: [] },
   };
   // Brand kit chosen in the onboarding / "Video mới" dialog: applied here so the project does not ask for it again.
   if (kit) { const { brandFields } = await import('./batch.mjs'); tl.brand = { ...brandFields(kit, d), kit: kit.id }; }
+  const grid = tl.scenes.find(s => s.type === 'frame_grid');
+  if (grid && tl.brand?.logo) grid.badge = { icon: tl.brand.logo, ...(orient === 'horizontal' ? { x: 640 } : {}) };
+  // Thẻ kết mặc định của engine là bản trình diễn ("SKILL AI EDIT VIDEO" + viên Claude): dùng tên / logo thương hiệu, không có thì để trống
+  const end = tl.scenes.find(s => s.type === 'title_card');
+  if (end) Object.assign(end, endCard(tl.brand, title));
   fs.writeFileSync(path.join(d, 'timeline.json'), JSON.stringify(tl, null, 1));
   // source.json (S12 mục 2.2): video gốc theo đường dẫn tương đối với Kho + dung lượng + sha256
   writeSource(d, ws || workspaceOfProject(d, tl), src, { size: fs.statSync(src).size, sha256: await sha });

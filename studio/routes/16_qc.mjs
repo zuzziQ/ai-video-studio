@@ -67,7 +67,9 @@ export default ctx => {
     }
     if (p === '/api/qc') {
       const r = readJ(path.join(st, 'qc.json'));
-      return ctx.json(res, r ? { ...r, can_undo: fs.existsSync(path.join(st, 'qc_backup.json')) } : { none: true, error: 'Chưa kiểm tra' }), true;
+      // S16 M120: stale = timeline đã đổi sau lần QC (sau tự sửa thì so với hash_now): điểm Kiểm tra chỉ tin QC đầy đủ còn mới
+      const ref = r && (r.hash_now ?? r.hash), now = ref ? projectHash(ctx.project.dir) : null;
+      return ctx.json(res, r ? { ...r, stale: !!(ref && now && ref !== now), can_undo: fs.existsSync(path.join(st, 'qc_backup.json')) } : { none: true, error: 'Chưa kiểm tra' }), true;
     }
     if (p === '/api/qc/gate') return ctx.json(res, readGate(ctx.project.dir)), true;
     if (p === '/api/qc/override' && req.method === 'POST') {

@@ -81,6 +81,7 @@
     <div class="ap-drop" id="ap-drop"><i class="ti ti-rocket big"></i><b>Thả video vào đây để tự dựng</b><small>mp4 · mov · m4v · mkv — có thể thả nhiều file</small>
       <input type="file" id="ap-file" accept="video/*,.mov,.mkv,.m4v" multiple hidden></div>
     <div id="ap-upl"></div>
+    <div id="ap-claude"></div>
     <div class="ap-row2"><select id="ap-prof">${profiles().map(p => `<option value="${esc(p.id)}" ${p.id === S.profile ? 'selected' : ''}>${esc(p.name)}${p.id === defProfile() ? ' (mặc định)' : ''}</option>`).join('')}</select>
       <button id="ap-pick"><i class="ti ti-file-upload"></i> Chọn file</button></div>
     <label class="ap-lbl">Hoặc đường dẫn video / thư mục dự án trên máy</label>
@@ -88,7 +89,18 @@
     <div id="ap-live"></div>
     <div id="ap-watch"></div>
     <div id="ap-profiles"></div>`;
-    bindTop(); renderLive(); renderWatch(); renderProfiles();
+    bindTop(); renderLive(); renderWatch(); renderProfiles(); renderClaude();
+  }
+  // S16 M120: báo trước khi chạy: máy không có Claude CLI thì "AI dựng giúp" và "Viết nội dung đăng" sẽ bị bỏ qua
+  let claudeAsked = false;
+  function renderClaude() {
+    const box = $('#ap-claude'); if (!box) return;
+    const R = Studio.setupCheck?.();
+    if (!R && !claudeAsked) { claudeAsked = true; api('/api/setup/check').then(r => { if (r?.items && !Studio.setupCheck?.()) S.apClaude = r; renderClaude(); }).catch(() => {}); }
+    const it = ((R || S.apClaude)?.items || []).find(i => i.id === 'claude');
+    box.innerHTML = it && it.status !== 'ok' ? `<div class="ap-card"><i class="ti ti-alert-triangle ap-warn"></i> Máy chưa có Claude Code CLI: Tự lái vẫn chạy nhưng bỏ qua <b>AI dựng giúp</b> và <b>Viết nội dung đăng</b>.
+      <button class="wf-lnk" id="ap-claude-fix">Kiểm tra máy</button></div>` : '';
+    $('#ap-claude-fix')?.addEventListener('click', () => Studio.openSetup?.());
   }
   function stepList(it) {
     const steps = S.st.steps, ss = it.steps || {};

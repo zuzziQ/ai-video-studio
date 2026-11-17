@@ -526,8 +526,17 @@ const server = http.createServer(async (req, res) => {
 
 if (args[0] === '--new') {
   job = { kind: 'new', state: 'running', progress: 0, step: '', log: '' };
-  await newProject({ video: args[1], dir: args[2] && !args[2].startsWith('--') ? args[2] : undefined });
-  console.log(`starter project: ${project.dir}`);
+  // S16 M120: thiếu thư viện (faster-whisper…) hay video hỏng: báo một dòng rồi vẫn mở Studio (màn Kiểm tra máy cài giúp được),
+  // không để lỗi bay ra ngoài làm sập server kèm stack trace
+  try {
+    await newProject({ video: args[1], dir: args[2] && !args[2].startsWith('--') ? args[2] : undefined });
+    console.log(`starter project: ${project.dir}`);
+  } catch (e) {
+    console.error(`Không tạo được dự án từ ${path.basename(String(args[1] || ''))}: ${e.message}`);
+    console.error(/Thiếu thư viện|Không tìm thấy|chạy lại bộ cài/.test(e.message)
+      ? 'Studio vẫn mở: vào menu ⋯ → Kiểm tra máy để cài phần còn thiếu, rồi tạo lại dự án từ trang chủ.'
+      : 'Studio vẫn mở: tạo lại dự án từ trang chủ.');
+  }
   job = null; // otherwise every later job (export, AI…) is refused as "already running"
 } else if (args[0] && !args[0].startsWith('--')) openProject(args[0]);
 

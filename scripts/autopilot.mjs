@@ -17,7 +17,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { newProject, PY } from './new_project.mjs';
+import { newProject, PY, videoOrient, endCard } from './new_project.mjs';
 import { rippleCut } from './ripple.mjs';
 import { AVS_HOME, getProfile, effectiveProfile } from './profile.mjs';
 import { notify } from './notify.mjs';
@@ -89,6 +89,12 @@ function loadTL(dir) {
   const capFile = typeof tl.captions === 'string' ? tl.captions : 'work/captions.json';
   const caps = typeof tl.captions === 'string' ? rd(path.join(dir, tl.captions), []) : (tl.captions || []);
   return { tlFile, tl, caps, capFile };
+}
+// S16 M120: hồ sơ để gói "tự chọn": video nguồn đã đúng khổ ra (dọc → dọc, ngang → ngang) thì a-roll tràn khung (gói basic);
+// lệch khổ (ngang → dọc…) mới đặt video thành thẻ trên nền lưới (slate). Không đọc được khổ → basic.
+export function autoPack(src, orient = 'auto') {
+  if (!orient || orient === 'auto') return 'basic';
+  try { return videoOrient(src) === orient ? 'basic' : 'slate'; } catch { return 'basic'; }
 }
 function saveTL(dir, tl, caps, capFile = 'work/captions.json') {
   if (caps) { fs.mkdirSync(path.dirname(path.join(dir, capFile)), { recursive: true }); fs.writeFileSync(path.join(dir, capFile), JSON.stringify(caps, null, 1)); tl.captions = capFile; }
@@ -225,7 +231,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
   const noSpeech = () => { const { tl, caps } = loadTL(dir); return !!tl.speech?.none || !caps.length; };
   const impl = {
     async new() {
-      await newProject({ video: abs, dir, model: prof.whisper || 'large-v3-turbo', pack: !['auto', 'keep', ''].includes(prof.pack) ? prof.pack : 'slate', title: '', orient: prof.orient || 'auto', lang: prof.lang },
+      await newProject({ video: abs, dir, model: prof.whisper || 'large-v3-turbo', pack: !['auto', 'keep', ''].includes(prof.pack) ? prof.pack : autoPack(abs, prof.orient), title: '', orient: prof.orient || 'auto', lang: prof.lang },
         { run: (c, a, l) => run(c, a, l), onStep: (s, p) => sayS(p, s) });
       const { tl, caps } = loadTL(dir);
       return `${caps.length} dòng phụ đề · ${tl.duration}s · ${tl.height > tl.width ? 'dọc' : 'ngang'}`;
@@ -238,6 +244,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
         const kit = loadBrand(prof.brand);
         if (!kit) throw new Error(`không thấy brand kit "${prof.brand}"`);
         tl.brand = { ...(tl.brand || {}), ...brandFields(kit, dir), kit: kit.id }; notes.push(kit.title || kit.name);
+        const card = (tl.scenes || []).filter(s => s.type === 'title_card' && !s._ai && !s._auto).pop(); if (card) Object.assign(card, endCard(tl.brand)); // S16 M120
       }
       if (prof.cta) { tl.brand = { ...(tl.brand || {}), outro: prof.cta }; const end = (tl.scenes || []).filter(s => s.type === 'title_card' && !s._ai && !s._auto).pop(); if (end) end.question = prof.cta; notes.push('CTA'); }
       saveTL(dir, tl, caps, capFile); return notes.join(' · ');

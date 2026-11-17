@@ -98,8 +98,10 @@
 
     const q = I.quick, qn = q && arr(q.issues).length;
     const full = I.qc, ran = !!full && !full.none && !full.error && Number.isFinite(+full.score);
+    // S16 M120: QC đầy đủ còn mới (sau lần sửa cuối) đã kiểm cả vị trí graphic: thay cho QC nhanh, không trừ lần nữa
+    const fullNew = ran && !full.stale;
     const check = [
-      it('quick', 'QC nhanh', 2, quickValue(q), !q || q.none || q.error ? 'Chưa kiểm tra nhanh vị trí graphic (che mặt, đè phụ đề).'
+      it('quick', fullNew ? 'QC nhanh (QC đầy đủ đã kiểm vị trí)' : 'QC nhanh', 2, fullNew ? 1 : quickValue(q), !q || q.none || q.error ? 'Chưa kiểm tra nhanh vị trí graphic (che mặt, đè phụ đề).'
         : q.stale ? `Đã sửa video sau lần kiểm tra nhanh${qn ? ` (còn ${qn} chỗ)` : ''}: kiểm tra lại.` : `QC nhanh còn ${qn} chỗ cần xem.`),
       ran ? it('qc', 'QC đầy đủ', 3, (+full.score) / 100, `QC đầy đủ được ${Math.round(+full.score)}/100: xem các chỗ chưa sửa.`)
         : it('qc', 'QC đầy đủ', 0, 0, 'Chưa chạy QC đầy đủ: chính tả, hook, nhịp, âm lượng.', { opt: true }),
