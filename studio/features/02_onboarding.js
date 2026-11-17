@@ -445,7 +445,9 @@
     const r = e.target.closest('[data-r]');
     if (r) {
       r.disabled = true; r.querySelector('small').textContent = 'đang mở…';
-      const j = await api('/api/onboarding/open', { i: +r.dataset.r });
+      // S17 M126: lưu dự án đang mở trước khi đổi sang dự án khác; lưu không được thì dừng, không bỏ mất thay đổi
+      if (ST?.project && Studio.TL) { await Studio.saveNow().catch(() => {}); if (Studio.dirty) { r.disabled = false; r.querySelector('small').textContent = 'chưa lưu được dự án đang mở'; return; } }
+      const j = await api('/api/onboarding/open', { i: +r.dataset.r }).catch(err => ({ error: err.message }));
       if (j.error) { toast(j.error); return openHome(); }
       return location.reload();
     }
@@ -456,7 +458,7 @@
     if (a === 'sample') {
       b.disabled = true;
       try {
-        if (ST?.project && Studio.TL) await Studio.saveNow(); // dự án đang mở: lưu trước khi đổi sang dự án mẫu
+        if (ST?.project && Studio.TL) { await Studio.saveNow(); if (Studio.dirty) throw new Error('Chưa lưu được dự án đang mở'); } // lưu trước khi đổi sang dự án mẫu
         const j = await api('/api/onboarding/sample', {});
         if (j.error) throw new Error(j.error);
       } catch (err) { b.disabled = false; return toast(err.message || 'Không mở được dự án mẫu'); }

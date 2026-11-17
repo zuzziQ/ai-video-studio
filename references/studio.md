@@ -119,7 +119,7 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 
 | Đường dẫn | Việc |
 |---|---|
-| `GET /api/project` | `{timeline, captions, meta}` |
+| `GET /api/project` | `{timeline, captions, meta}`; `meta.kho` = `{brand, title, root, found}` Kho của dự án (thanh trên hiện "Kho …" dưới tên dự án, S17 M126); không có dự án mở (kể cả lúc đang tạo video mới) → 404 |
 | `POST /api/save` | `{timeline, captions}` → ghi file + lịch sử + notes.md |
 | `GET /api/history`, `GET /api/history/<id>` | lịch sử |
 | `GET /api/library` | danh sách SFX / nhạc |
@@ -127,7 +127,7 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/broll?q=` | tìm trong 9.080 b-roll |
 | `POST /api/autosfx` | chạy `auto_sfx.py --keep-manual` |
 | `POST /api/export` | `{quality:"720"\|"1080"\|"4k", from?, to?, aspects?, deliver?}` — `deliver` mặc định giao bản xuất vào `Thanh pham/` (M100), `false` thì chỉ ghi `out/`; job trả `delivered`, `deliveredDir`, `deliverError` |
-| `POST /api/new` | `{video, dir?, model?, pack?, title?, orient?:"vertical"\|"horizontal"\|"auto", brand?}` — không có `dir`: dự án ở `<Kho của brand>/Du an/<tiêu đề\|tên video>`, gắn brand kit, ghi `source.json`; brand lạ → lỗi trước khi chạy whisper |
+| `POST /api/new` | `{video, dir?, model?, pack?, title?, orient?:"vertical"\|"horizontal"\|"auto", brand?}` — không có `dir`: dự án ở `<Kho của brand>/Du an/<tiêu đề\|tên video>`, gắn brand kit, ghi `source.json`; brand lạ → lỗi trước khi chạy whisper. S17 M126: trình duyệt lưu dự án đang mở trước khi gửi; server đóng dự án đó trong lúc dựng (không route nào ghi vào nó), xong mở dự án mới, hỏng thì mở lại dự án cũ. Hộp Video mới: thương hiệu mặc định theo Kho của dự án đang mở, dòng "Thương hiệu · Kho" luôn hiện, Kho khác dự án đang mở thì nhắc + nút đổi lại (thẻ Chuẩn bị của Tự lái cũng vậy) |
 | `GET /api/job`, `POST /api/job/cancel` | tiến độ / huỷ tác vụ |
 | `GET /api/source`, `POST /api/source/reveal`, `POST /api/source/burnin` | S13 M107, M110 (`14_source`): thẻ Video nguồn `{name, rel, inKho, exists, size, kho:{brand, title, root, found}, inbox, burnin, canScan}` từ `source.json` (ngoài Kho thì không trả đường dẫn, `rel` = `null`); `burnin` = `.studio/burnin.json` + `design` (px thiết kế) hoặc `null` khi chưa dò · hiện video gốc trong Explorer/Finder (chỉ khi còn trong Kho, không thì 404) · dò phụ đề cháy sẵn (`scripts/burnin.mjs`, một lượt mỗi lúc; không có video 404) → `{burnin}`. Chưa mở dự án 400 |
 | `POST /api/qc/quick {times?, fix?}`, `GET /api/qc/quick` | S13 M105 (`16_qc`): job `qc_quick` (`scripts/qc_quick.mjs`, không gọi Claude; ≤ 3 thời điểm cho 3 ô ảnh; `fix` = sửa bằng bộ giải QC rồi ghi timeline); đang có job 409 · kết quả gần nhất `.studio/qc_quick.json` + `stale` khi timeline đã đổi (`{none: true}` khi chưa chạy) |

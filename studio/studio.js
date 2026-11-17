@@ -1134,7 +1134,8 @@ async function api(path, body) {
   return r.json();
 }
 async function saveNow() {
-  const r = await api('/api/save', { timeline: TL, captions: CAP });
+  if (newBusy) return; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
+  const r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir }); // dir: server từ chối khi đã sang dự án khác (S17 M126)
   if (r.ok) { dirty = false; $('#status').textContent = 'Đã lưu'; $('#status').classList.remove('dirty'); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); }
   else toast('Lỗi lưu: ' + (r.error || ''));
 }
@@ -1252,7 +1253,7 @@ function videoPicker(host, o = {}) {
     if (my !== seq) return; // đổi thương hiệu nhanh: bỏ kết quả cũ
     items = r.items || [];
     const k = host.querySelector('.vp-kho'); k.textContent = r.kho ? `Kho ${r.kho.title}: ${r.kho.root}` : (r.error || 'Không đọc được Kho'); k.title = r.kho?.warning || r.kho?.root || '';
-    draw();
+    draw(); o.onKho?.(r.kho || null);
   }
   q.oninput = draw;
   pathIn.onchange = () => { draw(); o.onChange?.(pathIn.value.trim(), pathIn.value.trim().split(/[\\/]/).pop()); };
@@ -1276,48 +1277,71 @@ function videoPicker(host, o = {}) {
   load();
   return { setBrand(b) { if ((b || '') !== brand) { brand = b || ''; load(); } }, get value() { return pathIn.value.trim(); }, focus: () => q.focus() };
 }
-let newOpening = false; // two quick clicks must not open two dialogs (the dialog waits for /api/onboarding + /api/brands)
+// newBusy: đang tạo video mới (S17 M126), không lưu dự án cũ nữa; newOpening: hai lần bấm nhanh không mở hai hộp (hộp chờ /api/onboarding + /api/brands)
+let newOpening = false, newBusy = false;
 $('#newproj').addEventListener('click', async () => {
   if (newOpening) return; newOpening = true;
   try { await openNewProject(); } finally { newOpening = false; }
 });
+// S17 M126: video mới không lẫn với dự án đang mở. Thương hiệu mặc định = thương hiệu (Kho) của dự án đang mở, chưa mở thì theo
+// hướng dẫn đầu; dòng "Thương hiệu · Kho" luôn hiện, chọn Kho khác dự án đang mở thì nhắc và cho đổi lại. Bấm Tạo: lưu dự án đang mở,
+// che trình chỉnh sửa (server đóng dự án cũ trong lúc tạo), xong thì nạp lại trang với dự án mới sạch.
+const khoLabel = k => (k ? `${k.brand ? 'Thương hiệu ' + k.title : 'Không thương hiệu'} · Kho: ${k.brand ? k.title : 'Chung'}` : '');
 async function openNewProject() {
   // Thương hiệu, gói style và khổ hình đã chọn ở hướng dẫn đầu / brand kit: lấy sẵn, không hỏi lại. Muốn khác thì mở "Đổi".
   const ls = { get: (k, d) => { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('avs.' + k, v); } catch {} } };
   const [onb, brands] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => [])]);
   const BR = Array.isArray(brands) ? brands : [], PK = packs().filter(p => p.recipe);
-  const brand0 = BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : '');
+  const cur = TL ? META?.kho || null : null; // Kho của dự án đang mở (server đọc từ .kho.json / brand kit)
+  const brand0 = (cur && (cur.brand === '' || BR.some(b => b.id === cur.brand)) ? cur.brand : null) ?? (BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : ''));
   const packFor = id => { const b = BR.find(x => x.id === id); return [b?.pack, ls.get('newPack', '')].find(x => x && PK.some(p => p.id === x)) || PK[0]?.id || 'slate'; };
   const orient0 = { '16:9': 'horizontal', '9:16': 'vertical' }[onb?.aspect] || 'auto';
   const OR = [['auto', 'Theo video'], ['vertical', 'Dọc 9:16 (Reels, TikTok, Shorts)'], ['horizontal', 'Ngang 16:9 (YouTube)']];
-  modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3><label class="lbl">Video</label><div id="nvp"></div>
+  modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3>
+    <div id="nkho" class="nkho"><i class="ti ti-building-warehouse"></i><span></span></div>
+    <label class="lbl">Video</label><div id="nvp"></div>
     <label class="lbl">Tiêu đề / chủ đề (dùng cho intro)</label><input id="ntitle" placeholder="VD: 3 mẹo dùng ChatGPT">
     <details id="nopts"><summary><span class="muted">Dùng thiết lập sẵn:</span> <b id="nsum"></b> <span class="muted">· Đổi</span></summary>
-    <label class="lbl">Thương hiệu</label><select id="nbrand"><option value="">— không gắn —</option>${BR.map(b => `<option value="${esc(b.id)}" ${b.id === brand0 ? 'selected' : ''}>${esc(b.title || b.name || b.id)}</option>`).join('')}</select>
+    <label class="lbl">Thương hiệu · Kho</label><select id="nbrand"><option value="">Không thương hiệu · Kho Chung</option>${BR.map(b => `<option value="${esc(b.id)}" ${b.id === brand0 ? 'selected' : ''}>${esc(b.title || b.name || b.id)} · Kho: ${esc(b.title || b.name || b.id)}</option>`).join('')}</select>
     <label class="lbl">Gói style</label><div class="packs">${PK.map(p => `<label><input type="radio" name="npack" value="${p.id}" ${p.id === packFor(brand0) ? 'checked' : ''}><b>${p.icon} ${esc(p.name)}</b><span class="muted">${esc(p.desc || '')}</span></label>`).join('')}</div>
     <div class="row2"><div><label class="lbl">Khổ hình</label><select id="norient">${OR.map(([v, l]) => `<option value="${v}" ${v === orient0 ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div><label class="lbl">Độ chính xác nhận giọng</label><select id="nmodel">${[['large-v3-turbo', 'large-v3-turbo (chính xác, khuyên dùng)'], ['small', 'small (nhanh, sai nhiều hơn)'], ['large-v3', 'large-v3 (chậm nhất)']].map(([v, l]) => `<option value="${v}" ${v === ls.get('newModel', 'large-v3-turbo') ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <label class="lbl">Thư mục dự án (để trống = Kho của thương hiệu, thư mục Du an)</label><input id="ndir" placeholder=""></details>
-    <p class="muted">Tự làm: nhận giọng → cắt khoảng lặng → cắt khung → phụ đề → bản dựng theo gói (intro, graphic theo từ khoá, CTA, nhạc). Sau đó bạn (hoặc Claude) chỉnh tiếp.</p>
+    <p class="muted">Tự làm: nhận giọng → cắt khoảng lặng → cắt khung → phụ đề → bản dựng theo gói (intro, graphic theo từ khoá, CTA, nhạc). Sau đó bạn (hoặc Claude) chỉnh tiếp.${TL ? ` Dự án đang mở (<b>${esc(META.name)}</b>) được lưu rồi đóng lại; video mới mở trong một dự án riêng.` : ''}</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="ngo">Tạo</button></div>`);
   const sum = () => {
     const b = BR.find(x => x.id === $('#nbrand').value), pv = document.querySelector('[name=npack]:checked')?.value, p = PK.find(x => x.id === pv);
     $('#nsum').textContent = [b ? (b.title || b.name) : 'không thương hiệu', p ? p.name : pv, OR.find(o => o[0] === $('#norient').value)?.[1].replace(/ \(.*/, '')].filter(Boolean).join(' · ');
   };
-  const vp = videoPicker($('#nvp'), { brand: brand0, onChange: (p, name) => { if (p && !$('#ntitle').value) { $('#ntitle').value = String(name || '').replace(/\.\w+$/, ''); dirPh(); } } });
+  // dòng "Thương hiệu · Kho" (luôn hiện) + nhắc khi Kho khác dự án đang mở, kèm nút đổi lại
+  let kho = null;
+  const khoLine = () => {
+    const box = $('#nkho'); if (!box) return;
+    const b = BR.find(x => x.id === $('#nbrand').value), k = kho || { brand: b?.id || '', title: b ? (b.title || b.name || b.id) : 'Chung' };
+    const off = cur && (cur.brand || '') !== ($('#nbrand').value || '');
+    box.classList.toggle('warn', !!off);
+    box.querySelector('span').innerHTML = `<b>${esc(khoLabel(k))}</b>${kho?.root ? ` <small>${esc(kho.root)}</small>` : ''}`
+      + (off ? `<br>Video này sẽ vào Kho <b>${esc(k.brand ? k.title : 'Chung')}</b> của ${k.brand ? `thương hiệu <b>${esc(k.title)}</b>` : '<b>không thương hiệu</b>'}, khác dự án đang mở (${esc(khoLabel(cur))}). <button type="button" class="wf-lnk" id="nkho-back">Dùng Kho của dự án đang mở</button>` : '');
+    $('#nkho-back')?.addEventListener('click', () => { $('#nbrand').value = cur.brand || ''; $('#nbrand').onchange(); });
+  };
+  const vp = videoPicker($('#nvp'), { brand: brand0, onKho: k => { kho = k; khoLine(); }, onChange: (p, name) => { if (p && !$('#ntitle').value) { $('#ntitle').value = String(name || '').replace(/\.\w+$/, ''); dirPh(); } } });
   const dirPh = () => { const b = BR.find(x => x.id === $('#nbrand').value); $('#ndir').placeholder = `Kho ${b ? (b.title || b.name) : 'Chung'} › Du an › ${$('#ntitle').value.trim() || 'tên video'}`; };
   $('#ntitle').oninput = dirPh; dirPh();
-  $('#nbrand').onchange = () => { const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; vp.setBrand($('#nbrand').value); dirPh(); sum(); };
-  $('#nopts').onchange = sum; sum();
+  $('#nbrand').onchange = () => { const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; kho = null; khoLine(); vp.setBrand($('#nbrand').value); dirPh(); sum(); };
+  $('#nopts').onchange = sum; sum(); khoLine();
   $('#ngo').onclick = async () => {
     if (!vp.value) return toast('Chọn video trước');
     const pack = document.querySelector('[name=npack]:checked')?.value || 'slate';
     ls.set('newPack', pack); ls.set('newModel', $('#nmodel').value);
+    // lưu dự án đang mở trước khi server đóng nó; lưu hỏng thì dừng, không bỏ mất chỉnh sửa
+    if (TL && dirty) { await saveNow(); if (dirty) return toast('Chưa lưu được dự án đang mở — chưa tạo video mới'); }
     const r = await api('/api/new', { video: vp.value, dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
       pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined });
     if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
-    modal(`<h3>Đang tạo dự án…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
-    pollJob(j => { if (j.state === 'done') location.reload(); else modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`); });
+    // dự án cũ đã đóng phía server: che trình chỉnh sửa, không để thấy (hay lưu) timeline cũ trong lúc tạo
+    newBusy = true; dirty = false; document.body.classList.add('np-busy');
+    modal(`<h3>Đang tạo dự án mới…</h3><div class="muted">${esc(khoLabel(kho) || '')}</div><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
+    pollJob(j => { if (j.state === 'done') location.reload(); else modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="location.reload()">Đóng</button></div>`); });
   };
 }
 function toast(m) {
@@ -1332,7 +1356,7 @@ window.addEventListener('resize', fit);
 // ---------- feature API (studio/features/*.js) ----------
 // Features are plain scripts loaded after boot; they read/mutate TL/CAP through this object and call changed() after edits.
 const Studio = window.Studio = {
-  get TL() { return TL; }, set TL(v) { TL = v; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
+  get TL() { return TL; }, set TL(v) { TL = v; }, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
   $, esc, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),
@@ -1366,6 +1390,7 @@ async function boot() {
   if ((TL.width || 1080) > (TL.height || 1920)) { DW = 1280; DH = 720; SAFE = { x: 60, y: 40, w: 1160, h: 620 }; document.body.classList.add('landscape'); }
   migrateClips();
   $('#ver').textContent = META.version; $('#ptag').textContent = META.name;
+  { const k = $('#pkho'); if (k && META.kho) { k.hidden = false; k.textContent = 'Kho ' + (META.kho.brand ? META.kho.title : 'Chung'); k.title = `${khoLabel(META.kho)}\n${META.kho.root}\n${META.dir}`; } }
   for (const a of ['#aspect', '#aspect2']) $(a).textContent = DW > DH ? '16:9' : '9:16';
   $('#durtc').textContent = '/ ' + fmt(TL.duration);
   if (META.audio) voice.src = '/project/' + META.audio;
