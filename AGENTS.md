@@ -49,17 +49,11 @@ Bản này là repo riêng tư dựa trên repo gốc ở trên, nằm trong hub
 | Gói style / template | `references/packs.md`, `references/templates.md` | Gói người dùng ở `engine/packs/user/` chạy không cách ly (`M38`) |
 | Lỗi | `devmem_search` → `deep-debug` nếu chưa rõ nguyên nhân | Ghi cách tái hiện vào PR |
 
-## Quy tắc token (xem `D:/ai/docs/TOKEN-BUDGET.md`)
-
-- Một phiên = một đơn vị giao (một PR/một lỗi); xong thì `context-handover` và mở phiên mới.
-- Kiểm UI bằng số đo trước, ảnh sau; việc nhiều ảnh hoặc xem video giao subagent.
-- MCP của dự án: `code-rag-mcp`, `codebase-memory-mcp`, `dev-memory` (`.mcp.json`).
-
 ## Ngân sách phút CI (xem `D:/ai/docs/CI-BUDGET.md`)
 
 - Repo riêng tư trên tài khoản `zuzziQ`; đo phút: `python3 D:/ai/scripts/actions-usage.py .`
 - Workflow `CI` (`.github/workflows/ci.yml`) theo `D:/ai/templates/ci-gate.workflow.yml`: chạy khi PR, chạy tay và lịch tuần; không chạy sau mỗi push vào `main`. Chạy tay: `gh workflow run CI --ref main`.
-- Một job duy nhất `gate` (W1): nhãn PR, dòng Roadmap, `.rag/sync.js --check`, `node --check` cho mọi `scripts/**/*.mjs` và `studio/**/*.js|mjs`, `python -m unittest discover -s scripts/tests`, `node --test scripts/tests/*.test.mjs`. Không cài dependency, không render. Check bắt buộc: `gate`.
+- Một job duy nhất `gate` (W1, check bắt buộc): nhãn PR, dòng Roadmap và các lệnh của bảng verify bên dưới, cộng `node --test scripts/tests/*.test.mjs`. Không cài dependency, không render.
 - Sửa workflow xong chạy `python3 D:/ai/scripts/ci-audit.py .`
 
 ## Issue, PR và nhiều worktree (xem `D:/ai/docs/ISSUE-PR-STANDARD.md`)
