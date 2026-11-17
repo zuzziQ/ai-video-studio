@@ -445,6 +445,7 @@
     const r = e.target.closest('[data-r]');
     if (r) {
       r.disabled = true; r.querySelector('small').textContent = 'đang mở…';
+      if (ST?.project && Studio.TL) await Studio.saveNow(); // S17 M126: lưu dự án đang mở trước khi đổi sang dự án khác
       const j = await api('/api/onboarding/open', { i: +r.dataset.r });
       if (j.error) { toast(j.error); return openHome(); }
       return location.reload();

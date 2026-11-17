@@ -96,6 +96,15 @@
   // S16 M121: chuẩn bị trước khi chạy: thương hiệu (brand kit + Kho chứa dự án và Thành phẩm) và sản phẩm (không bắt buộc).
   // brand '' = theo hồ sơ đang chọn, '__none' = không thương hiệu (Kho Chung); gửi kèm mỗi video (enqueue / upload), nhớ ở autopilot.json.
   let PREP = null;
+  // S17 M126: video Tự lái vào Kho khác dự án đang mở → nhắc trước, cho đổi lại về thương hiệu của dự án đang mở
+  function offKho(kit, name) {
+    const cur = Studio.TL ? Studio.META?.kho : null;
+    if (!cur || PREP.loading || (kit?.id || '') === (cur.brand || '')) return '';
+    const to = kit ? `Kho <b>${esc(name(kit))}</b> của thương hiệu <b>${esc(name(kit))}</b>` : 'Kho <b>Chung</b> (không thương hiệu)';
+    const now = cur.brand ? `Kho ${esc(cur.title)} của thương hiệu ${esc(cur.title)}` : 'Kho Chung';
+    return `<div class="help ap-mt"><i class="ti ti-alert-triangle ap-warn"></i> Video này sẽ vào ${to}, khác dự án đang mở (${now}).
+      <button class="wf-lnk" id="ap-kho-back">Dùng thương hiệu của dự án đang mở</button></div>`;
+  }
   function renderPrep() {
     const box = $('#ap-prep'); if (!box) return;
     if (!PREP) {
@@ -116,9 +125,10 @@
       <div class="help ap-mt">${kit ? `Logo, màu, CTA của <b>${esc(name(kit))}</b>; dự án và thành phẩm vào Kho của thương hiệu này.`
         : '<i class="ti ti-info-circle ap-warn"></i> Đang chạy không thương hiệu: video không có logo, màu, lời kết riêng; dự án và thành phẩm vào Kho Chung.'}
         ${S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''}
-        ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div></div>`;
+        ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div>${offKho(kit, name)}</div>`;
     const save = () => api('/api/autopilot/settings', { brand: S.brand, product: S.product }).catch(() => {});
     $('#ap-brand').onchange = e => { S.brand = e.target.value; save(); renderPrep(); };
+    $('#ap-kho-back')?.addEventListener('click', () => { const c = Studio.META?.kho; S.brand = c?.brand && PREP.brands.some(b => b.id === c.brand) ? c.brand : '__none'; save(); renderPrep(); });
     $('#ap-product').onchange = e => { S.product = e.target.value; save(); renderPrep(); };
   }
   // S16 M120: báo trước khi chạy: máy không có Claude CLI thì "AI dựng giúp" và "Viết nội dung đăng" sẽ bị bỏ qua

@@ -13,6 +13,7 @@ import { killTree, openPath, pyBin, revealPath } from '../scripts/platform.mjs';
 import { cached } from '../scripts/net_cache.mjs';
 import { shortErr } from '../scripts/err_text.mjs';
 import { resolvePerf, PROFILES } from '../scripts/perf_profile.mjs';
+import { workspaceOfProject } from '../scripts/workspace.mjs';
 import { resolveProject, fileAllowed, newToken, tokenOk, writeTokenFile, tokenFile, sameOrigin, bodyStatus, readJson, cookieOk, sessionCookie, launchKeyOk, launchUrl } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -86,8 +87,12 @@ function readProject() {
   return { timeline: tl, captions: Array.isArray(captions) ? captions : [], meta: {
     name: path.basename(project.dir), dir: project.dir, version: VERSION, frames: frameCount(tl), audio: audioSrc,
     mix: tl.audio?.mix && fs.existsSync(P(tl.audio.mix)) ? tl.audio.mix : null,
-    saved: fs.statSync(project.tlFile).mtimeMs, notes: fs.existsSync(P('.studio/notes.md')),
+    saved: fs.statSync(project.tlFile).mtimeMs, notes: fs.existsSync(P('.studio/notes.md')), kho: khoOf(tl),
   } };
+}
+// S17 M126: Kho (và thương hiệu) của dự án đang mở cho thanh trên và hộp "Video mới"; lỗi đọc Kho không làm hỏng việc mở dự án.
+function khoOf(tl) {
+  try { const ws = workspaceOfProject(project.dir, tl); return { brand: ws.brand || '', title: ws.title, root: ws.root, found: ws.found }; } catch { return null; }
 }
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 function writeNotes(tl, captions) {
@@ -346,11 +351,19 @@ async function deliverFiles(into, outs, tl, { range, files = false } = {}) {
   return into;
 }
 // "Video mới" pipeline lives in scripts/new_project.mjs (shared with scripts/autopilot.mjs).
+// S17 M126: tạo video mới = đóng dự án đang mở (trình duyệt đã lưu nó trước khi gửi /api/new) rồi mở dự án mới sạch; trong lúc tạo
+// không route nào ghi vào dự án cũ. Tạo hỏng thì mở lại dự án cũ để người dùng không bị bỏ ở màn trống.
 async function newProject(o) {
   const { newProject: build } = await import(pathToFileURL(path.join(SKILL, 'scripts/new_project.mjs')).href);
-  const d = await build(o, { run, onStep: (s, p) => { job.step = s; job.progress = p; } });
-  openProject(d);
-  job.out = d;
+  const prev = project; project = null;
+  try {
+    const d = await build(o, { run, onStep: (s, p) => { job.step = s; job.progress = p; } });
+    openProject(d);
+    job.out = d;
+  } catch (e) {
+    if (!project && prev) project = prev;
+    throw e;
+  }
 }
 function startJob(kind, fn, payload) {
   if (job?.state === 'running') return false;
