@@ -83,6 +83,10 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgb(var(--
 .selwrap select { width: 104px; padding-left: var(--space-8); background-color: transparent; border-color: transparent; color: rgb(var(--color-fg-muted)); }
 .selwrap select:hover { background-color: rgb(var(--color-surface-muted)); }
 #top #export { height: var(--h-md); padding: 0 var(--space-4); }
+/* #top đã kín chỗ (logo, Tác giả, 5 bước, Tự lái, ⋯, Lưu, Xuất): thẻ "Thiếu N thư viện" (01_setup) đẩy "Xuất" ra ngoài
+   (scrollWidth 1504/1440, 1366/1280). Thiếu thư viện đã có chấm đỏ trên ⋯ và mục menu tô đỏ, nên ẩn thẻ ở mọi cỡ.
+   Không chèn nút/thẻ mới vào #top; đo scrollWidth ở 1024, 1280, 1440 px khi đổi thanh này. */
+#top #setup-chip { display: none; }
 /* Features plug buttons into the top bar (Studio.addTopButton). Below 1760 px they go icon-only (the title keeps the label),
    so "Xuất" stays on screen and the project name + save status keep room (QA 2026-11-15: Xuất cut off at 1440 px). */
 @media (max-width: 1760px) {
