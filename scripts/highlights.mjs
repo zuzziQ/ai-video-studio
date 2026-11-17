@@ -306,6 +306,8 @@ export async function buildProject(src, h, dir, o, info, words, onStep = () => {
     _highlight: { source: path.resolve(src), t0: h.t0, t1: h.t1, title: h.title, hook: h.hook, score: h.score, reason: h.reason, mode },
   };
   fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl, null, 1));
+  // S19 M135: bản máy giao (so với bản người dùng sửa khi "Áp cho các clip còn lại", scripts/set_apply.mjs)
+  fs.writeFileSync(path.join(dir, '.studio/set_base.json'), JSON.stringify({ timeline: tl, captions: caps, t: new Date().toISOString(), from: 'highlights' }));
   fs.writeFileSync(path.join(dir, '.studio/highlight.json'), JSON.stringify({ ...h, text: h.text, mode }, null, 1));
   // preview still (what the vertical frame will show; reframe → crop around the tracked face)
   const fr = String(Math.min(count, 31)).padStart(5, '0');

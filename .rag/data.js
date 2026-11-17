@@ -71,7 +71,7 @@ export const DOMAINS = {
         layer: "domain",
         title: "Hợp đồng plugin: route và feature",
         file_path: "references/studio.md",
-        lines: "180-205",
+        lines: "181-206",
         keywords: ["route", "renderBuild", "Studio.autofill", "afterMode", "queue", "feature", "ctx", "startJob", "addPanel", "addTopButton", "pollJob", "step", "level", "01_workflow", "GROUPS", "03_nextstep", "04_cmdk", "Studio.workflow", "focus", "21_transcript", "Studio.transcript"],
         content: "Chữ ký route (ctx => (req,res,p,u) => bool), các hàm của ctx và đối tượng Studio (addPanel/addTopButton nhận opts { step, level } để 01_workflow.js xếp vào 5 bước và chế độ Cơ bản/Chuyên nghiệp), danh sách tính năng có sẵn theo số thứ tự (gồm 03_nextstep cột phải theo bước đang mở, Studio.workflow.focus mở panel và tô sáng chỗ cần làm, 04_cmdk tìm công cụ Ctrl K dùng Studio.workflow).",
       },
