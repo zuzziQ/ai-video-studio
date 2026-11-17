@@ -191,6 +191,15 @@ Rà soát 2026-11-17 (`docs/plans/S13-luong-gon-qc-som.md`) trên dự án thậ
 - [ ] **`M111`** (`area/qc`): chữ graphic không bị cắt "…" giữa từ khoá ("uy…", "nhau thai…"): `cleanText` cho phép dài hơn khi khối có chỗ (đo bằng engine) hoặc nhờ Claude viết ngắn lại thay vì cắt; emoji cờ (🇯🇵) hiện thành chữ "JP" trên Chrome Windows: bỏ emoji cờ khỏi chữ graphic hoặc dùng ảnh emoji. Phát sinh khi đo `M104`.
 - [ ] **`M109`** (`area/docs`): `references/studio.md` (bước, panel), `references/ai-edit.md`, `references/qc-variants.md`, `references/autofill.md`, hướng dẫn người mới (`S10`), `SKILL.md`. Sau `M103`–`M108`.
 
+### **`S14`** Kết quả xuất không mất, cột phải đi cùng thanh trái, chấm điểm từng bước
+
+Chủ repo báo 2026-11-17 (`docs/plans/S14-xuat-cot-phai-diem.md`). (1) Kết quả xuất chỉ nằm trong hộp "Xuất xong" (`studio/studio.js`, `#export`): bấm "Mở video" thì trang video thay chỗ Studio, quay lại thì hộp đã đóng, panel Xuất (`wf-export`, `01_workflow.js`) chỉ còn một nút "Xuất video", không biết file ở đâu, thư mục nào, đã giao Thành phẩm chưa. (2) Cột phải lúc không chọn gì (thẻ "Bước tiếp theo" + "Sẵn sàng x/6" của `03_nextstep.js`) gần như không giúp gì: chỉ có/không theo 6 mục, không đổi theo panel đang mở ở thanh trái. Nghiệm thu: xuất xong, mở video, quay lại vẫn thấy đủ các bản xuất; mỗi bước có điểm và chỉ ra chỗ thiếu; bấm một chỗ thiếu ở cột phải mở đúng panel bên trái.
+
+- [ ] **`M112`** (`area/export`): kết quả xuất không mất. Tái hiện trước trên Windows và trong cửa sổ app (link `target="_blank"` tới `/project/…`, có trường hợp thay trang Studio). Lưu lịch sử xuất của dự án vào `.studio/exports.json` (file, khổ, chất lượng, thời lượng, dung lượng, lúc xuất, đã giao Thành phẩm chưa, lỗi giao); panel Xuất hiện bản gần nhất và danh sách các bản trước, mỗi bản có Xem (trình phát ngay trong Studio, không rời trang), Mở thư mục, Mở Thành phẩm, Chép đường dẫn; nút "Hiện trong Finder" đổi nhãn theo hệ điều hành ("Hiện trong thư mục" trên Windows). File bị xoá ngoài Studio thì đánh dấu, không lỗi.
+- [ ] **`M113`** (`area/infra`): cột phải đi cùng thanh trái. Rà hiện trạng trước (cột phải có gì, trùng gì với thanh trái, thẻ "Bước tiếp theo", trang chủ), ghi vào plan. Khi không chọn gì, cột phải hiện ngữ cảnh của bước đang mở bên trái: việc còn thiếu của bước, kết quả gần nhất (QC nhanh `M105`, bản xuất `M112`), nút đi tiếp; bấm một mục ở cột phải mở đúng panel bên trái và tô sáng chỗ cần làm. Bỏ phần trùng; "Cài đặt dự án" vẫn ở mục thu gọn. Sửa `PANEL_STEP` và hướng dẫn người mới (`S10`) trong cùng PR. Sau `M112` nếu dùng chung khối bản xuất.
+- [ ] **`M114`** (`area/qc`): chấm điểm từng bước thay cho "Sẵn sàng x/6" có/không. Mỗi bước điểm 0–100 theo tiêu chí xem được: Chuẩn bị (thương hiệu có tên, logo, màu; có sản phẩm khi gói là quảng cáo), Nguồn (có video, đã tách lời thoại, phụ đề, mặt; lời thoại đã làm sạch), Dựng (có mẫu, phụ đề bật, không khoảng trống dài, có b-roll và âm thanh khi gói cần), Kiểm tra (điểm QC nhanh `M105`, QC đầy đủ khi đã chạy), Xuất (đã xuất bản mới hơn lần sửa cuối, đã giao Thành phẩm). Bấm một bước hiện tiêu chí đạt / thiếu, mỗi chỗ thiếu một nút sửa (dùng đường mở panel của `M113`). Điểm tính từ dữ liệu sẵn có (`timeline.json`, `.studio/qc_quick.json`, `/api/qc`, `exports.json`), không gọi Claude. Chặn hay chỉ nhắc khi xuất theo `C17`. Sau `M105`, `M106`, `M112`.
+
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -209,6 +218,7 @@ Rà soát 2026-11-17 (`docs/plans/S13-luong-gon-qc-som.md`) trên dự án thậ
 - [ ] **`C14`** (`area/infra`): **Studio giữ giao diện tối (`S10`).** Hệ thiết kế chung của hub chỉ có giao diện sáng và chặn màu tím (mục 8.3). Đề xuất: Studio giữ nền tối (phần mềm dựng video cần nền tối để không làm lệch cảm nhận màu video), đổi màu nhấn tím `#8B7BFF` sang navy 82X. 2026-11-16: chủ repo cho bắt đầu `S10` theo đề xuất này.
 - [x] **`C15`** (`area/infra`): **Tự lái đặt ở đâu (`S13`).** Đề xuất: nút Tự lái trên thanh đầu mở màn hàng đợi riêng, không thuộc bước nào; bước Nguồn nhắc thả nhiều video vào `Nguon/Tha vao day/`. Chốt 2026-11-17: theo đề xuất.
 - [x] **`C16`** (`area/qc`): **QC nhanh tự chạy sau AI dựng hay chờ bấm (`S13`).** Đề xuất: tự chạy (render 3 khung + kiểm hình học, ~10–20 s, không tốn lượt Claude); QC đầy đủ có Claude vẫn chờ bấm. Chốt 2026-11-17: theo đề xuất.
+- [ ] **`C17`** (`area/qc`): **điểm từng bước có chặn Xuất không (`S14`).** Đề xuất: không chặn; bấm Xuất khi bước Kiểm tra dưới 60 điểm thì hiện cảnh báo kèm chỗ thiếu và nút "Vẫn xuất".
 
 ## 5. Ưu tiên tiếp theo
 
@@ -218,6 +228,7 @@ Rà soát 2026-11-17 (`docs/plans/S13-luong-gon-qc-som.md`) trên dự án thậ
 5. **`M29`**: đối chiếu lại 45 bài FreePD khi Wayback Machine cho truy cập (thử lại 2026-11-13 vẫn 429).
 3. **`S13`**: `C15`, `C16` đã chốt 2026-11-17; làm `M103` → `M104` trước (né mặt kéo điểm QC nhiều nhất), `M107` song song.
 6. **`S09`**: chủ repo chốt `C06`–`C12` (render tập trung: máy trạm → server → máy render) rồi mới làm, bắt đầu từ MVP `M70`–`M73`.
+7. **`S14`**: `M112` làm ngay được (lỗi người dùng gặp, không đụng tệp nóng của nhóm QC); `M113` sau `M112`; `M114` sau `M105`, `M106` và chờ chốt `C17`.
 
 ## 6. Không làm
 
