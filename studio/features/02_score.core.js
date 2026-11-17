@@ -63,6 +63,7 @@
     const scenes = arr(tl.scenes), caps = +I.caps || 0, dur = +tl.duration || 0;
     const burnFound = !!(I.burn && I.burn.found), burnMode = BURN_MODES.includes(tl.burnin && tl.burnin.mode) ? tl.burnin.mode : null;
     const capOn = caps > 0 && tl.caption_style !== 'none' && burnMode !== 'off';
+    const mute = !!(tl.speech && tl.speech.none); // S16 M119: video không lời (nhạc, sự kiện): không đòi lời thoại / phụ đề
     const it = (id, label, w, v, miss, o = {}) => ({ id, label, w, v: Math.max(0, Math.min(1, +v || 0)), miss, opt: false, ...o });
 
     const prep = [
@@ -76,8 +77,8 @@
     const hasVideo = arr(tl.clips).length > 0 && dur > 0;
     const source = [
       it('video', 'Video nguồn', 4, hasVideo, 'Chưa có video quay sẵn.'),
-      it('speech', 'Lời thoại', 3, caps > 0, 'Chưa tách lời thoại: phụ đề và AI dựng cần lời thoại.'),
-      it('clean', 'Lời thoại đã làm sạch', 2, !!I.fillers || arr(tl.clips).length > 1, 'Chưa dò lỗi nói, lặp từ, ngắt dài.', { opt: true }),
+      it('speech', mute ? 'Video không lời' : 'Lời thoại', 3, caps > 0 || mute, 'Chưa tách lời thoại: phụ đề và AI dựng cần lời thoại.'),
+      it('clean', 'Lời thoại đã làm sạch', 2, mute || !!I.fillers || arr(tl.clips).length > 1, 'Chưa dò lỗi nói, lặp từ, ngắt dài.', { opt: true }),
       it('face', 'Vị trí mặt', 2, !!((tl.face_track && arr(tl.face_track.keys).length) || tl.face), 'Chưa dò mặt: graphic có thể che mặt người nói.', { opt: true }),
     ];
     if (burnFound) source.push(it('burn', 'Xử lý phụ đề cháy sẵn', 3, !!burnMode, 'Video gốc có chữ in sẵn: chọn tắt, dời hoặc che để phụ đề mới không chồng lên.'));
@@ -88,7 +89,7 @@
     const audio = tl.audio || {};
     const build = [
       it('template', 'Mẫu hoặc AI dựng', 3, !!tl.pack || scenes.some(s => s._tpl || s._recipe) || ai > 0, 'Chưa có mẫu: bấm AI dựng để Claude dựng giúp, hoặc chọn một mẫu.'),
-      it('captions', 'Phụ đề bật', 3, capOn || (burnFound && burnMode === 'off'), 'Phụ đề đang tắt hoặc chưa có: người xem tắt tiếng sẽ không hiểu.'),
+      it('captions', mute ? 'Không cần phụ đề (video không lời)' : 'Phụ đề bật', 3, mute || capOn || (burnFound && burnMode === 'off'), 'Phụ đề đang tắt hoặc chưa có: người xem tắt tiếng sẽ không hiểu.'),
       it('gap', 'Không có khoảng trống dài', 2, dur > 0 && gap.len < GAP,
         dur > 0 ? `Từ ${mmss(gap.at)} có ${Math.round(gap.len)} giây không có graphic nào.` : 'Chưa có video.', dur > 0 ? { at: gap.at } : {}),
     ];

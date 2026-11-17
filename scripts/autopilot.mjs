@@ -221,6 +221,8 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
   const P = rel => path.join(dir, rel);
   const res = st.result || (st.result = {});
 
+  // S16 M119: transcribe.py không thấy lời thật (nhạc, tiếng ồn sự kiện) → new_project ghi timeline.speech.none
+  const noSpeech = () => { const { tl, caps } = loadTL(dir); return !!tl.speech?.none || !caps.length; };
   const impl = {
     async new() {
       await newProject({ video: abs, dir, model: prof.whisper || 'large-v3-turbo', pack: !['auto', 'keep', ''].includes(prof.pack) ? prof.pack : 'slate', title: '', orient: prof.orient || 'auto', lang: prof.lang },
@@ -264,6 +266,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
       return `cắt ${r.n} đoạn (${Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ')}), ngắn đi ${r.removed.toFixed(1)}s`;
     },
     async ai() {
+      if (!prof.template && noSpeech()) return { skip: 'video không lời: AI dựng giúp đọc lời thoại' }; // S16 M119
       if (prof.template) {
         sayS(.3, 'Áp template ' + prof.template); const m = await applyTemplate(dir, prof.template);
         // then fit the template's text / photos / timing to this clip's speech (scripts/tpl_fit.mjs)
@@ -291,6 +294,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, out: 
     },
     async broll() {
       if (!prof.broll_density || prof.broll_density === 'off') return { skip: 'tắt trong hồ sơ' };
+      if (noSpeech()) return { skip: 'video không lời: b-roll chọn theo lời thoại' }; // S16 M119
       const src = (prof.broll_src || []).join(',') || 'preset';
       // b-roll goal: the profile's own choice, else read from its free-text "Mục tiêu" (assets/broll/goals.json)
       const gf = String(prof.goal || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
