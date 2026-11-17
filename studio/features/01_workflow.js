@@ -332,8 +332,8 @@
     // thẻ "Kiểm tra chất lượng" và "Nhiều phiên bản" của 16_qc.js tự chèn vào panel có [data-ai="open"]
     $('#libbody').innerHTML = `<p class="wf-hint">Soi lỗi trước khi xuất: chữ tràn khung, graphic che mặt, phụ đề quá dài, đoạn trống, âm lượng.</p><span data-ai="open" hidden></span>`;
   });
-  S.addPanel('wf-export', 'ti-upload', 'Xuất', () => card('ti-upload', 'Xuất video',
-    'Chọn khổ hình (9:16, 1:1, 16:9) và chất lượng, rồi dựng ra file MP4.', 'Xuất video', clickEl('export', 'Chưa có nút Xuất')));
+  S.addPanel('wf-export', 'ti-upload', 'Xuất', () => (S.exports ? S.exports.render() : card('ti-upload', 'Xuất video', // M112: bản xuất + lịch sử ở 55_exports.js
+    'Chọn khổ hình (9:16, 1:1, 16:9) và chất lượng, rồi dựng ra file MP4.', 'Xuất video', clickEl('export', 'Chưa có nút Xuất'))));
   S.addPanel('wf-publish', 'ti-send', 'Đăng', () => card('ti-send', 'Gói đăng mạng xã hội',
     'Caption, hashtag và ảnh bìa cho TikTok, YouTube, Facebook từ video vừa xuất.', 'Mở gói đăng', clickEl('pub-btn', 'Tính năng Đăng chưa sẵn sàng')));
   S.addPanel('wf-engines', 'ti-cpu', 'Mô hình', () => card('ti-cpu', 'Mô hình & giọng',

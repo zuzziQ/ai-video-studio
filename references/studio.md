@@ -87,7 +87,7 @@ Khi phát thử, preview nghe giọng gốc kèm SFX và nhạc phát trực ti�
 
 ## Xuất
 Trong hộp thoại xuất còn có **Ảnh bìa** (render khung hiện tại ra `out/cover_*.jpg` ở 1080p) và **Phụ đề .srt** (`out/<tên>.srt`, để đăng YouTube/Facebook).
-"Xuất video" sẽ lưu dự án, chạy `mix_audio.py` rồi `render.mjs`, và ghi ra `<dự án>/out/<tên>_<thời gian>.mp4`. Chọn được 720p, 1080p hoặc 4K, và có thể chỉ xuất một đoạn từ–đến. Thanh tiến độ hiện ngay trong app, có nút "Hiện trong Finder". Ô **Giao vào Thành phẩm** (bật sẵn) đưa bản xuất sang `Thanh pham/<YYYY-MM>/` của Kho (mục Thư mục).
+"Xuất video" sẽ lưu dự án, chạy `mix_audio.py` rồi `render.mjs`, và ghi ra `<dự án>/out/<tên>_<thời gian>.mp4`. Chọn được 720p, 1080p hoặc 4K, và có thể chỉ xuất một đoạn từ–đến. Thanh tiến độ hiện ngay trong app. Xong thì hộp "Xuất xong" (M112, `features/55_exports.js`) ghi bản xuất vào `.studio/exports.json` và có Xem (trình phát ngay trong Studio, không rời trang), "Hiện trong thư mục" ("Hiện trong Finder" trên macOS), Mở Thành phẩm, Giao vào Thành phẩm, Chép đường dẫn. Panel **Xuất** hiện bản gần nhất và các bản trước với cùng các nút; file bị xoá ngoài Studio chỉ được đánh dấu. Dự án cũ chưa có `exports.json` thì nhặt video trong `out/` làm bản cũ. Ô **Giao vào Thành phẩm** (bật sẵn) đưa bản xuất sang `Thanh pham/<YYYY-MM>/` của Kho (mục Thư mục).
 
 ## Thư mục (Kho, dự án, Thành phẩm — S12)
 Hợp đồng đầy đủ và lý do: `docs/plans/S12-kho-du-an.md`. Mọi đường dẫn Kho tính qua `scripts/workspace.mjs`; không tự ghép `~/Videos/...`.
@@ -132,6 +132,7 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | `GET /api/pick/sources?brand=&q=`, `POST /api/pick/upload?name=&brand=` | M98 (`26_pick`): video trong Kho để chọn ở Video mới / Video dài (`Nguon/` trước, mới nhất trước) `{kho, items:[{rel, path, name, dir, size, mtime}]}` · tải video từ máy vào `<Kho>/Nguon/` (stream, ghi `.part` rồi đổi tên; trùng tên → `x (2).mp4`) → `{path, rel, size}`. Brand rỗng = Kho Chung, id sai 400 |
 | `GET /api/media/kho?group=&q=`, `GET /api/media/kho/file?rel=`, `POST /api/media/kho/use {rel}` | M99 (`61_kho_media`, `scripts/kho_media.mjs`): tab Kho của panel Media, Kho của dự án đang mở (`workspaceOfProject`) `{kho:{title, brand, root, exists, found, warning}, items:[{rel, name, kind, group, size, mtime, used}]}` · xem trước ảnh/âm thanh · liên kết vào `media/kho_<tên>` (khác ổ thì chép; video thêm khung + `audio.m4a`), trả mục như `/api/media`; `rel` thoát Kho hoặc video > 3 phút → 400 |
 | `GET /api/thanhpham`, `POST /api/thanhpham/open {path?}` | M100 (`54_thanhpham`): Thành phẩm của Kho dự án đang mở `{root, month, title, brand, found, items}` · hiện một bản giao trong Explorer/Finder hoặc mở thư mục tháng này. Không mở gì ngoài Kho của dự án |
+| `GET /api/exports`, `POST /api/exports/record\|reveal\|deliver\|copy` | M112 (`55_exports`): lịch sử xuất `.studio/exports.json` (`scripts/exports_log.mjs`: `readExports`, `exportsView`, `latestExport`) `{os, items}` mới → cũ, mỗi file có `exists`, `deliveredTo` · ghi job xuất vừa xong `{quality?, from?, to?}` · hiện file (mất thì mở `out/`) · giao lại vào Thành phẩm qua `kho_deliver` · chép đường dẫn. Chỉ nhận `id`, không nhận đường dẫn từ client |
 | `POST /api/kho/upload?brand=&name=&to=` | thân = file thô, stream xuống đĩa (trần tải lên lớn, `UPLOAD_ROUTES`) vào thư mục con theo loại hoặc `to` (`source, inbox, image, broll, music, brand`); tên trùng → `x (2).mp4`; loại lạ 400; Kho chưa tạo 409 → `{path, rel, name, kind, dir, size}` |
 | `POST /api/kho/pick-folder`, `POST /api/kho/reveal {brand}` | hộp chọn thư mục của hệ điều hành trên máy chạy Studio (Windows FolderBrowserDialog, macOS `choose folder`, Linux `zenity`; `AVS_NO_FOLDER_DIALOG=1` tắt) → `{path}` / `{cancelled}` / `{unsupported}`, đang mở 409 · mở Kho trong Explorer/Finder (chưa tạo 404) |
 | `GET /api/onboarding` | trạng thái hướng dẫn lần đầu `{done, skipped, step, purpose, aspect, platforms, brand, updated, isNew, project, recent:[{i, name, parent, t, current}]}` từ `$AVS_HOME/onboarding.json` (chưa có/hỏng → mặc định); có dự án đang mở thì ghi nó lên đầu `recent` (tối đa 8). Không trả đường dẫn đầy đủ (`02_onboarding`, M83) |
@@ -190,5 +191,6 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
   - `40_reframe`: Bám mặt, Lồng tiếng.
   - `50–52`: Hàng loạt, Thương hiệu, Đăng.
   - `53_products`: Sản phẩm (Product Brain, `references/products.md`).
+  - `55_exports` (M112): panel Xuất (bản gần nhất + các bản trước, trình phát trong Studio) và hộp "Xuất xong". `Studio.exports`: `render, done(job, {quality, from, to}), refresh, latest, list`.
   - `60–62`: Keyframe, Mặt nạ / Tách nền, B-roll AI.
   - `90_app`: mở thư mục, tiến trình.
