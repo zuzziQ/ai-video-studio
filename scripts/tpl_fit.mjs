@@ -268,6 +268,7 @@ Chỉ trả về DUY NHẤT một object JSON:
       else setP(s, t.path, v);
       sum.texts++;
     }
+    for (const m of mk) sum.missing.push(`dấu kịch bản “${String(m).slice(0, 40)}” (cảnh mẫu hết ô chữ)`); // S17 M123
   }
 
   // 4. images ----------------------------------------------------------------------------

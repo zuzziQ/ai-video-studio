@@ -71,7 +71,7 @@ export function docxText(buf) {
     if (name === 'word/document.xml') {
       if (buf.readUInt32LE(off) !== 0x04034b50) throw new Error('File .docx hỏng');
       const start = off + 30 + buf.readUInt16LE(off + 26) + buf.readUInt16LE(off + 28), data = buf.subarray(start, start + size);
-      xml = (method === 8 ? zlib.inflateRawSync(data, { maxOutputLength: 64 << 20 }) : method === 0 ? data : null)?.toString('utf8');
+      xml = (method === 8 ? zlib.inflateRawSync(data, { maxOutputLength: 16 << 20 }) : method === 0 ? data : null)?.toString('utf8');
       if (xml == null) throw new Error('File .docx nén kiểu lạ');
       break;
     }
@@ -183,7 +183,8 @@ export function writeScript(dir, text, { name = '' } = {}) {
   if (raw.length > MAX_TEXT) throw Object.assign(new Error(`Kịch bản dài quá (${raw.length} ký tự, tối đa ${MAX_TEXT})`), { status: 400 });
   const segments = parseScript(raw);
   if (!segments.length) throw Object.assign(new Error('Kịch bản không có chữ để nói'), { status: 400 });
-  const doc = { version: 1, text: raw, name: String(name || '').slice(0, 120), updated: new Date().toISOString(), segments };
+  const prev = readScript(dir); // heardDur: độ dài timeline lúc sao lưu phụ đề nhận dạng (applyScript)
+  const doc = { version: 1, text: raw, name: String(name || '').slice(0, 120), updated: new Date().toISOString(), segments, ...(prev?.heardDur != null ? { heardDur: prev.heardDur } : {}) };
   wr(scriptFile(dir), doc); return doc;
 }
 
@@ -210,11 +211,15 @@ export function applyScript(dir, { tl, caps, heard, max = 4, fresh = false } = {
   const tlFile = path.join(dir, 'timeline.json');
   tl = tl || JSON.parse(fs.readFileSync(tlFile, 'utf8'));
   caps = caps || projCaps(dir, tl);
-  const mute = !!tl.speech?.none;
-  const H = mute ? [] : heard || heardOf(caps);
+  const mute = !!tl.speech?.none, D = +tl.duration || 0;
   const backup = path.join(dir, '.studio', 'captions_noscript.json');
+  // sửa kịch bản lần sau: căn với phụ đề nhận dạng đã sao lưu (không phải phụ đề đã theo kịch bản, vốn luôn "khớp"), khi timeline
+  // chưa đổi độ dài kể từ lúc sao lưu (cắt / tốc độ làm lệch giờ của bản sao lưu → dùng phụ đề hiện có)
+  let saved = null;
+  if (!heard && !fresh && sc.heardDur != null && Math.abs(sc.heardDur - D) < .01) try { saved = JSON.parse(fs.readFileSync(backup, 'utf8')); } catch { /* không có bản sao lưu */ }
+  const H = mute ? [] : heard || heardOf(saved || caps);
   if (!mute && !H.length) return { tl, caps, script: sc, pending: true }; // chưa tách lời thoại: căn khi có (25_transcribe)
-  if (caps.length && (fresh || (!sc.align && !fs.existsSync(backup)))) wr(backup, caps);
+  if (caps.length && (fresh || (!sc.align && !fs.existsSync(backup)))) { wr(backup, caps); sc.heardDur = D; }
   const r = alignScript(sc.segments, H, { dur: speechSpan(tl) });
   const out = captionsFrom(r.words, { max, offWords: r.offWords || [] });
   Object.assign(sc, { segments: r.segments, align: r.align });
@@ -239,6 +244,7 @@ export function stageScript(text, { name = '' } = {}) {
   if (raw.length > MAX_TEXT) throw Object.assign(new Error(`Kịch bản dài quá (${raw.length} ký tự, tối đa ${MAX_TEXT})`), { status: 400 });
   if (!parseScript(raw).length) throw Object.assign(new Error('Kịch bản không có chữ để nói'), { status: 400 });
   const id = 's-' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+  try { for (const f of fs.readdirSync(stageDir())) { const p = path.join(stageDir(), f); if (/^s-.*\.json$/.test(f) && Date.now() - fs.statSync(p).mtimeMs > 30 * 864e5) fs.rmSync(p, { force: true }); } } catch { /* chưa có thư mục */ }
   wr(path.join(stageDir(), id + '.json'), { text: raw, name: String(name || '').slice(0, 120), at: new Date().toISOString() });
   return id;
 }
@@ -310,7 +316,8 @@ export function markMissing(marks, scenes, { strings = () => [], title = '' } = 
 /** Soát lời + chữ màn hình của kịch bản bằng script_gate.checkScript (ad_gates.py --script). Ghi vào script.json `gate`.
  *  Trả null khi dự án không bật quảng cáo hoặc không có kịch bản. `check` thay checkScript (test). */
 export async function gateScript(dir, tl, { check } = {}) {
-  const sc = readScript(dir); if (!sc || !tl?.ads?.on) return null;
+  const sc = readScript(dir); if (!sc) return null;
+  if (!tl?.ads?.on) { if (sc.gate) { delete sc.gate; wr(scriptFile(dir), sc); } return null; } // tắt quảng cáo: bỏ kết quả soát cũ
   const shape = gateShape(sc), seg = shape._seg;
   check = check || (await import('./script_gate.mjs')).checkScript;
   const r = check(shape, tl.ads);

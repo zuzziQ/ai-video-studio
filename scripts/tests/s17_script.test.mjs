@@ -243,3 +243,28 @@ test('tpl_fit: [HOOK] vào cảnh mẫu mở đầu, [CHỮ] vào cảnh trùng 
   assert.equal(tl.scenes[2].question, 'Cảm ơn đã xem');
   assert.equal(sum.script, 3);
 });
+
+test('applyScript: sửa kịch bản lần sau vẫn căn với phụ đề nhận dạng đã sao lưu (giữ chỗ nói lệch), timeline đổi độ dài thì dùng phụ đề hiện có', () => {
+  const dir = project();
+  D.writeScript(dir, 'Xin chào các bạn.\n\nCảm ơn đã xem nha.');
+  const r1 = D.applyScript(dir); fs.writeFileSync(path.join(dir, 'work/captions.json'), JSON.stringify(r1.caps));
+  assert.equal(D.readScript(dir).align.matched, 8); // 9 chữ, "nha" không nghe thấy
+  D.writeScript(dir, 'Xin chào các bạn.\n\nCảm ơn đã xem nhé.');
+  const r2 = D.applyScript(dir);
+  assert.equal(r2.script.align.matched, 8, 'so với lời nhận dạng, không phải với chữ kịch bản cũ'); assert.equal(r2.script.align.words, 9);
+  const tl = JSON.parse(fs.readFileSync(path.join(dir, 'timeline.json'), 'utf8')); tl.duration = 5; // đã cắt bớt
+  fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl)); fs.writeFileSync(path.join(dir, 'work/captions.json'), JSON.stringify(r2.caps));
+  D.writeScript(dir, 'Xin chào các bạn.\n\nCảm ơn đã xem nhé.');
+  assert.equal(D.applyScript(dir).script.align.matched, 9); // không còn bản sao lưu hợp giờ: so với phụ đề hiện có
+});
+
+test('gateScript: tắt quảng cáo thì xoá kết quả soát cũ; argsFor bỏ --script không phải id kịch bản chờ', async () => {
+  const dir = project();
+  D.writeScript(dir, 'Một câu thôi.'); D.applyScript(dir);
+  await D.gateScript(dir, { ads: { on: true } }, { check: () => ({ blocked: false, issues: [] }) });
+  assert.ok(D.readScript(dir).gate);
+  assert.equal(await D.gateScript(dir, { ads: { on: false } }), null);
+  assert.equal(D.readScript(dir).gate, undefined);
+  const Q = await import('../queue.mjs');
+  assert.equal(Q.argsFor({ kind: 'autopilot', input: 'x.mp4', opts: { script: 'C:/bat-ky/file.txt' } }).includes('--script'), false);
+});

@@ -22,7 +22,8 @@ Hôm nay mình chia sẻ ba kinh nghiệm.
 ## 2. Lưu
 `<dự án>/.studio/script.json`: `{ version, text (chữ gốc), name, updated, segments: [{ kind: hook|body|cta, say, screen[], broll[],
 t0, t1, spoken, ratio }], align: { mode: whisper|even, at, words, matched, offscript: [{t0, t1, text}] }, gate? }`.
-Lần đầu thay phụ đề, phụ đề nhận dạng được sao lưu ở `.studio/captions_noscript.json`; **Bỏ** kịch bản trả lại bản đó.
+Lần đầu thay phụ đề, phụ đề nhận dạng được sao lưu ở `.studio/captions_noscript.json` (kèm `heardDur` = độ dài timeline lúc đó); **Bỏ** kịch bản trả lại bản đó.
+Sửa kịch bản rồi lưu lại: căn với bản sao lưu này (không với phụ đề đã theo kịch bản) khi timeline chưa đổi độ dài; đã cắt / đổi tốc độ thì căn với phụ đề hiện có.
 
 ## 3. Phụ đề theo đúng chữ kịch bản
 Lời nghe được (chữ của phụ đề hiện có, hoặc lời vừa nhận dạng lại ở "Tạo lời thoại tự động") chỉ cho **thời điểm**:
@@ -53,5 +54,5 @@ Dự án quảng cáo (`timeline.ads.on`, có sản phẩm): `gateScript` soát 
 ## 6. Tự lái
 Thẻ Chuẩn bị có ô Kịch bản "cho video kế tiếp": khi thêm video (đường dẫn hoặc kéo thả, chỉ video đầu tiên), chữ được lưu thành
 kịch bản chờ `$AVS_HOME/scripts/<id>.json` (`POST /api/script/stage`), job mang `opts.script = <id>` (route kiểm id `s-[a-z0-9]{6,40}`),
-`argsFor` → `--script <id>`, rồi ô tự xoá. Bước `script` (sau `fillers`, trước `ai`) ghi `.studio/script.json` và thay phụ đề.
-Gọi tay: `--script` nhận cả đường dẫn `.txt` / `.docx` / `.json` (`{text}`).
+`argsFor` → `--script <id>` (chỉ id, chuỗi khác bị bỏ), rồi ô tự xoá. Kịch bản chờ cũ hơn 30 ngày được dọn khi lưu kịch bản chờ mới. Bước `script` (sau `fillers`, trước `ai`) ghi `.studio/script.json` và thay phụ đề.
+Gọi tay `autopilot.mjs`: `--script` nhận cả đường dẫn `.txt` / `.docx` / `.json` (`{text}`).
