@@ -157,6 +157,7 @@
     if (!x) return false; // không ghi được: studio.js hiện hộp cũ
     showDone(x, j);
     if ($('#libbody [data-exp]')) render();
+    S.nextStep?.refresh?.(); // S16 M118: điểm Xuất và "Bản xuất gần nhất" ở cột phải đổi ngay, không chờ đổi tab
     return true;
   }
   S.exports = { render, done, refresh, latest: () => DATA?.items?.[0] || null, list: () => DATA?.items || [], loaded: () => DATA != null, edited: () => DATA?.edited || null };
