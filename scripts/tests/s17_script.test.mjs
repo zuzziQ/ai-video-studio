@@ -228,3 +228,18 @@ test('route /api/script: lưu + thay phụ đề, GET, docx, stage, clear', asyn
   assert.equal(ctx.readProject().captions[0].words[0].w, 'xin');
   assert.equal(await h(req('GET'), {}, '/api/other'), false);
 });
+
+test('tpl_fit: [HOOK] vào cảnh mẫu mở đầu, [CHỮ] vào cảnh trùng giờ, [CTA] vào cảnh cuối (chữ theo kịch bản, kiểu theo mẫu)', async () => {
+  const { fitProject } = await import('../tpl_fit.mjs');
+  const caps = [{ t0: 0, t1: 1.15, words: W('xin chào các bạn') }, ...['hôm nay nói về giá', 'cảm ơn đã xem'].map((s, k) => ({ t0: 2 + k * 3, t1: 3 + k * 3, words: W(s).map(w => ({ ...w, s: w.s + 2 + k * 3, e: w.e + 2 + k * 3 })) }))];
+  const scenes = [{ type: 'title_card', t0: 0, t1: 1.8, title: 'Tiêu đề mẫu', _tpl: true }, { type: 'lower_third', t0: 2, t1: 4, text: 'Ưu điểm thứ nhất', _tpl: true }, { type: 'title_card', t0: 5, t1: 7.5, question: 'Bạn thấy sao?', _tpl: true }];
+  const dir = project({ caps, scenes, duration: 9 });
+  D.writeScript(dir, '[HOOK] Xin chào các bạn\n[CHỮ: Chào bạn]\n\nHôm nay nói về giá\n[CHỮ: Giá tốt]\n\n[CTA] Cảm ơn đã xem');
+  D.applyScript(dir);
+  const sum = await fitProject(dir, { images: false });
+  const tl = JSON.parse(fs.readFileSync(path.join(dir, 'timeline.json'), 'utf8'));
+  assert.equal(tl.scenes[0].title, 'Chào bạn');
+  assert.equal(tl.scenes[1].text, 'Giá tốt');
+  assert.equal(tl.scenes[2].question, 'Cảm ơn đã xem');
+  assert.equal(sum.script, 3);
+});
