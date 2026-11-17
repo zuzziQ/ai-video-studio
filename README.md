@@ -80,6 +80,18 @@ Giao diện tối kiểu editor chuyên nghiệp. Phần mềm có **28 gói sty
 
 Linux chạy được phần lõi (dùng `install.sh`), nhưng không có app hay lối tắt.
 
+**Thư viện trình cài cài thêm** (trong `scripts/.venv` và `scripts/node_modules`, không phải tự cài nếu đã chạy trình cài):
+
+| Thư viện | Mức | Dùng cho |
+|---|---|---|
+| ffmpeg, ffprobe · Node.js ≥ 18 · Python 3.10+ trong `scripts/.venv` | bắt buộc | nhập video, sóng âm, mọi script Python |
+| `faster-whisper`, `numpy`, `scipy`, `pillow` (pip) | bắt buộc | tách lời thoại, âm thanh, ảnh |
+| Chrome hoặc Edge · `puppeteer-core` (npm) | bắt buộc | render và xuất video |
+| `rembg` (tách nền), `edge-tts` (giọng online), cuBLAS CUDA 12 (whisper chạy GPU NVIDIA), `chrome-headless-shell` (render nhanh hơn) | tuỳ chọn | trình cài vẫn cài; lỗi thì bỏ qua |
+| Ollama, VieNeu (`scripts/install_vieneu.ps1`), Claude Code CLI, mô hình mặt YuNet (`assets/models`, cần `onnxruntime`) | tuỳ chọn | LLM trên máy, giọng Việt trên máy, tính năng AI, bám mặt |
+
+**Kiểm tra máy trong Studio** (S15): lần đầu mở Studio, sau thẻ tác giả, màn **Kiểm tra máy** liệt kê từng mục ở trên (có / thiếu / phiên bản), tính năng nào cần nó và lệnh cài đúng hệ điều hành (chạy lại trình cài, hoặc lệnh riêng của mục). Thiếu mục bắt buộc thì màn tự hiện lại và có thẻ đỏ "Thiếu N thư viện" cạnh logo (màn hẹp: chấm đỏ trên nút ⋯); mở lại bất cứ lúc nào từ ⋯ → **Kiểm tra máy…**. Studio không tự cài gì. Bỏ qua trình cài hoặc gỡ mất một thư viện thì cứ mở Studio, làm theo lệnh trên màn đó rồi bấm **Kiểm tra lại**.
+
 ---
 
 ## 3. Cài đặt

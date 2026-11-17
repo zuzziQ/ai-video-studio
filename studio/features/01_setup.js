@@ -1,0 +1,214 @@
+// Kiểm tra máy (ROADMAP S15 M115, references/studio.md): Studio cần những thư viện nào, máy này có chưa, cài bằng lệnh gì.
+// - Dữ liệu: GET /api/setup/check (studio/routes/01_setup.mjs, danh sách lấy từ install.ps1 / scripts/setup.sh), có cache 5 phút.
+// - Tự hiện SAU màn tác giả (#author, 00_author.js) khi chưa xem lần nào, hoặc khi có mục bắt buộc mới thiếu so với lần bấm "Để sau";
+//   02_onboarding.js chờ Studio.setupGate (đóng màn này) rồi mới mở hướng dẫn người mới.
+// - Thiếu mục bắt buộc: thẻ đỏ "Thiếu thư viện" cạnh logo cho tới khi đủ; mở lại từ đó hoặc menu ⋯ → "Kiểm tra máy…".
+// - Bấm một tính năng (POST tới API của nó) khi thư viện nó cần đang thiếu, hoặc lỗi trả về nhắc tới thư viện thiếu
+//   (No module named …, spawn ffmpeg ENOENT, puppeteer-core…): hiện thẻ #setup-need nêu đúng thư viện + lệnh cài.
+// Không cài gì tự động. File đứng trước 01_workflow.js: nút menu có class ghost để 01_workflow chuyển vào ⋯.
+'use strict';
+(() => {
+  const { esc, api } = Studio;
+  let R = null, gateDone = null;
+  Studio.setupGate = new Promise(ok => { gateDone = ok; });
+  const css = document.createElement('style');
+  css.textContent = `
+  #avs-setup { position: fixed; inset: 0; z-index: 52; /* trên #modal (50), dưới thẻ tác giả (55) và toast (60) */ display: flex; align-items: center; justify-content: center;
+    padding: var(--space-4); background: rgb(var(--color-scrim) / .66); }
+  #avs-setup .su-box { width: min(760px, 100%); max-height: calc(100vh - 2 * var(--space-4)); display: flex; flex-direction: column; min-width: 0;
+    background: rgb(var(--color-surface-raised)); color: rgb(var(--color-fg)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-modal); box-shadow: var(--shadow-overlay); }
+  #avs-setup .su-head { padding: var(--space-4) var(--space-5) var(--space-3); border-bottom: 1px solid rgb(var(--color-line)); }
+  #avs-setup h3 { margin: 0 0 var(--space-1); font-size: var(--text-lg); display: flex; align-items: center; gap: var(--space-2); }
+  #avs-setup .su-sum { margin: 0; font-size: var(--text-sm); color: rgb(var(--color-fg-muted)); }
+  #avs-setup .su-sum.bad { color: rgb(var(--color-danger-text)); font-weight: 600; }
+  #avs-setup .su-sum.good { color: rgb(var(--color-success-text)); font-weight: 600; }
+  #avs-setup .su-body { overflow: auto; padding: var(--space-3) var(--space-5); min-height: 0; }
+  #avs-setup .su-all { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); margin-bottom: var(--space-3); border-radius: var(--radius-card);
+    background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); font-size: var(--text-sm); }
+  #avs-setup .su-all.bad { border-color: rgb(var(--color-danger) / .6); }
+  #avs-setup h4 { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .04em; color: rgb(var(--color-fg-subtle)); }
+  #avs-setup ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+  #avs-setup li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--space-1) var(--space-2); padding: var(--space-2); border-radius: var(--radius-control); }
+  #avs-setup li.missing.req, #avs-setup li.old.req { background: rgb(var(--color-danger) / .1); }
+  #avs-setup li .ti { font-size: 16px; line-height: 20px; }
+  #avs-setup li.ok .ti { color: rgb(var(--color-success-text)); }
+  #avs-setup li.na .ti { color: rgb(var(--color-fg-subtle)); }
+  #avs-setup li.missing .ti, #avs-setup li.old .ti { color: rgb(var(--color-warning-text)); }
+  #avs-setup li.req.missing .ti, #avs-setup li.req.old .ti { color: rgb(var(--color-danger-text)); }
+  #avs-setup .su-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); min-width: 0; }
+  #avs-setup .su-name b { font-weight: 600; overflow-wrap: anywhere; }
+  #avs-setup .su-ver { color: rgb(var(--color-fg-subtle)); font-size: var(--text-xs); overflow-wrap: anywhere; }
+  #avs-setup .su-feat { grid-column: 2; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); }
+  .su-cmd { display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; }
+  #avs-setup .su-cmd { grid-column: 2; }
+  .su-cmd code { flex: 1; min-width: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-xs); background: rgb(var(--color-canvas)); border: 1px solid rgb(var(--color-line));
+    font: var(--text-xs)/1.5 var(--font-mono); overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
+  .su-cmd .ui-btn { flex: none; }
+  #avs-setup .su-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-top: 1px solid rgb(var(--color-line)); }
+  #avs-setup .su-foot .grow { flex: 1; }
+  #avs-setup .su-note { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+  #setup-chip { margin-left: var(--space-1); }
+  #setup-chip[hidden] { display: none; }
+  /* thanh trên không còn chỗ dưới 1280 px: thay thẻ bằng chấm đỏ trên nút ⋯ (mục "Kiểm tra máy… (thiếu N)" trong menu) */
+  @media (max-width: 1279px) { #setup-chip { display: none; } }
+  #wf-morebtn.su-dot { position: relative; }
+  #wf-morebtn.su-dot::after { content: ''; position: absolute; top: var(--space-1); right: var(--space-1); width: 8px; height: 8px; border-radius: var(--radius-pill); background: rgb(var(--color-danger)); }
+  #setup-need { position: fixed; right: var(--space-4); top: calc(var(--h-lg) + var(--space-6)); z-index: 58; width: min(420px, calc(100vw - 2 * var(--space-4)));
+    display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4); font-size: var(--text-sm);
+    background: rgb(var(--color-surface-raised)); color: rgb(var(--color-fg)); border: 1px solid rgb(var(--color-danger) / .6); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
+  #setup-need .sn-t { margin: 0; padding-right: var(--space-6); font-weight: 600; }
+  #setup-need .sn-f { margin: 0; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); }
+  #setup-need .sn-x { position: absolute; top: var(--space-2); right: var(--space-2); }
+  #setup-need .sn-act { display: flex; gap: var(--space-2); justify-content: flex-end; }`;
+  document.head.appendChild(css);
+
+  const bad = i => i.status === 'missing' || i.status === 'old';
+  const missingReq = r => (r?.items || []).filter(i => i.need === 'required' && bad(i));
+  const ICON = { ok: 'ti-circle-check', missing: 'ti-circle-x', old: 'ti-alert-triangle', na: 'ti-circle-minus' };
+  const STATUS = { ok: 'Có', missing: 'Thiếu', old: 'Bản cũ', na: 'Không cần' };
+  const cmdHtml = c => `<div class="su-cmd"><code>${esc(c)}</code><button class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-copy="${esc(c)}" title="Sao chép lệnh" aria-label="Sao chép lệnh"><i class="ti ti-copy"></i></button></div>`;
+
+  async function load(fresh) {
+    const r = await api('/api/setup/check' + (fresh ? '?fresh=1' : ''));
+    if (!r || r.error || !Array.isArray(r.items)) throw new Error(r?.error || 'không đọc được kết quả');
+    R = r;
+    syncChip();
+    return R;
+  }
+  // ---------- chip cạnh logo (chỉ khi thiếu mục bắt buộc) ----------
+  const chip = document.createElement('button');
+  chip.id = 'setup-chip'; chip.className = 'ui-chip ui-chip--bad'; chip.hidden = true;
+  chip.addEventListener('click', () => open());
+  document.querySelector('#top .logo')?.after(chip);
+  function syncChip() {
+    const m = missingReq(R);
+    chip.hidden = !m.length;
+    chip.innerHTML = `<i class="ti ti-alert-triangle"></i> Thiếu ${m.length} thư viện`;
+    chip.title = 'Kiểm tra máy: thiếu ' + m.map(i => i.label).join(', ');
+    const label = m.length ? `Kiểm tra máy… (thiếu ${m.length})` : 'Kiểm tra máy…';
+    const sb = document.getElementById('setup-btn');
+    if (sb) { sb.title = label; const t = sb.querySelector('span'); if (t) t.textContent = label; }
+    document.getElementById('wf-morebtn')?.classList.toggle('su-dot', !!m.length);
+  }
+  // ---------- màn Kiểm tra máy ----------
+  function row(i) {
+    const show = bad(i) && i.fix;
+    const ver = [i.version && 'v' + i.version.replace(/^v/, ''), i.note].filter(Boolean).join(' · ');
+    return `<li class="${i.status} ${i.need === 'required' ? 'req' : 'opt'}" data-id="${esc(i.id)}">
+      <i class="ti ${ICON[i.status] || 'ti-point'}" aria-hidden="true"></i>
+      <div class="su-name"><b>${esc(i.label)}</b><span class="ui-chip ${i.status === 'ok' ? 'ui-chip--ok' : bad(i) ? (i.need === 'required' ? 'ui-chip--bad' : 'ui-chip--warn') : ''}">${STATUS[i.status] || i.status}</span>${ver ? `<span class="su-ver">${esc(ver)}</span>` : ''}</div>
+      <div class="su-feat">${esc(i.features || '')}</div>
+      ${show ? cmdHtml(i.fix) : ''}</li>`;
+  }
+  function render(el, busy) {
+    const m = missingReq(R), optMiss = R.items.filter(i => i.need !== 'required' && bad(i));
+    const sum = m.length
+      ? `<p class="su-sum bad">Thiếu ${m.length} thư viện bắt buộc: ${esc(m.map(i => i.label).join(', '))}. Tính năng cần chúng sẽ không chạy cho tới khi cài.</p>`
+      : `<p class="su-sum good">Đủ thư viện bắt buộc.${optMiss.length ? ` ${optMiss.length} mục tuỳ chọn chưa có (không cần để dùng Studio).` : ''}</p>`;
+    el.querySelector('.su-box').innerHTML = `
+      <div class="su-head"><h3 id="su-title"><i class="ti ti-stethoscope"></i> Kiểm tra máy</h3>${sum}</div>
+      <div class="su-body">
+        <div class="su-all ${m.length ? 'bad' : ''}"><span>${m.length ? 'Cách nhanh nhất: chạy lại trình cài trong một cửa sổ dòng lệnh (mục đã có sẽ bỏ qua), rồi bấm "Kiểm tra lại".' : 'Cài lại hoặc cài thêm phần tuỳ chọn: chạy lại trình cài.'}</span>${cmdHtml(R.install)}</div>
+        <h4>Bắt buộc</h4><ul>${R.items.filter(i => i.need === 'required').map(row).join('')}</ul>
+        <h4>Tuỳ chọn</h4><ul>${R.items.filter(i => i.need !== 'required').map(row).join('')}</ul>
+      </div>
+      <div class="su-foot"><span class="su-note">Kiểm lúc ${esc(new Date(R.at).toLocaleTimeString('vi-VN'))} · ${R.ms} ms${R.cached ? ' · kết quả đã lưu' : ''}</span><div class="grow"></div>
+        <button class="ui-btn ui-btn--secondary ui-btn--md" data-su="again" ${busy ? 'disabled' : ''}><i class="ti ti-refresh"></i> ${busy ? 'Đang kiểm…' : 'Kiểm tra lại'}</button>
+        <button class="ui-btn ${m.length ? 'ui-btn--ghost' : 'ui-btn--primary'} ui-btn--md" data-su="close">${m.length ? 'Để sau' : 'Tiếp tục'}</button></div>`;
+  }
+  async function open(opts = {}) {
+    document.getElementById('avs-setup')?.remove();
+    const el = document.createElement('div');
+    el.id = 'avs-setup';
+    el.innerHTML = '<div class="su-box" role="dialog" aria-modal="true" aria-labelledby="su-title"><div class="su-head"><h3 id="su-title"><i class="ti ti-stethoscope"></i> Kiểm tra máy</h3><p class="su-sum">Đang kiểm…</p></div></div>';
+    document.body.appendChild(el);
+    const close = () => {
+      el.remove(); document.removeEventListener('keydown', key, true);
+      if (R) api('/api/setup/seen', { missing: missingReq(R).map(i => i.id) }).catch(() => {});
+      gateDone();
+    };
+    const key = e => { if (e.key === 'Escape' && document.getElementById('avs-setup') === el) { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', key, true);
+    el.addEventListener('click', async e => {
+      const c = e.target.closest('[data-copy]');
+      if (c) { copy(c.dataset.copy, c); return; }
+      const b = e.target.closest('[data-su]');
+      if (b?.dataset.su === 'close') close();
+      if (b?.dataset.su === 'again') { render(el, true); try { await load(true); } catch (err) { Studio.toast(err.message); } if (el.isConnected) render(el); }
+    });
+    try { if (!R || opts.fresh) await load(!!opts.fresh); render(el); el.querySelector('[data-su="close"]')?.focus(); }
+    catch (err) { el.querySelector('.su-sum').textContent = 'Không kiểm được: ' + err.message; el.querySelector('.su-box').insertAdjacentHTML('beforeend', '<div class="su-foot"><div class="grow"></div><button class="ui-btn ui-btn--primary ui-btn--md" data-su="close">Đóng</button></div>'); }
+  }
+  async function copy(text, btn) {
+    try { await navigator.clipboard.writeText(text); Studio.toast('Đã sao chép lệnh'); }
+    catch { const code = btn.parentElement.querySelector('code'); const s = getSelection(); s.removeAllRanges(); const r = document.createRange(); r.selectNodeContents(code); s.addRange(r); Studio.toast('Đã chọn lệnh: bấm Ctrl+C để sao chép'); }
+  }
+  Studio.openSetup = () => open({ fresh: true });
+  Studio.setupCheck = () => R;
+  Studio.addTopButton('<button class="ghost" id="setup-btn" title="Kiểm tra máy…"><i class="ti ti-stethoscope"></i></button>', () => open({ fresh: true }));
+
+  // ---------- thẻ "thiếu thư viện" khi bấm một tính năng ----------
+  let lastNeed = '', lastAt = 0;
+  function need(items, why) {
+    items = items.filter(Boolean);
+    if (!items.length) return;
+    const k = items.map(i => i.id).join(',');
+    if (k === lastNeed && Date.now() - lastAt < 15000) return;
+    lastNeed = k; lastAt = Date.now();
+    document.getElementById('setup-need')?.remove();
+    const el = document.createElement('aside');
+    el.id = 'setup-need'; el.setAttribute('role', 'alert');
+    el.innerHTML = `<p class="sn-t"><i class="ti ti-alert-triangle"></i> ${why}: thiếu ${esc(items.map(i => i.label).join(', '))}</p>
+      ${items.map(i => `<p class="sn-f">${esc(i.label)} — cần cho: ${esc(i.features || '')}</p>${i.fix ? cmdHtml(i.fix) : ''}`).join('')}
+      <div class="sn-act"><button class="ui-btn ui-btn--secondary ui-btn--sm" data-sn="open"><i class="ti ti-stethoscope"></i> Kiểm tra máy</button></div>
+      <button class="sn-x ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-sn="x" title="Đóng" aria-label="Đóng"><i class="ti ti-x"></i></button>`;
+    el.addEventListener('click', e => {
+      const c = e.target.closest('[data-copy]'); if (c) return copy(c.dataset.copy, c);
+      const b = e.target.closest('[data-sn]'); if (!b) return;
+      el.remove(); if (b.dataset.sn === 'open') open({ fresh: true });
+    });
+    document.body.appendChild(el);
+  }
+  // Trước khi gọi API của một tính năng: thư viện nó cần đang thiếu → báo luôn (vẫn gửi đi, để lỗi thật của server cũng hiện).
+  const _fetch = window.fetch;
+  window.fetch = function (input, init) {
+    try {
+      const method = String(init?.method || input?.method || 'GET').toUpperCase();
+      if (R && method === 'POST') {
+        const p = new URL(typeof input === 'string' ? input : input.url, location.href).pathname;
+        const miss = R.items.filter(i => bad(i) && (i.api || []).some(a => (a.endsWith('/') ? p.startsWith(a) : p === a)));
+        if (miss.length) setTimeout(() => need(miss, 'Tính năng này chưa chạy được'));
+      }
+    } catch { /* không chặn request */ }
+    return _fetch.apply(this, arguments);
+  };
+  // Lỗi hiện ra (toast, hộp thoại) nhắc tới một thư viện → nêu đúng tên và lệnh cài thay cho lỗi chung.
+  const PATTERNS = [
+    [/No module named '?faster_whisper/i, 'faster-whisper'], [/No module named '?numpy/i, 'numpy'], [/No module named '?scipy/i, 'scipy'],
+    [/No module named '?PIL\b/i, 'pillow'], [/No module named '?rembg/i, 'rembg'], [/No module named '?edge_tts/i, 'edge-tts'],
+    [/No module named '?onnxruntime/i, 'yunet'], [/cublas\w*\.(dll|so)|libcublas/i, 'cuda'],
+    [/spawn ffmpeg ENOENT|'ffmpeg' is not recognized|ffmpeg: (command )?not found/i, 'ffmpeg'], [/spawn ffprobe ENOENT|'ffprobe' is not recognized|ffprobe: (command )?not found/i, 'ffprobe'],
+    [/Cannot find (package|module) '?puppeteer-core/i, 'puppeteer-core'], [/Could not find (Chrome|expected browser)|Thiếu (Google )?Chrome/i, 'chrome'],
+    [/\.venv[\\/](Scripts|bin)[\\/]python\S* ENOENT|spawn python3? ENOENT/i, 'venv'], [/spawn claude(\.exe)? ENOENT|Claude Code CLI (chưa|không)/i, 'claude'],
+  ];
+  function scan(text) {
+    if (!R || !text || text.length > 20000) return;
+    const hit = PATTERNS.filter(([re]) => re.test(text)).map(([, id]) => R.items.find(i => i.id === id)).filter(i => i && i.status !== 'na');
+    if (hit.length) need([...new Set(hit)], 'Lỗi do thiếu thư viện');
+  }
+  new MutationObserver(ms => {
+    for (const m of ms) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1 || n.closest?.('#setup-need, #avs-setup')) continue;
+      if (n.matches?.('.toast') || n.closest?.('#modalbox') || n.id === 'modalbox') scan(n.textContent);
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // ---------- lần đầu: sau màn tác giả ----------
+  const afterAuthor = fn => { const t = setInterval(() => { if (!document.getElementById('author')) { clearInterval(t); fn(); } }, 250); };
+  Studio.onReady(() => { if (R) syncChip(); }); // nút ⋯ và nhãn menu do 01_workflow.js tạo sau file này
+  load(false).then(r => {
+    const m = missingReq(r).map(i => i.id);
+    const auto = !r.seen || m.some(id => !(r.later || []).includes(id));
+    if (auto) afterAuthor(() => open()); else gateDone();
+  }).catch(e => { console.error('setup', e); gateDone(); });
+})();

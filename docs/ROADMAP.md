@@ -200,6 +200,12 @@ Chủ repo báo 2026-11-17 (`docs/plans/S14-xuat-cot-phai-diem.md`). (1) Kết q
 - [ ] **`M114`** (`area/qc`): chấm điểm từng bước thay cho "Sẵn sàng x/6" có/không. Mỗi bước điểm 0–100 theo tiêu chí xem được: Chuẩn bị (thương hiệu có tên, logo, màu; có sản phẩm khi gói là quảng cáo), Nguồn (có video, đã tách lời thoại, phụ đề, mặt; lời thoại đã làm sạch), Dựng (có mẫu, phụ đề bật, không khoảng trống dài, có b-roll và âm thanh khi gói cần), Kiểm tra (điểm QC nhanh `M105`, QC đầy đủ khi đã chạy), Xuất (đã xuất bản mới hơn lần sửa cuối, đã giao Thành phẩm). Bấm một bước hiện tiêu chí đạt / thiếu, mỗi chỗ thiếu một nút sửa (dùng đường mở panel của `M113`). Điểm tính từ dữ liệu sẵn có (`timeline.json`, `.studio/qc_quick.json`, `/api/qc`, `exports.json`), không gọi Claude. Chặn hay chỉ nhắc khi xuất theo `C17`. Sau `M105`, `M106`, `M112`.
 
 
+### **`S15`** Máy mới chạy được ngay: kiểm thư viện từ lần mở đầu
+
+Chủ repo báo 2026-11-17: Studio cần nhiều thư viện (ffmpeg, Python venv với faster-whisper, Chrome/Edge, puppeteer-core…) nhưng chỉ trình cài (`install.ps1`, `install.sh`, README mục "2. Yêu cầu") kiểm; máy bỏ qua trình cài hoặc thiếu một thư viện chỉ biết khi tính năng hỏng. Nghiệm thu: mở Studio lần đầu trên máy thiếu một thư viện bắt buộc thì thấy ngay tên thư viện, tính năng cần nó và lệnh cài đúng hệ điều hành.
+
+- [x] **`M115`** (`area/infra`): màn "Kiểm tra máy". `GET /api/setup/check` (`studio/routes/01_setup.mjs`) kiểm nhanh, có cache, không tự cài: bắt buộc (ffmpeg/ffprobe, Node ≥ 18, Python 3.10+ trong `.venv`, faster-whisper, numpy, scipy, pillow, Chrome hoặc Edge, puppeteer-core) và tuỳ chọn (rembg, edge-tts, cuBLAS khi có GPU NVIDIA, chrome-headless-shell, Ollama, VieNeu, Claude, mô hình YuNet); gói pip lấy từ chính `install.ps1` / `scripts/setup.sh`. Mỗi mục: có / thiếu / phiên bản, tính năng cần nó, lệnh cài (chạy lại trình cài + lệnh riêng). Màn tự hiện lần đầu sau màn tác giả, trước hướng dẫn người mới; thiếu mục bắt buộc thì tự hiện lại, có "Để sau", "Kiểm tra lại", mở lại từ menu ⋯. Bấm tính năng mà thư viện của nó thiếu thì báo đúng tên thư viện và lệnh cài.
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -229,6 +235,7 @@ Chủ repo báo 2026-11-17 (`docs/plans/S14-xuat-cot-phai-diem.md`). (1) Kết q
 3. **`S13`**: `C15`, `C16` đã chốt 2026-11-17; làm `M103` → `M104` trước (né mặt kéo điểm QC nhiều nhất), `M107` song song.
 6. **`S09`**: chủ repo chốt `C06`–`C12` (render tập trung: máy trạm → server → máy render) rồi mới làm, bắt đầu từ MVP `M70`–`M73`.
 7. **`S14`**: `M112` làm ngay được (lỗi người dùng gặp, không đụng tệp nóng của nhóm QC); `M113` sau `M112`; `M114` sau `M105`, `M106` (`C17` đã chốt 2026-11-17: chỉ cảnh báo, không chặn).
+8. **`S15`**: `M115` làm ngay được (không đụng tệp nóng; chỉ thêm cặp route/feature mới và một dòng chờ trong `02_onboarding.js`).
 
 ## 6. Không làm
 
