@@ -119,7 +119,7 @@ const BY_INSTALLER = new Set(['ffmpeg', 'ffprobe', 'node', 'venv', 'puppeteer-co
  * o: {skill, platform, venv (có scripts/.venv chạy được), winget, brew (đường dẫn hoặc null), npm (npm-cli.js), node, puppeteer}
  */
 // Đường dẫn tuyệt đối: ctx.run chạy với cwd = thư mục dự án, và Windows tìm tên lệnh trần ở cwd trước (dự án lạ có powershell.exe giả).
-export const POWERSHELL = path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+export const POWERSHELL = path.win32.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const PKG = { ffmpeg: ['Gyan.FFmpeg', 'ffmpeg'], ffprobe: ['Gyan.FFmpeg', 'ffmpeg'], chrome: ['Google.Chrome', '--cask google-chrome'], ollama: ['Ollama.Ollama', 'ollama'], node: ['OpenJS.NodeJS.LTS', 'node'] };
 export function fixPlan(id, o) {
   const win = o.platform === 'win32', mac = o.platform === 'darwin', node = o.node || process.execPath;

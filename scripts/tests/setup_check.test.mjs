@@ -118,7 +118,7 @@ test('fixPlan: lệnh dựng từ danh sách cho phép, đúng hệ điều hàn
   const o = { skill: SKILL, platform: 'win32', venv: true, winget: 'C:/w/winget.exe', brew: null, npm: '/n/npm-cli.js', node: '/n/node', puppeteer: true };
   const all = M.fixPlan('all', o)[0];
   // đường dẫn tuyệt đối: ctx.run chạy ở thư mục dự án, tên trần có thể khớp file lạ trong đó
-  assert.ok(path.isAbsolute(all.cmd) && /powershell\.exe$/i.test(all.cmd), all.cmd);
+  assert.ok(path.win32.isAbsolute(all.cmd) && /powershell\.exe$/i.test(all.cmd), all.cmd);
   assert.equal(M.fixPlan('all', { ...o, platform: 'linux' })[0].cmd, '/bin/bash');
   assert.equal(M.fixPlan('constructor', o), null); assert.equal(M.fixPlan('toString', o), null);
   assert.ok(M.fixPlan('ffmpeg', o)[0].okText.test('Found an existing package already installed.')); assert.ok(all.argv.includes('-Yes')); assert.match(all.argv.join(' '), /install\.ps1/);
