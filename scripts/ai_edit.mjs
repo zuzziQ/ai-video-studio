@@ -158,22 +158,72 @@ function clampT(o, t0, t1, top = true) {
     else if (v && typeof v === 'object') clampT(v, t0, t1, false);
   }
 }
+// S13 · M111: flag emoji (regional-indicator pairs 🇯🇵, tag flags 🏴) have no glyph in Segoe UI Emoji, so Chrome on Windows
+// draws them as the letters "JP". They are dropped from graphic text (an emoji image would need a new asset set per flag).
+const FLAG_RE = /[\u{1F1E6}-\u{1F1FF}]|\u{1F3F4}[\u{E0020}-\u{E007F}]+/gu;
+export const hasFlag = s => typeof s === 'string' && /[\u{1F1E6}-\u{1F1FF}]|\u{1F3F4}[\u{E0020}-\u{E007F}]/u.test(s);
+export const stripFlags = s => s.replace(FLAG_RE, '').replace(/[ \t]{2,}/g, ' ').replace(/^[ \t]+|[ \t]+$/g, '');
 // Text length follows the example of the same field (graphics are designed for that much text), with a hard cap.
-// M62: at least 20 characters (a 12 floor cut "Chọn hiệu ứng" to "Chọn hiệu ứ…"), and cut at a word boundary.
-export function cleanText(o, ex, key = '') {
-  if (Array.isArray(o)) return o.slice(0, 8).map(x => cleanText(x, Array.isArray(ex) ? ex[0] : undefined, key));
-  if (o && typeof o === 'object') { const r = {}; for (const [k, v] of Object.entries(o)) r[k] = cleanText(v, ex && typeof ex === 'object' ? ex[k] : undefined, k); return r; }
+// M62: cut at a word boundary. S13 · M111: the cap is looser (≥ 28 characters, 2.5× the example): the engine shrinks text to
+// 70 % to fit its block before it would add "…", and QC reports a block the engine still had to cut (text_cut). Past the cap
+// the text ends at a clause (",", ";", "–"…) when one is far enough in, else at a word; cuts = [] collects {text, max, cut}
+// so Claude can write a shorter line instead (shortenCuts).
+export function cleanText(o, ex, key = '', cuts) {
+  if (Array.isArray(o)) return o.slice(0, 8).map(x => cleanText(x, Array.isArray(ex) ? ex[0] : undefined, key, cuts));
+  if (o && typeof o === 'object') { const r = {}; for (const [k, v] of Object.entries(o)) r[k] = cleanText(v, ex && typeof ex === 'object' ? ex[k] : undefined, k, cuts); return r; }
   if (typeof o === 'string') {
-    const max = Math.min(LONG_TEXT.has(key) ? 140 : 70, typeof ex === 'string' && ex.length ? Math.max(20, Math.ceil(ex.length * 1.8)) : 70);
-    return o.length > max ? cutWords(o, max) : o;
+    if (hasFlag(o)) o = stripFlags(o);
+    const max = Math.min(LONG_TEXT.has(key) ? 160 : 90, typeof ex === 'string' && ex.length ? Math.max(28, Math.ceil(ex.length * 2.5)) : 90);
+    if (o.length <= max) return o;
+    const cut = cutWords(o, max);
+    if (cuts) cuts.push({ text: o, max, cut });
+    return cut;
   }
   return o;
 }
-// Keep whole words (a single over-long word is cut as before) and drop a dangling separator before the ellipsis.
+// Keep whole words (only a single word longer than the cap is cut inside) and drop a dangling separator before the ellipsis;
+// a clause end in the second half of the cap is a clean stop without "…".
 function cutWords(s, max) {
+  const head = s.slice(0, max + 1), clause = Math.max(-1, ...[...head.matchAll(/[,;:.!?–—](?=\s)/gu)].map(m => m.index));
+  if (clause >= max * .5 && clause < max) return s.slice(0, clause).trim();
   const cut = s.slice(0, max - 1), sp = cut.search(/\s\S*$/);
-  const keep = /\s/.test(s[max - 1] || '') ? cut : sp >= max * .5 ? cut.slice(0, sp) : cut;
+  const keep = /\s/.test(s[max - 1] || '') ? cut : sp > 0 ? cut.slice(0, sp) : cut;
   return keep.replace(/[\s,.;:+&/–—-]+$/u, '') + '…';
+}
+// S13 · M111: ask the model once for shorter lines in place of the word-boundary cuts cleanText made (plan.cuts). ask(prompt)
+// → parsed JSON {texts:[…]}; a reply that is missing, not shorter, well past the cap, empty, cut or has a flag keeps the cut.
+// → number replaced.
+export async function shortenCuts(plan, ask) {
+  const cuts = (plan.cuts || []).filter(c => c.cut !== c.text);
+  if (!cuts.length) return 0;
+  const prompt = `Các dòng chữ sau dài hơn ô graphic cho phép. Viết lại MỖI dòng ngắn hơn, giữ trọn ý và từ khoá (tiếng Việt có dấu, không cắt giữa từ, không dùng "…", không emoji cờ), độ dài tối đa ghi trong ngoặc:
+${cuts.map((c, i) => `${i + 1}. (≤ ${c.max} ký tự) ${c.text}`).join('\n')}
+Chỉ trả về DUY NHẤT một object JSON (không markdown): {"texts":["dòng 1", "dòng 2", …]} đúng ${cuts.length} dòng, đúng thứ tự.`;
+  let r;
+  try { r = await ask(prompt); } catch { return 0; }
+  const texts = Array.isArray(r?.texts) ? r.texts : [];
+  const map = new Map();
+  // the cap is soft (the engine still shrinks text to fit, QC reports a block it had to cut): a rewrite a little over it is kept
+  cuts.forEach((c, i) => { const t = typeof texts[i] === 'string' ? texts[i].trim() : ''; if (t && t.length < c.text.length && t.length <= Math.ceil(c.max * 1.25) && !hasFlag(t) && !t.endsWith('…')) map.set(c.cut, t); });
+  let n = 0;
+  const walk = o => {
+    if (Array.isArray(o)) return o.forEach((v, i) => { if (typeof v === 'string' && map.has(v)) { o[i] = map.get(v); n++; } else walk(v); });
+    if (!o || typeof o !== 'object') return;
+    for (const [k, v] of Object.entries(o)) { if (typeof v === 'string' && map.has(v)) { o[k] = map.get(v); n++; } else walk(v); }
+  };
+  walk(plan.scenes);
+  return n;
+}
+// S13 · M111: the text strings a graphic shows (same rule as inventedNumbers: no colours, ids, files, timing)
+export function sceneStrings(scene) {
+  const out = [];
+  const walk = (v, k = '') => {
+    if (Array.isArray(v)) return v.forEach(x => walk(x, k));
+    if (v && typeof v === 'object') return Object.entries(v).forEach(([kk, x]) => { if (!NOT_TEXT.test(kk) && !/^(t|t0|t1|type|_.*)$/.test(kk)) walk(x, kk); });
+    if (typeof v === 'string' && !v.startsWith('#')) out.push(v);
+  };
+  walk(scene);
+  return out;
 }
 function fixBroll(o, lib, used) {
   if (Array.isArray(o)) return o.forEach(x => fixBroll(x, lib, used));
@@ -225,7 +275,7 @@ export function inventedNumbers(scene, said) {
   return bad;
 }
 export function validate(raw, { tl, caps, cat, lib, o }) {
-  const dropped = [];
+  const dropped = [], cuts = []; // cuts: graphic text cut to fit (S13 · M111, shortenCuts)
   const dur = tl.duration;
   const keep = o.pack && o.pack !== 'auto';
   const vertical = (tl.height || 1920) > (tl.width || 1080);
@@ -258,7 +308,7 @@ export function validate(raw, { tl, caps, cat, lib, o }) {
     if (t0 == null) { dropped.push(`cảnh ${s.type}: thiếu thời điểm`); continue; }
     t0 = r2(Math.max(0, Math.min(dur - .8, t0 - .05)));
     const t1 = r2(Math.min(dur, t0 + Math.min(8, Math.max(.8, +s.dur || (it.ex.t1 - it.ex.t0) || 2.5))));
-    const params = cleanText(s.params && typeof s.params === 'object' ? s.params : {}, it.ex);
+    const params = cleanText(s.params && typeof s.params === 'object' ? s.params : {}, it.ex, '', cuts);
     for (const k of ['type', 't0', 't1', 'cid', '_orig', '_ai']) delete params[k];
     const ex = shiftRel(it.ex, t0, t1);
     const scene = { ...ex, ...shiftRel(params, t0, t1), type: s.type, t0, t1, _ai: true };
@@ -292,7 +342,7 @@ export function validate(raw, { tl, caps, cat, lib, o }) {
     sfx.push({ t: r2(Math.max(0, t - .05)), name, gain: -12, _ai: true });
   }
   const hook = String(raw.hook || '').slice(0, 60);
-  return { pack, caption_style, hook, captions: capOut, scenes: [...base, ...scenes], music, sfx, summary: String(raw.summary || '').slice(0, 400), dropped, created: new Date().toISOString() };
+  return { pack, caption_style, hook, captions: capOut, scenes: [...base, ...scenes], music, sfx, summary: String(raw.summary || '').slice(0, 400), dropped, cuts, created: new Date().toISOString() };
 }
 
 // Apply a plan: earlier AI items (and untouched recipe items) are replaced; anything the user edited (_orig) or added stays.
@@ -338,6 +388,12 @@ async function main() {
     onRaw: res => fs.writeFileSync(path.join(dir, '.studio/ai_raw.txt'), res) });
   say(.92, 'Kiểm tra và sửa kết quả');
   const plan = validate(raw, ctx);
+  // S13 · M111: text too long for its graphic → one short call for shorter lines instead of a "…" cut (cut kept if it fails)
+  if (plan.cuts.length && !args.includes('--no-shorten')) {
+    say(.925, `Viết ngắn lại ${plan.cuts.length} dòng chữ quá dài`);
+    const n = await shortenCuts(plan, p => askJSON(p, { task: 'text', model, cwd: os.tmpdir(), shape: 'object', retries: 0 }));
+    console.log(`chữ quá dài: ${plan.cuts.length} · Claude viết ngắn lại ${n}`);
+  }
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
   try { const k = await (await import('./kho_media.mjs')).khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
   // S13 · M104: render the plan once and move graphics off the speaking face / captions / unsafe edges before it is applied

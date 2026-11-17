@@ -12,8 +12,8 @@ import { qcHash } from './export_gate.mjs';
 const r2 = v => Math.round(v * 100) / 100;
 const deep = o => JSON.parse(JSON.stringify(o));
 // kiểm hình học của QC nhanh; mọi loại đều sửa được bằng applyDeterministic. S13 · M106: thêm thẻ trống và số không có trong
-// lời thoại (ẩn khi graphic do máy tạo; graphic người dùng đặt chỉ được đánh dấu)
-export const QUICK = new Set(['face_cover', 'caption_overlap', 'text_unsafe', 'text_offcanvas', 'empty', 'empty_card', 'invented_number']);
+// lời thoại (ẩn khi graphic do máy tạo; graphic người dùng đặt chỉ được đánh dấu). S13 · M111: emoji cờ (bỏ khỏi chữ graphic)
+export const QUICK = new Set(['face_cover', 'caption_overlap', 'text_unsafe', 'text_offcanvas', 'empty', 'empty_card', 'invented_number', 'emoji_flag']);
 
 // Ba thời điểm cho ba ô ảnh: đầu, giữa, cuối các graphic AI (không có thì mọi graphic), lúc graphic đã hiện hẳn.
 export function pickTimes(tl) {

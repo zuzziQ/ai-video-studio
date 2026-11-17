@@ -48,14 +48,15 @@ test('M62 M3: chữ LED chừa chỗ cho dấu chồng (Ế, Ậ) trong vùng m�
   assert.match(html, /padding:\.45em 0 \.3em;margin:-\.45em 0 -\.3em/);
 });
 
-test('M62 M2: chữ AI chỉ bị cắt ở ranh giới từ, sàn 20 ký tự', () => {
+test('M62 M2 + S13 M111: chữ AI chỉ bị cắt ở ranh giới từ, sàn 28 ký tự', () => {
   assert.equal(cleanText('Chọn hiệu ứng', 'Bước'), 'Chọn hiệu ứng');
   assert.equal(cleanText('TRƯỚC: VÀI TIẾNG', 'CHỮ', 'text'), 'TRƯỚC: VÀI TIẾNG');
-  assert.equal(cleanText('CHUYỂN ĐỘNG + PHÔNG CHỮ ĐẸP', 'CHỮ', 'text'), 'CHUYỂN ĐỘNG + PHÔNG…');
-  assert.equal(cleanText('CHUYỂN ĐỘNG + PHÔNGCHỮ ĐẸP', 'CHỮ', 'text'), 'CHUYỂN ĐỘNG…'); // dangling "+" dropped
-  assert.equal(cleanText('MỘT HAI BA BỐN NĂM SÁU BẢY', 'CHỮ', 'text'), 'MỘT HAI BA BỐN NĂM…');
-  const one = cleanText('x'.repeat(40), 'CHỮ', 'text');
-  assert.equal(one.length, 20);
+  assert.equal(cleanText('CHUYỂN ĐỘNG + PHÔNG CHỮ ĐẸP', 'CHỮ', 'text'), 'CHUYỂN ĐỘNG + PHÔNG CHỮ ĐẸP'); // M111: vừa trần mới
+  assert.equal(cleanText('CHUYỂN ĐỘNG + PHÔNG CHỮ ĐẸP MẮT VÀ GỌN GÀNG HƠN', 'CHỮ', 'text'), 'CHUYỂN ĐỘNG + PHÔNG CHỮ ĐẸP…');
+  assert.equal(cleanText('CHUYỂN ĐỘNG + PHÔNGCHỮĐẸPMẮTVÀGỌN GÀNG', 'CHỮ', 'text'), 'CHUYỂN ĐỘNG…'); // dangling "+" dropped
+  assert.equal(cleanText('MỘT HAI BA BỐN NĂM SÁU BẢY TÁM CHÍN MƯỜI', 'CHỮ', 'text'), 'MỘT HAI BA BỐN NĂM SÁU BẢY…');
+  const one = cleanText('x'.repeat(40), 'CHỮ', 'text'); // một "từ" dài hơn trần: vẫn cắt bên trong như cũ
+  assert.equal(one.length, 28);
   assert.ok(one.endsWith('…'));
 });
 
