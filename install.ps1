@@ -1,8 +1,9 @@
 ﻿# AI Video Studio — cài đặt trên Windows 10/11 (bản tương đương install.sh).
-#   Bấm đúp install.cmd, hoặc:  powershell -ExecutionPolicy Bypass -File install.ps1 [-NoSkill] [-NoShortcut] [-Yes] [-NoCuda]
+#   Bấm đúp install.cmd, hoặc:  powershell -ExecutionPolicy Bypass -File install.ps1 [-NoSkill] [-NoShortcut] [-Yes] [-NoCuda] [-NoModels]
 #   -Yes: tự cài công cụ còn thiếu bằng winget, không hỏi lại.
 #   -NoCuda: có GPU NVIDIA cũng không cài CUDA runtime cho whisper (whisper chạy CPU).
-param([switch]$NoSkill, [switch]$NoShortcut, [switch]$Yes, [switch]$NoCuda)
+#   -NoModels: không tải sẵn mô hình whisper large-v3 / large-v3-turbo và tách nền (~4,9 GB); tính năng tự tải khi dùng lần đầu.
+param([switch]$NoSkill, [switch]$NoShortcut, [switch]$Yes, [switch]$NoCuda, [switch]$NoModels)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $REPO = $PSScriptRoot
@@ -52,7 +53,12 @@ $CHROME = @($env:CHROME_PATH,
   Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $CHROME) { Die 'Thiếu Google Chrome hoặc Microsoft Edge (dùng để render video). Tải Chrome tại https://www.google.com/chrome/' }
 Say "Trình duyệt render: $CHROME"
-if (Has 'claude') { Say 'Có Claude Code CLI → bật được AI dựng giúp, Tạo style, lồng tiếng…' }
+# Claude Code CLI: mô hình AI mặc định của Studio (Ollama tạm tắt, M117). Thiếu thì cài qua npm (Node đã có ở trên).
+if (-not (Has 'claude')) {
+  $ok = $Yes -or ((Read-Host 'Chưa có Claude Code CLI (AI dựng giúp, Tạo style, trợ lý…). Cài bằng npm? (Y/n)') -notmatch '^[nN]')
+  if ($ok) { Say 'Cài Claude Code CLI (npm install -g @anthropic-ai/claude-code)'; npm install -g @anthropic-ai/claude-code; RefreshPath }
+}
+if (Has 'claude') { Say 'Có Claude Code CLI → bật được AI dựng giúp, Tạo style, lồng tiếng… (lần đầu: chạy claude một lần để đăng nhập)' }
 else { Say 'Chưa có Claude Code CLI (tính năng AI sẽ tắt). Cài: https://docs.claude.com/claude-code' }
 
 # 2. Thư viện Python (venv) + puppeteer-core
@@ -61,7 +67,7 @@ $S = Join-Path $REPO 'scripts'
 $VPY = Join-Path $S '.venv\Scripts\python.exe'
 if (-not (Test-Path $VPY)) { & $PY[0] $PY[1..9] -m venv (Join-Path $S '.venv'); if ($LASTEXITCODE) { Die 'Không tạo được Python venv' } }
 & $VPY -m pip install -q --upgrade pip
-& $VPY -m pip install -q faster-whisper numpy scipy pillow 'rembg[cpu]'; if ($LASTEXITCODE) { Die 'Cài thư viện Python lỗi (xem dòng báo lỗi ở trên)' }
+& $VPY -m pip install -q faster-whisper numpy scipy pillow 'rembg[cpu]' onnxruntime; if ($LASTEXITCODE) { Die 'Cài thư viện Python lỗi (xem dòng báo lỗi ở trên)' }
 # Whisper trên GPU (M53): có GPU NVIDIA thì cài cuBLAS của CUDA 12 qua pip (ctranslate2 bản Windows đã kèm cuDNN).
 # Lỗi không chặn cài đặt: whisper tự lùi về CPU.
 if (-not $NoCuda -and (Has 'nvidia-smi')) {
@@ -69,6 +75,11 @@ if (-not $NoCuda -and (Has 'nvidia-smi')) {
   & $VPY -m pip install -q nvidia-cublas-cu12; if ($LASTEXITCODE) { Say 'Không cài được cuBLAS: whisper sẽ chạy CPU' }
 }
 & $VPY -m pip install -q edge-tts; if ($LASTEXITCODE) { Say 'Bỏ qua edge-tts (giọng đọc online, không bắt buộc)' }
+# M117: tải sẵn mô hình nặng (whisper large-v3-turbo + large-v3, tách nền u2net) để lần đầu dùng không phải chờ; lỗi không chặn cài.
+if (-not $NoModels) {
+  Say 'Tải sẵn mô hình: whisper large-v3-turbo + large-v3, tách nền (~4,9 GB, lần đầu mất lâu; bỏ qua bằng -NoModels)'
+  & $VPY -I (Join-Path $S 'prefetch_models.py'); if ($LASTEXITCODE) { Say 'Chưa tải đủ mô hình (mạng?): tính năng sẽ tự tải khi dùng, hoặc chạy lại install.cmd' }
+}
 Push-Location $S; npm install --silent; $npm = $LASTEXITCODE; Pop-Location
 if ($npm) { Die 'npm install lỗi' }
 # chrome-headless-shell cho worker render (M57, tuỳ chọn): tải lỗi thì vẫn render bằng Chrome đã cài

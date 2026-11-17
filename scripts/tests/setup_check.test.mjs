@@ -62,7 +62,10 @@ test('thiếu ffmpeg (PATH rỗng): mục bắt buộc missing, ready=false, có
   const ids = r.items.map(i => i.id);
   for (const id of ['ffmpeg', 'ffprobe', 'node', 'venv', 'faster-whisper', 'numpy', 'scipy', 'pillow', 'chrome', 'puppeteer-core'])
     assert.equal(r.items.find(i => i.id === id)?.need, 'required', `${id} phải là bắt buộc`);
-  for (const id of ['rembg', 'edge-tts', 'cuda', 'headless-shell', 'ollama', 'vieneu', 'claude', 'yunet'])
+  // M117: phần nặng trình cài cài sẵn (mặt, tách nền, mô hình whisper, Claude Code) là "recommended"
+  for (const id of ['rembg', 'edge-tts', 'cuda', 'headless-shell', 'claude', 'yunet', 'whisper-large-v3-turbo', 'whisper-large-v3', 'rembg-u2net_human_seg'])
+    assert.equal(r.items.find(i => i.id === id)?.need, 'recommended', `${id} phải là cài sẵn`);
+  for (const id of ['ollama', 'vieneu'])
     assert.equal(r.items.find(i => i.id === id)?.need, 'optional', `${id} phải là tuỳ chọn`);
   assert.equal(new Set(ids).size, ids.length, 'id trùng');
   for (const i of r.items) assert.ok(['ok', 'missing', 'old', 'na'].includes(i.status));
@@ -180,4 +183,60 @@ test('cài giúp: lệnh lỗi thì job lỗi; winget báo "đã cài" thì coi 
     assert.equal(await post({ id: 'all' }), 200);
     assert.match(await job.done, /^error:/);
   } finally { srv.closeAllConnections?.(); srv.close(); }
+});
+
+// ---------- M117: cài sẵn mô hình, Ollama tắt mặc định ----------
+test('models.json: mô hình whisper large-v3 + large-v3-turbo và tách nền; trình cài tải sẵn và cài onnxruntime', () => {
+  const ms = M.loadModels(SKILL), names = ms.map(m => m.name);
+  for (const n of ['large-v3', 'large-v3-turbo', 'u2net_human_seg']) assert.ok(names.includes(n), n);
+  assert.equal(ms.find(m => m.name === 'large-v3').repo, 'Systran/faster-whisper-large-v3');
+  const ps1 = fs.readFileSync(path.join(SKILL, 'install.ps1'), 'utf8'), sh = fs.readFileSync(path.join(SKILL, 'scripts/setup.sh'), 'utf8');
+  assert.match(ps1, /prefetch_models\.py/); assert.match(ps1, /\$NoModels/);
+  assert.match(sh, /prefetch_models\.py/); assert.match(sh, /AVS_NO_MODELS/);
+  assert.match(fs.readFileSync(path.join(SKILL, 'install.sh'), 'utf8'), /--no-models/);
+  for (const plat of ['win32', 'linux']) assert.ok(M.pipFromInstallers(SKILL, plat).some(p => p.dist === 'onnxruntime'), `onnxruntime trong trình cài ${plat}`);
+});
+
+test('mô hình có / chưa có: đọc cache Hugging Face và thư mục rembg, không import thư viện', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-models-'));
+  const env = { HOME: home, USERPROFILE: home, PATH: BIN };
+  const v3 = M.loadModels(SKILL).find(m => m.name === 'large-v3'), seg = M.loadModels(SKILL).find(m => m.kind === 'rembg');
+  try {
+    assert.equal(M.modelPresent(v3, env), false);
+    const snap = path.join(home, '.cache/huggingface/hub/models--Systran--faster-whisper-large-v3/snapshots/abc');
+    fs.mkdirSync(snap, { recursive: true });
+    assert.equal(M.modelPresent(v3, env), false, 'chưa có model.bin (tải dở) → chưa có');
+    fs.writeFileSync(path.join(snap, 'model.bin'), 'x');
+    assert.equal(M.modelPresent(v3, env), true);
+    assert.equal(M.modelPresent(v3, { ...env, HF_HUB_CACHE: path.join(home, 'khac') }), false, 'HF_HUB_CACHE thắng mặc định');
+    assert.equal(M.modelPresent(seg, env), false);
+    fs.mkdirSync(path.join(home, '.u2net')); fs.writeFileSync(path.join(home, '.u2net', 'u2net_human_seg.onnx'), 'x');
+    assert.equal(M.modelPresent(seg, env), true);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('fixPlan mô hình: tải bằng prefetch_models.py trong .venv khi đã có thư viện của nó', () => {
+  const o = { skill: SKILL, platform: 'linux', venv: true, pkgs: { 'faster-whisper': true, rembg: false } };
+  const st = M.fixPlan('whisper-large-v3', o)[0];
+  assert.match(st.cmd, /\.venv[\\/]bin[\\/]python$/);
+  assert.deepEqual(st.argv.slice(-2), ['--model', 'large-v3']); assert.match(st.argv[1], /prefetch_models\.py$/);
+  assert.equal(M.fixPlan('rembg-u2net_human_seg', o), null, 'thiếu rembg → trình cài');
+  assert.equal(M.fixPlan('whisper-large-v3', { ...o, venv: false }), null);
+  assert.equal(M.fixPlan('whisper-khong-co', o), null);
+});
+
+test('Ollama tắt mặc định: màn Kiểm tra máy ghi "na", không dò máy chủ; bật thì kiểm như cũ', async () => {
+  const cfg = path.join(HOME, 'config.json');
+  const r = await M.checkAll({ skill: SKILL, env: { ...process.env, PATH: BIN, Path: BIN } });
+  const ol = r.items.find(i => i.id === 'ollama');
+  assert.equal(ol.status, 'na'); assert.match(ol.note, /tắt/); assert.equal(ol.auto, '');
+  const L = await import('../llm.mjs');
+  assert.equal(L.llmConfig().text, 'claude'); assert.equal(L.llmConfig().ollama.enabled, false);
+  L.saveLlmConfig({ enabled: true });
+  assert.equal(L.llmConfig().ollama.enabled, true);
+  const r2 = await M.checkAll({ skill: SKILL, env: { ...process.env, PATH: BIN, Path: BIN } });
+  assert.notEqual(r2.items.find(i => i.id === 'ollama').note, ol.note);
+  L.saveLlmConfig({ text: 'ollama' }); L.saveLlmConfig({ enabled: false });
+  assert.deepEqual([L.llmConfig().text, L.llmConfig().ollama.enabled], ['claude', false], 'tắt Ollama → quay về Claude');
+  fs.rmSync(cfg, { force: true });
 });

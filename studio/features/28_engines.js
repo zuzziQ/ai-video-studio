@@ -53,6 +53,15 @@
 
   function llmTab() {
     const c = S.cfg.llm, o = S.st?.ollama, ol = c.text === 'ollama';
+    // M117: Ollama tắt mặc định, mọi việc AI dùng Claude Code; bật mới hiện lựa chọn Ollama
+    if (!c.ollama?.enabled) {
+      const r = S.tryRes;
+      return `<p class="eng-help">Mọi việc AI (viết chữ, xem ảnh, dựng giúp) chạy bằng <b>Claude Code</b>: lệnh <code>claude</code> trên máy, tài khoản Claude của bạn.</p>
+      <div class="eng-st">${dot(true)}<span><b>Claude Code</b> là mô hình mặc định.</span></div>
+      <div class="eng-st">${dot(null)}<span><b>Ollama</b> (model chạy trên máy, không gửi chữ ra ngoài) đang tắt. Chỉ cho việc chỉ có chữ, cần cài Ollama và tải model riêng.</span><button data-eng="ollama-on" title="Bật Ollama"><i class="ti ti-toggle-left"></i> Bật Ollama</button></div>
+      ${r ? `<div class="ui-banner eng-res ${r.ok ? 'ui-banner--ok' : 'ui-banner--err'}" role="status"><div>${r.ok ? `<b>Được</b> · ${esc(r.provider)} · ${r.sec}s` : `<b>Lỗi</b>: ${esc(r.error || '')}`}</div></div>` : ''}
+      <div class="actions"><button data-eng="close">Đóng</button><button data-eng="try" ${S.trying ? 'disabled' : ''}><i class="ti ti-player-play"></i> ${S.trying ? 'Đang thử…' : 'Thử Claude'}</button></div>`;
+    }
     const stat = S.loading && !S.st ? `${dot(null)}<span>Đang kiểm Ollama…</span>`
       : o?.reachable ? `${dot(o.has_model)}<span>Ollama đang chạy ở <code>${esc(c.ollama.url)}</code>. ${o.has_model ? `Có model <b>${esc(c.ollama.model)}</b>.` : `<b>Chưa có model ${esc(c.ollama.model)}</b>: chạy <code>ollama pull ${esc(c.ollama.model)}</code>.`}</span>`
       : `${dot(false)}<span>Không kết nối được Ollama ở <code>${esc(c.ollama.url)}</code>${o?.error ? ` (${esc(o.error)})` : ''}. Cài Ollama (ollama.com) rồi mở ứng dụng hoặc chạy <code>ollama serve</code>.</span>`;
@@ -62,7 +71,7 @@
       <span class="lbl">Nhà cung cấp cho việc chỉ có chữ${envNote(c.env.text)}</span>
       <div class="eng-seg">${[['claude', 'Claude', 'Lệnh claude trên máy (tài khoản Claude của bạn)'], ['ollama', 'Ollama', 'Model chạy trên máy này, không gửi chữ ra ngoài']].map(([k, n, d]) =>
         `<label class="${c.text === k ? 'on' : ''}"><input type="radio" name="eng-text" value="${k}" ${c.text === k ? 'checked' : ''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>
-      <div class="eng-st" id="eng-ost">${stat}<button data-eng="recheck" title="Kiểm lại"><i class="ti ti-refresh"></i></button></div>
+      <div class="eng-st" id="eng-ost">${stat}<button data-eng="recheck" title="Kiểm lại"><i class="ti ti-refresh"></i></button><button data-eng="ollama-off" title="Tắt Ollama, dùng Claude Code cho mọi việc"><i class="ti ti-toggle-right"></i> Tắt Ollama</button></div>
       <div class="row2"><div><span class="lbl">Địa chỉ Ollama (chỉ máy này)${envNote(c.env.url)}</span><input type="text" id="eng-url" value="${esc(c.ollama.url)}" placeholder="http://127.0.0.1:11434" autocomplete="off" spellcheck="false"></div>
         <div><span class="lbl">Model${envNote(c.env.model)}</span><input type="text" id="eng-model" value="${esc(c.ollama.model)}" list="eng-models" placeholder="qwen2.5:7b" autocomplete="off" spellcheck="false">
         <datalist id="eng-models">${models.map(m => `<option value="${esc(m)}">`).join('')}</datalist></div></div>
@@ -165,6 +174,7 @@
 
   const radio = n => box().querySelector(`input[name="${n}"]:checked`)?.value;
   async function saveLlm(quiet) {
+    if (!S.cfg.llm.ollama?.enabled) return true; // Ollama tắt: chỉ có Claude, không có gì để lưu
     const r = await Studio.api('/api/engines/llm', { text: radio('eng-text'), fallback: $('#eng-fb').checked ? 'claude' : '', url: $('#eng-url').value.trim(), model: $('#eng-model').value.trim() });
     if (r.error) { S.tryRes = { ok: false, error: r.error }; render(); return false; }
     S.cfg = r; if (!quiet) Studio.toast('Đã lưu nhà cung cấp LLM');
@@ -199,6 +209,13 @@
     if (a === 'close') return Studio.closeModal();
     if (a === 'recheck') { S.st = null; await load(true); return isOpen() && render(); }
     if (a === 'save-llm') { if (await saveLlm()) render(); return; }
+    if (a === 'ollama-on' || a === 'ollama-off') {
+      const r = await Studio.api('/api/engines/llm', { enabled: a === 'ollama-on' }).catch(err => ({ error: err.message }));
+      if (r.error) { S.tryRes = { ok: false, error: r.error }; return render(); }
+      S.cfg = r; S.tryRes = null; Studio.toast(a === 'ollama-on' ? 'Đã bật Ollama: chọn nhà cung cấp bên dưới' : 'Đã tắt Ollama: dùng Claude Code');
+      if (a === 'ollama-on') { S.st = null; await load(true); }
+      return isOpen() && render();
+    }
     if (a === 'try') {
       if (!(await saveLlm(true))) return;
       S.trying = true; S.tryRes = null; render();

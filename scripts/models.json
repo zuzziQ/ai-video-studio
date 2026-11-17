@@ -1,0 +1,10 @@
+{
+  "_doc": "M117: mô hình trình cài tải sẵn (scripts/prefetch_models.py) và màn Kiểm tra máy kiểm (studio/routes/01_setup.mjs). Thêm mô hình mới vào đây là cả hai thấy.",
+  "whisper": [
+    { "name": "large-v3-turbo", "repo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo", "gb": 1.6, "for": "Tách lời thoại, phụ đề (mô hình mặc định)" },
+    { "name": "large-v3", "repo": "Systran/faster-whisper-large-v3", "gb": 3.1, "for": "Nghe lại đoạn nghi sai khi soát lời thoại" }
+  ],
+  "rembg": [
+    { "name": "u2net_human_seg", "gb": 0.17, "for": "Tách nền người, sticker, tìm mặt" }
+  ]
+}

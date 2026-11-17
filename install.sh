@@ -3,13 +3,14 @@
 #   bash install.sh            cài thư viện, gắn làm skill Claude Code, dựng dự án clip mẫu, tạo app Mac
 #   bash install.sh --no-app   không tạo app Mac
 #   bash install.sh --no-skill không gắn vào ~/.claude/skills
+#   bash install.sh --no-models không tải sẵn mô hình whisper large-v3 / large-v3-turbo và tách nền (~4,9 GB)
 set -e
 REPO="$(cd "$(dirname "$0")" && pwd)"
 SKILL_DIR="${AVS_SKILL_DIR:-$HOME/.claude/skills/ai-video-studio}"
 HOME_DIR="${AVS_HOME:-$HOME/.ai-video-studio}"
 SAMPLE="$HOME_DIR/footage/clip-mau"
 APP=1; LINK=1
-for a in "$@"; do case "$a" in --no-app) APP=0;; --no-skill) LINK=0;; esac; done
+for a in "$@"; do case "$a" in --no-app) APP=0;; --no-skill) LINK=0;; --no-models) export AVS_NO_MODELS=1;; esac; done
 
 say() { printf '\033[1;35m▸\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗ %s\033[0m\n' "$*"; exit 1; }
@@ -24,6 +25,8 @@ python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || die "Python qu�
 CHROME="${CHROME_PATH:-}"
 for c in "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" /usr/bin/google-chrome /usr/bin/chromium; do [ -z "$CHROME" ] && [ -x "$c" ] && CHROME="$c"; done
 [ -n "$CHROME" ] || die "Thiếu Google Chrome (dùng để render video). Tải tại https://www.google.com/chrome/"
+# Claude Code CLI: mô hình AI mặc định (Ollama tạm tắt, M117). Thiếu thì cài qua npm; lỗi không chặn cài.
+command -v claude >/dev/null || { say "Cài Claude Code CLI (npm install -g @anthropic-ai/claude-code)"; npm install -g @anthropic-ai/claude-code || say "Không cài được Claude Code CLI (thử lại với quyền phù hợp)"; }
 command -v claude >/dev/null && say "Có Claude Code CLI → bật được AI dựng giúp, Tạo style, lồng tiếng…" \
   || say "Chưa có Claude Code CLI (tính năng AI sẽ tắt). Cài: https://docs.claude.com/claude-code"
 

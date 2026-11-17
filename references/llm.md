@@ -24,6 +24,8 @@ Lỗi là `LlmError` có `kind`: `missing`, `login`, `quota`, `model`, `exit`, `
 
 ## Cấu hình
 
+**Ollama tắt mặc định (S15 M117):** Studio dùng Claude Code cho mọi việc AI. `llm.ollama_enabled: true` trong `config.json` (nút **Bật Ollama** trong ⋯ → Mô hình & giọng, `POST /api/engines/llm {enabled}`) hoặc `AVS_OLLAMA=1` mới hiện lựa chọn Ollama; máy đã chọn `text: "ollama"` từ trước coi như đang bật. Tắt lại thì `text` về `claude`. `llmConfig().ollama.enabled` cho biết trạng thái; `GET /api/engines/status` không dò Ollama khi đang tắt.
+
 `~/.ai-video-studio/config.json` (cùng file với API key, quyền 600), khoá `llm`:
 
 ```json

@@ -29,7 +29,7 @@ export const DOMAINS = {
         layer: "domain",
         title: "README mục 16: bản quyền, ghi công, thành phần bên thứ ba",
         file_path: "README.md",
-        lines: "871-891",
+        lines: "872-892",
         keywords: ["mit", "sample", "hyperframes", "ghost-editor", "simple icons", "bên thứ ba"],
         content: "Giấy phép MIT, yêu cầu ghi công của tác giả, quyền dùng video mẫu, giấy phép từng thành phần bên thứ ba.",
       },
