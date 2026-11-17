@@ -35,12 +35,12 @@ const MOVIES = path.join(os.homedir(), 'Movies', 'AI Video Studio');
 // Thư mục canh cũ (trước S12): chỉ còn canh khi đã có trên máy hoặc người dùng tự thêm; mặc định mới là Tha vao day/ của mỗi Kho.
 export const DEFAULT_FOLDER = { in: path.join(MOVIES, 'Thả video vào đây'), done: path.join(MOVIES, 'Đã xong'), processed: path.join(MOVIES, 'Đã xử lý'), profile: '' };
 // S12 M98: <Kho>/Nguon/Tha vao day/ của mọi Kho đã có. Video nhận xong chuyển sang Nguon/, dự án vào Du an/ của Kho đó,
-// thành phẩm vào Thanh pham/ (autopilot.mjs). Hồ sơ: hồ sơ đầu tiên gắn thương hiệu của Kho, không có thì hồ sơ mặc định.
+// thành phẩm vào Thanh pham/ (autopilot.mjs). Phong cách (S19 M133): của thương hiệu của Kho, Kho Chung → 'chung'.
 // Lượt quét chỉ canh Tha vao day/ đã có (exists), không tạo thư mục trong Kho người dùng chọn sẵn; nút "Mở thư mục" tạo nó.
 export function khoInboxes() {
   const profs = (() => { try { return loadStore().profiles; } catch { return []; } })();
   return allWorkspaces().filter(ws => fs.existsSync(ws.root)).map(ws => ({ in: sub(ws, 'inbox'), done: '', processed: sub(ws, 'source'), brand: ws.brand, kho: ws.title,
-    profile: (ws.brand && profs.find(p => p.brand === ws.brand)?.id) || '', exists: fs.existsSync(sub(ws, 'inbox')) }));
+    profile: profs.find(p => p.brand === (ws.brand || ''))?.id || '', exists: fs.existsSync(sub(ws, 'inbox')) }));
 }
 const khoTopicDir = (brand, name) => { const ws = ensureWorkspace(workspaceFor(brand || '')); return path.join(sub(ws, 'projects', { mkdir: true }), safeName(name)); };
 const LA_LABEL = 'com.aivideostudio.watch';

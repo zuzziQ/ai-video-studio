@@ -55,7 +55,7 @@ Giao diện tối kiểu editor chuyên nghiệp. Phần mềm có **28 gói sty
 | **Khung hình & ngôn ngữ** | Bám mặt tự động khi đổi khổ. Một lần xuất ra 9:16, 1:1 và 16:9. Dịch, lồng tiếng, phụ đề song ngữ |
 | **Tạo style** | **Clone style từ video bất kỳ**, hoặc **tạo style từ mô tả bằng chữ**. Claude viết gói style mới, template và skill riêng |
 | **Kinh doanh** | Làm hàng loạt từ Excel/CSV (mỗi dòng một video). Nhiều brand kit. Gói đăng TikTok/YouTube/Facebook/Instagram/Zalo với tiêu đề, caption, hashtag do AI viết |
-| **Tự động hoá** | **Tự lái** (một nút từ video thô đến thành phẩm), **thư mục tự động**, hàng đợi chạy nền, **hồ sơ kênh** học từ những gì bạn sửa tay. **AI tự kiểm tra** (chữ tràn, che mặt, sai chính tả, đoạn trống) và tự sửa. **Nhiều phiên bản A/B**. **Video dài thành clip ngắn**. **Chủ đề thành video**. **Lịch đăng** và tự đăng YouTube. Báo về máy (Mac: Notification Center, Windows: khay hệ thống) khi xong |
+| **Tự động hoá** | **Tự lái** (một nút từ video thô đến thành phẩm), **thư mục tự động**, hàng đợi chạy nền, **phong cách dựng của từng thương hiệu** học từ những gì bạn sửa tay. **AI tự kiểm tra** (chữ tràn, che mặt, sai chính tả, đoạn trống) và tự sửa. **Nhiều phiên bản A/B**. **Video dài thành clip ngắn**. **Chủ đề thành video**. **Lịch đăng** và tự đăng YouTube. Báo về máy (Mac: Notification Center, Windows: khay hệ thống) khi xong |
 | **Agent & tự cải tiến** | Điều khiển qua **Telegram**: gửi video → nhận lại video đã dựng, `/chude` ra video không cần quay, nhắn tự nhiên để agent làm việc. Chấm ★ + góp ý → app **tự chỉnh hồ sơ kênh**. **Tự đề xuất** mỗi sáng (chạy lại việc lỗi, lên lịch đăng, ý tưởng video mới) kèm nút Áp dụng |
 | **Nhanh** | Render song song nhiều luồng, nhanh khoảng 5 lần (video 22 giây xuất trong khoảng 8 giây) |
 | **Mac & Windows** | macOS: app trong `~/Applications`, kéo video vào icon là tạo dự án. Windows 10/11: bấm đúp `install.cmd` để cài, lối tắt Desktop để mở |
@@ -359,8 +359,8 @@ Mẫu lưu lại gồm:
 Graphic của bản dựng tự động sẽ được dựng lại theo video mới. Mẫu của bạn nằm trong `templates/user/` và hiện chung trong thư viện.
 
 ### 5.6. Dùng mẫu ở chỗ khác
-- **Tự lái và thư mục tự động:** trong hồ sơ kênh, chọn **Template**. Mọi video thả vào đều được áp mẫu đó rồi bám lời thoại.
-- **Agent Telegram:** gửi video vào chat. Bot dùng mẫu của hồ sơ kênh đang chọn.
+- **Tự lái và thư mục tự động:** trong Phong cách dựng của thương hiệu (trang **Thương hiệu**), chọn **Template**. Mọi video thả vào đều được áp mẫu đó rồi bám lời thoại.
+- **Agent Telegram:** gửi video vào chat. Bot dùng mẫu trong phong cách dựng của thương hiệu đang chọn.
 - **Hàng loạt từ Excel/CSV:** chọn một mẫu, ghép cột vào chữ và ảnh của mẫu (ví dụ cột `gia` vào giá, cột `anh_1` vào ảnh), mỗi dòng ra một video. Xem [mục 9](#9-làm-hàng-loạt-thương-hiệu-đăng-mạng-xã-hội).
 - **Claude Code:** gõ trong chat, ví dụ *"dựng video này theo mẫu Căn hộ sang trọng"*.
 
@@ -517,10 +517,10 @@ Chi tiết từng công cụ:
 | **Chuyển cảnh** | 15 kiểu, kéo thả vào chỗ nối giữa 2 clip |
 | **Bộ lọc** | 8 bộ màu, xem trước ngay trên khung hình |
 | **Thành phần** | Danh sách mọi thứ đang có trong video, bật hoặc tắt từng cái |
-| **Tự lái** (nút trên thanh trên) | Thả video vào là tự dựng đến thành phẩm; hàng đợi, thư mục tự động, hồ sơ kênh |
+| **Tự lái** (nút trên thanh trên) | Thả video vào là tự dựng đến thành phẩm; hàng đợi, thư mục tự động, chọn thương hiệu |
 | **Cắt clip** | Video dài thành nhiều clip ngắn; gõ chủ đề ra video không cần quay |
 | **Lịch đăng** | Lịch tuần kéo thả, tự xếp lịch, tự đăng YouTube, nhắc giờ đăng các nền tảng khác |
-| **Agent** | Cổng Telegram (gửi video qua chat → nhận lại video đã dựng), chấm điểm video, tự cải tiến hồ sơ kênh, đề xuất việc nên làm |
+| **Agent** | Cổng Telegram (gửi video qua chat → nhận lại video đã dựng), chấm điểm video, tự cải tiến phong cách dựng, đề xuất việc nên làm |
 | **AI dựng** | Một nút: AI dựng giúp, kèm tuỳ chọn thêm b-roll và âm thanh; xong tự chạy QC nhanh |
 | **Lời thoại** | Sửa video bằng chữ: bôi đen chữ rồi bấm Xoá là video bị cắt theo; tab **Làm sạch lời nói** cắt lỗi nói |
 | **Âm thanh+** | Lọc ồn giọng, hạ nhạc khi nói, thêm track âm thanh (lời dẫn, nhạc phụ, tiếng nền) |
@@ -634,7 +634,7 @@ Một bấm, máy đọc lời thoại rồi chèn b-roll đúng lúc nói, đ�
 ### Tự lái: thả video vào, nhận video hoàn chỉnh
 - Bấm nút **Tự lái** trên thanh trên (cạnh ⋯; không thuộc 5 bước) rồi thả video thô vào ô lớn, hoặc **Chọn file**. Studio tự làm hết: phụ đề, cắt lỗi nói, AI dựng giúp, b-roll, SFX + nhạc, AI kiểm tra lỗi, xuất MP4 (thêm 1:1 / 16:9 nếu muốn), ảnh bìa, phụ đề .srt và nội dung đăng cho từng nền tảng. Khoảng 1,5–2 phút cho clip 30–45 giây.
 - Chạy **nền, theo hàng đợi**: vẫn chỉnh video khác được trong lúc chờ. Xem từng bước đang chạy, huỷ, thử lại (chạy tiếp từ bước dừng), đổi thứ tự, mở dự án ra chỉnh tay.
-- **Hồ sơ kênh**: mỗi kênh một bộ cài đặt (thương hiệu, gói hoặc “AI chọn”, mật độ b-roll, mức âm thanh, nhạc, làm sạch giọng, cắt lỗi nói, khổ xuất, CTA, nền tảng đăng, giờ đăng). **Học từ chỉnh sửa**: khi bạn sửa lại video Tự lái làm (xoá emoji, đổi kiểu phụ đề, tắt nhạc…), hồ sơ ghi nhận và sau ít nhất 2 video sẽ tự điều chỉnh; xem và xoá được điều đã học.
+- **Phong cách dựng của thương hiệu** (trước là Hồ sơ kênh, gộp vào trang **Thương hiệu** từ S19): mỗi thương hiệu, và **Chung** cho video không thương hiệu, một bộ cài đặt (gói hoặc “AI chọn”, mật độ b-roll, mức âm thanh, nhạc, làm sạch giọng, cắt lỗi nói, khổ xuất, CTA, nền tảng đăng, giờ đăng). **Học từ chỉnh sửa**: khi bạn sửa lại video Tự lái làm (xoá emoji, đổi kiểu phụ đề, tắt nhạc…), thương hiệu ghi nhận và sau ít nhất 2 video sẽ tự điều chỉnh; xem và xoá được điều đã học ở trang Thương hiệu.
 - **Thư mục tự động**: bật lên rồi thả video vào `Nguon/Tha vao day/` trong Kho của thương hiệu (Finder, Explorer, AirDrop…); dự án nằm ở `Du an/`, bản xong giao vào `Thanh pham/<tháng>/`. Có thể **chạy cả khi tắt app** và bật **Thả vào app = tự lái** (thả video vào biểu tượng app).
 - Dòng lệnh: `node scripts/autopilot.mjs clip.mov --out ~/Desktop/xong`. Chi tiết: [references/autopilot.md](references/autopilot.md).
 
@@ -710,7 +710,7 @@ Agent là "trợ lý dựng video" chạy trên máy bạn: điều khiển qua 
 - `/trangthai`: xem hàng đợi.
 - `/dexuat`: xem đề xuất.
 - `/caitien`: tự cải tiến.
-- `/hoso`: chọn hồ sơ kênh.
+- `/hoso`: chọn thương hiệu (phong cách dựng) cho video gửi qua bot.
 - Nhắn tự nhiên, ví dụ "làm video về cách chọn kem chống nắng": agent (Claude) hiểu ý và tự chạy đúng việc.
 
 ### Vòng phản hồi và tự cải tiến
@@ -720,7 +720,7 @@ Agent là "trợ lý dựng video" chạy trên máy bạn: điều khiển qua 
    - Hiệu ứng rối/ít, Che mặt
    - Dài quá
    - Video xuất trong Studio thì chấm ở **Agent → Phản hồi**.
-2. Cứ 3 phản hồi, app **tự cải tiến** hồ sơ kênh:
+2. Cứ 3 phản hồi, app **tự cải tiến** phong cách dựng của thương hiệu:
    - chỉnh mật độ hiệu ứng, âm lượng nhạc, mức tiếng động, kiểu phụ đề;
    - đưa góp ý vào hướng dẫn cho AI dựng giúp;
    - Claude phân tích thêm điểm và lỗi AI kiểm tra.
@@ -797,7 +797,7 @@ bash $S/scripts/make_app.sh                                        # tạo lại
 # Agent, phản hồi, đề xuất
 node $S/scripts/telegram.mjs token <BOT_TOKEN> | pair | run | status
 node $S/scripts/feedback.mjs add out/video.mp4 4 nhac_to,hook "góp ý"
-node $S/scripts/feedback.mjs improve [--no-claude] [--apply]      # tự cải tiến hồ sơ kênh
+node $S/scripts/feedback.mjs improve [--no-claude] [--apply]      # tự cải tiến phong cách dựng
 node $S/scripts/feedback.mjs suggest | suggestions | act <id> apply
 
 # Khối HyperFrames + mẫu Doanh nghiệp
@@ -915,7 +915,7 @@ ai-video-studio/
 └─ docs/images/            ảnh chụp màn hình
 ```
 
-Dữ liệu của bạn nằm ngoài repo, ở `~/.ai-video-studio/` (Windows: `%USERPROFILE%\.ai-video-studio`): clip mẫu (khi đã bấm Xem thử dự án mẫu), brand kit, hồ sơ kênh, style đã tạo, key API, token Telegram, phản hồi và đề xuất. Vì vậy `git pull` không làm mất gì.
+Dữ liệu của bạn nằm ngoài repo, ở `~/.ai-video-studio/` (Windows: `%USERPROFILE%\.ai-video-studio`): clip mẫu (khi đã bấm Xem thử dự án mẫu), brand kit, phong cách dựng (`styles.json`), style đã tạo, key API, token Telegram, phản hồi và đề xuất. Vì vậy `git pull` không làm mất gì.
 
 ---
 

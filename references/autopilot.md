@@ -1,4 +1,4 @@
-# Tự lái · Hồ sơ kênh · Hàng đợi nền · Thư mục tự động
+# Tự lái · Phong cách dựng của thương hiệu · Hàng đợi nền · Thư mục tự động
 
 Thả video thô → nhận MP4 hoàn chỉnh + ảnh bìa + phụ đề .srt + nội dung đăng, không cần mở timeline.
 
@@ -8,19 +8,19 @@ Thả video thô → nhận MP4 hoàn chỉnh + ảnh bìa + phụ đề .srt + 
 | Tạo dự án từ video (dùng chung với `/api/new`) | `scripts/new_project.mjs` |
 | Cắt ripple ngoài trình duyệt (chạy chính `studio/clips.js` trong `node:vm`) | `scripts/ripple.mjs` |
 | Nội dung đăng (dùng chung với nút **Đăng**) | `scripts/publish_texts.mjs` |
-| Hồ sơ kênh + học từ chỉnh sửa | `scripts/profile.mjs` |
+| Phong cách dựng của thương hiệu (trước là hồ sơ kênh) + học từ chỉnh sửa | `scripts/profile.mjs` |
 | Hàng đợi, thư mục tự động, LaunchAgent | `scripts/queue.mjs` |
 | Thông báo macOS | `scripts/notify.mjs` |
-| Studio | `studio/routes/15_autopilot.mjs`, `studio/features/15_autopilot.js` (rail **Tự lái**, nút **Tự lái** trên thanh trên) |
+| Studio | `studio/routes/15_autopilot.mjs`, `studio/features/15_autopilot.js` (rail **Tự lái**, nút **Tự lái** trên thanh trên); phong cách dựng sửa ở `studio/routes/51_brands.mjs`, `studio/features/51_brands.js` (trang **Thương hiệu**) |
 
-Dữ liệu nằm trong `~/.ai-video-studio/` (đổi bằng `AVS_HOME`): `profiles.json`, `queue.json`, `autopilot.json` (cài đặt), `queue.lock`, `autopilot/projects/` (dự án do Tự lái tạo), `autopilot/inbox/` (video kéo thả vào Studio).
+Dữ liệu nằm trong `~/.ai-video-studio/` (đổi bằng `AVS_HOME`): `styles.json` (+ `profiles.json` cũ, chỉ đọc khi chuyển), `queue.json`, `autopilot.json` (cài đặt), `queue.lock`, `autopilot/projects/` (dự án do Tự lái tạo), `autopilot/inbox/` (video kéo thả vào Studio).
 
 ## 1. Chuỗi tự lái
 ```bash
-node scripts/autopilot.mjs <video | thư mục dự án> [--profile <id>] [--script <id | kịch bản.txt|.docx>] [--out <thư mục giao>] [--project <dir>] [--restart] [--from <bước>]
+node scripts/autopilot.mjs <video | thư mục dự án> [--brand <id> | --profile <id>] [--script <id | kịch bản.txt|.docx>] [--out <thư mục giao>] [--project <dir>] [--restart] [--from <bước>]
 node scripts/autopilot.mjs --steps
 ```
-| Bước | Làm gì | Tắt bằng (hồ sơ) |
+| Bước | Làm gì | Tắt bằng (phong cách dựng) |
 |---|---|---|
 | `new` * | whisper (`whisper`, `lang`) → cắt lặng → khung hình (`orient`: theo video / dọc / ngang) → mặt → phụ đề | — (bỏ qua nếu đầu vào là dự án) |
 | `brand` | brand kit (`brand`) + CTA (`cta` → `brand.outro`) | để trống cả hai |
@@ -42,14 +42,21 @@ node scripts/autopilot.mjs --steps
 
 Đầu ra: dòng `@@ <0..1> [k/12] <bước>: <chi tiết>`, `PROJECT <dir>`, cuối cùng `RESULT {json}`. Với `--out`, thư mục giao có `<tên> 9x16.mp4` (+ `1x1`, `16x9`), `<tên> - ảnh bìa.jpg`, `<tên>.srt`, `<tên> - nội dung đăng.txt`, `summary.json`.
 
-## 2. Hồ sơ kênh (`profiles.json`)
-`{version, default, profiles: [ {id, name, brand, pack ('auto' = AI chọn), template, caption_style, goal, tone, ai, ai_density, extra, broll_density, broll_src[], broll_claude, sound, music ('auto'|'off'|mood), clean, fillers, fillers_claude, whisper, lang, orient, aspects[], quality, qc, cta, platforms[], slot, learn, learned} ]}`.
-Studio: tạo / sửa / nhân bản / xoá / đặt mặc định trong thẻ **Hồ sơ kênh**. CLI: `node scripts/profile.mjs list | show [id] | default <id> | learn <dự án> | reset-learned <id>`. `slot` (giờ đăng mặc định) được ghi vào `summary.json` để Lịch đăng (A4) dùng.
+## 2. Phong cách dựng của thương hiệu (`styles.json`, S19 M133)
+Mỗi thương hiệu (brand kit) có **một** phong cách dựng + điều đã học; `chung` = video không gắn thương hiệu (Kho Chung).
+`{version, default, styles: { chung: {…}, <id thương hiệu>: {pack ('auto' = AI chọn), template, caption_style, goal, tone, ai, ai_density, extra, broll_density, broll_src[], broll_goal, broll_claude, sound, music ('auto'|'off'|mood), clean, fillers, fillers_claude, whisper, lang, orient, aspects[], quality, qc, cta, platforms[], slot, learn, learned, fb, updated} }, aliases: { <id hồ sơ cũ>: <id phong cách> }, migrated: {at, notes[]} }`.
+- Thương hiệu chưa lưu phong cách riêng thì mượn các trường của Chung (không mượn `learned` / `fb`). Xoá thương hiệu → bỏ phong cách của nó.
+- **Chuyển dữ liệu một lần** (lần đầu đọc, trong khoá `styles.json.lock`): hồ sơ có `brand` còn trong `brands.json` → phong cách của thương hiệu đó, không có / thương hiệu đã xoá → Chung. Nhiều hồ sơ cùng chỗ: lấy hồ sơ mặc định, không thì hồ sơ sửa gần nhất; `learned.projects` của cả nhóm gộp lại; ghi chú vào `migrated.notes` (trang Thương hiệu hiện một lần). `profiles.json` giữ nguyên. `default` = thương hiệu của hồ sơ mặc định cũ. `brands.json` / `profiles.json` hỏng hoặc bận lúc chuyển → báo lỗi, không ghi `styles.json` (lần sau chuyển lại). Cập nhật xong khởi động lại Studio, runner nền (LaunchAgent) và bot Telegram: tiến trình cũ còn ghi `profiles.json`, thay đổi đó bị bỏ qua.
+- Xoá thương hiệu để lại bí danh `<id> → chung`: mục cũ còn mang id đó chạy theo Chung thay vì báo lỗi.
+- **Id cũ vẫn nhận** (`resolveStyleId`): `--profile` của CLI, `opts.profile` trong `queue.json`, `profile` của thư mục canh, `profile` trong `.studio/autopilot.json` và cấu hình Telegram nhận id thương hiệu, `chung`, `__none` hoặc id hồ sơ cũ (qua `aliases`; `mac-dinh` → Chung). Id lạ → lỗi 404.
+- `autopilot.mjs`: `--brand` quyết định luôn phong cách (`''` / `__none` → Chung); không có `--brand` thì `--profile`, rồi phong cách lần chạy trước, rồi `default`. `autopilot.json` ghi `profile` = id phong cách.
+- Ghi luôn dưới khoá `styles.json.lock`; `styles.json` hỏng thì báo lỗi, không ghi đè. `saveStore` (feedback.mjs) không ghi `learned`, nên một bản đọc cũ không xoá điều vừa học.
+Studio: trang **Thương hiệu** — thẻ **Chung** + mỗi thẻ thương hiệu có **Phong cách dựng** (bút chì mở hộp sửa) và **Điều đã học** (cục tẩy = quên). API: `GET /api/brands/styles`, `POST /api/brands/style {action: save|reset, id, style?}`; `POST /api/autopilot/profile {action: save|default|reset}` giữ cho tương thích (`duplicate`/`delete` → 409). CLI: `node scripts/profile.mjs list | show [id] | default <id> | learn <dự án> | reset-learned <id>`. `slot` (giờ đăng mặc định) được ghi vào `summary.json` để Lịch đăng (A4) dùng.
 
 ### Học từ chỉnh sửa
 - Khi Studio đang mở một dự án do Tự lái làm (bất kỳ tab nào trên thanh tab, M131) và bạn **lưu** nó (kiểm tra mỗi 15 s, hoặc bấm **Học từ dự án này**), Studio so `timeline.json` với `.studio/autopilot_result.json` (bản Tự lái giao) và ghi một *quan sát* vào `learned.projects[<dự án>]`: số cảnh Tự lái chèn (`_auto` của b-roll + `_ai` của AI dựng giúp, trừ nền `_base`) theo loại (emoji / chữ / ảnh / graphic khác) trước–sau, riêng graphic AI trước–sau, SFX tự động trước–sau, nhạc bị tắt / đổi dB, kiểu phụ đề / gói bị đổi, số cảnh tự động bị chỉnh (`_orig`). Lưu lại cùng dự án chỉ **thay** quan sát cũ, không cộng dồn.
-- Luật (trên ≤ 10 quan sát mới nhất, cần **≥ 2 video**): xoá ≥ 60 % emoji / chữ nổi / ảnh tự động (≥ 4 cái) → bỏ nguồn đó khỏi b-roll và dặn AI “không chèn …”; xoá ≥ 45 % b-roll tự động → giảm mật độ một bậc; xoá ≥ 45 % graphic AI → AI thưa hơn một bậc; xoá ≥ 50 % SFX → giảm mức âm thanh; tắt nhạc ở ≥ 60 % video → không nhạc; luôn chỉnh nhạc cùng chiều → áp dB trung bình; 2–3 video gần nhất cùng đổi sang một kiểu phụ đề / gói → dùng luôn (trừ khi hồ sơ đã ép).
-- Điều đã học hiện trong thẻ hồ sơ (câu tiếng Việt), được ghi vào `autopilot.json`/`summary.json` (`learnedApplied`) mỗi lần chạy; **Quên điều đã học** (cục tẩy) xoá `learned`. Tắt hẳn: `learn: false`.
+- Luật (trên ≤ 10 quan sát mới nhất, cần **≥ 2 video**): xoá ≥ 60 % emoji / chữ nổi / ảnh tự động (≥ 4 cái) → bỏ nguồn đó khỏi b-roll và dặn AI “không chèn …”; xoá ≥ 45 % b-roll tự động → giảm mật độ một bậc; xoá ≥ 45 % graphic AI → AI thưa hơn một bậc; xoá ≥ 50 % SFX → giảm mức âm thanh; tắt nhạc ở ≥ 60 % video → không nhạc; luôn chỉnh nhạc cùng chiều → áp dB trung bình; 2–3 video gần nhất cùng đổi sang một kiểu phụ đề / gói → dùng luôn (trừ khi phong cách đã ép).
+- Quan sát ghi vào phong cách của thương hiệu mà dự án được Tự lái làm theo (`profile` trong `.studio/autopilot.json`, id cũ ánh xạ qua `aliases`). Điều đã học hiện ở trang Thương hiệu (câu tiếng Việt), được ghi vào `autopilot.json`/`summary.json` (`learnedApplied`) mỗi lần chạy; **Quên điều đã học** (cục tẩy) xoá `learned`. Tắt hẳn: `learn: false`.
 
 ## 3. Hàng đợi nền (`queue.json`)
 Mục: `{id, kind, input, opts, source, state: queued|paused|running|done|error|cancelled, progress, step, created, started, finished, outputs[], error, attempt, project, batch?}`.
@@ -57,7 +64,7 @@ Mọi lần đọc–sửa–ghi `queue.json` (Studio, runner, bot Telegram, CLI
 
 | kind | lệnh |
 |---|---|
-| `autopilot` | `autopilot.mjs <input> [--profile] [--out]` |
+| `autopilot` | `autopilot.mjs <input> [--profile] [--brand] [--out]` |
 | `highlights` | `highlights.mjs <video> --out <dir> [--n --min --max --orient]` (A3; mặc định `autopilot/highlights/<tên>-<id>`) |
 | `topic` | `topic_video.mjs "<chủ đề>" --out <dir> [--dur --voice --orient]` (A3; mặc định mỗi mục một thư mục `autopilot/topics/<id>`) |
 | `variants` | `variants.mjs <dự án> --n 3 [--kind]` (A2) |
@@ -71,12 +78,12 @@ Mọi lần đọc–sửa–ghi `queue.json` (Studio, runner, bot Telegram, CLI
 - CLI: `node scripts/queue.mjs add autopilot ~/clip.mov [--profile id] [--out dir] [--batch lô] | list | cancel|retry|remove|up|down <id> | clear-done | pause|resume|cancel-all [lô] | run [--daemon]`.
 
 ## 4. Thư mục tự động
-Mặc định (tắt sẵn): `~/Movies/AI Video Studio/Thả video vào đây` → kết quả `…/Đã xong/<tên>/`, bản gốc chuyển sang `…/Đã xử lý/`. Thêm nhiều thư mục, mỗi thư mục một hồ sơ. Nhận `.mov .mp4 .m4v .mkv`; bỏ qua file ẩn, `.download/.crdownload/.part` (AirDrop/trình duyệt đang tải); file phải giữ nguyên dung lượng + giờ sửa **5 giây** mới được nhận.
+Mặc định (tắt sẵn): `~/Movies/AI Video Studio/Thả video vào đây` → kết quả `…/Đã xong/<tên>/`, bản gốc chuyển sang `…/Đã xử lý/`. Thêm nhiều thư mục, mỗi thư mục một thương hiệu (phong cách). Thư mục canh `Tha vao day/` của mỗi Kho dùng phong cách của thương hiệu của Kho (Kho Chung → `chung`). Nhận `.mov .mp4 .m4v .mkv`; bỏ qua file ẩn, `.download/.crdownload/.part` (AirDrop/trình duyệt đang tải); file phải giữ nguyên dung lượng + giờ sửa **5 giây** mới được nhận.
 Chạy khi Studio/app mở. **Chạy cả khi tắt app**: cài `~/Library/LaunchAgents/com.aivideostudio.watch.plist` (`queue.mjs run --daemon --role agent`, KeepAlive, nhật ký `~/Library/Logs/AIVideoStudio-watch.log`); bỏ chọn = `launchctl bootout` + xoá plist. Nhờ `queue.lock` không bao giờ có hai runner cùng xử lý. CLI: `node scripts/queue.mjs agent install|uninstall|status`.
 
 ## 5. Giao diện
-Rail **Tự lái** (biểu tượng tên lửa): vùng thả lớn + **Chọn file** + đường dẫn, chọn hồ sơ; thẻ **Đang làm** với danh sách 12 bước (✓ / đang chạy / bỏ qua / cảnh báo, thời gian từng bước); **Hàng đợi**; **Thư mục tự động** (bật/tắt, ô đường dẫn + Mở trong Finder, hồ sơ cho từng thư mục, Chạy cả khi tắt app, Thông báo, Thả vào app = tự lái); **Hồ sơ kênh** + điều đã học. Nút **Tự lái** trên thanh trên hiện % việc đang chạy. Mở thẳng: `http://localhost:5186/#tu-lai`.
-**Chuẩn bị trước khi chạy** (S16 M121): thẻ trong panel chọn **Thương hiệu · Kho** (`''` = theo hồ sơ, `__none` = không thương hiệu, Kho Chung, hoặc id brand kit) và **Sản phẩm** (không bắt buộc). Lựa chọn nhớ ở `autopilot.json` (`brand`, `product`), gửi kèm mỗi video (`/api/autopilot/enqueue` thân `brand`/`product`, `/api/autopilot/upload?brand=&product=`), thành `--brand` / `--product` của `autopilot.mjs`. Bước `brand` dùng thương hiệu đã chọn thay cho thương hiệu của hồ sơ (logo, màu, thẻ kết) và gắn sản phẩm vào `timeline.ads` (`on`, `product`, `industry`), nên QC kiểm claim quảng cáo. Không chọn gì thì panel nói rõ đang chạy không thương hiệu. Máy thiếu Claude CLI thì panel báo trước các bước sẽ bị bỏ qua (M120).
+Rail **Tự lái** (biểu tượng tên lửa): vùng thả lớn + **Chọn file** + đường dẫn; thẻ **Đang làm** với danh sách 12 bước (✓ / đang chạy / bỏ qua / cảnh báo, thời gian từng bước); **Hàng đợi**; **Thư mục tự động** (bật/tắt, ô đường dẫn + Mở trong Finder, thương hiệu cho từng thư mục, Chạy cả khi tắt app, Thông báo, Thả vào app = tự lái). Thẻ Hồ sơ kênh đã chuyển sang trang **Thương hiệu** (M133). Nút **Tự lái** trên thanh trên hiện % việc đang chạy. Mở thẳng: `http://localhost:5186/#tu-lai`.
+**Chuẩn bị trước khi chạy** (S16 M121): thẻ trong panel chọn **Thương hiệu · Kho** (`__none` = không thương hiệu, Kho Chung, hoặc id brand kit; M133: thương hiệu quyết định luôn phong cách dựng, `''` cũ → thương hiệu của phong cách mặc định) kèm một dòng tóm tắt phong cách dựng + số điều đã học, nút **Sửa ở trang Thương hiệu** và **Học từ dự án này** và **Sản phẩm** (không bắt buộc). Lựa chọn nhớ ở `autopilot.json` (`brand`, `product`), gửi kèm mỗi video (`/api/autopilot/enqueue` thân `brand`/`product`, `/api/autopilot/upload?brand=&product=`), thành `--brand` / `--product` của `autopilot.mjs`. Bước `brand` dùng thương hiệu đã chọn (logo, màu, thẻ kết) và gắn sản phẩm vào `timeline.ads` (`on`, `product`, `industry`), nên QC kiểm claim quảng cáo. Không chọn gì thì panel nói rõ đang chạy không thương hiệu. Máy thiếu Claude CLI thì panel báo trước các bước sẽ bị bỏ qua (M120).
 **Thả vào app = tự lái**: thả video vào biểu tượng AI Video Studio → `launcher.sh new` đưa vào hàng đợi (`/api/autopilot/enqueue`) rồi mở Studio ở panel Tự lái.
 
 ## 6. Giới hạn

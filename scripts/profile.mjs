@@ -1,14 +1,15 @@
-// Hồ sơ kênh (channel profiles) for Tự lái: ~/.ai-video-studio/profiles.json (AVS_HOME overrides), plus "Học từ chỉnh sửa".
-// Spec: references/autopilot.md. CLI:
+// Phong cách dựng của từng thương hiệu (S19 M133, trước là "hồ sơ kênh") cho Tự lái: ~/.ai-video-studio/styles.json (AVS_HOME đổi được),
+// chuyển một lần từ profiles.json (giữ file cũ), cộng "Học từ chỉnh sửa". Spec: references/autopilot.md. CLI:
 //   node scripts/profile.mjs list | show <id> | default <id> | learn <project_dir> | reset-learned <id>
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { retryBusy, withFileLock } from './file_lock.mjs';
 
 export const AVS_HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
-const FILE = path.join(AVS_HOME, 'profiles.json');
+const FILE = path.join(AVS_HOME, 'styles.json'), LOCK = FILE + '.lock', OLD = path.join(AVS_HOME, 'profiles.json'), BRANDS = path.join(AVS_HOME, 'brands.json');
 
 export const DEFAULT_PROFILE = {
   id: 'mac-dinh', name: 'Mặc định',
@@ -40,56 +41,155 @@ const STEPS_DENS = ['off', 'thua', 'vua', 'day', 'ratday'];
 const STEPS_SOUND = ['off', 'nhe', 'vua', 'phongphu'];
 const STEPS_AI = ['thua', 'vua', 'day'];
 
-const slug = s => String(s || 'kenh').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'kenh';
+// ---------- Phong cách dựng theo thương hiệu (S19 M133) ----------
+// styles.json: { version, default, styles: { chung: {...}, <brand id>: {...} }, aliases: { <id hồ sơ cũ>: <id phong cách> }, migrated }
+// Mỗi thương hiệu một phong cách (id = id thương hiệu), "chung" = không thương hiệu. Thương hiệu chưa lưu phong cách thì
+// mượn các trường của Chung (không mượn điều đã học / phản hồi). Ghi luôn dưới khoá styles.json.lock (Studio, hàng đợi,
+// Telegram, CLI cùng ghi). Lần đầu chạy: chuyển từ profiles.json (giữ nguyên file cũ).
+export const CHUNG = 'chung';
+const FIELDS = Object.keys(DEFAULT_PROFILE).filter(k => !['id', 'name', 'brand', 'learned'].includes(k));
+const pickFields = (src = {}) => Object.fromEntries(FIELDS.filter(k => k in src).map(k => [k, src[k]]));
+const brandList = () => { try { const b = JSON.parse(fs.readFileSync(BRANDS, 'utf8')).brands; return Array.isArray(b) ? b.filter(x => x && x.id) : []; } catch { return []; } };
+const brandName = b => b?.title || b?.name || b?.id || '';
 function writeAtomic(f, obj) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
-  const tmp = `${f}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 1)); fs.renameSync(tmp, f);
+  const tmp = `${f}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 1));
+  try { retryBusy(() => fs.renameSync(tmp, f)); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 }
-export function loadStore() {
-  let s; try { s = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { s = null; }
-  if (!s || !Array.isArray(s.profiles) || !s.profiles.length) s = { version: 1, default: 'mac-dinh', profiles: [{ ...DEFAULT_PROFILE }] };
-  s.profiles = s.profiles.map(p => ({ ...DEFAULT_PROFILE, ...p }));
-  if (!s.profiles.find(p => p.id === s.default)) s.default = s.profiles[0].id;
+// null = chưa có file. File hỏng thì ném lỗi: không coi là rỗng rồi ghi đè điều đã học (bài học queue.json, ai-video-studio-005).
+function readRaw() {
+  let txt; try { txt = retryBusy(() => fs.readFileSync(FILE, 'utf8'), 20); } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+  try { return JSON.parse(txt); } catch { throw new Error(`styles.json hỏng (${FILE}): sửa tay hoặc xoá để chuyển lại từ profiles.json`); }
+}
+const stamp = p => p.updated || p.created || '';
+const trimProjects = projects => Object.fromEntries(Object.entries(projects).sort((a, b) => (b[1].t || '').localeCompare(a[1].t || '')).slice(0, 20));
+// profiles.json → styles. Hồ sơ có brand (còn trong brands.json) → phong cách của thương hiệu đó, không có → Chung.
+// Nhiều hồ sơ cùng chỗ: lấy hồ sơ mặc định, không thì hồ sơ sửa gần nhất; điều đã học của cả nhóm gộp lại (khoá theo dự án, không đếm đôi).
+export function migrateProfiles(old, brands = brandList()) {
+  const profs = Array.isArray(old?.profiles) ? old.profiles.filter(p => p && typeof p === 'object' && typeof p.id === 'string') : [];
+  const ids = new Map(brands.map(b => [b.id, b])), notes = [], groups = new Map();
+  const s = { version: 1, default: CHUNG, styles: {}, aliases: {}, migrated: profs.length ? { at: new Date().toISOString(), from: 'profiles.json', notes } : null };
+  for (const p of profs) {
+    const key = p.brand && ids.has(p.brand) ? p.brand : CHUNG;
+    if (p.brand && !ids.has(p.brand)) notes.push(`Hồ sơ “${p.name || p.id}” gắn thương hiệu đã xoá (${p.brand}) → Chung`);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p); s.aliases[p.id] = key;
+  }
+  for (const [key, list] of groups) {
+    const pick = list.find(p => p.id === old.default) || [...list].sort((a, b) => stamp(b).localeCompare(stamp(a)))[0];
+    const st = { ...pickFields({ ...DEFAULT_PROFILE, ...pick }), from: pick.id };
+    if (stamp(pick)) st.updated = stamp(pick);
+    if (pick.fb) st.fb = pick.fb;
+    const projects = {};
+    for (const p of [...list.filter(x => x !== pick), pick]) Object.assign(projects, p.learned?.projects || {});
+    if (Object.keys(projects).length) st.learned = { projects: trimProjects(projects), updated: Object.values(projects).map(o => o.t || '').sort().pop() };
+    s.styles[key] = st;
+    if (list.length > 1) notes.push(`${key === CHUNG ? 'Chung' : `Thương hiệu “${brandName(ids.get(key))}”`} có ${list.length} hồ sơ (${list.map(p => p.name || p.id).join(', ')}): lấy “${pick.name || pick.id}” (${pick.id === old.default ? 'hồ sơ mặc định' : 'sửa gần nhất'}), gộp điều đã học của cả nhóm; bản cũ vẫn trong profiles.json`);
+  }
+  if (old?.default && s.aliases[old.default]) s.default = s.aliases[old.default];
   return s;
 }
-export const saveStore = s => writeAtomic(FILE, s);
-export function getProfile(id) {
-  const s = loadStore();
-  const p = s.profiles.find(x => x.id === (id || s.default));
-  if (!p && id) throw new Error(`Không có hồ sơ kênh "${id}"`);
-  return p || s.profiles[0];
+function normalize(s) {
+  if (!s || typeof s !== 'object') s = {};
+  if (!s.styles || typeof s.styles !== 'object') s.styles = {};
+  if (!s.styles[CHUNG]) s.styles[CHUNG] = {};
+  if (!s.aliases || typeof s.aliases !== 'object') s.aliases = {};
+  if (!s.aliases[DEFAULT_PROFILE.id]) s.aliases[DEFAULT_PROFILE.id] = CHUNG; // 'mac-dinh': id hồ sơ mặc định cũ, có trong autopilot.json / queue.json cũ
+  if (typeof s.default !== 'string' || !s.default) s.default = CHUNG;
+  return s;
+}
+// Đọc cho lần chuyển (chỉ chạy một lần, ghi nhầm là vĩnh viễn): chưa có file = null; file bận (Windows) thử lại; hỏng / lỗi khác
+// thì ném lỗi và không ghi styles.json (review M133: brands.json bận lúc chuyển từng làm hồ sơ có thương hiệu rơi về Chung).
+function readStrict(f) {
+  let txt; try { txt = retryBusy(() => fs.readFileSync(f, 'utf8'), 20); } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+  try { return JSON.parse(txt); } catch { throw new Error(`${path.basename(f)} hỏng (${f}): chưa chuyển hồ sơ kênh sang thương hiệu`); }
+}
+const fresh = () => { const b = readStrict(BRANDS)?.brands; return migrateProfiles(readStrict(OLD), Array.isArray(b) ? b.filter(x => x && x.id) : []); };
+export function loadStyles() {
+  let s = readRaw();
+  if (!s) { // lần đầu: chuyển một lần, ghi trong khoá (tiến trình khác có thể vừa ghi xong)
+    s = withFileLock(LOCK, () => { const cur = readRaw(); if (cur) return cur; const m = normalize(fresh()); writeAtomic(FILE, m); return m; });
+  }
+  return normalize(s);
+}
+// Đọc-sửa-ghi trong khoá; fn ném lỗi thì không ghi.
+export function mutateStyles(fn) { return withFileLock(LOCK, () => { const s = normalize(readRaw() || fresh()); const r = fn(s); writeAtomic(FILE, s); return r; }); }
+// Id phong cách từ id thương hiệu, 'chung' / '__none', id hồ sơ cũ (--profile, queue.json, autopilot.json) hoặc ''/undefined (mặc định).
+// null = không biết. Thương hiệu đã xoá → Chung.
+export function resolveStyleId(ref, s = loadStyles(), brands = brandList()) {
+  const has = id => id === CHUNG || brands.some(b => b.id === id);
+  if (ref == null || ref === '') return has(s.default) ? s.default : CHUNG;
+  ref = String(ref);
+  if (ref === CHUNG || ref === '__none') return CHUNG;
+  if (brands.some(b => b.id === ref)) return ref;
+  if (Object.hasOwn(s.aliases, ref)) return has(s.aliases[ref]) ? s.aliases[ref] : CHUNG;
+  if (Object.hasOwn(s.styles, ref)) return CHUNG; // phong cách còn lại của thương hiệu đã xoá
+  return null;
+}
+// Thương hiệu chưa lưu phong cách: các trường của Chung (không mượn learned / fb)
+const baseOf = (s, id) => s.styles[id] || (id === CHUNG ? {} : pickFields(s.styles[CHUNG]));
+function view(s, id, brands) {
+  const st = baseOf(s, id), b = brands.find(x => x.id === id);
+  return { ...DEFAULT_PROFILE, ...pickFields(st), learned: s.styles[id]?.learned || null, ...(s.styles[id]?.fb ? { fb: s.styles[id].fb } : {}),
+    id, brand: id === CHUNG ? '' : id, name: id === CHUNG ? 'Chung' : brandName(b), saved: !!s.styles[id], updated: s.styles[id]?.updated };
+}
+// Danh sách kiểu cũ {default, profiles} (queue khoInboxes, Telegram, Agent, phản hồi): Chung trước, rồi từng thương hiệu.
+export function loadStore() {
+  const s = loadStyles(), brands = brandList();
+  return { version: 2, default: resolveStyleId('', s, brands), aliases: { ...s.aliases }, migrated: s.migrated || null, profiles: [view(s, CHUNG, brands), ...brands.map(b => view(s, b.id, brands))] };
+}
+// Ghi lại các phong cách đã đổi trong một store kiểu cũ (feedback.mjs đặt p.fb / đổi trường). Ghi cả các trường của bản đọc:
+// gọi ngay sau loadStore (không giữ bản đọc qua await), kẻo hoàn tác chỉnh sửa làm ở Studio giữa chừng. learned không ghi ở đây:
+// chỉ learnFromProject / resetLearned đụng tới nó, nên một bản đọc cũ không xoá được điều vừa học.
+export function saveStore(store) {
+  return mutateStyles(s => {
+    const brands = brandList();
+    for (const p of store?.profiles || []) {
+      const id = resolveStyleId(p.id, s, brands); if (!id) continue;
+      const cur = view(s, id, brands), next = { ...pickFields(p), ...(p.fb ? { fb: p.fb } : {}) };
+      if (JSON.stringify([pickFields(cur), cur.fb || null]) === JSON.stringify([pickFields({ ...cur, ...next }), next.fb || cur.fb || null])) continue;
+      s.styles[id] = { ...baseOf(s, id), ...next, learned: s.styles[id]?.learned || null, updated: new Date().toISOString() };
+    }
+  });
+}
+const notFound = ref => Object.assign(new Error(`Không có thương hiệu / phong cách "${ref}"`), { status: 404 });
+export function getProfile(ref) {
+  const s = loadStyles(), brands = brandList(), id = resolveStyleId(ref, s, brands);
+  if (!id) throw notFound(ref);
+  return view(s, id, brands);
 }
 const CLEAN = (src, cur = {}) => {
   const o = { ...cur };
-  for (const k of Object.keys(DEFAULT_PROFILE)) if (k in src && !['id', 'learned'].includes(k)) o[k] = src[k];
+  for (const k of FIELDS) if (k in src) o[k] = src[k];
   for (const k of ['broll_src', 'aspects', 'platforms']) if (typeof o[k] === 'string') o[k] = o[k].split(',').map(x => x.trim()).filter(Boolean);
-  for (const k of ['ai', 'fillers', 'fillers_claude', 'broll_claude', 'qc', 'learn']) o[k] = !!o[k];
-  o.name = String(o.name || 'Hồ sơ').slice(0, 60); o.cta = String(o.cta || '').slice(0, 200); o.extra = String(o.extra || '').slice(0, 600);
+  for (const k of ['ai', 'fillers', 'fillers_claude', 'broll_claude', 'qc', 'learn']) if (k in o) o[k] = !!o[k];
+  if ('cta' in o) o.cta = String(o.cta || '').slice(0, 200);
+  if ('extra' in o) o.extra = String(o.extra || '').slice(0, 600);
   return o;
 };
-export function upsertProfile(src) {
-  const s = loadStore();
-  let p = src.id && s.profiles.find(x => x.id === src.id);
-  if (!p) { p = { ...DEFAULT_PROFILE, id: slug(src.name) + '-' + crypto.randomBytes(2).toString('hex'), learned: null, created: new Date().toISOString() }; s.profiles.push(p); }
-  Object.assign(p, CLEAN(src, p), { updated: new Date().toISOString() });
-  saveStore(s); return p;
+// Lưu phong cách dựng của một thương hiệu (src.id = id thương hiệu / 'chung' / id hồ sơ cũ). Không tạo "hồ sơ" mới nữa.
+export function upsertProfile(src = {}) {
+  return mutateStyles(s => {
+    const brands = brandList(), id = src.id == null || src.id === '' ? null : resolveStyleId(src.id, s, brands);
+    if (!id) throw notFound(src.id ?? '');
+    s.styles[id] = { ...CLEAN(src, baseOf(s, id)), learned: s.styles[id]?.learned || null, ...(s.styles[id]?.fb ? { fb: s.styles[id].fb } : {}), updated: new Date().toISOString() };
+    return view(s, id, brands);
+  });
 }
-export function duplicateProfile(id) {
-  const s = loadStore(), p = s.profiles.find(x => x.id === id);
-  if (!p) throw new Error('không thấy hồ sơ');
-  const c = { ...JSON.parse(JSON.stringify(p)), id: slug(p.name) + '-' + crypto.randomBytes(2).toString('hex'), name: p.name + ' (bản sao)', learned: null, created: new Date().toISOString() };
-  s.profiles.push(c); saveStore(s); return c;
+// Sửa trực tiếp phong cách (fn(style, id) đổi tại chỗ); thương hiệu chưa lưu thì bắt đầu từ các trường của Chung.
+export function patchStyle(ref, fn) {
+  return mutateStyles(s => {
+    const brands = brandList(), id = resolveStyleId(ref, s, brands); if (!id) throw notFound(ref);
+    const st = s.styles[id] || (s.styles[id] = { ...baseOf(s, id) });
+    fn(st, id); return view(s, id, brands);
+  });
 }
-export function deleteProfile(id) {
-  const s = loadStore();
-  if (s.profiles.length <= 1) throw new Error('Cần giữ ít nhất 1 hồ sơ');
-  s.profiles = s.profiles.filter(p => p.id !== id);
-  if (s.default === id) s.default = s.profiles[0].id;
-  saveStore(s); return true;
-}
-export function setDefault(id) { const s = loadStore(); if (!s.profiles.find(p => p.id === id)) throw new Error('không thấy hồ sơ'); s.default = id; saveStore(s); return true; }
-export function resetLearned(id) { const s = loadStore(), p = s.profiles.find(x => x.id === id); if (!p) throw new Error('không thấy hồ sơ'); p.learned = null; saveStore(s); return p; }
+// Xoá thương hiệu (51_brands) → bỏ phong cách của nó, để lại bí danh id → Chung: mục cũ trong queue.json / autopilot.json /
+// Telegram còn mang id thương hiệu này vẫn chạy (theo Chung) thay vì báo lỗi. Id hồ sơ cũ trỏ tới nó cũng về Chung.
+export const deleteStyle = id => mutateStyles(s => { if (typeof id === 'string' && id && id !== CHUNG) { delete s.styles[id]; s.aliases[id] = CHUNG; } return true; });
+export function setDefault(ref) { return mutateStyles(s => { const id = ref == null || ref === '' ? null : resolveStyleId(ref, s); if (!id) throw notFound(ref ?? ''); s.default = id; return true; }); }
+export const resetLearned = ref => patchStyle(ref, st => { st.learned = null; });
 
 // ---------- "Học từ chỉnh sửa" ----------
 // Observation of ONE autopilot project: what the autopilot delivered (.studio/autopilot_result.json) vs the timeline the user saved.
@@ -177,6 +277,7 @@ export function effectiveProfile(p) {
   return out;
 }
 // Learn from one project the autopilot produced (called by the Studio lane after the user saves it, or by CLI).
+// S19 M133: ap.profile là id phong cách (thương hiệu / 'chung'), hoặc id hồ sơ cũ (ánh xạ qua aliases).
 export function learnFromProject(dir) {
   const st = path.join(dir, '.studio');
   const rd = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
@@ -184,29 +285,35 @@ export function learnFromProject(dir) {
   if (!ap?.profile || !before || !after) return { ok: false, why: 'không phải dự án Tự lái hoặc chưa chạy xong' };
   const mt = fs.statSync(path.join(dir, 'timeline.json')).mtimeMs;
   if (mt <= (ap.finishedMs || 0) + 1000) return { ok: false, why: 'chưa có chỉnh sửa sau Tự lái' };
-  const s = loadStore(), p = s.profiles.find(x => x.id === ap.profile);
-  if (!p) return { ok: false, why: 'hồ sơ đã bị xoá' };
-  if (!p.learn) return { ok: false, why: 'hồ sơ tắt “Học từ chỉnh sửa”' };
+  const id = resolveStyleId(ap.profile);
+  if (!id) return { ok: false, why: 'thương hiệu / hồ sơ đã bị xoá' };
+  if (!getProfile(id).learn) return { ok: false, why: 'phong cách tắt “Học từ chỉnh sửa”' };
   const key = crypto.createHash('md5').update(path.resolve(dir)).digest('hex').slice(0, 10);
   const o = { ...observe(before, after), t: new Date().toISOString(), dir: path.resolve(dir), name: path.basename(dir) };
-  p.learned = p.learned || { projects: {} };
-  p.learned.projects[key] = o; // re-saving the same project replaces its observation (never double counts)
-  const keys = Object.keys(p.learned.projects).sort((a, b) => (p.learned.projects[b].t || '').localeCompare(p.learned.projects[a].t || ''));
-  for (const k of keys.slice(20)) delete p.learned.projects[k];
-  p.learned.updated = o.t;
-  saveStore(s);
-  return { ok: true, profile: p.id, observation: o, rules: deriveRules(p.learned) };
+  const p = patchStyle(id, s => {
+    s.learned = s.learned || { projects: {} };
+    s.learned.projects[key] = o; // re-saving the same project replaces its observation (never double counts)
+    s.learned.projects = trimProjects(s.learned.projects);
+    s.learned.updated = o.t;
+  });
+  return { ok: true, profile: id, brand: p.brand, name: p.name, observation: o, rules: deriveRules(p.learned) };
+}
+// Danh sách cho Studio (trang Thương hiệu, panel Tự lái): phong cách + điều đã học + giá trị sau khi áp.
+export function stylesOut() {
+  const s = loadStore();
+  return { default: s.default, aliases: s.aliases, migrated: s.migrated, list: s.profiles.map(p => { const e = effectiveProfile(p); const r = deriveRules(p.learned);
+    return { ...p, learnedNotes: r.notes, learnedN: r.n, effective: { broll_density: e.broll_density, broll_src: e.broll_src, sound: e.sound, music: e.music, caption_style: e.caption_style, pack: e.pack, ai_density: e.ai_density } }; }) };
 }
 
 // ---------- CLI ----------
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.resolve(process.argv[1]))).href) {
   const [cmd, a] = process.argv.slice(2);
   try {
-    if (cmd === 'list') { const s = loadStore(); for (const p of s.profiles) console.log(`${p.id === s.default ? '*' : ' '} ${p.id}  ${p.name}`); }
+    if (cmd === 'list') { const s = loadStore(); for (const p of s.profiles) console.log(`${p.id === s.default ? '*' : ' '} ${p.id}  ${p.name}${p.saved ? '' : '  (theo Chung)'}`); }
     else if (cmd === 'show') { const p = getProfile(a); const e = effectiveProfile(p); console.log(JSON.stringify({ ...p, effective: e.applied }, null, 1)); }
     else if (cmd === 'default') { setDefault(a); console.log('ok'); }
     else if (cmd === 'learn') console.log(JSON.stringify(learnFromProject(path.resolve(a)), null, 1));
     else if (cmd === 'reset-learned') { resetLearned(a); console.log('ok'); }
-    else { console.error('usage: node scripts/profile.mjs list | show [id] | default <id> | learn <project_dir> | reset-learned <id>'); process.exit(2); }
+    else { console.error('usage: node scripts/profile.mjs list | show [thương hiệu|chung|id hồ sơ cũ] | default <id> | learn <project_dir> | reset-learned <id>'); process.exit(2); }
   } catch (e) { console.error('LỖI: ' + e.message); process.exit(1); }
 }

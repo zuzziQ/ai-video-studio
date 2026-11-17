@@ -8,6 +8,7 @@ import { brandFields } from '../../scripts/batch.mjs';
 import { dictString, parseDict, LIMITS } from '../../scripts/dict.mjs';
 import { retryBusy, withFileLock } from '../../scripts/file_lock.mjs';
 import * as W from '../../scripts/workspace.mjs';
+import { stylesOut, upsertProfile, resetLearned, deleteStyle, CHUNG } from '../../scripts/profile.mjs';
 
 // Cùng một AVS_HOME với setWorkspace (W.AVS_HOME = security.mjs) để hai bên dùng đúng một file khoá brands.json.lock
 const AVS_HOME = W.AVS_HOME(), FILE = path.join(AVS_HOME, 'brands.json'), DIR = path.join(AVS_HOME, 'brands');
@@ -43,6 +44,8 @@ export default ctx => async (req, res, p, u) => {
   if (!p.startsWith('/api/brands')) return false;
   const J = (o, c) => (ctx.json(res, o, c), true);
   if (p === '/api/brands' && req.method === 'GET') return J(load().map(pub));
+  // S19 M133: Phong cách dựng + Điều đã học của từng thương hiệu (scripts/profile.mjs, styles.json); 'chung' = không thương hiệu
+  if (p === '/api/brands/styles' && req.method === 'GET') return J(stylesOut());
   if (p.startsWith('/api/brands/logo/') && req.method === 'GET') {
     const b = load().find(x => x.id === p.slice(17));
     return b?.logo ? (ctx.sendFile(req, res, path.join(DIR, b.id, b.logo)), true) : J({ error: 'không có logo' }, 404);
@@ -80,11 +83,19 @@ export default ctx => async (req, res, p, u) => {
       });
       return J(pub(b));
     }
+    if (p === '/api/brands/style') {
+      const id = String(body.id ?? '');
+      if (id !== CHUNG && !load().some(x => x.id === id)) return J({ error: 'không thấy brand' }, 404);
+      if (body.action === 'save') { const st = body.style && typeof body.style === 'object' && !Array.isArray(body.style) ? body.style : {}; upsertProfile({ ...st, id }); return J({ ok: true, styles: stylesOut() }); }
+      if (body.action === 'reset') { resetLearned(id); return J({ ok: true, styles: stylesOut() }); }
+      return J({ error: 'hành động lạ' }, 400);
+    }
     if (p === '/api/brands/delete') {
       // Kho của thương hiệu là thư mục của người dùng: không xoá, chỉ bỏ thương hiệu khỏi brands.json
       const id = String(body.id ?? '');
       mutate(list => { const i = list.findIndex(x => x.id === id); if (i < 0) throw notFound(); list.splice(i, 1); });
       fs.rmSync(path.join(DIR, id), { recursive: true, force: true });
+      try { deleteStyle(id); } catch (e) { console.error('style:', e.message); } // phong cách của thương hiệu (M133); lỗi không chặn việc xoá
       return J({ ok: true });
     }
     if (p === '/api/brands/duplicate') {

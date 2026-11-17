@@ -154,7 +154,8 @@ test('queue: canh Tha vao day/ của mọi Kho đã có, chuyển bản gốc sa
   assert.deepEqual(Q.loadSettings().watch.folders, [], 'không còn tự canh ~/Movies/… khi thư mục đó chưa có');
   const ws = W.ensureWorkspace(W.workspaceFor('nha-dep'));
   const box = Q.khoInboxes().find(f => f.brand === 'nha-dep');
-  assert.equal(box.in, path.join(ws.root, 'Nguon', 'Tha vao day')); assert.equal(box.processed, path.join(ws.root, 'Nguon')); assert.equal(box.profile, 'kenh-nha');
+  assert.equal(box.in, path.join(ws.root, 'Nguon', 'Tha vao day')); assert.equal(box.processed, path.join(ws.root, 'Nguon')); assert.equal(box.profile, 'nha-dep'); // S19 M133: phong cách = id thương hiệu
+  assert.equal(Q.khoInboxes().find(f => f.brand === '')?.profile ?? 'chung', 'chung', 'Kho Chung → phong cách Chung');
   assert.equal(box.exists, false);
   const st0 = Q.loadSettings(); new Q.Runner({ role: 'test', daemon: true, log: () => {} }).scan(st0);
   assert.ok(!fs.existsSync(box.in), 'lượt quét không tạo thư mục trong Kho');
@@ -166,7 +167,7 @@ test('queue: canh Tha vao day/ của mọi Kho đã có, chuyển bản gốc sa
   assert.ok(!fs.existsSync(f)); assert.equal(fs.readFileSync(path.join(ws.root, 'Nguon', 'tha.mp4'), 'utf8'), 'cu');
   const it = Q.loadQueue().items.find(x => x.source === 'watch');
   assert.equal(it.input, path.join(ws.root, 'Nguon', 'tha (2).mp4'));
-  assert.deepEqual(it.opts, { profile: 'kenh-nha', brand: 'nha-dep' });
+  assert.deepEqual(it.opts, { profile: 'nha-dep', brand: 'nha-dep' });
   Q.removeItem(it.id);
   // thư mục canh cũ đã có trên máy thì vẫn canh
   fs.mkdirSync(Q.DEFAULT_FOLDER.in, { recursive: true });

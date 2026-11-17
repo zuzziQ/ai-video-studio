@@ -1,18 +1,18 @@
 // Tự lái (references/autopilot.md): queue lane inside the Studio server (its own lane — never uses the interactive job slot),
-// watch folders, channel profiles, "Học từ chỉnh sửa".
+// watch folders, phong cách dựng của thương hiệu (S19 M133, trước là hồ sơ kênh; sửa ở trang Thương hiệu), "Học từ chỉnh sửa".
 //   GET  /api/autopilot/state                → {items, runner, settings, profiles, steps, kinds, learn}
 //   POST /api/autopilot/enqueue {input, kind?, profile?, out?, opts?}
 //   POST /api/autopilot/upload?name=&profile= (raw body = the video) → saved in <Kho của thương hiệu trong hồ sơ>/Nguon/, queued
 //        (vào Nguon/ chứ không vào Nguon/Tha vao day/: thư mục canh sẽ nhận lại chính file này lần nữa)
 //   POST /api/autopilot/item {id, action: cancel|retry|remove|up|down|reveal|open}
-//   POST /api/autopilot/clear · /settings {…} · /agent {on} · /profile {action: save|duplicate|delete|default|reset, …} · /learn
+//   POST /api/autopilot/clear · /settings {…} · /agent {on} · /profile {action: save|default|reset, id, profile?} (id = thương hiệu / 'chung' / id hồ sơ cũ) · /learn
 // Env AVS_NO_QUEUE=1 → no runner in this server (UI still edits the queue; `node scripts/queue.mjs run` executes it).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { Runner, AVS_HOME, KINDS, khoInboxes, loadQueue, addItem, cancelItem, retryItem, removeItem, moveItem, clearDone, clearFailed, loadSettings, saveSettings, agentInstall, agentUninstall } from '../../scripts/queue.mjs';
-import { loadStore, getProfile, upsertProfile, duplicateProfile, deleteProfile, setDefault, resetLearned, deriveRules, effectiveProfile, learnFromProject } from '../../scripts/profile.mjs';
+import { getProfile, resolveStyleId, upsertProfile, setDefault, resetLearned, learnFromProject, stylesOut } from '../../scripts/profile.mjs';
 import { STEPS } from '../../scripts/autopilot.mjs';
 import { openPath, revealPath } from '../../scripts/platform.mjs';
 import { uploadVideo } from './26_pick.mjs';
@@ -49,10 +49,7 @@ export default ctx => {
   };
   setInterval(() => { for (const d of openDirs()) try { tryLearn(false, d); } catch (e) { console.error('learn:', e.message); } }, 15000).unref();
 
-  const profilesOut = () => {
-    const s = loadStore();
-    return { default: s.default, list: s.profiles.map(p => { const e = effectiveProfile(p); const r = deriveRules(p.learned); return { ...p, learnedNotes: r.notes, learnedN: r.n, effective: { broll_density: e.broll_density, broll_src: e.broll_src, sound: e.sound, music: e.music, caption_style: e.caption_style, pack: e.pack, ai_density: e.ai_density } }; }) };
-  };
+  const profilesOut = stylesOut;
   const detail = it => {
     if (!it.project) return it;
     const ap = rd(path.join(it.project, '.studio/autopilot.json'));
@@ -149,13 +146,13 @@ export default ctx => {
       }
       if (p === '/api/autopilot/profile') {
         const a = b.action;
-        // An unknown id used to surface as a 500 ("không thấy hồ sơ") from scripts/profile.mjs.
-        if (['duplicate', 'delete', 'default', 'reset'].includes(a) && !loadStore().profiles.some(x => x.id === b.id)) return J({ error: 'Không thấy hồ sơ này' }, 404);
-        if (a === 'delete' && loadStore().profiles.length <= 1) return J({ error: 'Cần giữ ít nhất 1 hồ sơ' }, 409);
-        if (a === 'save') return J({ ok: true, profile: upsertProfile(b.profile || {}), profiles: profilesOut() });
-        if (a === 'duplicate') return J({ ok: true, profile: duplicateProfile(b.id), profiles: profilesOut() });
-        if (a === 'delete') { deleteProfile(b.id); return J({ ok: true, profiles: profilesOut() }); }
-        if (a === 'default') { setDefault(b.id); return J({ ok: true, profiles: profilesOut() }); }
+        // S19 M133: mỗi thương hiệu một phong cách ('chung' = không thương hiệu); không còn tạo / nhân bản / xoá hồ sơ riêng.
+        // id lạ → 404 (trước khi xem hành động), như khi còn hồ sơ kênh.
+        const sid = typeof b.id === 'string' && b.id ? resolveStyleId(b.id) : null;
+        if (['duplicate', 'delete', 'default', 'reset'].includes(a) && !sid) return J({ error: 'Không thấy thương hiệu / phong cách này' }, 404);
+        if (a === 'duplicate' || a === 'delete') return J({ error: 'Mỗi thương hiệu một phong cách dựng: sửa ở trang Thương hiệu' }, 409);
+        if (a === 'save') { const pr = b.profile && typeof b.profile === 'object' ? b.profile : {}; return J({ ok: true, profile: upsertProfile(pr), profiles: profilesOut() }); }
+        if (a === 'default') { setDefault(sid); return J({ ok: true, profiles: profilesOut() }); }
         if (a === 'reset') { resetLearned(b.id); return J({ ok: true, profiles: profilesOut() }); }
         return J({ error: 'hành động lạ' }, 400);
       }

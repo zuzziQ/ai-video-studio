@@ -197,12 +197,15 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
   if (!fs.existsSync(abs)) throw new Error(`Không thấy ${abs}`);
   const isProj = fs.statSync(abs).isDirectory() && fs.existsSync(path.join(abs, 'timeline.json'));
   if (!isProj && !(fs.statSync(abs).isFile() && VIDEO.test(abs))) throw new Error('Chỉ nhận tệp video (mp4, mov, m4v, mkv…) hoặc thư mục dự án có timeline.json');
-  // Kho của dự án mới: --brand (thư mục canh của một Kho), không có thì thương hiệu của hồ sơ
+  // S19 M133: phong cách dựng là của thương hiệu: --brand chọn luôn phong cách ('' / '__none' = Chung); không có --brand thì
+  // --profile (id thương hiệu, 'chung' hoặc id hồ sơ cũ, ánh xạ trong styles.json), rồi phong cách lần chạy trước, rồi mặc định.
+  const styleRef = typeof brandArg === 'string' ? (brandArg && brandArg !== '__none' ? brandArg : 'chung') : profId;
+  // Kho của dự án mới: --brand (thư mục canh của một Kho), không có thì thương hiệu của phong cách
   const khoOf = () => workspaceFor(typeof brandArg === 'string' ? brandArg : getProfile(profId).brand || '');
   const dir = path.resolve(projArg || (isProj ? abs : projectDirFor(abs, khoOf())));
   const stFile = path.join(dir, '.studio/autopilot.json');
   let st = rd(stFile);
-  const prof0 = getProfile(profId || st?.profile);
+  const prof0 = getProfile(styleRef || st?.profile);
   const prof = effectiveProfile(prof0);
   if (!st || restart) {
     if (restart) fs.rmSync(path.join(dir, '.studio/autopilot'), { recursive: true, force: true });
@@ -243,7 +246,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
     async brand() {
       // S16 M121: thương hiệu chọn ở panel Tự lái (--brand; '' = không thương hiệu) thắng thương hiệu của hồ sơ; sản phẩm (--product) không bắt buộc
       const kitId = typeof brandArg === 'string' ? (brandArg === '__none' ? '' : brandArg) : prof.brand || '', productId = typeof productArg === 'string' ? productArg : '';
-      if (!kitId && !prof.cta && !productId) return { skip: typeof brandArg === 'string' ? 'không thương hiệu (Kho Chung)' : 'hồ sơ không có brand kit / CTA' };
+      if (!kitId && !prof.cta && !productId) return { skip: typeof brandArg === 'string' ? 'không thương hiệu (Kho Chung)' : 'phong cách không có thương hiệu / CTA' };
       const { tl, caps, capFile } = loadTL(dir); const notes = [];
       if (productId) {
         const { loadProduct } = await import('./products.mjs');
@@ -265,14 +268,14 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       saveTL(dir, tl, caps, capFile); return notes.join(' · ');
     },
     async clean() {
-      if (!prof.clean || prof.clean === 'off') return { skip: 'tắt trong hồ sơ' };
+      if (!prof.clean || prof.clean === 'off') return { skip: 'tắt trong phong cách dựng' };
       const { tl, caps, capFile } = loadTL(dir);
       tl.audio = { ...(tl.audio || {}), clean: { preset: prof.clean } };
       saveTL(dir, tl, caps, capFile);
       return `preset ${prof.clean} (áp khi trộn)`;
     },
     async fillers() {
-      if (!prof.fillers) return { skip: 'tắt trong hồ sơ' };
+      if (!prof.fillers) return { skip: 'tắt trong phong cách dựng' };
       const { tl, caps, capFile } = loadTL(dir);
       if (!caps.length) return { skip: 'không có lời thoại' };
       const inF = P('.studio/autopilot/fillers_in.json'), outF = P('.studio/autopilot/fillers.json');
@@ -315,7 +318,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
         } catch (e) { fit = ` · chưa bám lời thoại (${e.message})`; }
         return 'template ' + m + fit;
       }
-      if (!prof.ai) return { skip: 'tắt trong hồ sơ' };
+      if (!prof.ai) return { skip: 'tắt trong phong cách dựng' };
       const extra = [prof.extra, prof.cta && `Kết video bằng lời kêu gọi: "${prof.cta}".`].filter(Boolean).join(' ');
       const optF = P('.studio/autopilot/ai_opts.json');
       wr(optF, { goal: prof.goal || '', tone: prof.tone || '', pack: prof.pack || 'auto', density: prof.ai_density || 'vua', extra });
@@ -330,7 +333,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       return summary || 'xong';
     },
     async broll() {
-      if (!prof.broll_density || prof.broll_density === 'off') return { skip: 'tắt trong hồ sơ' };
+      if (!prof.broll_density || prof.broll_density === 'off') return { skip: 'tắt trong phong cách dựng' };
       if (noSpeech()) return { skip: 'video không lời: b-roll chọn theo lời thoại' }; // S16 M119
       const src = (prof.broll_src || []).join(',') || 'preset';
       // b-roll goal: the profile's own choice, else read from its free-text "Mục tiêu" (assets/broll/goals.json)
@@ -367,10 +370,10 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
         catch (e) { console.log(`! nhạc Kho: ${e.message}`); }
       }
       res.sfx = { sfx: tl.audio.sfx?.length || 0, music: (tl.audio.music || []).map(m => m.mood || path.basename(m.file || '')).filter(Boolean) };
-      return notes.length ? `${notes.join(' · ')} · ${res.sfx.sfx} SFX, nhạc: ${res.sfx.music.join(', ') || '—'}` : { skip: 'tắt trong hồ sơ' };
+      return notes.length ? `${notes.join(' · ')} · ${res.sfx.sfx} SFX, nhạc: ${res.sfx.music.join(', ') || '—'}` : { skip: 'tắt trong phong cách dựng' };
     },
     async qc() {
-      if (!prof.qc) return { skip: 'tắt trong hồ sơ' };
+      if (!prof.qc) return { skip: 'tắt trong phong cách dựng' };
       if (!fs.existsSync(S('ai_qc.mjs'))) return { skip: 'chưa có scripts/ai_qc.mjs' };
       await run('node', [S('ai_qc.mjs'), dir, '--fix'], l => { const m = /^@@ ([\d.]+) (.*)$/.exec(l); if (m) sayS(+m[1], m[2]); });
       const q = rd(P('.studio/qc.json'));
@@ -404,7 +407,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       return res.videos.map(v => `${v.aspect} ${v.w}×${v.h} ${v.dur}s`).join(' · ');
     },
     async publish() {
-      if (!prof.platforms?.length) return { skip: 'hồ sơ không chọn nền tảng' };
+      if (!prof.platforms?.length) return { skip: 'phong cách dựng không chọn nền tảng' };
       const v = res.videos?.[0]; if (!v) throw new Error('chưa có video');
       const { tl, caps } = loadTL(dir);
       const { generatePublish } = await import('./publish_texts.mjs');

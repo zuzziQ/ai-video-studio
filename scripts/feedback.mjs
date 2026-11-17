@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { AVS_HOME, loadStore, saveStore, getProfile } from './profile.mjs';
+import { AVS_HOME, loadStore, saveStore, getProfile, resolveStyleId } from './profile.mjs';
 import { loadQueue, addItem, isFailed } from './queue.mjs';
 import { loadSchedule } from './publish.mjs';
 import { askJSON } from './llm.mjs';
@@ -105,7 +105,8 @@ const sanitizeAction = a => {
 export async function improve({ claude = true, apply = false, model = 'sonnet', log = () => {} } = {}) {
   const all = listFeedback(), store = loadStore(), report = { at: new Date().toISOString(), profiles: [], ai: null, suggestions: 0 };
   for (const p of store.profiles) {
-    const mine = all.filter(e => (e.profile || store.default) === p.id && (e.rating || e.tags.length || e.comment));
+    // S19 M133: e.profile là id phong cách (thương hiệu / 'chung') hoặc id hồ sơ cũ → ánh xạ; '' = mặc định
+    const mine = all.filter(e => resolveStyleId(e.profile || '') === p.id && (e.rating || e.tags.length || e.comment));
     const r = deriveFeedbackRules(mine);
     if (r.n >= 2) { p.fb = { ...r.adjust, notes: r.notes, n: r.n, avg: r.avg, at: report.at }; }
     report.profiles.push({ id: p.id, name: p.name, n: r.n, avg: r.avg, notes: r.notes });
@@ -163,7 +164,7 @@ export async function refreshSuggestions({ claude = true, model = 'sonnet' } = {
   if (!upcoming && ready) addSuggestion({ key: 'schedule', title: 'Lên lịch đăng cho 3 ngày tới', detail: `Chưa có bài nào được hẹn giờ trong 3 ngày tới, trong khi đã có ${ready} video làm xong.`, action: { type: 'schedule' } });
   const failed = q.items.filter(isFailed).length;
   if (failed) addSuggestion({ key: 'failed', title: `Chạy lại ${failed} việc bị lỗi trong hàng đợi`, detail: 'Tự lái chạy tiếp từ bước dở, không làm lại từ đầu.', action: { type: 'retry_failed' } });
-  for (const p of store.profiles) if (p.fb?.avg && p.fb.avg >= 4.3 && p.fb.n >= 4) addSuggestion({ key: 'clone-' + p.id, title: `Hồ sơ "${p.name}" đang được chấm ${p.fb.avg}★`, detail: 'Nhân bản hồ sơ này cho kênh khác để giữ công thức đang hiệu quả.', action: { type: 'none' } });
+  for (const p of store.profiles) if (p.fb?.avg && p.fb.avg >= 4.3 && p.fb.n >= 4) addSuggestion({ key: 'clone-' + p.id, title: `Phong cách "${p.name}" đang được chấm ${p.fb.avg}★`, detail: 'Giữ công thức đang hiệu quả: mở trang Thương hiệu để chép các cài đặt này sang thương hiệu khác.', action: { type: 'none' } });
   if (claude) {
     const texts = [];
     for (const it of q.items.filter(i => i.state === 'done' && i.project).slice(-5)) {
@@ -189,7 +190,7 @@ export async function actSuggestion(sid, act, { onImprove } = {}) {
   if (act === 'apply') {
     const a = s.action || {};
     if (a.type === 'profile') {
-      const store = loadStore(), p = store.profiles.find(x => x.id === a.profile) || store.profiles.find(x => x.id === store.default);
+      const store = loadStore(), sid = resolveStyleId(a.profile || ''), p = store.profiles.find(x => x.id === sid); // id lạ: báo lỗi, không áp nhầm sang phong cách mặc định
       if (!p) throw new Error('Không thấy hồ sơ');
       const patch = cleanPatch(a.patch);
       if (!Object.keys(patch).length) throw new Error('Đề xuất không có thay đổi hợp lệ');
