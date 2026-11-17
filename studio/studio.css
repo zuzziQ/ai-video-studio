@@ -81,10 +81,11 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgb(var(--
 .nkho.warn { border-color: rgb(var(--color-warning) / .6); background: rgb(var(--color-warning) / .08); color: rgb(var(--color-fg)); }
 /* đang tạo video mới: dự án cũ đã đóng, không để thấy timeline cũ sau hộp tiến trình */
 body.np-busy > *:not(#modal):not(.toast) { visibility: hidden; }
-.status { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
-.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: rgb(var(--color-success)); }
+/* trạng thái lưu chỉ là biểu tượng (thanh trên chật); chữ "Đã lưu" / "Chưa lưu" ở title + aria-label */
+.status { font-size: 0; color: rgb(var(--color-success)); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; cursor: default; }
+.status::before { font-family: "tabler-icons"; font-size: 16px; line-height: 1; content: "\f84d"; }
 .status.dirty { color: rgb(var(--color-warning)); }
-.status.dirty::before { background: rgb(var(--color-warning)); box-shadow: 0 0 0 3px rgb(var(--color-warning) / .15); }
+.status.dirty::before { content: "\eb04"; }
 .tbtns { display: flex; gap: var(--space-050); margin-left: var(--space-1); }
 .aspect { font-size: var(--text-2xs); font-weight: 700; color: rgb(var(--color-fg-muted)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-xs); padding: var(--space-050) var(--space-2); letter-spacing: .02em; }
 .aspect.sm { padding: var(--space-050) 6px; }

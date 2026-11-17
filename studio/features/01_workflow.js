@@ -69,6 +69,7 @@
   @media (max-width: 1280px) { #top > #ap-topbtn { font-size: 0; gap: 0; } }
   #wf-more { position: fixed; z-index: 60; min-width: 240px; padding: 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-raised); display: flex; flex-direction: column; gap: 4px; }
   #wf-more[hidden] { display: none; }
+  #wf-more .wf-ver { padding: 2px 8px 4px; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
   #wf-more > button, #wf-more .selwrap select { width: 100%; justify-content: flex-start; height: 32px; padding: 0 8px; font-size: 13px; background: transparent; border-color: transparent; color: var(--tx); gap: 8px; }
   #wf-more > button:hover, #wf-more .selwrap select:hover { background: var(--bg3); }
   #wf-more .selwrap select { padding-left: 32px; }
@@ -132,7 +133,9 @@
   const more = document.createElement('div'); more.id = 'wf-more'; more.hidden = true;
   more.innerHTML = `<div class="wf-lv"><span>Chế độ</span><div class="grow"></div><span class="wf-seg" data-wf="lv"></span></div><hr data-wf="tail">
     <button data-wf="longform"><i class="ti ti-scissors"></i> Cắt clip từ video dài…</button>
-    <button data-wf="settings"><i class="ti ti-settings"></i> Cài đặt…</button>`;
+    <button data-wf="settings"><i class="ti ti-settings"></i> Cài đặt…</button><hr>
+    <button data-wf="author" title="Tác giả · Tặng khoá học AI miễn phí"><i class="ti ti-user-heart"></i> Tác giả: Nguyễn Tất Kiểm</button>
+    <div class="wf-ver">AI Video Studio <span data-wf="ver"></span></div>`;
   document.body.appendChild(more);
   const tail = more.querySelector('[data-wf="tail"]');
   const LABEL = { fitall: 'Vừa khung (⇧Z)', 'app-reveal': 'Mở thư mục dự án' };
@@ -173,6 +176,7 @@
 
   function openMore() {
     renderLv(); more.hidden = false; moreBtn.classList.add('on');
+    { const v = more.querySelector('[data-wf="ver"]'); if (v) v.textContent = S.META?.version || $('#ver')?.textContent || ''; }
     const r = moreBtn.getBoundingClientRect();
     more.style.top = r.bottom + 4 + 'px'; more.style.left = Math.max(8, Math.min(innerWidth - more.offsetWidth - 8, r.right - more.offsetWidth)) + 'px';
   }
@@ -184,6 +188,8 @@
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeMore(); $('#wf-pop')?.remove(); } });
   more.querySelector('[data-wf="settings"]').addEventListener('click', () => { closeMore(); goStep('settings'); });
+  // ghi công tác giả (AGENTS.md): nút Tác giả chuyển từ thanh trên vào menu ⋯, vẫn mở lại màn tác giả của 00_author.js
+  more.querySelector('[data-wf="author"]').addEventListener('click', () => { closeMore(); S.showAuthor?.(); });
   more.querySelector('[data-wf="longform"]').addEventListener('click', () => { closeMore(); openPanel('longform'); });
 
   // ---------- thanh trái theo bước ----------
