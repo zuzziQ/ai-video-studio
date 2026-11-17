@@ -4,8 +4,6 @@
 # Mở trình duyệt tại http://localhost:5186 (đổi cổng: --port 5190)
 # Không muốn dùng Terminal? Tạo app Mac một lần:  bash scripts/make_app.sh   (→ ~/Applications/AI Video Studio.app,
 #   bấm để mở studio, thả video vào icon để tạo dự án — xem references/app-render.md)
-# Không truyền gì: mở dự án clip mẫu (~/.ai-video-studio/footage/clip-mau, do install.sh tạo).
+# Không truyền gì: mở trang chủ (dự án gần đây, Video mới, Tự lái); chưa có thương hiệu thì vào bước Chuẩn bị.
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SAMPLE="${AVS_HOME:-$HOME/.ai-video-studio}/footage/clip-mau"
-if [ $# -eq 0 ] && [ -f "$SAMPLE/timeline.json" ]; then set -- "$SAMPLE"; fi
 exec node "$HERE/studio/server.mjs" "$@" --open

@@ -6,6 +6,8 @@
 //   Bước (a) có "Gợi ý bằng AI" (trợ lý brand), bước (b) có "Điền bằng AI" (trợ lý product): 05_assist.js, M91. Chỉ ghi khi bấm Nhận.
 // - Trang chủ (#onb-home): 4 cách bắt đầu, mỗi thẻ mở đúng luồng có sẵn (Tự lái, Video mới + Mẫu, Cắt clip từ video dài, Hàng loạt)
 //   + dự án gần đây. Tự hiện khi chưa mở dự án; nút nhà trên thanh trên mở lại. Studio.openOnboarding() / Studio.openHome().
+// - S17 M125: Studio mở không kèm dự án (không còn dự án mẫu tự tạo). Chưa có thương hiệu: trang chủ nhắc bước Chuẩn bị và tự mở
+//   hướng dẫn ở bước Thương hiệu (một lần mỗi phiên trình duyệt); "Xem thử dự án mẫu" chép sample/clip-mau rồi mở (/api/onboarding/sample).
 'use strict';
 (() => {
   const { esc, api, toast } = Studio;
@@ -73,6 +75,10 @@
   #onb-home .rec button { justify-content: flex-start; gap: 12px; padding: 12px; font-size: 13px; background: var(--bg1); border-color: var(--line); border-radius: var(--r); text-align: left; }
   #onb-home .rec button .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #onb-home .rec small { font-size: 11px; color: var(--tx3); }
   #onb-home .empty { font-size: 12px; color: var(--tx3); padding: 12px; border: 1px dashed var(--line2); border-radius: var(--r); }
+  #onb-home .prep { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding: 12px 16px; border-radius: var(--r); background: var(--acc-soft); border: 1px solid var(--acc-line); font-size: 13px; color: var(--tx); }
+  #onb-home .prep .ti { font-size: 22px; color: var(--acc); flex: none; } #onb-home .prep div { flex: 1; min-width: 0; } #onb-home .prep small { display: block; color: var(--tx2); font-size: 12px; margin-top: 2px; }
+  #onb-home .prep button { flex: none; font-size: 13px; }
+  @media (max-width: 720px) { #onb-home .prep { flex-wrap: wrap; } }
   #onb-home .links { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; } #onb-home .links button { font-size: 12px; }
   @media (max-width: 720px) { #onb-home .cards, .onb-g2, .onb-g3 { grid-template-columns: minmax(0, 1fr); } .onb-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); } }`;
   document.head.appendChild(css);
@@ -411,8 +417,10 @@
   }
   function hideHome() { HOME?.remove(); HOME = null; document.removeEventListener('keydown', homeKey, true); }
   function homeKey(e) { if (e.key === 'Escape' && ST?.project && !document.getElementById('onb-wiz') && document.getElementById('modal')?.hidden !== false) { e.stopPropagation(); hideHome(); } }
+  const brandCount = async () => { const b = await api('/api/brands').catch(() => null); return Array.isArray(b) ? b.length : -1; };
   async function openHome() {
     await loadState();
+    const nb = await brandCount();
     hideHome();
     HOME = document.createElement('div'); HOME.id = 'onb-home';
     const p = purpose(ST?.purpose), rec = ST?.recent || [];
@@ -423,9 +431,12 @@
         ${card('tpl', 'ti-layout-grid', 'Dựng theo mẫu', 'Chọn một mẫu đẹp sẵn rồi thay chữ, ảnh, video của bạn.', p ? `Gợi ý cho ${p[2]}` : 'Gần 90 mẫu theo lĩnh vực')}
         ${card('long', 'ti-scissors', 'Cắt clip từ video dài', 'Đưa video dài (livestream, podcast, buổi học), AI chọn đoạn hay làm clip ngắn.', 'Cắt clip')}
         ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ một file Excel hoặc CSV, làm nhiều video cùng mẫu trong một lần.', 'Hàng loạt')}</div>
+      ${nb === 0 ? `<div class="prep"><i class="ti ti-briefcase"></i><div><b>Chưa có thương hiệu</b><small>Làm bước Chuẩn bị trước: thương hiệu (logo, màu, lời kết) và Kho chứa dự án, thành phẩm.</small></div>
+        <button class="primary" data-h="prep"><i class="ti ti-arrow-right"></i> Chuẩn bị</button></div>` : ''}
       <h3>Dự án gần đây</h3><div class="rec">${rec.length ? rec.map(r => `<button data-r="${r.i}" ${r.current ? 'disabled' : ''}><i class="ti ti-folder"></i><span class="nm">${esc(r.name)}</span><small>${r.current ? 'đang mở' : esc(r.parent)}${r.t && !r.current ? ' · ' + esc(fmtDay(r.t)) : ''}</small></button>`).join('')
         : '<div class="empty">Chưa có dự án nào. Bắt đầu bằng một trong 4 cách ở trên.</div>'}</div>
-      <div class="links"><button class="ghost" data-h="wiz"><i class="ti ti-route"></i> Xem lại hướng dẫn</button></div></div>`;
+      <div class="links"><button class="ghost" data-h="wiz"><i class="ti ti-route"></i> Xem lại hướng dẫn</button>
+        <button class="ghost" data-h="sample" title="Mở một video mẫu có sẵn để xem Studio làm được gì"><i class="ti ti-player-play"></i> Xem thử dự án mẫu</button></div></div>`;
     HOME.addEventListener('click', onHome);
     document.body.appendChild(HOME);
     document.addEventListener('keydown', homeKey, true);
@@ -441,7 +452,16 @@
     const b = e.target.closest('[data-h]'); if (!b) return;
     const a = b.dataset.h;
     if (a === 'close') return hideHome();
-    if (a === 'wiz') return openWizard(0);
+    if (a === 'wiz' || a === 'prep') return openWizard(0);
+    if (a === 'sample') {
+      b.disabled = true;
+      try {
+        if (ST?.project && Studio.TL) await Studio.saveNow(); // dự án đang mở: lưu trước khi đổi sang dự án mẫu
+        const j = await api('/api/onboarding/sample', {});
+        if (j.error) throw new Error(j.error);
+      } catch (err) { b.disabled = false; return toast(err.message || 'Không mở được dự án mẫu'); }
+      return location.reload();
+    }
     if (a === 'tpl') {
       if (ST?.project) { hideHome(); return openTemplates(ST.purpose); }
       // Templates need a project: start "Video mới"; after it reloads, onReady opens the Mẫu panel on the chosen field.
@@ -478,5 +498,10 @@
       if (mb && !drop()) { const mo = new MutationObserver(() => drop() && mo.disconnect()); mo.observe(mb, { childList: true }); setTimeout(() => mo.disconnect(), 15000); }
     }
     if (!s.done && !s.skipped) afterAuthor(() => openWizard());
+    else if (!s.project && (await brandCount()) === 0) {
+      // S17 M125: đã qua hướng dẫn nhưng chưa có thương hiệu: vào thẳng bước Chuẩn bị (Thương hiệu → Kho), mỗi phiên một lần
+      let seen = false; try { seen = !!sessionStorage.getItem('avs-onb-prep'); sessionStorage.setItem('avs-onb-prep', '1'); } catch { /* không có sessionStorage */ }
+      if (!seen) afterAuthor(() => openWizard(0));
+    }
   }).catch(e => console.error('onboarding', e));
 })();

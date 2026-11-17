@@ -1,6 +1,6 @@
 #!/bin/bash
 # AI Video Studio — cài đặt một lệnh (macOS; Linux chạy được phần lõi, không có app Mac).
-#   bash install.sh            cài thư viện, gắn làm skill Claude Code, dựng dự án clip mẫu, tạo app Mac
+#   bash install.sh            cài thư viện, gắn làm skill Claude Code, tạo app Mac
 #   bash install.sh --no-app   không tạo app Mac
 #   bash install.sh --no-skill không gắn vào ~/.claude/skills
 #   bash install.sh --no-models không tải sẵn mô hình whisper large-v3 / large-v3-turbo và tách nền (~4,9 GB)
@@ -8,7 +8,6 @@ set -e
 REPO="$(cd "$(dirname "$0")" && pwd)"
 SKILL_DIR="${AVS_SKILL_DIR:-$HOME/.claude/skills/ai-video-studio}"
 HOME_DIR="${AVS_HOME:-$HOME/.ai-video-studio}"
-SAMPLE="$HOME_DIR/footage/clip-mau"
 APP=1; LINK=1
 for a in "$@"; do case "$a" in --no-app) APP=0;; --no-skill) LINK=0;; --no-models) export AVS_NO_MODELS=1;; esac; done
 
@@ -45,15 +44,7 @@ if [ "$LINK" = 1 ] && [ "$REPO" != "$SKILL_DIR" ]; then
   say "Skill: $SKILL_DIR → $REPO"
 fi
 
-# 4. Dự án clip mẫu (video gốc trong sample/) để mở Studio là thấy mẫu ngay
-say "Dựng dự án clip mẫu: $SAMPLE"
-mkdir -p "$SAMPLE/work/frames"
-cp -n "$REPO/sample/clip-mau/timeline.json" "$SAMPLE/" 2>/dev/null || true
-cp -n "$REPO/sample/clip-mau/work/captions.json" "$SAMPLE/work/" 2>/dev/null || true # giữ phụ đề bạn đã sửa
-cp "$REPO/sample/clip-mau/work/"{words.json,aroll.mp4} "$SAMPLE/work/"
-if [ "$(ls "$SAMPLE/work/frames" | wc -l | tr -d ' ')" -lt 100 ]; then
-  ffmpeg -v error -y -i "$SAMPLE/work/aroll.mp4" -vf "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280" -q:v 3 "$SAMPLE/work/frames/%05d.jpg"
-fi
+# 4. Không dựng dự án mẫu nữa (S17 M125): Studio mở trang chủ; nút "Xem thử dự án mẫu" chép sample/clip-mau khi cần.
 
 # 5. Khôi phục các style người dùng (Tạo style) + skill video-style-* của chúng
 node "$REPO/scripts/style_lab.mjs" sync $([ "$LINK" = 1 ] || echo --no-skills) >/dev/null 2>&1 || true
@@ -68,7 +59,7 @@ cat <<EOF
 
 ✅ Cài xong AI Video Studio.
 
-  Mở Studio với clip mẫu:   bash "$REPO/studio.sh"
+  Mở Studio:                bash "$REPO/studio.sh"   (trang chủ; lần đầu vào bước Chuẩn bị)
   Mở với video của bạn:     bash "$REPO/studio.sh" --new /đường/dẫn/video.mp4
 $([ -d "$HOME/Applications/AI Video Studio.app" ] && echo '  Hoặc bấm app "AI Video Studio" trong Launchpad / ~/Applications.')
 
