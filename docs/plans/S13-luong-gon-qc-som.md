@@ -60,6 +60,8 @@ Kết quả `M103`–`M104` (2026-11-17): new_project đã có `timeline.face_tr
 
 Kết quả `M105` (2026-11-17): `scripts/qc_quick.mjs` + job `qc_quick` (`/api/qc/quick`), tự chạy khi hộp "Đã dựng xong" mở (`C16`); ảnh 3 ô lấy từ chính các khung QC render (không qua `/api/still`). Kiểm tra ~8 s, "Sửa ngay" ~27 s trên clip mẫu 31,6 s.
 
+Kết quả `M107` (2026-11-17): thẻ Video nguồn đọc `source.json` qua `GET /api/source` (dự án cũ không có thì ghi "chưa ghi video gốc"); "Đổi video" mở hộp tạo dự án mới (dự án hiện tại giữ trong Kho), "Tạo dự án khác" mở trang chủ. Trạng thái AI dựng giúp rời bước Nguồn sang panel AI dựng ở bước Dựng, để `M108` gộp tiếp.
+
 Thứ tự đề xuất: `M103` → `M104` (kéo điểm nhiều nhất) → `M105` → `M106`; `M107` làm song song được (không đụng file của nhóm QC). `M104` và `M106` đều sửa `scripts/ai_qc.mjs` (tệp nóng): làm lần lượt.
 
 ## 4. Quyết định (chốt 2026-11-17: theo đề xuất)

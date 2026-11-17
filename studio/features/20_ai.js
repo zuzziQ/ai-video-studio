@@ -1,5 +1,7 @@
 // AI tools (references/ai-edit.md): "AI dựng giúp" (Claude plans pack, caption fixes, hook, graphics, music, SFX),
 // "Cắt lỗi nói" (fillers / repeats / pauses / false starts). The "Lời thoại" panel lives in 21_transcript.js (M89).
+// S13 M107: panel 'ai' = "Làm sạch lời nói" (bước Nguồn, tab thứ hai của mục Lời thoại); trạng thái AI dựng giúp
+// (kế hoạch, cảnh AI trên timeline, QC nhanh, xoá cảnh AI) vẽ trong panel 'wf-aihelp' của bước Dựng (S.ai.renderBuild).
 // Every cut is a ripple on TL.clips (split + remove + remapAll from clips.js), so captions, scenes, sfx and music follow.
 'use strict';
 (() => {
@@ -43,7 +45,7 @@
   const DENS = [['thua', 'Thưa', '5–7 graphic'], ['vua', 'Vừa', '8–11 graphic'], ['day', 'Dày', '12–15 graphic']];
   const packs = () => S.win?.PACKS || [];
   const packName = id => packs().find(p => p.id === id)?.name || id || '—';
-  let aiTab = 'build', lastPlan = null, fl = null, flSel = new Set(), flBusy = false;
+  let lastPlan = null, fl = null, flSel = new Set(), flBusy = false;
 
   // ---------- ripple cut on the main track ----------
   // Cut output-time ranges [[a,b],…]: split clips at the edges, drop the pieces inside, remap everything after. One undo step.
@@ -266,23 +268,25 @@
     if (cutRanges(list.map(c => [c.a, c.b]), 'Đã cắt lỗi nói')) { fl = null; flSel.clear(); renderAi(); }
   }
 
+  const AI_PANELS = ['ai', 'wf-aihelp'];
   function renderAi() {
-    const seg = `<div class="seg">${[['build', 'Dựng giúp'], ['fix', 'Cắt lỗi nói']].map(([k, l]) => `<button data-aitab="${k}" class="${aiTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-    if (aiTab === 'build') {
+    if (!AI_PANELS.includes(panel)) return; // dò lỗi nói xong khi người dùng đã sang panel khác
+    if (panel === 'wf-aihelp') {
       const nAi = (TL.scenes || []).filter(s => s._ai && !s._base).length, nEd = (TL.scenes || []).filter(s => s._ai && s._orig).length;
-      $('#libbody').innerHTML = seg + (CAP.length ? '' : S.ctaTranscribe('AI dựng giúp')) + `<button class="wide primary" data-ai="open"><i class="ti ti-wand"></i> AI dựng giúp</button>
+      // data-ai="build" (không phải "open"): thẻ QC của 16_qc.js chỉ chèn vào bước Kiểm tra
+      $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng giúp')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng giúp</button>
         <div class="help">Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX. Cần Claude Code (lệnh <b>claude</b>) trên máy.</div>
         ${lastPlan ? planCard(lastPlan, true) : ''}
         <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}.</p>
         <div class="acts"><button class="mini" data-ai="qc" ${nAi ? '' : 'disabled'}><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="mini danger" data-ai="clear" ${nAi ? '' : 'disabled'}><i class="ti ti-trash"></i> Xoá cảnh AI</button></div></div>`;
-      if (!lastPlan) S.api('/api/ai/plan').then(p => { if (!p.error && !lastPlan) { lastPlan = p; if (panel === 'ai' && aiTab === 'build') renderAi(); } }).catch(() => {});
+      if (!lastPlan) S.api('/api/ai/plan').then(p => { if (!p.error && !lastPlan) { lastPlan = p; if (panel === 'wf-aihelp') renderAi(); } }).catch(() => {});
       return;
     }
     const list = fl ? fl.cuts.map((c, i) => `<div class="fl-it ${flSel.has(i) ? '' : 'off'}"><input type="checkbox" data-fl="${i}" ${flSel.has(i) ? 'checked' : ''}>
         <span class="fl-k ${c.kind}">${KIND_VI[c.kind] || c.kind}</span><span class="fl-tx">${esc(c.text || c.reason)}<small>${fmt(c.a)} · ${(c.b - c.a).toFixed(2)}s · ${esc(c.reason)}</small></span>
         <button class="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" data-flplay="${i}" title="Nghe thử đoạn này" aria-label="Nghe thử đoạn này"><i class="ti ti-player-play"></i></button></div>`).join('') : '';
     const tot = fl ? fl.cuts.filter((c, i) => flSel.has(i)).reduce((a, c) => a + c.b - c.a, 0) : 0;
-    $('#libbody').innerHTML = seg + `<div class="help">Dò tiếng đệm (ờ, à, ừm, thì là, kiểu như…), từ/cụm nói lặp liền nhau, chỗ ngắt quá lâu. Cắt sẽ dồn cả video, phụ đề, graphic, SFX như cắt clip trên timeline.</div>
+    $('#libbody').innerHTML = `<div class="help">Dò tiếng đệm (ờ, à, ừm, thì là, kiểu như…), từ/cụm nói lặp liền nhau, chỗ ngắt quá lâu. Cắt sẽ dồn cả video, phụ đề, graphic, SFX như cắt clip trên timeline.</div>
       <div class="ai-row"><div><label class="lbl ai-lbl">Ngắt quãng dài hơn (giây)</label><input id="flpause" type="number" step=".1" min=".3" value="${$('#flpause')?.value || .7}"></div></div>
       <label class="lbl ai-lbl">Từ đệm (phẩy ngăn cách, để trống = mặc định)</label><input id="fllist" placeholder="ờ, à, ừ, ừm, ơ, ờm, thì là, kiểu như, nói chung là" value="${esc($('#fllist')?.value || '')}">
       <label class="ai-row ai-click"><input type="checkbox" id="flclaude" class="ai-nf" ${$('#flclaude')?.checked ? 'checked' : ''}><span>Nhờ Claude tìm câu nói hỏng (bắt đầu rồi nói lại) <span class="muted">· chậm hơn</span></span></label>
@@ -293,16 +297,15 @@
         : `<div class="empty"><i class="ti ti-mood-check"></i><b>Không thấy lỗi nói</b><span>Lời thoại đã gọn. Có thể bật “Nhờ Claude” để tìm câu nói hỏng.</span></div>`) : ''}
       ${fl?.note ? `<div class="help ai-c-warn">${esc(fl.note)}</div>` : ''}`;
   }
-  S.addPanel('ai', 'ti-sparkles', 'AI', renderAi);
+  S.addPanel('ai', 'ti-eraser', 'Làm sạch lời nói', renderAi);
   $('#libbody').addEventListener('click', e => {
-    if (panel !== 'ai') return;
-    const t = e.target, b = t.closest('[data-aitab],[data-ai],[data-flplay]');
+    if (!AI_PANELS.includes(panel)) return;
+    const t = e.target, b = t.closest('[data-ai],[data-flplay]');
     if (t.matches('[data-fl]')) { const i = +t.dataset.fl; t.checked ? flSel.add(i) : flSel.delete(i); return renderAi(); }
     if (!b) return;
-    if (b.dataset.aitab) { aiTab = b.dataset.aitab; return renderAi(); }
     if (b.dataset.flplay) { const c = fl.cuts[+b.dataset.flplay]; return previewRange(c.a, c.b); }
     const a = b.dataset.ai;
-    if (a === 'open') openAiModal();
+    if (a === 'open' || a === 'build') openAiModal();
     if (a === 'clear') removeAi();
     if (a === 'qc') openQuick();
     if (a === 'detect') detect();
@@ -314,5 +317,5 @@
 
   // For tests / Claude: Studio.ai.cut([[a,b]]) etc.
   // features/21_transcript.js (panel Lời thoại) uses cutRanges, wordSpan, allWords and the filler flags.
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, previewRange, detect: () => detect(), get fillers() { return fl; } };
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, previewRange, detect: () => detect(), renderBuild: renderAi, get fillers() { return fl; } };
 })();

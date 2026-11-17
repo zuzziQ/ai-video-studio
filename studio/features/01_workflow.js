@@ -16,7 +16,9 @@
   const PANELS = {
     // S12 (M97): Kho thay Media ở Chuẩn bị; Media (file của dự án đang mở) chuyển sang bước Dựng
     brands: ['prep', 1], products: ['prep', 2], kho: ['prep', 3], media: ['build', 2],
-    'wf-new': ['source', 1], longform: ['source', 2], words: ['source', 3], ai: ['source', 4],
+    // S13 (M107): Nguồn = video của dự án này (thẻ Video nguồn) + Lời thoại (tab Làm sạch lời nói); Cắt clip từ video dài chỉ
+    // hiện trên thanh trái khi video nguồn > 5 phút, lúc nào cũng mở được từ menu ⋯
+    'wf-new': ['source', 1], words: ['source', 2], ai: ['source', 3], longform: ['source', 4],
     autopilot: ['build', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 1], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
     aibroll: ['build', 6], 'wf-broll': ['build', 6], fx: ['build', 7], sticker: ['build', 8], trans: ['build', 9], filter: ['build', 10], dub: ['build', 11],
     'wf-qc': ['check', 1], comp: ['check', 2, 'pro'],
@@ -32,7 +34,11 @@
     { id: 'quick', name: 'Dựng nhanh AI', short: 'Dựng AI', icon: 'ti-wand', tabs: [['autopilot', 'Tự lái'], ['wf-aihelp', 'AI dựng giúp'], ['autofill', 'Tự động']] },
     { id: 'audio', name: 'Âm thanh', icon: 'ti-music', tabs: [['audio', 'Nhạc & SFX'], ['audioplus', 'Giọng & trộn']] },
     { id: 'broll', name: 'B-roll', icon: 'ti-movie', tabs: [['aibroll', 'Kho & AI'], ['wf-broll', 'B-roll động']] },
+    { id: 'speech', name: 'Lời thoại', icon: 'ti-file-text', tabs: [['words', 'Lời thoại'], ['ai', 'Làm sạch lời nói']] },
   ];
+  const SHORT = { longform: 'Cắt clip' }; // nhãn thanh trái (60px) của panel tên dài
+  const LONG_SRC = 300; // giây: video nguồn dài hơn thì gợi ý Cắt clip từ video dài
+  const srcDur = () => (TL ? (META.frames ? META.frames / (TL.fps || 30) : TL.duration || 0) : 0);
   const groupOf = id => GROUPS.find(g => g.tabs.some(t => t[0] === id));
 
   const store = {
@@ -79,6 +85,14 @@
   .wf-card button { align-self: flex-start; }
   .wf-card.pick { cursor: pointer; } .wf-card.pick:hover { border-color: var(--line3); } .wf-card.pick.on { border-color: var(--acc-line); background: var(--acc-soft); }
   .wf-hint { color: var(--tx3); font-size: 11px; line-height: 1.5; margin: 0 0 8px; }
+  .wf-src .wf-name { overflow-wrap: anywhere; min-width: 0; } .wf-src .wf-name .ti { flex: none; }
+  .wf-src dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 12px; }
+  .wf-src dt { color: var(--tx3); } .wf-src dd { margin: 0; color: var(--tx2); overflow-wrap: anywhere; min-width: 0; }
+  .wf-st { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--tx2); }
+  .wf-st li { display: flex; align-items: center; gap: 8px; } .wf-st .ti { font-size: 16px; color: var(--tx3); } .wf-st .is-done .ti { color: var(--acc); }
+  .wf-acts { display: flex; flex-wrap: wrap; gap: 8px; } .wf-card .wf-acts button { align-self: auto; }
+  .wf-lnk { background: none; border: 0; padding: 0; height: auto; color: var(--acc); cursor: pointer; font-size: inherit; text-decoration: underline; }
+  .wf-hint code, .wf-src code { font-size: 11px; color: var(--tx2); overflow-wrap: anywhere; }
   #wf-tabs { display: flex; gap: 4px; padding: 0 12px 8px; flex: none; overflow-x: auto; }
   #wf-tabs[hidden] { display: none; }
   #wf-tabs button { height: 28px; padding: 0 12px; font-size: 12px; background: transparent; border-color: var(--line); color: var(--tx2); white-space: nowrap; }
@@ -103,6 +117,7 @@
   moreBtn.innerHTML = '<i class="ti ti-dots"></i>'; $('#save').before(moreBtn);
   const more = document.createElement('div'); more.id = 'wf-more'; more.hidden = true;
   more.innerHTML = `<div class="wf-lv"><span>Chế độ</span><div class="grow"></div><span class="wf-seg" data-wf="lv"></span></div><hr data-wf="tail">
+    <button data-wf="longform"><i class="ti ti-scissors"></i> Cắt clip từ video dài…</button>
     <button data-wf="settings"><i class="ti ti-settings"></i> Cài đặt…</button>`;
   document.body.appendChild(more);
   const tail = more.querySelector('[data-wf="tail"]');
@@ -154,6 +169,7 @@
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeMore(); $('#wf-pop')?.remove(); } });
   more.querySelector('[data-wf="settings"]').addEventListener('click', () => { closeMore(); goStep('settings'); });
+  more.querySelector('[data-wf="longform"]').addEventListener('click', () => { closeMore(); openPanel('longform'); });
 
   // ---------- thanh trái theo bước ----------
   const meta = id => {
@@ -168,7 +184,9 @@
     store.set('step', step);
     const btns = [...rail.querySelectorAll('button[data-p]')];
     const lead = groupLeads(btns);
-    const mine = btns.filter(b => { const m = meta(b.dataset.p), g = groupOf(b.dataset.p); return m.step === step && (!g || lead[g.id] === b) && (level === 'pro' || m.level === 'basic' || b.dataset.p === panel); })
+    const hideLong = srcDur() <= LONG_SRC && panel !== 'longform';
+    for (const b of btns) { const sh = SHORT[b.dataset.p], sp = b.querySelector('span'); if (sh && sp) { b.title = sp.textContent; sp.textContent = sh; } }
+    const mine = btns.filter(b => { const m = meta(b.dataset.p), g = groupOf(b.dataset.p); return m.step === step && (!g || lead[g.id] === b) && (level === 'pro' || m.level === 'basic' || b.dataset.p === panel) && !(hideLong && b.dataset.p === 'longform'); })
       .sort((a, b) => { const x = meta(a.dataset.p), y = meta(b.dataset.p); return (x.known === y.known ? 0 : x.known ? -1 : 1) || x.order - y.order; });
     for (const b of btns) b.hidden = true;
     const shown = mine.slice(0, MAX_RAIL); overflow = mine.slice(MAX_RAIL);
@@ -235,10 +253,48 @@
     $('#libbody [data-wf="go"]').onclick = fn;
   }
   const clickEl = (id, miss) => () => { const el = document.getElementById(id); if (el) el.click(); else S.toast(miss); };
-  S.addPanel('wf-new', 'ti-video-plus', 'Video mới', () => card('ti-video-plus', 'Tạo dự án từ video thô',
-    'Chọn một video quay sẵn: Studio tách lời thoại, làm phụ đề và mở dự án mới để dựng.', 'Chọn video', clickEl('newproj', 'Chưa có nút Video mới')));
-  S.addPanel('wf-aihelp', 'ti-wand', 'AI dựng', () => card('ti-wand', 'AI dựng giúp',
-    'Claude đọc lời thoại rồi đặt graphic, phụ đề, nhạc và hiệu ứng âm thanh. Bạn xem lại và sửa từng thứ sau.', 'Mở AI dựng giúp', clickEl('aibtn', 'Tính năng AI chưa sẵn sàng')));
+  // S13 (M107): đã mở dự án → thẻ "Video nguồn" (GET /api/source, studio/routes/14_source.mjs); chưa có → bộ chọn như cũ.
+  // C15: một dòng nhắc thả nhiều video vào Nguon/Tha vao day/ cho Tự lái (nút Tự lái ra thanh đầu thuộc M108).
+  let SRC = null, srcDir = null;
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const mb = b => (b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB');
+  const newVideo = clickEl('newproj', 'Chưa có nút Video mới');
+  function renderSource() {
+    if (!TL) return card('ti-video-plus', 'Tạo dự án từ video thô',
+      'Chọn một video quay sẵn: Studio tách lời thoại, làm phụ đề và mở dự án mới để dựng.', 'Chọn video', newVideo);
+    if (srcDir !== META.dir) {
+      SRC = null; srcDir = META.dir;
+      S.api('/api/source').then(r => { if (srcDir !== META.dir) return; SRC = r?.error ? { failed: true } : r; if (panel === 'wf-new') renderSource(); }).catch(() => { SRC = { failed: true }; });
+    }
+    const d = srcDur(), cap = (CAP || []).length, capOn = cap > 0 && TL.caption_style !== 'none';
+    const faceT = TL.face_track?.keys?.length > 0, face = faceT || !!TL.face;
+    const st = (done, text) => `<li class="${done ? 'is-done' : ''}"><i class="ti ${done ? 'ti-circle-check' : 'ti-circle-dashed'}"></i>${text}</li>`;
+    const where = !SRC ? 'Đang đọc…' : SRC.failed ? 'Không đọc được' : SRC.inKho ? `${esc(SRC.kho.title)} · <code>${esc(SRC.rel)}</code>${SRC.exists ? '' : ' (không còn file)'}`
+      : SRC.name ? `Ngoài Kho${SRC.exists ? '' : ' (không còn file)'}` : 'Dự án cũ, chưa ghi video gốc';
+    $('#libbody').innerHTML = `<div class="wf-card wf-src"><h4 class="wf-name"><i class="ti ti-movie"></i>${esc(SRC?.name || META.name || 'Dự án')}</h4>
+      <dl><dt>Độ dài</dt><dd>${mmss(d)}${SRC?.size ? ` · ${mb(SRC.size)}` : ''}</dd>
+        <dt>Vị trí</dt><dd>${where}${SRC?.inKho && SRC.exists ? ` <button class="wf-lnk" data-wf="src-reveal">Mở thư mục</button>` : ''}</dd></dl>
+      <ul class="wf-st">${st(cap, cap ? `Đã tách lời thoại (${cap} câu)` : 'Chưa tách lời thoại')}${st(capOn, capOn ? 'Phụ đề đang bật' : cap ? 'Phụ đề đang tắt' : 'Chưa có phụ đề')}${st(face, faceT ? 'Đã dò mặt theo thời gian' : face ? 'Đã dò vị trí mặt' : 'Chưa dò mặt')}</ul>
+      <div class="wf-acts"><button data-wf="src-change" title="Chọn video khác: Studio tạo dự án mới, dự án này vẫn giữ trong Kho"><i class="ti ti-replace"></i>Đổi video</button>
+        <button data-wf="src-new" title="Trang chủ: mẫu, video dài, hàng loạt, dự án gần đây"><i class="ti ti-plus"></i>Tạo dự án khác</button></div></div>
+      ${cap || !S.ctaTranscribe ? '' : S.ctaTranscribe('')}
+      ${d > LONG_SRC ? `<div class="wf-card"><h4><i class="ti ti-scissors"></i>Video dài ${Math.round(d / 60)} phút</h4><p>Cắt thành nhiều clip ngắn: AI chọn đoạn hay, mỗi đoạn thành một dự án.</p>
+        <button data-wf="src-long"><i class="ti ti-scissors"></i>Cắt clip từ video dài</button></div>` : ''}
+      <p class="wf-hint"><i class="ti ti-stack-2"></i> Có nhiều video? Thả vào <code>Nguon/Tha vao day/</code>${SRC?.kho ? ` trong Kho ${esc(SRC.kho.title)}` : ''} để Tự lái làm hết.</p>`;
+  }
+  $('#libbody').addEventListener('click', e => {
+    if (panel !== 'wf-new') return;
+    const b = e.target.closest('[data-wf^="src-"]'); if (!b) return;
+    const a = b.dataset.wf;
+    if (a === 'src-change') newVideo();
+    if (a === 'src-new') (S.openHome || newVideo)();
+    if (a === 'src-long') openPanel('longform');
+    if (a === 'src-reveal') S.api('/api/source/reveal', {}).then(r => { if (!r.ok) S.toast(r.error || 'Không mở được thư mục'); });
+  });
+  S.addPanel('wf-new', 'ti-video', 'Video nguồn', renderSource);
+  // trạng thái AI dựng giúp (kế hoạch, cảnh AI, QC nhanh) do 20_ai.js vẽ (S.ai.renderBuild); chưa có thì thẻ mở hộp như cũ
+  S.addPanel('wf-aihelp', 'ti-wand', 'AI dựng', () => (S.ai?.renderBuild ? S.ai.renderBuild() : card('ti-wand', 'AI dựng giúp',
+    'Claude đọc lời thoại rồi đặt graphic, phụ đề, nhạc và hiệu ứng âm thanh. Bạn xem lại và sửa từng thứ sau.', 'Mở AI dựng giúp', clickEl('aibtn', 'Tính năng AI chưa sẵn sàng'))));
   // B-roll động (9.080 media_card, GET /api/broll) — cùng dữ liệu với tab "B-roll động" cũ của Media, nay nằm trong mục B-roll
   let bq = '', bres = [], bbusy = false;
   const r2 = v => Math.round(v * 100) / 100;
