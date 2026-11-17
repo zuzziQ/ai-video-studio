@@ -251,7 +251,7 @@
     B.querySelectorAll('[data-pr]').forEach(b => (b.onclick = () => confirm('Quên mọi điều hồ sơ này đã học từ các lần bạn sửa?') && act('reset', b.dataset.pr)));
     B.querySelectorAll('[data-px]').forEach(b => (b.onclick = () => confirm('Xoá hồ sơ này?') && act('delete', b.dataset.px)));
     $('#ap-pnew').onclick = () => editProfile(null);
-    if ($('#ap-learn')) $('#ap-learn').onclick = async () => { await Studio.saveNow?.(); const r = await api('/api/autopilot/learn', {}); Studio.toast(r.ok ? `Đã ghi nhận: ${r.rules?.notes?.length || 0} điều chỉnh (${r.rules?.n || 0} video)` : 'Chưa học: ' + (r.why || r.error)); if (r.profiles) S.st.profiles = r.profiles; await refresh(); renderProfiles(); };
+    if ($('#ap-learn')) $('#ap-learn').onclick = async () => { if (Studio.saveNow && !await Studio.saveNow()) return; const r = await api('/api/autopilot/learn', {}); Studio.toast(r.ok ? `Đã ghi nhận: ${r.rules?.notes?.length || 0} điều chỉnh (${r.rules?.n || 0} video)` : 'Chưa học: ' + (r.why || r.error)); if (r.profiles) S.st.profiles = r.profiles; await refresh(); renderProfiles(); };
   }
 
   // ---------- profile editor ----------
@@ -311,7 +311,7 @@
   // ---------- actions ----------
   async function itemAct(id, action) {
     if (action === 'cancel' && !confirm('Huỷ việc này?')) return;
-    if (action === 'open') { if (!confirm('Mở dự án này trong Studio? (dự án hiện tại được lưu trước)')) return; await Studio.saveNow?.(); }
+    if (action === 'open') { if (!confirm('Mở dự án này trong Studio? (dự án hiện tại được lưu trước)')) return; if (Studio.dirty && Studio.saveNow && !await Studio.saveNow()) return; }
     const r = await api('/api/autopilot/item', { id, action });
     if (r.error) return Studio.toast(r.error);
     if (action === 'open') return (location.hash = '', location.reload());

@@ -216,7 +216,7 @@
     B.querySelectorAll('[data-breveal]').forEach(b => (b.onclick = () => Studio.api('/api/reveal', { path: b.dataset.breveal })));
     B.querySelectorAll('[data-bproj]').forEach(b => (b.onclick = async () => {
       if (!confirm('Mở dự án của dòng này trong Studio? (lưu dự án hiện tại trước)')) return;
-      await Studio.saveNow(); const r = await Studio.api('/api/open', { path: Studio.META.dir + '/' + b.dataset.bproj }); if (r.ok) location.reload(); else Studio.toast(r.error || 'Lỗi');
+      if (Studio.dirty && !await Studio.saveNow()) return; const r = await Studio.api('/api/open', { path: Studio.META.dir + '/' + b.dataset.bproj }); if (r.ok) location.reload(); else Studio.toast(r.error || 'Lỗi');
     }));
     B.querySelectorAll('[data-bhist]').forEach(b => (b.onclick = async () => { S.run = b.dataset.bhist; S.page = null; S.status = okSt(await Studio.api(stUrl())); S.job = await Studio.api('/api/job'); if (S.job?.kind === 'batch' && S.job.state === 'running') poll(); render(); }));
   }

@@ -129,7 +129,7 @@ function writeNotes(tl, captions) {
   else if (fs.existsSync(f)) fs.unlinkSync(f);
   return out.length;
 }
-function save({ timeline, captions, dir }) {
+function save({ timeline, captions, dir, base, force }) {
   // S17 M126: trình chỉnh sửa gửi kèm thư mục dự án nó đang sửa; khác dự án đang mở (tab cũ còn mở sau "Video mới" hay mở dự án
   // khác) thì từ chối, không ghi timeline cũ đè lên dự án mới. Không gửi dir (script cũ) thì như trước.
   if (dir != null) {
@@ -137,6 +137,12 @@ function save({ timeline, captions, dir }) {
     if (typeof dir !== 'string' || k(dir) !== k(cur().dir)) throw Object.assign(new Error('Studio đã chuyển sang dự án khác — tải lại trang trước khi lưu'), { status: 409 });
   }
   if (!timeline || typeof timeline !== 'object' || Array.isArray(timeline)) throw Object.assign(new Error('Thiếu timeline — không lưu'), { status: 400 });
+  // S18 M131: cùng một dự án mở ở hai cửa sổ / tab: trình chỉnh sửa gửi `base` = mốc giờ sửa timeline.json lúc nó tải / lưu lần
+  // cuối; file đã được lưu mới hơn từ chỗ khác thì báo xung đột (không ghi), trừ khi người dùng chọn ghi đè (`force`).
+  if (typeof base === 'number' && force !== true) {
+    let now = 0; try { now = fs.statSync(cur().tlFile).mtimeMs; } catch { /* file mất: lưu dựng lại */ }
+    if (now > base + 1) throw Object.assign(new Error('Dự án vừa được lưu ở cửa sổ hoặc tab khác'), { status: 409, conflict: true, saved: now });
+  }
   if (captions != null && !Array.isArray(captions)) throw Object.assign(new Error('captions phải là danh sách'), { status: 400 });
   const tl = timeline;
   const capFile = typeof tl.captions === 'string' ? tl.captions : (captions?.length ? 'work/captions.json' : null);
@@ -148,7 +154,7 @@ function save({ timeline, captions, dir }) {
   // keep the newest 60 snapshots
   const all = fs.readdirSync(path.dirname(snap)).sort();
   for (const f of all.slice(0, Math.max(0, all.length - 60))) fs.unlinkSync(path.join(path.dirname(snap), f));
-  return { ok: true, notes: writeNotes(tl, captions || []), saved: Date.now() };
+  return { ok: true, notes: writeNotes(tl, captions || []), saved: fs.statSync(cur().tlFile).mtimeMs };
 }
 
 // ---------- library (sound, music, fonts) ----------
@@ -523,7 +529,10 @@ async function handle(req, res) {
       rp.meta.pid = curPid() || TABS.open(cur().dir).id; rp.meta.base = `/p/${rp.meta.pid}/`;
       return json(res, rp);
     }
-    if (p === '/api/save' && req.method === 'POST') return json(res, save(await body(req)));
+    if (p === '/api/save' && req.method === 'POST') {
+      const b = await body(req);
+      try { return json(res, save(b)); } catch (e) { if (!e.conflict) throw e; return json(res, { error: e.message, conflict: true, saved: e.saved }, 409); }
+    }
     if (p === '/api/history') {
       const d = path.join(cur().dir, '.studio/history');
       if (!fs.existsSync(d)) return json(res, []);

@@ -154,3 +154,65 @@ test('server: hai tab đọc / lưu xen kẽ hai dự án, không ghi nhầm; fi
   const src = fs.readFileSync(path.join(SKILL, 'studio/server.mjs'), 'utf8');
   assert.match(src, /!job\.openedSent && job\.tab === curPid\(\).*job\.openedSent = true/);
 });
+
+// S18 M131: cùng một dự án mở ở hai cửa sổ — cửa sổ lưu sau mà chưa thấy bản mới của cửa sổ kia thì bị báo xung đột, không đè
+test('server: cùng dự án ở hai cửa sổ — lưu với mốc cũ → 409 conflict, ghi đè có chủ ý (force) được, mốc mới trả về sau khi lưu', async () => {
+  const op = await api('/api/open', { path: A }); assert.equal(op.status, 200, op.text);
+  const id = op.opened || tabId(A);
+  const w1 = (await api('/api/project', undefined, id)).json.meta.saved, w2 = w1; // hai cửa sổ tải cùng một bản
+  await new Promise(r => setTimeout(r, 30));
+  const s1 = await api('/api/save', { timeline: { ...tl(A), title: 'cua-so-1' }, captions: [], dir: A, base: w1 }, id);
+  assert.equal(s1.status, 200, s1.text); assert.ok(s1.json.saved > w1, 'trả mốc giờ sửa mới của timeline.json');
+  const s2 = await api('/api/save', { timeline: { ...tl(A), title: 'cua-so-2' }, captions: [], dir: A, base: w2 }, id);
+  assert.equal(s2.status, 409); assert.equal(s2.json.conflict, true); assert.equal(tl(A).title, 'cua-so-1', 'không đè bản của cửa sổ 1');
+  const s3 = await api('/api/save', { timeline: { ...tl(A), title: 'cua-so-1b' }, captions: [], dir: A, base: s1.json.saved }, id);
+  assert.equal(s3.status, 200, 'cửa sổ 1 lưu tiếp bằng mốc vừa nhận');
+  const s4 = await api('/api/save', { timeline: { ...tl(A), title: 'cua-so-2' }, captions: [], dir: A, base: w2, force: true }, id);
+  assert.equal(s4.status, 200); assert.equal(tl(A).title, 'cua-so-2');
+  assert.equal((await api('/api/save', { timeline: tl(A), captions: [], dir: A }, id)).status, 200, 'không gửi base (script cũ) thì như trước');
+});
+
+test('trình duyệt: saveNow trả đã lưu hay chưa, xếp hàng; chỗ gọi rồi chạy việc phía server không bỏ qua kết quả', () => {
+  const js = fs.readFileSync(path.join(SKILL, 'studio/studio.js'), 'utf8');
+  assert.match(js, /function saveNow\(force\) \{ const p = saveQ\.then/, 'lần lưu sau chờ lần trước (mốc saved mới), không xung đột giả với chính cửa sổ này');
+  assert.match(js, /META\.saved = r\.saved;[^\n]*return true; \}\n {2}if \(r\.conflict\) saveConflict\(\);/);
+  assert.match(js, /\$\('#save'\)\.addEventListener\('click', \(\) => saveNow\(\)\)/, 'event không lọt vào tham số force');
+  const bad = [];
+  for (const f of ['studio/studio.js', 'studio/library.js', ...fs.readdirSync(path.join(SKILL, 'studio/features')).filter(x => x.endsWith('.js')).map(x => 'studio/features/' + x)])
+    fs.readFileSync(path.join(SKILL, f), 'utf8').split('\n').forEach((l, i) => { if (/(^|[;{]\s*)await (S\.|Studio\.)?saveNow\??\.?\(\)(\.catch\([^)]*\))?;/.test(l) && !/dirty\)? *\{? *if|if \((S\.|Studio\.)?dirty\)/.test(l)) bad.push(`${f}:${i + 1}`); });
+  assert.deepEqual(bad, [], 'gọi saveNow rồi bỏ qua kết quả');
+});
+
+// S18 M131: dự án chỉ sửa ở một tab; tab thứ hai mở cùng video nguồn thì tạo dự án mới (bản sao, cùng thư mục cha = cùng Kho)
+test('server: /api/project/duplicate chép dự án của tab sang "<tên> (2)" (bỏ out/, lịch sử, dấu vết Tự lái) rồi mở ở tab gọi', async () => {
+  const id = (await api('/api/open', { path: A })).opened || tabId(A);
+  fs.mkdirSync(path.join(A, 'out'), { recursive: true }); fs.writeFileSync(path.join(A, 'out', 'v.mp4'), 'x');
+  fs.writeFileSync(path.join(A, '.studio', 'autopilot.json'), '{}');
+  const r = await api('/api/project/duplicate', {}, id);
+  assert.equal(r.status, 200, r.text);
+  const D = path.join(path.dirname(A), 'Clip A (2)');
+  assert.equal(r.json.name, 'Clip A (2)'); assert.equal(r.json.id, tabId(D)); assert.equal(r.opened, tabId(D), 'tab gọi chuyển sang bản mới');
+  assert.deepEqual(tl(D), tl(A)); assert.equal(fs.readFileSync(path.join(D, 'media', 'a.png'), 'utf8'), 'png-Clip A');
+  for (const x of ['out', '.studio/autopilot.json']) assert.ok(!fs.existsSync(path.join(D, x)), x);
+  assert.equal(fs.readdirSync(path.join(D, '.studio', 'history')).length, 0, 'không chép lịch sử');
+  assert.ok(!fs.readdirSync(path.dirname(A)).some(x => x.includes('.tao-')), 'không còn thư mục tạm');
+  // sửa bản mới không đụng bản gốc (file chép thật, không liên kết cứng)
+  fs.writeFileSync(path.join(D, 'media', 'a.png'), 'doi'); assert.equal(fs.readFileSync(path.join(A, 'media', 'a.png'), 'utf8'), 'png-Clip A');
+  const r2 = await api('/api/project/duplicate', {}, id); assert.equal(r2.json.name, 'Clip A (3)');
+});
+
+test('trình duyệt: dự án giữ khoá Web Locks suốt đời trang; tab thứ hai bị chặn, chỉ xem, có nút tạo dự án mới', () => {
+  const js = fs.readFileSync(path.join(SKILL, 'studio/studio.js'), 'utf8');
+  assert.match(js, /if \(!await holdProject\(META\.pid \|\| META\.dir\)\) return projectBusy\(\);/);
+  assert.match(js, /navigator\.locks\.request\('avs-project:' \+ id, \{ ifAvailable: true \}/);
+  assert.match(js, /if \(readOnly\) \{ projectBusy\(\); return false; \}/, 'trang bị chặn không lưu được');
+  assert.match(js, /api\('\/api\/project\/duplicate'/);
+});
+
+test('nhân bản: hai lần bấm cùng lúc ra hai dự án khác tên, không chép chồng', async () => {
+  const { duplicateProject } = await import('../../studio/routes/59_projcopy.mjs');
+  const S = mkProj('Clip S', 'S');
+  const [x, y] = await Promise.all([duplicateProject(S), duplicateProject(S)]);
+  assert.deepEqual([path.basename(x), path.basename(y)].sort(), ['Clip S (2)', 'Clip S (3)']);
+  for (const d of [x, y]) assert.deepEqual(tl(d), tl(S));
+});

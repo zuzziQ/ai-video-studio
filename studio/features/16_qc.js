@@ -66,7 +66,7 @@
 
   // ---------- run QC as a job ----------
   async function runQc({ fix = false, claude = true, after, only } = {}) {
-    if (dirty()) await S.saveNow();
+    if (dirty() && !await S.saveNow()) return;
     const r = await S.api('/api/qc/run', { fix, claude, ...(only ? { only } : {}) });
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
     S.modal(`<h3><i class="ti ti-shield-check"></i> ${only ? `Đang áp dụng ${only.length} gợi ý sửa…` : fix ? 'Đang kiểm tra & tự sửa…' : 'Đang kiểm tra chất lượng…'}</h3>
@@ -202,7 +202,7 @@
   // ---------- variants ----------
   async function runVariants() {
     const kind = $('#vakind')?.value || 'hook', exp = $('#vaexp')?.checked;
-    if (dirty()) await S.saveNow();
+    if (dirty() && !await S.saveNow()) return;
     const r = await S.api('/api/variants/run', { n: 3, kind, export: !!exp });
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
     S.modal(`<h3><i class="ti ti-versions"></i> Đang tạo 3 phiên bản…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre>
@@ -226,7 +226,7 @@
     $('#vaplay').onclick = () => { for (const vd of document.querySelectorAll('#modalbox video')) { vd.currentTime = 0; vd.play().catch(() => {}); } };
     $('#modalbox .va-grid').addEventListener('click', async e => {
       const b = e.target.closest('[data-vaopen]'); if (!b) return;
-      if (dirty()) await S.saveNow();
+      if (dirty() && !await S.saveNow()) return;
       const r = await S.api('/api/variants/open', { dir: b.dataset.vaopen });
       if (r.ok) location.reload(); else S.toast(r.error || 'Không mở được');
     });
@@ -291,7 +291,7 @@
   let passGate = false;
   const KCODE = { ad_policy: 'Chính sách', ad_claim: 'Claim', ad_originality: 'Nguyên bản' };
   async function checkGate() {
-    if (dirty()) await S.saveNow();
+    if (dirty() && !await S.saveNow()) return null;
     const g = await S.api('/api/qc/gate').catch(() => null);
     if (!g?.blocked) { passGate = true; return $('#xgo')?.click(); }
     showGate(g);

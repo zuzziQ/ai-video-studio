@@ -122,7 +122,8 @@ Mọi `/api/*` cần **token phiên** (sinh mới mỗi lần chạy server): he
 | Đường dẫn | Việc |
 |---|---|
 | `GET /api/project` | `{timeline, captions, meta}`; `meta.kho` = `{brand, title, root, found}` Kho của dự án (thanh trên hiện "Kho …" dưới tên dự án, S17 M126); không có dự án mở (kể cả lúc đang tạo video mới) → 404 |
-| `POST /api/save` | `{timeline, captions}` → ghi file + lịch sử + notes.md |
+| `POST /api/save` | `{timeline, captions, dir?, base?, force?}` → ghi file + lịch sử + notes.md, trả `saved` (mốc giờ sửa `timeline.json`). `dir` khác dự án của tab → 409 (M126). `base` = mốc trang đã tải / lưu lần cuối: file đã được lưu mới hơn (cùng dự án mở ở cửa sổ / tab khác) → 409 `{conflict: true}`, không ghi; trình chỉnh sửa hỏi **Tải bản mới nhất** / **Ghi đè bằng bản ở đây** (`force: true`) / **Để sau** (M131) |
+| `POST /api/project/duplicate` | chép dự án của tab sang thư mục bên cạnh `<tên> (2)` (cùng Kho / thương hiệu; bỏ `out/`, lịch sử, dấu vết Tự lái; chép thật, không liên kết cứng) rồi mở ở tab gọi (`X-AVS-Opened`) → `{ok, id, name}` (M131, `routes/59_projcopy.mjs`) |
 | `GET /api/history`, `GET /api/history/<id>` | lịch sử |
 | `GET /api/library` | danh sách SFX / nhạc |
 | `GET /api/waveform` | biên độ mỗi 1/50 s |

@@ -64,7 +64,7 @@
       const t = (P.draft ?? ta.value).trim(); if (!t) return Studio.toast('Kịch bản đang trống');
       P.busy = true; renderCard();
       try {
-        await Studio.saveNow?.(); // phụ đề đang sửa trong trình duyệt vào đĩa trước khi server thay
+        if (Studio.saveNow && !await Studio.saveNow()) throw new Error('Chưa lưu được dự án — chọn bản giữ lại rồi thử lại'); // phụ đề đang sửa trong trình duyệt vào đĩa trước khi server thay
         const r = await Studio.api('/api/script', { text: t, name: P.name || sc?.name || '' });
         if (r.error) throw new Error(r.error);
         P.draft = null; P.data = { ...(P.data || {}), script: r.script };
@@ -76,7 +76,7 @@
     const clr = el.querySelector('[data-sc="clear"]');
     if (clr) clr.onclick = async () => {
       if (!confirm('Bỏ kịch bản của dự án này? Phụ đề quay về bản nhận dạng tự động (nếu còn bản sao lưu).')) return;
-      await Studio.saveNow?.();
+      if (Studio.saveNow && !await Studio.saveNow()) return;
       const r = await Studio.api('/api/script/clear', {});
       if (r.error) return Studio.toast(r.error);
       P.data = { ...(P.data || {}), script: null }; P.draft = ''; if (r.restored) await Studio.reload?.();

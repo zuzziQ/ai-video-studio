@@ -573,7 +573,7 @@ function projectField(pf, el) {
   changed();
 }
 async function autoSfx() {
-  await saveNow(); pushUndo();
+  if (!await saveNow()) return; pushUndo();
   const p = await api('/api/autosfx', { keep: true });
   if (p.error) return toast('Lỗi: ' + p.error);
   TL = p.timeline; CAP = p.captions; migrateClips(); changed(true); return toast(`Đã đặt ${TL.audio?.sfx?.length || 0} SFX`);
@@ -1136,13 +1136,31 @@ async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body, strip) });
   return r.json();
 }
-async function saveNow() {
-  if (newBusy) return; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
-  const r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir }); // dir: server từ chối khi đã sang dự án khác (S17 M126)
-  if (r.ok) { dirty = false; setStatus('Đã lưu', false); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); }
+// S18 M131: trả true khi đã lưu. Các lần lưu xếp hàng (Ctrl+S khi lần trước còn bay): lần sau gửi mốc `saved` lần trước vừa nhận,
+// không báo xung đột giả với chính cửa sổ này. Chỗ gọi rồi chạy việc phía server / tải lại timeline phải dừng khi false.
+let saveQ = Promise.resolve(true);
+function saveNow(force) { const p = saveQ.then(() => saveOnce(force), () => saveOnce(force)); saveQ = p.catch(() => false); return p; }
+async function saveOnce(force) {
+  if (readOnly) { projectBusy(); return false; } // dự án đang mở ở tab khác (S18 M131)
+  if (newBusy) return false; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
+  // dir: server từ chối khi đã sang dự án khác (S17 M126). base: mốc lưu lần cuối mà trang này biết (S18 M131: cùng dự án ở hai cửa sổ)
+  const r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir, base: META?.saved, ...(force ? { force: true } : {}) });
+  if (r.ok) { dirty = false; if (META) META.saved = r.saved; setStatus('Đã lưu', false); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); return true; }
+  if (r.conflict) saveConflict();
   else toast('Lỗi lưu: ' + (r.error || ''));
+  return false;
 }
-$('#save').addEventListener('click', saveNow);
+// Bản trên đĩa mới hơn bản trang này đã tải: hỏi giữ bản nào, không âm thầm đè. Chưa chọn thì vẫn "chưa lưu".
+function saveConflict() {
+  modal(`<h3><i class="ti ti-alert-triangle"></i> Dự án vừa được lưu ở chỗ khác</h3>
+    <p>Dự án này đang mở ở một cửa sổ hoặc tab khác và bản ở đó đã được lưu sau khi trang này tải. <b>Tải bản mới nhất</b> bỏ các sửa đổi chưa lưu ở trang này; <b>Ghi đè</b> thay bản bên kia bằng bản ở đây.</p>
+    <p class="muted">Bản nào bị thay vẫn còn trong Lịch sử.</p>
+    <div class="actions"><button id="scf-load" class="primary">Tải bản mới nhất</button><button id="scf-over" class="danger">Ghi đè bằng bản ở đây</button><button id="scf-no">Để sau</button></div>`);
+  $('#scf-load').onclick = () => { dirty = false; location.reload(); };
+  $('#scf-over').onclick = () => { closeModal(); saveNow(true); };
+  $('#scf-no').onclick = closeModal;
+}
+$('#save').addEventListener('click', () => saveNow());
 $('#undo').addEventListener('click', undo);
 $('#redo').addEventListener('click', redo);
 async function loadHistory() {
@@ -1158,7 +1176,7 @@ $('#history').addEventListener('change', async e => {
 });
 function modal(html) { $('#modalbox').innerHTML = html; $('#modal').hidden = false; }
 function closeModal() { $('#modal').hidden = true; }
-$('#modal').addEventListener('click', e => { if (e.target.id === 'modal' && !pollTimer) closeModal(); });
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal' && !pollTimer && !readOnly) closeModal(); });
 let pollTimer = null;
 function pollJob(onDone) {
   clearInterval(pollTimer);
@@ -1195,11 +1213,11 @@ $('#export').addEventListener('click', () => {
     <div class="acts acts--spaced"><button id="xcover"><i class="ti ti-photo"></i> Ảnh bìa (khung ${fmt(T)})</button><button id="xsrt"><i class="ti ti-file-text"></i> Phụ đề .srt</button></div>
     <p class="muted">Âm thanh được trộn lại (giọng + nhạc + SFX, chuẩn −14 LUFS) rồi render từng khung bằng đúng engine của preview.</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="xgo"><i class="ti ti-upload"></i> Xuất</button></div>`);
-  $('#xcover').onclick = async () => { if (dirty) await saveNow(); toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T, deliver: $('#xgive').checked }); if (r.out) { window.open(PB() + r.out); api('/api/reveal', { path: r.out }); if (giveNote(r)) toast('Ảnh bìa' + giveNote(r)); } else toast('Lỗi: ' + r.error); };
-  $('#xsrt').onclick = async () => { if (dirty) await saveNow(); const r = await api('/api/srt', { deliver: $('#xgive').checked }); toast('Đã lưu ' + r.out + giveNote(r)); api('/api/reveal', { path: r.out }); };
+  $('#xcover').onclick = async () => { if (dirty && !await saveNow()) return; toast('Đang render ảnh bìa…'); const r = await api('/api/still', { t: T, deliver: $('#xgive').checked }); if (r.out) { window.open(PB() + r.out); api('/api/reveal', { path: r.out }); if (giveNote(r)) toast('Ảnh bìa' + giveNote(r)); } else toast('Lỗi: ' + r.error); };
+  $('#xsrt').onclick = async () => { if (dirty && !await saveNow()) return; const r = await api('/api/srt', { deliver: $('#xgive').checked }); toast('Đã lưu ' + r.out + giveNote(r)); api('/api/reveal', { path: r.out }); };
   $('#xgive').onchange = e => giveSet(e.target.checked);
   $('#xgo').onclick = async () => {
-    if (dirty) await saveNow();
+    if (dirty && !await saveNow()) return;
     const from = $('#xfrom').value, to = $('#xto').value;
     const xo = { quality: document.querySelector('[name=xq]:checked').value, from: from === '' ? undefined : +from, to: to === '' ? undefined : +to };
     const r = await api('/api/export', { ...xo, aspects: [...document.querySelectorAll('[name=xasp]:checked')].map(i => i.value), deliver: $('#xgive').checked });
@@ -1404,6 +1422,32 @@ function loadTabUI() {
   requestAnimationFrame(() => { const sc = $('#tlscroll'); if (sc && +ui.sx >= 0) sc.scrollLeft = +ui.sx; });
 }
 window.addEventListener('pagehide', saveTabUI);
+// S18 M131: mỗi dự án chỉ mở ở một tab / cửa sổ của trình duyệt (chủ repo chốt 2026-11-17: mở trùng thì cảnh báo, không cho mở
+// tiếp). Khoá Web Locks theo mã dự án, giữ suốt đời trang; tab đóng, tải lại hay treo thì trình duyệt tự nhả nên không kẹt khoá.
+// Thử lại vài lần ~2 s: tải lại / "Tải bản mới nhất" có khi trang mới chạy trước khi trang cũ kịp nhả. Hai trình duyệt khác nhau
+// không chung khoá: chốt chặn còn lại là xung đột khi lưu (base, M131). Trình duyệt không có Web Locks thì cho mở như cũ.
+let readOnly = false;
+async function holdProject(id) {
+  if (!navigator.locks || !id) return true;
+  const once = () => new Promise(ok => navigator.locks.request('avs-project:' + id, { ifAvailable: true }, lock => { ok(!!lock); return lock ? new Promise(() => {}) : null; }).catch(() => ok(true)));
+  for (let i = 0; i < 8; i++) { if (await once()) return true; await new Promise(r => setTimeout(r, 250)); }
+  return false;
+}
+function projectBusy() {
+  readOnly = true; document.body.classList.add('proj-busy');
+  modal(`<h3><i class="ti ti-lock"></i> Dự án đang mở ở tab khác</h3>
+    <p><b>${esc(META.name || '')}</b> đang được sửa ở một tab hoặc cửa sổ khác của trình duyệt. Mỗi dự án chỉ sửa ở một chỗ để hai bên không ghi đè nhau.</p>
+    <p class="muted">Muốn làm thêm một bản khác từ cùng video nguồn: tạo dự án mới (bản sao, cùng Kho / thương hiệu, sửa độc lập). Hoặc quay lại tab kia, đóng nó rồi bấm Thử lại.</p>
+    <div class="actions"><button id="pb-dup" class="primary"><i class="ti ti-copy-plus"></i> Tạo dự án mới từ video này</button><button id="pb-retry">Thử lại</button><button id="pb-home">Mở dự án khác</button></div>`);
+  $('#pb-dup').onclick = async e => {
+    e.target.disabled = true; e.target.textContent = 'Đang tạo…';
+    const r = await api('/api/project/duplicate', {}).catch(err => ({ error: err.message }));
+    if (r.ok && r.id && window.avsProject) return location.replace(window.avsProject.url(r.id));
+    e.target.disabled = false; e.target.textContent = 'Tạo dự án mới từ video này'; toast(r.error || 'Chưa tạo được dự án mới');
+  };
+  $('#pb-retry').onclick = () => location.reload();
+  $('#pb-home').onclick = () => { if (!Studio.openHome) return toast('Trang chủ chưa sẵn sàng'); closeModal(); Studio.openHome(); }; // trang chủ che trình chỉnh sửa; mở dự án nào thì trang tải lại
+}
 async function boot() {
   renderRail();
   const proj = fetch('/api/project'), lib = api('/api/library').catch(() => ({ sfx: [], music: [] }));
@@ -1415,6 +1459,7 @@ async function boot() {
   const p = await r.json();
   TL = p.timeline; CAP = p.captions; META = p.meta;
   if (META.pid) window.avsProject?.set(META.pid); // S18 M129: mã tab lên thanh địa chỉ, các request sau mang X-AVS-Project
+  if (!await holdProject(META.pid || META.dir)) return projectBusy(); // S18 M131: một dự án chỉ sửa ở một tab
   TL.scenes = TL.scenes || [];
   if ((TL.width || 1080) > (TL.height || 1920)) { DW = 1280; DH = 720; SAFE = { x: 60, y: 40, w: 1160, h: 620 }; document.body.classList.add('landscape'); }
   migrateClips();
