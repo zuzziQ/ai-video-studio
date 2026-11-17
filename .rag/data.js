@@ -53,8 +53,8 @@ export const DOMAINS = {
         layer: "domain",
         title: "Bảng API của Studio cho script",
         file_path: "references/studio.md",
-        lines: "111-162",
-        keywords: ["api", "save", "export", "open", "job", "templates", "upload", "token", "origin", "avs_token", "onboarding", "dict", "từ điển", "assist", "assist/cancel"],
+        lines: "112-163",
+        keywords: ["api", "save", "export", "open", "job", "templates", "upload", "token", "origin", "avs_token", "onboarding", "dict", "từ điển", "assist", "assist/cancel", "exports", "lịch sử xuất"],
         content: "Token phiên, kiểm origin, giới hạn body (413/411), các đường dẫn /api/* (project, save, export, new, job, open có chặn thư mục cấu hình, media, still/srt POST, templates, onboarding, dict) và phạm vi file server phục vụ.",
       },
       {
