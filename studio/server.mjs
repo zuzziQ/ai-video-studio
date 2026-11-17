@@ -87,10 +87,11 @@ function readProject() {
   return { timeline: tl, captions: Array.isArray(captions) ? captions : [], meta: {
     name: path.basename(project.dir), dir: project.dir, version: VERSION, frames: frameCount(tl), audio: audioSrc,
     mix: tl.audio?.mix && fs.existsSync(P(tl.audio.mix)) ? tl.audio.mix : null,
-    saved: fs.statSync(project.tlFile).mtimeMs, notes: fs.existsSync(P('.studio/notes.md')), kho: khoOf(tl),
+    saved: fs.statSync(project.tlFile).mtimeMs, notes: fs.existsSync(P('.studio/notes.md')),
   } };
 }
-// S17 M126: Kho (và thương hiệu) của dự án đang mở cho thanh trên và hộp "Video mới"; lỗi đọc Kho không làm hỏng việc mở dự án.
+// S17 M126: Kho (và thương hiệu) của dự án đang mở cho thanh trên và hộp "Video mới" (chỉ GET /api/project, không phải mọi
+// readProject của route); lỗi đọc Kho không làm hỏng việc mở dự án.
 function khoOf(tl) {
   try { const ws = workspaceOfProject(project.dir, tl); return { brand: ws.brand || '', title: ws.title, root: ws.root, found: ws.found }; } catch { return null; }
 }
@@ -475,7 +476,10 @@ const server = http.createServer(async (req, res) => {
       const f = under(project.dir, p.slice(9));
       return f && fileAllowed(f) ? sendFile(req, res, f) : json(res, {}, 403);
     }
-    if (p === '/api/project' && req.method === 'GET') return project ? json(res, readProject()) : json(res, { error: 'Chưa mở dự án' }, 404);
+    if (p === '/api/project' && req.method === 'GET') {
+      if (!project) return json(res, { error: 'Chưa mở dự án' }, 404);
+      const rp = readProject(); rp.meta.kho = khoOf(rp.timeline); return json(res, rp);
+    }
     if (p === '/api/save' && req.method === 'POST') return json(res, save(await body(req)));
     if (p === '/api/history') {
       const d = path.join(project.dir, '.studio/history');
