@@ -97,7 +97,8 @@ export function workspaceFor(brandId = '', { home = AVS_HOME(), userHome = os.ho
   const b = brandId ? (readJson(brandsFile(home))?.brands || []).find(x => x.id === brandId) : null;
   if (b) { brand = b.id; title = b.title || b.name || b.id; saved = b.workspace; } else saved = readJson(commonFile(home))?.root;
   const bad = typeof saved === 'string' ? workspaceProblem(saved, home) : null;
-  if (typeof saved === 'string' && !bad) { const root = path.resolve(saved); return { root, brand, title, custom: true, exists: fs.existsSync(root), warning: null }; }
+  // "Tạo Kho mặc định" cũng lưu đường dẫn vào brand kit: trùng thư mục mặc định thì vẫn là mặc định, không phải "tự chọn"
+  if (typeof saved === 'string' && !bad) { const root = path.resolve(saved); return { root, brand, title, custom: key(root) !== key(defaultRoot(title, userHome)), exists: fs.existsSync(root), warning: null }; }
   // mặc định theo tên; trùng tên với Kho của thương hiệu khác (hai tên giống nhau sau safeName) → thêm id vào tên
   let root = defaultRoot(title, userHome);
   const o = ownerOf(root); if (o !== null && o !== brand) root = defaultRoot(`${title} ${brand || 'chung'}`, userHome);
