@@ -112,3 +112,72 @@ test('GET có cache, fresh=1 kiểm lại, POST seen ghi setup.json; không lộ
   assert.equal(d.seen, true); assert.deepEqual(d.later, ['ffmpeg']);
   assert.equal((await fetch(BASE + '/api/setup/other')).status, 404);
 });
+
+// ---------- M116: cài giúp ----------
+test('fixPlan: lệnh dựng từ danh sách cho phép, đúng hệ điều hành', () => {
+  const o = { skill: SKILL, platform: 'win32', venv: true, winget: 'C:/w/winget.exe', brew: null, npm: '/n/npm-cli.js', node: '/n/node', puppeteer: true };
+  const all = M.fixPlan('all', o)[0];
+  // đường dẫn tuyệt đối: ctx.run chạy ở thư mục dự án, tên trần có thể khớp file lạ trong đó
+  assert.ok(path.win32.isAbsolute(all.cmd) && /powershell\.exe$/i.test(all.cmd), all.cmd);
+  assert.equal(M.fixPlan('all', { ...o, platform: 'linux' })[0].cmd, '/bin/bash');
+  assert.equal(M.fixPlan('constructor', o), null); assert.equal(M.fixPlan('toString', o), null);
+  assert.ok(M.fixPlan('ffmpeg', o)[0].okText.test('Found an existing package already installed.')); assert.ok(all.argv.includes('-Yes')); assert.match(all.argv.join(' '), /install\.ps1/);
+  assert.match(M.fixPlan('all', { ...o, platform: 'darwin' })[0].argv[0], /install\.sh$/);
+  const rem = M.fixPlan('rembg', o)[0];
+  assert.match(rem.cmd, /\.venv[\\/]Scripts[\\/]python\.exe$/); assert.deepEqual(rem.argv, ['-m', 'pip', 'install', 'rembg[cpu]']);
+  assert.equal(M.fixPlan('rembg', { ...o, venv: false }), null, 'chưa có .venv → dùng trình cài');
+  assert.deepEqual(M.fixPlan('yunet', o)[0].argv, ['-m', 'pip', 'install', 'onnxruntime']);
+  assert.deepEqual(M.fixPlan('ffmpeg', o)[0].argv.slice(0, 3), ['install', '--id', 'Gyan.FFmpeg']);
+  assert.equal(M.fixPlan('ffmpeg', { ...o, winget: null }), null);
+  assert.deepEqual(M.fixPlan('chrome', { ...o, platform: 'darwin', brew: '/b/brew' })[0].argv, ['install', '--cask', 'google-chrome']);
+  assert.deepEqual(M.fixPlan('puppeteer-core', o)[0].argv.slice(0, 2), ['/n/npm-cli.js', 'install']);
+  assert.equal(M.fixPlan('headless-shell', { ...o, puppeteer: false }), null);
+  assert.equal(M.fixPlan('vieneu', o), null);
+  assert.equal(M.fixPlan('rm -rf /', o), null);
+});
+
+test('POST /api/setup/install: chỉ nhận id, chạy job với lệnh của server, bận thì 409', async () => {
+  const calls = [];
+  let job = null, busy = false;
+  const ctx2 = { SKILL, json, body: req => readJson(req), get job() { return job; },
+    startJob: (kind, fn, payload) => { if (busy) return false; job = { kind, step: '', progress: 0, log: '', payload }; job.done = fn(payload).then(() => 'done', e => 'error:' + e.message); return true; },
+    run: async (cmd, argv, onLine) => { calls.push([cmd, argv]); onLine('▸ Kiểm tra công cụ'); } };
+  const h = M.default(ctx2);
+  const srv = http.createServer(async (req, res) => { const u = new URL(req.url, 'http://x'); if (!(await h(req, res, u.pathname, u))) json(res, {}, 404); });
+  await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
+  const B = `http://127.0.0.1:${srv.address().port}`;
+  const post = async b => { const r = await fetch(B + '/api/setup/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); return { status: r.status, j: await r.json() }; };
+  try {
+    assert.equal((await post({ cmd: 'calc.exe' })).status, 400);
+    assert.equal((await post({ id: 'không có' })).status, 400);
+    assert.equal((await post({ id: 'vieneu' })).status, 400, 'mục không cài lẻ được');
+    const r = await post({ id: 'all' });
+    assert.equal(r.status, 200); assert.equal(job.kind, 'setup');
+    await new Promise(ok => setTimeout(ok, 50));
+    assert.equal(calls.length, 1);
+    assert.match(calls[0][1].join(' '), /install\.(ps1|sh)/);
+    assert.equal(job.step.length > 0, true);
+    assert.equal(await job.done, 'done');
+    busy = true;
+    assert.equal((await post({ id: 'all' })).status, 409);
+  } finally { srv.closeAllConnections?.(); srv.close(); }
+});
+
+test('cài giúp: lệnh lỗi thì job lỗi; winget báo "đã cài" thì coi là xong', async () => {
+  let job = null, mode = 'fail';
+  const ctx3 = { SKILL, json, body: req => readJson(req), get job() { return job; },
+    startJob: (kind, fn) => { job = { kind, step: '', progress: 0, log: '' }; job.done = fn().then(() => 'done', e => 'error:' + e.message); return true; },
+    run: async () => { job.log += mode === 'fail' ? 'boom\n' : 'Found an existing package already installed.\n'; throw new Error('winget.exe lỗi (mã 1)'); } };
+  const h = M.default(ctx3);
+  const srv = http.createServer(async (req, res) => { const u = new URL(req.url, 'http://x'); if (!(await h(req, res, u.pathname, u))) json(res, {}, 404); });
+  await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
+  const post = async b => (await fetch(`http://127.0.0.1:${srv.address().port}/api/setup/install`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })).status;
+  try {
+    assert.equal(await post({ id: 'all' }), 200);
+    assert.match(await job.done, /^error:/, 'trình cài lỗi → job lỗi');
+    // okText chỉ gắn cho bước winget; trình cài ("all") không có okText nên "already installed" vẫn là lỗi
+    mode = 'ok';
+    assert.equal(await post({ id: 'all' }), 200);
+    assert.match(await job.done, /^error:/);
+  } finally { srv.closeAllConnections?.(); srv.close(); }
+});

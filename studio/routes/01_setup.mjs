@@ -3,6 +3,11 @@
 //        status: ok | missing | old (phiên bản thấp) | na (không cần trên máy này, vd không có GPU NVIDIA)
 //        Kết quả giữ trong bộ nhớ 5 phút (fresh=1 kiểm lại). Không cài gì, không chạy trình cài.
 //   POST /api/setup/seen {missing:[id…]} → ghi $AVS_HOME/setup.json (đã xem màn này, các mục bắt buộc còn thiếu lúc bấm "Để sau")
+//   POST /api/setup/install {id}         → M116: cài giúp, chạy như job của Studio (theo dõi qua /api/job). id = "all" chạy lại trình cài
+//        (install.ps1 -Yes / install.sh), id của một mục chạy lệnh cài lẻ (item.auto === 'item'). Lệnh do server dựng từ danh sách cho phép
+//        (fixPlan), trình duyệt chỉ gửi id. Xong thì (Windows) đọc lại PATH của máy vào tiến trình server và xoá cache để kiểm lại.
+//        AVS_SETUP_DRY=1: chỉ in lệnh sẽ chạy (thử giao diện mà không cài thật).
+//   POST /api/setup/reveal               → mở thư mục chứa install.cmd / install.sh (Finder / Explorer)
 // Gói pip đọc từ các dòng `pip install` của install.ps1 (Windows) / scripts/setup.sh (macOS, Linux): thêm gói vào trình cài là
 // màn này thấy ngay. META chỉ thêm nhãn, mức bắt buộc và tính năng; gói không có META hiện thành mục tuỳ chọn.
 // Không trả token, nội dung .env hay đường dẫn tới file bí mật: chỉ phiên bản, có/thiếu và lệnh cài.
@@ -55,7 +60,10 @@ export function which(cmd, env = process.env) {
   for (const dir of String(env.PATH || env.Path || '').split(path.delimiter).filter(Boolean)) {
     for (const e of exts) {
       const f = path.join(dir, cmd + e);
-      try { if (fs.statSync(f).isFile()) return f; } catch { /* không có */ }
+      try { if (fs.statSync(f).isFile()) return f; } catch {
+        // App alias của Windows (WindowsApps\winget.exe) là reparse point: stat lỗi, lstat đọc được
+        try { if (fs.lstatSync(f).isSymbolicLink()) return f; } catch { /* không có */ }
+      }
     }
   }
   return null;
@@ -90,6 +98,61 @@ function commands(skill, platform) {
     vieneu: win ? `powershell -ExecutionPolicy Bypass -File ${q(path.join(skill, 'scripts', 'install_vieneu.ps1'))}` : 'Xem references/engines.md mục VieNeu (bản cài một lệnh hiện chỉ có cho Windows)',
     claude: 'npm install -g @anthropic-ai/claude-code  (rồi chạy claude một lần để đăng nhập)',
   };
+}
+
+// ---------- cài giúp (M116) ----------
+// npm của chính Node đang chạy Studio (npm.cmd trên Windows không spawn được nếu không qua shell).
+export function npmCli(exec = process.execPath) {
+  const d = path.dirname(exec);
+  return [path.join(d, 'node_modules/npm/bin/npm-cli.js'), path.join(d, '../lib/node_modules/npm/bin/npm-cli.js')].find(f => fs.existsSync(f)) || null;
+}
+const PIP_IDS = new Set(Object.values(PIP_META).map(m => m.id));
+/** Spec pip (như trình cài viết) của một mục. */
+export function pipSpecs(id, skill, platform = process.platform) {
+  if (id === 'yunet') return ['onnxruntime'];
+  return pipFromInstallers(skill, platform).filter(p => (PIP_META[p.dist]?.id || p.dist) === id).map(p => p.spec);
+}
+// Mục trình cài lo được (chạy lại trình cài là có): ffmpeg/Node qua winget (Windows), .venv + pip, npm, headless-shell.
+const BY_INSTALLER = new Set(['ffmpeg', 'ffprobe', 'node', 'venv', 'puppeteer-core', 'headless-shell', ...PIP_IDS]);
+/**
+ * Các bước [{cmd, argv, label}] để cài một mục, hoặc null khi không cài lẻ được (dùng trình cài hoặc cài tay).
+ * o: {skill, platform, venv (có scripts/.venv chạy được), winget, brew (đường dẫn hoặc null), npm (npm-cli.js), node, puppeteer}
+ */
+// Đường dẫn tuyệt đối: ctx.run chạy với cwd = thư mục dự án, và Windows tìm tên lệnh trần ở cwd trước (dự án lạ có powershell.exe giả).
+export const POWERSHELL = path.win32.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const PKG = { ffmpeg: ['Gyan.FFmpeg', 'ffmpeg'], ffprobe: ['Gyan.FFmpeg', 'ffmpeg'], chrome: ['Google.Chrome', '--cask google-chrome'], ollama: ['Ollama.Ollama', 'ollama'], node: ['OpenJS.NodeJS.LTS', 'node'] };
+export function fixPlan(id, o) {
+  const win = o.platform === 'win32', mac = o.platform === 'darwin', node = o.node || process.execPath;
+  if (id === 'all') return win
+    ? [{ cmd: POWERSHELL, argv: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(o.skill, 'install.ps1'), '-Yes'], label: 'Chạy trình cài (install.ps1)' }]
+    : [{ cmd: '/bin/bash', argv: [path.join(o.skill, 'install.sh')], label: 'Chạy trình cài (install.sh)' }];
+  const vpy = path.join(o.skill, 'scripts', win ? '.venv/Scripts/python.exe' : '.venv/bin/python');
+  if (PIP_IDS.has(id) || id === 'yunet') {
+    const specs = pipSpecs(id, o.skill, o.platform);
+    return o.venv && specs.length ? [{ cmd: vpy, argv: ['-m', 'pip', 'install', ...specs], label: `pip install ${specs.join(' ')}` }] : null;
+  }
+  const pkg = Object.hasOwn(PKG, id) ? PKG[id] : null;
+  // winget trả mã khác 0 khi gói đã có / không có bản nâng: coi là xong (okText)
+  if (pkg && win && o.winget) return [{ cmd: o.winget, argv: ['install', '--id', pkg[0], '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements'], label: `winget install ${pkg[0]}`,
+    okText: /already installed|No available upgrade|No applicable upgrade|No newer package/i }];
+  if (pkg && mac && o.brew) return [{ cmd: o.brew, argv: ['install', ...pkg[1].split(' ')], label: `brew install ${pkg[1]}` }];
+  if (id === 'puppeteer-core' && o.npm) return [{ cmd: node, argv: [o.npm, 'install', '--prefix', path.join(o.skill, 'scripts')], label: 'npm install (scripts)' }];
+  if (id === 'headless-shell' && o.puppeteer) return [{ cmd: node, argv: [path.join(o.skill, 'scripts', 'install_headless_shell.mjs')], label: 'Tải chrome-headless-shell' }];
+  if (id === 'claude' && o.npm) return [{ cmd: node, argv: [o.npm, 'install', '-g', '@anthropic-ai/claude-code'], label: 'npm install -g @anthropic-ai/claude-code' }];
+  return null;
+}
+// Windows: winget ghi PATH mới vào registry, tiến trình server vẫn giữ PATH cũ → nối thêm các thư mục mới để ffmpeg… dùng được ngay.
+function refreshPathWin() {
+  if (!IS_WIN) return Promise.resolve(false);
+  const ps = "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')";
+  return exec(POWERSHELL, ['-NoProfile', '-Command', ps], 5000).then(r => {
+    if (!r.ok) return false;
+    const key = Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') || 'Path';
+    const cur = String(process.env[key] || '').split(';').filter(Boolean), low = new Set(cur.map(d => d.toLowerCase()));
+    const add = r.out.trim().split(';').map(d => d.trim()).filter(d => d && !low.has(d.toLowerCase()));
+    if (add.length) process.env[key] = [...cur, ...add].join(';');
+    return add.length > 0;
+  });
 }
 
 const PROBE = `import sys, json
@@ -224,7 +287,11 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
   const req = [...ff, node, venv, ...[...pipItems.values()].filter(i => i.need === 'required'), chrome, pup];
   const opt = [...[...pipItems.values()].filter(i => i.need !== 'required'), hs, ollama, vieneu, claude, yunet];
   const items = [...req, ...opt];
-  return { ready: req.every(i => i.status === 'ok'), platform, install: C.install, items, ms: Date.now() - t0, at: new Date().toISOString() };
+  // M116: mục nào cài lẻ được ('item'), mục nào chạy lại trình cài là có ('all'), còn lại cài tay ('').
+  const plan = { skill, platform, venv: !!py && !py.broken && verGe(py.py, [3, 10]), winget: which('winget', env), brew: which('brew', env), npm: npmCli(), puppeteer: pup.status === 'ok' };
+  for (const i of items) i.auto = !(i.status === 'missing' || i.status === 'old') ? '' : fixPlan(i.id, plan) ? 'item' : BY_INSTALLER.has(i.id) ? 'all' : '';
+  const installer = platform === 'win32' ? 'install.cmd' : 'install.sh';
+  return { ready: req.every(i => i.status === 'ok'), platform, install: C.install, installer, items, ms: Date.now() - t0, at: new Date().toISOString() };
 }
 
 const stateFile = () => path.join(AVS_HOME(), 'setup.json');
@@ -244,13 +311,50 @@ export default ctx => {
   let cache = null, pending = null;
   const run = () => (pending ||= checkAll({ skill: ctx.SKILL }).then(r => (cache = { at: Date.now(), r }, r)).finally(() => { pending = null; }));
   return async (req, res, p, u) => {
-    if (p !== '/api/setup/check' && p !== '/api/setup/seen') return false;
+    if (!/^\/api\/setup\/(check|seen|install|reveal)$/.test(p)) return false;
     try {
       if (p === '/api/setup/check' && req.method === 'GET') {
         const fresh = u?.searchParams?.get('fresh') === '1';
         const hit = !fresh && cache && Date.now() - cache.at < TTL;
         const r = hit ? cache.r : await run();
         ctx.json(res, { ...r, ...loadSeen(), cached: !!hit });
+        return true;
+      }
+      if (p === '/api/setup/install' && req.method === 'POST') {
+        if (+req.headers['content-length'] > 1024) { req.resume(); ctx.json(res, { error: 'Dữ liệu gửi lên quá lớn' }, 413); return true; }
+        const { id } = (await ctx.body(req)) || {};
+        if (typeof id !== 'string' || !/^[\w.-]{1,40}$/.test(id)) { ctx.json(res, { error: 'Thiếu id mục cần cài' }, 400); return true; }
+        const r = await run(); // kiểm mới: quyết định .venv / puppeteer theo trạng thái lúc bấm, không theo cache 5 phút
+        const item = r.items.find(i => i.id === id);
+        if (id !== 'all' && !item) { ctx.json(res, { error: 'Không có mục này trong danh sách kiểm' }, 400); return true; }
+        const steps = fixPlan(id, { skill: ctx.SKILL, platform: process.platform, venv: r.items.find(i => i.id === 'venv')?.status === 'ok' && fs.existsSync(venvPy(ctx.SKILL)),
+          winget: which('winget'), brew: which('brew'), npm: npmCli(), puppeteer: r.items.find(i => i.id === 'puppeteer-core')?.status === 'ok' });
+        if (!steps) { ctx.json(res, { error: `Chưa cài giúp được ${item?.label || id} trên máy này: chạy lại trình cài hoặc dùng lệnh trong mục "Cho người rành máy"` }, 400); return true; }
+        const dry = process.env.AVS_SETUP_DRY === '1';
+        const ok = ctx.startJob('setup', async () => {
+          const job = ctx.job;
+          for (const [n, s] of steps.entries()) {
+            job.step = s.label; job.progress = n / steps.length;
+            const [cmd, argv] = dry ? [process.execPath, ['-e', `console.log(${JSON.stringify('▸ (chạy thử) ' + s.label)});setTimeout(()=>console.log('▸ Xong bước chạy thử'),1500)`]] : [s.cmd, s.argv];
+            // Dòng "▸ …" của trình cài là tên bước: đưa lên thanh tiến trình
+            const from = job.log.length;
+            try {
+              await ctx.run(cmd, argv, line => { const m = /^\s*▸\s*(.+)/.exec(line); if (m) { job.step = m[1].slice(0, 160); job.progress = Math.min(0.95, job.progress + 0.07); } });
+            } catch (e) { if (!(s.okText && s.okText.test(job.log.slice(Math.max(0, from - 200))))) throw e; }
+          }
+          // Cài đã xong: bước kiểm lại lỗi thì không biến kết quả thành "cài lỗi"
+          job.step = 'Kiểm lại máy';
+          try { if (!dry) await refreshPathWin(); cache = null; await run(); } catch (e) { console.error('setup re-check:', e.message); }
+          job.step = 'Xong';
+        }, { id });
+        if (!ok) { ctx.json(res, { error: 'Studio đang chạy một việc khác (xuất video, tách lời thoại…): chờ xong rồi cài' }, 409); return true; }
+        ctx.json(res, { ok: true, steps: steps.map(s => s.label) });
+        return true;
+      }
+      if (p === '/api/setup/reveal' && req.method === 'POST') {
+        const { revealPath } = await import(pathToFileURL(path.join(ctx.SKILL, 'scripts/platform.mjs')).href);
+        revealPath(path.join(ctx.SKILL, IS_WIN ? 'install.cmd' : 'install.sh'));
+        ctx.json(res, { ok: true });
         return true;
       }
       if (p === '/api/setup/seen' && req.method === 'POST') {

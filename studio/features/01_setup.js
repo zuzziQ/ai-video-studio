@@ -2,10 +2,12 @@
 // - Dữ liệu: GET /api/setup/check (studio/routes/01_setup.mjs, danh sách lấy từ install.ps1 / scripts/setup.sh), có cache 5 phút.
 // - Tự hiện SAU màn tác giả (#author, 00_author.js) khi chưa xem lần nào, hoặc khi có mục bắt buộc mới thiếu so với lần bấm "Để sau";
 //   02_onboarding.js chờ Studio.setupGate (đóng màn này) rồi mới mở hướng dẫn người mới.
-// - Thiếu mục bắt buộc: thẻ đỏ "Thiếu thư viện" cạnh logo cho tới khi đủ; mở lại từ đó hoặc menu ⋯ → "Kiểm tra máy…".
+// - Thiếu mục bắt buộc: chấm đỏ trên nút ⋯ + mục "Kiểm tra máy… (thiếu N)" tô đỏ trong menu (mở lại màn từ đó).
 // - Bấm một tính năng (POST tới API của nó) khi thư viện nó cần đang thiếu, hoặc lỗi trả về nhắc tới thư viện thiếu
 //   (No module named …, spawn ffmpeg ENOENT, puppeteer-core…): hiện thẻ #setup-need nêu đúng thư viện + lệnh cài.
-// Không cài gì tự động. File đứng trước 01_workflow.js: nút menu có class ghost để 01_workflow chuyển vào ⋯.
+// - M116 cài giúp: "Cài giúp đủ một lần" chạy lại trình cài, "Cài" trên từng dòng chạy lệnh cài lẻ (POST /api/setup/install {id}, job
+//   của Studio, tiến trình + log hiện ngay trong màn qua /api/job); lệnh dạng chữ thu vào "Lệnh cho người rành máy".
+// Không cài gì khi người dùng chưa bấm. File đứng trước 01_workflow.js: nút menu có class ghost để 01_workflow chuyển vào ⋯.
 'use strict';
 (() => {
   const { esc, api } = Studio;
@@ -44,13 +46,25 @@
   .su-cmd code { flex: 1; min-width: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-xs); background: rgb(var(--color-canvas)); border: 1px solid rgb(var(--color-line));
     font: var(--text-xs)/1.5 var(--font-mono); overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
   .su-cmd .ui-btn { flex: none; }
+  #avs-setup .su-acts { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+  #avs-setup .su-hint { color: rgb(var(--color-fg-subtle)); font-size: var(--text-xs); }
+  #avs-setup details.su-adv { grid-column: 2; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
+  #avs-setup .su-all details.su-adv { grid-column: auto; }
+  #avs-setup details.su-adv summary { cursor: pointer; width: max-content; max-width: 100%; }
+  #avs-setup details.su-adv .su-cmd { margin-top: var(--space-1); }
+  #avs-setup .su-row-act { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  #avs-setup .su-prog { display: flex; flex-direction: column; gap: var(--space-1); }
+  #avs-setup .su-step { font-weight: 600; overflow-wrap: anywhere; }
+  #avs-setup .su-bar { height: 4px; border-radius: var(--radius-pill); background: rgb(var(--color-line)); overflow: hidden; }
+  #avs-setup .su-bar i { display: block; height: 100%; width: var(--p, 5%); background: rgb(var(--color-accent)); transition: width var(--duration-base) var(--ease-standard); }
+  #avs-setup pre.su-log { margin: 0; max-height: 120px; overflow: auto; padding: var(--space-2); border-radius: var(--radius-xs); background: rgb(var(--color-canvas));
+    border: 1px solid rgb(var(--color-line)); font: var(--text-2xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: rgb(var(--color-fg-muted)); }
+  #avs-setup .su-res.bad { color: rgb(var(--color-danger-text)); } #avs-setup .su-res.good { color: rgb(var(--color-success-text)); }
   #avs-setup .su-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-top: 1px solid rgb(var(--color-line)); }
   #avs-setup .su-foot .grow { flex: 1; }
   #avs-setup .su-note { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
-  #setup-chip { margin-left: var(--space-1); }
-  #setup-chip[hidden] { display: none; }
-  /* thanh trên không còn chỗ dưới 1280 px: thay thẻ bằng chấm đỏ trên nút ⋯ (mục "Kiểm tra máy… (thiếu N)" trong menu) */
-  @media (max-width: 1279px) { #setup-chip { display: none; } }
+  /* thanh trên đầy ở 1024–1440 px: báo thiếu bằng chấm đỏ trên nút ⋯ + mục "Kiểm tra máy… (thiếu N)" tô đỏ trong menu */
+  #setup-btn.su-miss, #setup-btn.su-miss .ti { color: rgb(var(--color-danger-text)); }
   #wf-morebtn.su-dot { position: relative; }
   #wf-morebtn.su-dot::after { content: ''; position: absolute; top: var(--space-1); right: var(--space-1); width: 8px; height: 8px; border-radius: var(--radius-pill); background: rgb(var(--color-danger)); }
   #setup-need { position: fixed; right: var(--space-4); top: calc(var(--h-lg) + var(--space-6)); z-index: 58; width: min(420px, calc(100vw - 2 * var(--space-4)));
@@ -75,30 +89,31 @@
     syncChip();
     return R;
   }
-  // ---------- chip cạnh logo (chỉ khi thiếu mục bắt buộc) ----------
-  const chip = document.createElement('button');
-  chip.id = 'setup-chip'; chip.className = 'ui-chip ui-chip--bad'; chip.hidden = true;
-  chip.addEventListener('click', () => open());
-  document.querySelector('#top .logo')?.after(chip);
+  // ---------- báo thiếu trên nút ⋯ (không thêm thẻ vào #top: thanh trên đã đầy) ----------
   function syncChip() {
     const m = missingReq(R);
-    chip.hidden = !m.length;
-    chip.innerHTML = `<i class="ti ti-alert-triangle"></i> Thiếu ${m.length} thư viện`;
-    chip.title = 'Kiểm tra máy: thiếu ' + m.map(i => i.label).join(', ');
     const label = m.length ? `Kiểm tra máy… (thiếu ${m.length})` : 'Kiểm tra máy…';
     const sb = document.getElementById('setup-btn');
-    if (sb) { sb.title = label; const t = sb.querySelector('span'); if (t) t.textContent = label; }
+    if (sb) { sb.title = label; sb.classList.toggle('su-miss', !!m.length); const t = sb.querySelector('span'); if (t) t.textContent = label; }
     document.getElementById('wf-morebtn')?.classList.toggle('su-dot', !!m.length);
   }
   // ---------- màn Kiểm tra máy ----------
+  // Việc cài đang chạy (M116): {id, running, step, progress, log, result: ''|'done'|'error', restart}
+  let INST = null, poll = 0;
+  const RESTART_IDS = ['node', 'chrome', 'ffmpeg', 'ffprobe'];
+  const adv = c => `<details class="su-adv"><summary>Lệnh cho người rành máy</summary>${cmdHtml(c)}</details>`;
   function row(i) {
-    const show = bad(i) && i.fix;
+    const show = bad(i) && i.fix, run = INST?.running;
     const ver = [i.version && 'v' + i.version.replace(/^v/, ''), i.note].filter(Boolean).join(' · ');
+    const act = !bad(i) ? '' : i.auto === 'item'
+      ? `<div class="su-row-act"><button class="ui-btn ui-btn--secondary ui-btn--sm" data-inst="${esc(i.id)}" ${run ? 'disabled' : ''}><i class="ti ti-download"></i> Cài</button></div>`
+      : i.auto === 'all' ? '<div class="su-row-act"><span class="su-hint">Có trong "Cài giúp đủ một lần"</span></div>'
+        : '<div class="su-row-act"><span class="su-hint">Cài tay theo lệnh bên dưới</span></div>';
     return `<li class="${i.status} ${i.need === 'required' ? 'req' : 'opt'}" data-id="${esc(i.id)}">
       <i class="ti ${ICON[i.status] || 'ti-point'}" aria-hidden="true"></i>
       <div class="su-name"><b>${esc(i.label)}</b><span class="ui-chip ${i.status === 'ok' ? 'ui-chip--ok' : bad(i) ? (i.need === 'required' ? 'ui-chip--bad' : 'ui-chip--warn') : ''}">${STATUS[i.status] || i.status}</span>${ver ? `<span class="su-ver">${esc(ver)}</span>` : ''}</div>
       <div class="su-feat">${esc(i.features || '')}</div>
-      ${show ? cmdHtml(i.fix) : ''}</li>`;
+      ${act}${show ? adv(i.fix) : ''}</li>`;
   }
   function render(el, busy) {
     const m = missingReq(R), optMiss = R.items.filter(i => i.need !== 'required' && bad(i));
@@ -108,13 +123,64 @@
     el.querySelector('.su-box').innerHTML = `
       <div class="su-head"><h3 id="su-title"><i class="ti ti-stethoscope"></i> Kiểm tra máy</h3>${sum}</div>
       <div class="su-body">
-        <div class="su-all ${m.length ? 'bad' : ''}"><span>${m.length ? 'Cách nhanh nhất: chạy lại trình cài trong một cửa sổ dòng lệnh (mục đã có sẽ bỏ qua), rồi bấm "Kiểm tra lại".' : 'Cài lại hoặc cài thêm phần tuỳ chọn: chạy lại trình cài.'}</span>${cmdHtml(R.install)}</div>
+        <div class="su-all ${m.length ? 'bad' : ''}">${allBox(m)}</div>
         <h4>Bắt buộc</h4><ul>${R.items.filter(i => i.need === 'required').map(row).join('')}</ul>
         <h4>Tuỳ chọn</h4><ul>${R.items.filter(i => i.need !== 'required').map(row).join('')}</ul>
       </div>
       <div class="su-foot"><span class="su-note">Kiểm lúc ${esc(new Date(R.at).toLocaleTimeString('vi-VN'))} · ${R.ms} ms${R.cached ? ' · kết quả đã lưu' : ''}</span><div class="grow"></div>
-        <button class="ui-btn ui-btn--secondary ui-btn--md" data-su="again" ${busy ? 'disabled' : ''}><i class="ti ti-refresh"></i> ${busy ? 'Đang kiểm…' : 'Kiểm tra lại'}</button>
+        <button class="ui-btn ui-btn--secondary ui-btn--md" data-su="again" ${busy || INST?.running ? 'disabled' : ''}><i class="ti ti-refresh"></i> ${busy ? 'Đang kiểm…' : 'Kiểm tra lại'}</button>
         <button class="ui-btn ${m.length ? 'ui-btn--ghost' : 'ui-btn--primary'} ui-btn--md" data-su="close">${m.length ? 'Để sau' : 'Tiếp tục'}</button></div>`;
+  }
+  function allBox(m) {
+    if (INST?.running) {
+      return `<div class="su-prog" aria-live="polite"><span class="su-step"><i class="ti ti-loader-2"></i> Đang cài: ${esc(INST.step || 'bắt đầu')}</span>
+        <div class="su-bar"><i data-p="${Math.round((INST.progress || 0) * 100)}"></i></div>
+        <span class="su-hint">Có thể mất vài phút. Windows có thể hỏi quyền cài đặt: bấm Yes. Đóng màn này vẫn cài tiếp.</span>
+        ${INST.log ? `<pre class="su-log">${esc(INST.log)}</pre>` : ''}</div>`;
+    }
+    const res = INST?.result === 'error'
+      ? `<p class="su-res bad"><i class="ti ti-alert-triangle"></i> Cài chưa xong: ${esc(INST.step || 'lỗi')}</p>${INST.log ? `<pre class="su-log">${esc(INST.log)}</pre>` : ''}`
+      : INST?.result === 'done' ? `<p class="su-res good"><i class="ti ti-circle-check"></i> Cài xong, đã kiểm lại máy.${INST.restart ? ' Đóng cửa sổ Studio rồi mở lại để mọi tính năng dùng bản vừa cài.' : ''}</p>` : '';
+    const winTip = R.platform === 'win32' ? 'hoặc bấm đúp <b>install.cmd</b> trong thư mục cài đặt' : 'hoặc chạy <b>install.sh</b> trong thư mục cài đặt';
+    return `${res}<span>${m.length ? 'Bấm <b>Cài giúp đủ một lần</b>: Studio tự chạy trình cài, mục đã có sẽ bỏ qua.' : 'Muốn cài thêm phần tuỳ chọn hoặc cài lại: bấm <b>Cài giúp đủ một lần</b>.'}</span>
+      <div class="su-acts"><button class="ui-btn ${m.length ? 'ui-btn--primary' : 'ui-btn--secondary'} ui-btn--md" data-inst="all"><i class="ti ti-download"></i> Cài giúp đủ một lần</button>
+        <button class="ui-btn ui-btn--ghost ui-btn--md" data-su="reveal"><i class="ti ti-folder-open"></i> Mở thư mục cài đặt</button></div>
+      <span class="su-hint">${winTip}.</span>${adv(R.install)}`;
+  }
+  // Thanh tiến trình: độ rộng đặt qua biến CSS (không viết thuộc tính style trong markup)
+  const paint = el => { const b = el.querySelector('.su-bar i'); if (b) b.style.setProperty('--p', Math.max(5, +b.dataset.p || 0) + '%'); };
+  async function install(id, el) {
+    const before = new Set((R?.items || []).filter(bad).map(i => i.id));
+    const r = await api('/api/setup/install', { id }).catch(e => ({ error: e.message }));
+    if (!r?.ok) { Studio.toast(r?.error || 'Không bắt đầu cài được'); return; }
+    INST = { id, running: true, step: r.steps?.[0] || '', progress: 0, log: '', result: '', before };
+    follow(el);
+  }
+  // Theo dõi job "setup" qua /api/job; xong thì đọc kết quả kiểm mới (route đã kiểm lại) và vẽ lại.
+  function follow(el) {
+    clearInterval(poll);
+    const draw = () => { const box = document.getElementById('avs-setup'); if (box && R) { render(box); paint(box); } };
+    draw();
+    poll = setInterval(async () => {
+      const j = await api('/api/job').catch(() => undefined);
+      if (j === undefined) return; // mạng chập chờn: thử lại lượt sau
+      if (!j || j.kind !== 'setup') {
+        // Server khởi động lại hoặc ô job đã thuộc việc khác: không kẹt ở "đang cài"
+        clearInterval(poll); poll = 0;
+        INST.running = false; INST.result = 'error'; INST.step = 'Không còn theo dõi được việc cài (Studio vừa khởi động lại?). Bấm Kiểm tra lại.';
+        try { await load(true); } catch { /* giữ kết quả cũ */ }
+        return draw();
+      }
+      INST.step = j.step; INST.progress = j.progress; INST.log = String(j.log || '').split(/[\r\n]+/).filter(Boolean).slice(-8).join('\n');
+      if (j.state === 'running') return draw();
+      clearInterval(poll); poll = 0;
+      INST.running = false; INST.result = j.state === 'done' ? 'done' : 'error';
+      try { await load(false); } catch { /* giữ kết quả cũ */ }
+      const now = new Set((R?.items || []).filter(bad).map(i => i.id));
+      INST.restart = INST.result === 'done' && RESTART_IDS.some(id => INST.before?.has(id) && !now.has(id));
+      draw();
+      Studio.toast(INST.result === 'done' ? 'Cài xong, đã kiểm lại máy' : 'Cài chưa xong: xem log trong màn Kiểm tra máy');
+    }, 800);
   }
   async function open(opts = {}) {
     document.getElementById('avs-setup')?.remove();
@@ -134,9 +200,19 @@
       if (c) { copy(c.dataset.copy, c); return; }
       const b = e.target.closest('[data-su]');
       if (b?.dataset.su === 'close') close();
-      if (b?.dataset.su === 'again') { render(el, true); try { await load(true); } catch (err) { Studio.toast(err.message); } if (el.isConnected) render(el); }
+      const ins = e.target.closest('[data-inst]');
+      if (ins && !INST?.running) { install(ins.dataset.inst, el); return; }
+      if (b?.dataset.su === 'reveal') { api('/api/setup/reveal', {}).catch(() => {}); return; }
+      if (b?.dataset.su === 'again') { render(el, true); try { await load(true); } catch (err) { Studio.toast(err.message); } if (el.isConnected) { render(el); paint(el); } }
     });
-    try { if (!R || opts.fresh) await load(!!opts.fresh); render(el); el.querySelector('[data-su="close"]')?.focus(); }
+    try {
+      if (!R || opts.fresh) await load(!!opts.fresh);
+      // Việc cài đang chạy (mở lại màn, tải lại trang): theo dõi tiếp
+      const j = INST?.running ? null : await api('/api/job').catch(() => null);
+      if (j?.kind === 'setup' && j.state === 'running') { INST = { id: '', running: true, step: j.step, progress: j.progress, log: '', result: '', before: new Set(R.items.filter(bad).map(i => i.id)) }; follow(el); }
+      render(el); paint(el); el.querySelector('[data-su="close"]')?.focus();
+      if (opts.install && !INST?.running) install(opts.install, el);
+    }
     catch (err) { el.querySelector('.su-sum').textContent = 'Không kiểm được: ' + err.message; el.querySelector('.su-box').insertAdjacentHTML('beforeend', '<div class="su-foot"><div class="grow"></div><button class="ui-btn ui-btn--primary ui-btn--md" data-su="close">Đóng</button></div>'); }
   }
   async function copy(text, btn) {
@@ -148,6 +224,8 @@
   Studio.addTopButton('<button class="ghost" id="setup-btn" title="Kiểm tra máy…"><i class="ti ti-stethoscope"></i></button>', () => open({ fresh: true }));
 
   // ---------- thẻ "thiếu thư viện" khi bấm một tính năng ----------
+  // Một mục cài lẻ được → cài mục đó; còn lại mà trình cài lo được → chạy trình cài
+  const fixId = items => (items.length === 1 && items[0].auto === 'item' ? items[0].id : items.some(i => i.auto) ? 'all' : '');
   let lastNeed = '', lastAt = 0;
   function need(items, why) {
     items = items.filter(Boolean);
@@ -159,13 +237,13 @@
     const el = document.createElement('aside');
     el.id = 'setup-need'; el.setAttribute('role', 'alert');
     el.innerHTML = `<p class="sn-t"><i class="ti ti-alert-triangle"></i> ${why}: thiếu ${esc(items.map(i => i.label).join(', '))}</p>
-      ${items.map(i => `<p class="sn-f">${esc(i.label)} — cần cho: ${esc(i.features || '')}</p>${i.fix ? cmdHtml(i.fix) : ''}`).join('')}
-      <div class="sn-act"><button class="ui-btn ui-btn--secondary ui-btn--sm" data-sn="open"><i class="ti ti-stethoscope"></i> Kiểm tra máy</button></div>
+      ${items.map(i => `<p class="sn-f">${esc(i.label)} — cần cho: ${esc(i.features || '')}</p>${i.fix ? adv(i.fix) : ''}`).join('')}
+      <div class="sn-act">${fixId(items) ? `<button class="ui-btn ui-btn--primary ui-btn--sm" data-sn="fix" data-id="${esc(fixId(items))}"><i class="ti ti-download"></i> Cài giúp</button>` : ''}<button class="ui-btn ui-btn--secondary ui-btn--sm" data-sn="open"><i class="ti ti-stethoscope"></i> Kiểm tra máy</button></div>
       <button class="sn-x ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-sn="x" title="Đóng" aria-label="Đóng"><i class="ti ti-x"></i></button>`;
     el.addEventListener('click', e => {
       const c = e.target.closest('[data-copy]'); if (c) return copy(c.dataset.copy, c);
       const b = e.target.closest('[data-sn]'); if (!b) return;
-      el.remove(); if (b.dataset.sn === 'open') open({ fresh: true });
+      el.remove(); if (b.dataset.sn === 'open') open({ fresh: true }); if (b.dataset.sn === 'fix') open({ install: b.dataset.id });
     });
     document.body.appendChild(el);
   }
