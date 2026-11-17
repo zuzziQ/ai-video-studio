@@ -92,9 +92,9 @@ test('lưu phong cách, saveStore (phản hồi) không xoá điều đã học,
   assert.equal(P.getProfile('nha-dep').learned, null);
 });
 
-test('học từ dự án Tự lái có profile cũ → ghi vào phong cách của thương hiệu', () => {
+test('học từ dự án Tự lái cũ (chỉ autopilot_result.json) → ghi vào thương hiệu của dự án (M134: Kho / TL.brand.kit)', () => {
   const d = path.join(TMP, 'proj'); fs.mkdirSync(path.join(d, '.studio'), { recursive: true });
-  const tl = { scenes: [{ type: 'emoji_pop', _auto: true }, { type: 'emoji_pop', _auto: true }], audio: { music: [] } };
+  const tl = { scenes: [{ type: 'emoji_pop', _auto: true }, { type: 'emoji_pop', _auto: true }], audio: { music: [] }, brand: { kit: 'bep-ngon' } };
   fs.writeFileSync(path.join(d, '.studio/autopilot_result.json'), JSON.stringify(tl));
   fs.writeFileSync(path.join(d, '.studio/autopilot.json'), JSON.stringify({ state: 'done', profile: 'bep-1', finishedMs: 0 }));
   fs.writeFileSync(path.join(d, 'timeline.json'), JSON.stringify({ ...tl, scenes: [] }));

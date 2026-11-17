@@ -20,7 +20,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { newProject, PY, videoOrient, endCard } from './new_project.mjs';
 import { rippleCut } from './ripple.mjs';
-import { AVS_HOME, getProfile, effectiveProfile } from './profile.mjs';
+import { AVS_HOME, getProfile, effectiveProfile, saveDelivered } from './profile.mjs';
 import { notify } from './notify.mjs';
 import { findChrome } from './platform.mjs';
 import { readGate, recordOverride, gateText } from './export_gate.mjs';
@@ -393,6 +393,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       if (g.blocked) { const e = new Error(`CHẶN XUẤT — ${gateText(g)} (theo lần QC trước).`); e.gate = g; throw e; }
       // what the autopilot delivered — "Học từ chỉnh sửa" compares the user's later saves against this
       fs.copyFileSync(P('timeline.json'), P('.studio/autopilot_result.json'));
+      saveDelivered(dir, 'autopilot'); // S19 M134: kèm phụ đề (chữ phụ đề bị sửa → từ điển chính tả của thương hiệu)
       const outs = await exportProject(dir, { quality: prof.quality || '1080', aspects: prof.aspects || [] }, sayS);
       res.videos = outs.map(o => ({ ...o, ...probe(P(o.out)) }));
       const { caps } = loadTL(dir);

@@ -47,6 +47,9 @@
   .bk-sty > small, .bk-learn small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); overflow-wrap: anywhere; }
   .bk-learn { margin-top: var(--space-1); font-size: var(--text-2xs); } .bk-learn b { font-weight: 600; color: rgb(var(--color-fg-muted)); }
   .bk-learn ul, .bk-mig ul { margin: var(--space-050) 0 0; padding-left: var(--space-4); color: rgb(var(--color-fg-muted)); font-size: var(--text-2xs); } .bk-learn li, .bk-mig li { margin: var(--space-050) 0; }
+  .bk-hab { list-style: none; padding: 0; margin: var(--space-050) 0 0; } .bk-hab li { display: flex; gap: var(--space-1); align-items: flex-start; padding: var(--space-050) 0; color: rgb(var(--color-fg-muted)); }
+  .bk-hab li span { flex: 1; min-width: 0; overflow-wrap: anywhere; } .bk-hab li.off span, .bk-hab li.info span { color: rgb(var(--color-fg-subtle)); } .bk-hab em { font-style: normal; }
+  .bk-hab button { flex: none; width: var(--h-sm); height: var(--h-sm); padding: 0; justify-content: center; }
   .bk-mig b { font-size: var(--text-xs); } .bk-mig small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
   .bk-sform { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); } .bk-sform label { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); display: block; margin-bottom: var(--space-050); }
   .bk-sform .full { grid-column: 1 / 3; } .bk-sform .chk { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); } .bk-sform .chk label { display: flex; gap: var(--space-1); align-items: center; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); margin: 0; }
@@ -200,8 +203,16 @@
         <span class="grow"></span><button class="icon" title="Sửa phong cách dựng" data-bks="${esc(id)}"><i class="ti ti-pencil"></i></button>
         ${st.learned ? `<button class="icon" title="Quên mọi điều đã học" data-bkr="${esc(id)}"><i class="ti ti-eraser"></i></button>` : ''}</div>
       <small>${esc(sum)}</small>
-      <div class="bk-learn"><b>Điều đã học</b>${st.learnedNotes?.length ? `<ul>${st.learnedNotes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>`
-        : `<small>${st.learn ? `Đang học từ ${st.learnedN || 0} video bạn đã sửa (cần ít nhất 2 video có cùng thói quen)` : 'Tắt “Học từ chỉnh sửa”'}</small>`}</div></div>`;
+      <div class="bk-learn"><b>Điều đã học</b>${habitRows(id, st)}</div></div>`;
+  }
+  // S19 M134: mỗi thói quen một dòng: tắt / bật (giữ, không áp) và quên (bỏ các lần sửa tới giờ, học lại từ video mới)
+  function habitRows(id, st) {
+    const H = st.habits || [], info = (st.learnedNotes || []).filter(n => n.startsWith('(Thống kê)'));
+    if (!H.length && !info.length) return `<small>${st.learn ? `Đang học từ ${st.learnedN || 0} video bạn đã sửa (cần ít nhất 2 video có cùng thói quen)` : 'Tắt “Học từ chỉnh sửa”'}</small>`;
+    return `<ul class="bk-hab">${H.map(h => `<li class="${h.off ? 'off' : ''}"><span>${esc(h.note)}${h.off ? ' <em>(đang tắt)</em>' : ''}</span>
+        <button class="icon" title="${h.off ? 'Bật lại' : 'Tắt (không áp nữa)'}" data-bkh="${esc(id)}" data-key="${esc(h.key)}" data-op="${h.off ? 'on' : 'off'}"><i class="ti ${h.off ? 'ti-eye' : 'ti-eye-off'}"></i></button>
+        <button class="icon" title="Xoá điều này (học lại từ video mới)" data-bkh="${esc(id)}" data-key="${esc(h.key)}" data-op="forget"><i class="ti ti-x"></i></button></li>`).join('')}
+      ${info.map(n => `<li class="info"><span>${esc(n)}</span></li>`).join('')}</ul>`;
   }
   const chungCard = () => `<div class="bk-card"><div class="bk-top"><div class="bk-logo"><i class="ti ti-world"></i></div>
       <div class="bk-nm"><b>Chung</b><small>Video không gắn thương hiệu (Kho Chung)</small></div></div>${styleBlock('chung')}</div>`;
@@ -211,6 +222,10 @@
       const st = style(b.dataset.bkr); if (!confirm(`Quên mọi điều “${st?.name || ''}” đã học từ các lần bạn sửa?`)) return;
       const r = await Studio.api('/api/brands/style', { action: 'reset', id: b.dataset.bkr }); if (r.error) return Studio.toast(r.error);
       STY = r.styles; render(); Studio.toast('Đã quên điều đã học');
+    }));
+    B.querySelectorAll('[data-bkh]').forEach(b => (b.onclick = async () => {
+      const r = await Studio.api('/api/brands/style', { action: 'habit', id: b.dataset.bkh, key: b.dataset.key, op: b.dataset.op }); if (r.error) return Studio.toast(r.error);
+      STY = r.styles; render(); Studio.toast({ off: 'Đã tắt thói quen này', on: 'Đã bật lại', forget: 'Đã xoá; Studio sẽ học lại từ các video sau' }[b.dataset.op]);
     }));
     $('#bk-mig-ok')?.addEventListener('click', () => { try { localStorage.setItem(MIG_KEY, STY.migrated.at); } catch {} render(); });
   }

@@ -41,6 +41,8 @@ Chạy lại chỉ thay phần do AI tạo. Panel AI dựng còn hiện lượt 
 
 CLI: `node scripts/ai_edit.mjs <dự án> [--goal "Chia sẻ"] [--tone …] [--pack keep|auto|<id>] [--density thua|vua|day] [--extra "…"] [--out plan.json] [--apply]`. Prompt và câu trả lời thô được lưu ở `.studio/ai_prompt.txt` và `.studio/ai_raw.txt`.
 
+**Thói quen của thương hiệu** (S19 M134, `references/autopilot.md` mục Học từ chỉnh sửa): `/api/ai/edit` gắn `opts.learned` (thương hiệu của Kho chứa dự án, trừ khoá trong `skip`) → `applyLearned` sau `validate`; `GET /api/ai/habits` cho hộp AI dựng; xong việc Studio lưu rồi gọi `POST /api/ai/delivered` (bản AI giao `.studio/ai_result.json`). `plan.music = null` (thói quen không nhạc) → `applyPlan` bỏ nhạc `_ai` / `_auto`, giữ nhạc file của người dùng.
+
 ## 2. Cắt lỗi nói (`scripts/fillers.py`)
 Trong Studio là panel **Làm sạch lời nói** (id `ai`, trước S13 tên "AI"), tab thứ hai của mục Lời thoại ở bước Nguồn: dò tiếng đệm, lặp, ngắt dài, chọn rồi cắt có ripple.
 `python fillers.py <words.json|captions.json> [out.json] [--pause 0.7] [--keep 0.25] [--gap 0.12] [--fillers "ờ,ừm,thì là"] [--claude]`

@@ -143,7 +143,7 @@
         ${S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''}
         ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div>${offKho(kit, name)}
       ${sty ? `<div class="help ap-mt"><i class="ti ti-adjustments"></i> Phong cách dựng ${kit ? `của <b>${esc(name(kit))}</b>` : '<b>Chung</b>'}${sty.saved || !kit ? '' : ' (đang theo Chung)'}:
-        ${esc(Studio.brandStyle?.summary ? Studio.brandStyle.summary(sty) : ['b-roll ' + sty.broll_density, 'âm thanh ' + sty.sound].join(' · '))}${sty.learnedNotes?.length ? ` · áp ${sty.learnedNotes.length} điều đã học` : sty.learn ? ` · đang học từ ${sty.learnedN || 0} video` : ''}.
+        ${esc(Studio.brandStyle?.summary ? Studio.brandStyle.summary(sty) : ['b-roll ' + sty.broll_density, 'âm thanh ' + sty.sound].join(' · '))}${(sty.habits || []).some(h => !h.off) ? ` · áp ${(sty.habits || []).filter(h => !h.off).length} thói quen đã học` : sty.learn ? ` · đang học từ ${sty.learnedN || 0} video` : ''}.
         <button class="wf-lnk" id="ap-style">Sửa ở trang Thương hiệu</button>${proj?.autopilot ? ' <button class="wf-lnk" id="ap-learn" title="So dự án đang mở (do Tự lái làm) với bản Tự lái giao để học thói quen sửa của bạn">Học từ dự án này</button>' : ''}</div>` : ''}
       ${learn ? `<div class="help ap-mt1">${learn.ok ? `Lần học gần nhất: ${esc(learn.observation?.name || '')} → ${esc(learn.name || '')} (${new Date(learn.at).toLocaleTimeString('vi-VN')})` : `Chưa học: ${esc(learn.why || '')}`}</div>` : ''}
       <label class="ap-lbl">Kịch bản (không bắt buộc, cho video kế tiếp)</label><div id="ap-script"></div></div>`;

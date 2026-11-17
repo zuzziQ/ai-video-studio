@@ -42,7 +42,7 @@ export default ctx => {
     // "Tạo lời thoại" cũng ghi .studio/stem_voice.wav: không chạy chồng
     if (ctx.job?.state === 'running' && ctx.job.kind === 'transcribe') return J({ error: 'Đang tạo lời thoại, đợi xong rồi nghe lại.' }, 409);
     let terms = [];
-    try { const d = dictSources({ dir: ctx.project.dir, timeline: tl }); terms = [...d.auto, ...d.brand, ...d.project].map(x => x.to); } catch { /* từ điển hỏng: nghe không có từ khoá */ }
+    try { const d = dictSources({ dir: ctx.project.dir, timeline: tl }); terms = [...d.auto, ...(d.learned || []), ...d.brand, ...d.project].map(x => x.to); } catch { /* từ điển hỏng: nghe không có từ khoá */ }
     const words = captions.flatMap(c => c.words || []).filter(w => typeof w?.w === 'string');
     const rec = last = batch ? { state: 'running', run: ++seq, batch: true, step: 'Bắt đầu', progress: 0, n: b.spans.length, started: Date.now() }
       : { state: 'running', run: ++seq, step: 'Bắt đầu', progress: 0, s: +b.s, e: +b.e, started: Date.now() };

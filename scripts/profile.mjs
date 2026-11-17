@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { retryBusy, withFileLock } from './file_lock.mjs';
+import { workspaceOfProject } from './workspace.mjs';
 
 export const AVS_HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
 const FILE = path.join(AVS_HOME, 'styles.json'), LOCK = FILE + '.lock', OLD = path.join(AVS_HOME, 'profiles.json'), BRANDS = path.join(AVS_HOME, 'brands.json');
@@ -192,11 +193,42 @@ export function setDefault(ref) { return mutateStyles(s => { const id = ref == n
 export const resetLearned = ref => patchStyle(ref, st => { st.learned = null; });
 
 // ---------- "Học từ chỉnh sửa" ----------
-// Observation of ONE autopilot project: what the autopilot delivered (.studio/autopilot_result.json) vs the timeline the user saved.
-// scenes the autopilot inserted: b-roll pass (_auto) and AI dựng giúp (_ai, except long _base backgrounds)
+// Observation of ONE project where AI inserted things: what AI delivered (.studio/ai_result.json — AI dựng, Tự động, Tự lái;
+// projects from before S19 M134: .studio/autopilot_result.json) vs the timeline the user saved.
+// scenes AI inserted: b-roll pass (_auto) and AI dựng giúp (_ai, except long _base backgrounds)
 const KIND = s => s.type === 'emoji_pop' ? 'emoji' : s.type === 'text' ? 'text' : s.type === 'photo' ? 'photo' : 'preset';
 const MINE = s => (s._auto || s._ai) && !s._base;
-export function observe(before, after) {
+// S19 M134: câu khẳng định (claim) trong graphic AI chèn: số %, "nhất", "số 1", cam kết / đảm bảo, chữa khỏi…
+export const CLAIM = /\d\s*%|\bnhất\b|số\s*1\b|cam\s*kết|đảm\s*bảo|tuyệt\s*đối|100\s*%|chữa\s*(khỏi|dứt)|khỏi\s*hẳn|hiệu\s*quả\s*ngay|không\s*tác\s*dụng\s*phụ|rẻ\s*nhất|tốt\s*nhất/i;
+const strings = (o, out = [], d = 0) => {
+  if (d > 4 || out.length > 20) return out;
+  if (typeof o === 'string') { if (o.trim() && o.length <= 200) out.push(o.trim()); }
+  else if (Array.isArray(o)) for (const x of o) strings(x, out, d + 1);
+  else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (!/^(_|src|file|url|icon|font|color|bg|type|anim|kind|pos|align)/i.test(k)) strings(v, out, d + 1);
+  return out;
+};
+const claimsOf = tl => (tl.scenes || []).filter(MINE).flatMap(s => strings({ text: s.text, title: s.title, params: s.params })).filter(t => CLAIM.test(t));
+// một từ của phụ đề: bỏ dấu câu ở hai đầu (giống cleanSide của dict.mjs)
+const bare = w => String(w || '').normalize('NFC').trim().replace(/^[,.!?:;"'“”…()[\]-]+|[,.!?:;"'“”…()[\]-]+$/g, '').trim();
+// Chữ phụ đề bị sửa: ghép từng dòng (cùng t0, cùng số từ), từng từ khác nhau → cặp [sai, đúng] (≤ 40)
+export function captionFixes(before = [], after = []) {
+  const out = [], seen = new Set();
+  if (!Array.isArray(before) || !Array.isArray(after)) return out;
+  for (const c of after) {
+    const b = before.find(x => Math.abs((x.t0 ?? -9) - (c.t0 ?? -1)) < .05 && (x.words || []).length === (c.words || []).length);
+    if (!b) continue;
+    c.words.forEach((w, j) => {
+      const f = bare(b.words[j]?.w), t = bare(w?.w);
+      if (!f || !t || f === t || f.length > 40 || t.length > 40 || /[=;]/.test(f + t)) return;
+      const k = f.toLocaleLowerCase('vi') + '\u0000' + t;
+      if (!seen.has(k) && out.length < 40) { seen.add(k); out.push([f, t]); }
+    });
+  }
+  return out;
+}
+const ctaOf = tl => String(tl?.brand?.outro || '').trim();
+// extra (S19 M134, không bắt buộc): { capsBefore, capsAfter } — giữ chữ ký cũ observe(before, after)
+export function observe(before, after, extra = {}) {
   const count = (tl, pred) => (tl.scenes || []).filter(pred);
   const o = { auto: {}, ai: [0, 0], sfx: [0, 0], moved: 0 };
   for (const k of ['emoji', 'text', 'photo', 'preset']) o.auto[k] = [count(before, s => MINE(s) && KIND(s) === k).length, count(after, s => MINE(s) && KIND(s) === k).length];
@@ -208,37 +240,69 @@ export function observe(before, after) {
   o.music = { before: mus(before).length, after: mus(after).length, gain: mus(after).length && mus(before).length ? +(mus(after)[0].gain ?? -20) - +(mus(before)[0].gain ?? -20) : 0 };
   if ((after.caption_style || '') !== (before.caption_style || '')) o.caption_style = after.caption_style || '';
   if ((after.pack || '') !== (before.pack || '')) o.pack = after.pack || '';
-  o.edited = JSON.stringify({ s: after.scenes, a: after.audio, c: after.caption_style, p: after.pack }) !== JSON.stringify({ s: before.scenes, a: before.audio, c: before.caption_style, p: before.pack });
+  // S19 M134: lời kết / CTA đổi, câu khẳng định của AI bị xoá, chữ phụ đề bị sửa
+  if (ctaOf(after) && ctaOf(after) !== ctaOf(before)) o.cta = ctaOf(after).slice(0, 200);
+  const cb = claimsOf(before), ca = new Set(claimsOf(after));
+  if (cb.length) o.claims = [cb.length, cb.filter(t => ca.has(t)).length, cb.filter(t => !ca.has(t)).slice(0, 3)];
+  const fx = captionFixes(extra.capsBefore, extra.capsAfter);
+  if (fx.length) o.words = fx;
+  o.edited = !!fx.length || JSON.stringify({ s: after.scenes, a: after.audio, c: after.caption_style, p: after.pack, b: ctaOf(after) }) !== JSON.stringify({ s: before.scenes, a: before.audio, c: before.caption_style, p: before.pack, b: ctaOf(before) });
   return o;
 }
 // Aggregate the newest ≤ 10 observations into small, explainable adjustments.
-export function deriveRules(learned) {
-  const obs = Object.values(learned?.projects || {}).filter(o => o.edited).sort((a, b) => (b.t || '').localeCompare(a.t || '')).slice(0, 10);
-  const rules = { n: obs.length, adjust: {}, notes: [] };
-  if (!obs.length) return rules;
-  const sum = (f) => obs.reduce((a, o) => [a[0] + f(o)[0], a[1] + f(o)[1]], [0, 0]);
+// S19 M134: mỗi điều là một "thói quen" có khoá (items[]) — learned.off[] tắt hẳn, learned.forgot{khoá: thời điểm} quên các
+// quan sát trước thời điểm đó (học lại được từ video mới), opts.skip tắt cho riêng một lần chạy (panel AI dựng).
+export function deriveRules(learned, { skip = [] } = {}) {
+  const all = Object.values(learned?.projects || {}).filter(o => o && o.edited).sort((a, b) => (b.t || '').localeCompare(a.t || '')).slice(0, 10);
+  const off = new Set([...(Array.isArray(learned?.off) ? learned.off : []), ...skip]), forgot = learned?.forgot && typeof learned.forgot === 'object' ? learned.forgot : {};
+  const rules = { n: all.length, adjust: {}, notes: [], items: [] };
+  if (!all.length) return rules;
+  const use = key => all.filter(o => !forgot[key] || (o.t || '') > forgot[key]);
+  const add = (key, note, adj) => {
+    const it = { key, note, off: off.has(key) }; rules.items.push(it);
+    if (it.off) return;
+    for (const [k, v] of Object.entries(adj)) rules.adjust[k] = Array.isArray(v) ? [...(rules.adjust[k] || []), ...v] : v;
+    rules.notes.push(note);
+  };
+  const sum = (obs, f) => obs.reduce((a, o) => [a[0] + f(o)[0], a[1] + f(o)[1]], [0, 0]);
   const rem = ([b, a]) => (b ? Math.max(0, b - a) / b : 0);
   const pct = x => Math.round(x * 100) + '%';
-  const enough = obs.length >= 2;
   for (const [k, label] of [['emoji', 'emoji pop'], ['text', 'chữ nổi'], ['photo', 'ảnh']]) {
-    const s = sum(o => o.auto[k] || [0, 0]), r = rem(s);
-    if (enough && s[0] >= 4 && r >= .6) { rules.adjust.drop_src = [...(rules.adjust.drop_src || []), k]; rules.notes.push(`Bạn thường xoá ${label} tự động (${pct(r)} trong ${obs.length} video) → không chèn ${label} nữa`); }
+    const obs = use('drop_' + k), s = sum(obs, o => o.auto?.[k] || [0, 0]), r = rem(s);
+    if (obs.length >= 2 && s[0] >= 4 && r >= .6) add('drop_' + k, `Bạn thường xoá ${label} tự động (${pct(r)} trong ${obs.length} video) → không chèn ${label} nữa`, { drop_src: [k] });
   }
-  const all = sum(o => Object.values(o.auto).reduce((a, x) => [a[0] + x[0], a[1] + x[1]], [0, 0])), rAll = rem(all);
-  if (enough && all[0] >= 6 && rAll >= .45) { rules.adjust.broll_step = -1; rules.notes.push(`Bạn xoá ${pct(rAll)} b-roll tự động → giảm mật độ b-roll một bậc`); }
-  const ai = sum(o => o.ai), rAi = rem(ai);
-  if (enough && ai[0] >= 6 && rAi >= .45) { rules.adjust.ai_step = -1; rules.notes.push(`Bạn xoá ${pct(rAi)} graphic của AI → AI đặt thưa hơn một bậc`); }
-  const sf = sum(o => o.sfx), rSf = rem(sf);
-  if (enough && sf[0] >= 6 && rSf >= .5) { rules.adjust.sound_step = -1; rules.notes.push(`Bạn xoá ${pct(rSf)} SFX tự động → giảm mức âm thanh một bậc`); }
-  const musOff = obs.filter(o => o.music.before && !o.music.after).length;
-  if (musOff >= 2 && musOff / obs.length >= .6) { rules.adjust.music = 'off'; rules.notes.push(`Bạn tắt nhạc nền ở ${musOff}/${obs.length} video → không thêm nhạc`); }
-  const gains = obs.filter(o => o.music.after && o.music.gain).map(o => o.music.gain);
-  if (gains.length >= 2 && gains.every(g => Math.sign(g) === Math.sign(gains[0]))) { const g = +(gains.reduce((a, b) => a + b, 0) / gains.length).toFixed(1); rules.adjust.music_gain = g; rules.notes.push(`Bạn thường chỉnh nhạc ${g > 0 ? 'to' : 'nhỏ'} hơn ${Math.abs(g)} dB → áp sẵn`); }
+  { const obs = use('broll_step'), s = sum(obs, o => Object.values(o.auto || {}).reduce((a, x) => [a[0] + x[0], a[1] + x[1]], [0, 0])), r = rem(s);
+    if (obs.length >= 2 && s[0] >= 6 && r >= .45) add('broll_step', `Bạn xoá ${pct(r)} b-roll tự động → giảm mật độ b-roll một bậc`, { broll_step: -1 }); }
+  { const obs = use('ai_step'), s = sum(obs, o => o.ai || [0, 0]), r = rem(s);
+    if (obs.length >= 2 && s[0] >= 6 && r >= .45) add('ai_step', `Bạn xoá ${pct(r)} graphic của AI → AI đặt thưa hơn một bậc`, { ai_step: -1 }); }
+  { const obs = use('sound_step'), s = sum(obs, o => o.sfx || [0, 0]), r = rem(s);
+    if (obs.length >= 2 && s[0] >= 6 && r >= .5) add('sound_step', `Bạn xoá ${pct(r)} SFX tự động → giảm mức âm thanh một bậc`, { sound_step: -1 }); }
+  { const obs = use('music_off'), n = obs.filter(o => o.music?.before && !o.music?.after).length;
+    if (n >= 2 && n / obs.length >= .6) add('music_off', `Bạn tắt nhạc nền ở ${n}/${obs.length} video → không thêm nhạc`, { music: 'off' }); }
+  { const gains = use('music_gain').filter(o => o.music?.after && o.music?.gain).map(o => o.music.gain);
+    if (gains.length >= 2 && gains.every(g => Math.sign(g) === Math.sign(gains[0]))) { const g = +(gains.reduce((a, b) => a + b, 0) / gains.length).toFixed(1); add('music_gain', `Bạn thường chỉnh nhạc ${g > 0 ? 'to' : 'nhỏ'} hơn ${Math.abs(g)} dB → áp sẵn`, { music_gain: g }); } }
   for (const [k, label] of [['caption_style', 'kiểu phụ đề'], ['pack', 'gói style']]) {
-    const v = obs.slice(0, 3).map(o => o[k]).filter(x => x != null);
-    if (v.length >= 2 && v.every(x => x === v[0]) && v[0]) { rules.adjust[k] = v[0]; rules.notes.push(`Bạn đổi ${label} sang “${v[0]}” ở ${v.length} video gần nhất → dùng luôn`); }
+    const v = use(k).slice(0, 3).map(o => o[k]).filter(x => x != null);
+    if (v.length >= 2 && v.every(x => x === v[0]) && v[0]) add(k, `Bạn đổi ${label} sang “${v[0]}” ở ${v.length} video gần nhất → dùng luôn`, { [k]: v[0] });
   }
-  const moved = obs.reduce((a, o) => a + o.moved, 0);
+  // CTA / lời kết: 2 lần đổi gần nhất cùng một câu
+  { const v = use('cta').map(o => o.cta).filter(Boolean).slice(0, 2);
+    if (v.length >= 2 && v[0].toLocaleLowerCase('vi') === v[1].toLocaleLowerCase('vi')) add('cta', `Bạn đổi lời kết / CTA thành “${v[0]}” ở ${v.length} video gần nhất → dùng luôn`, { cta: v[0] }); }
+  // câu khẳng định của AI bị xoá ở ≥ 2 video, tổng ≥ 50 %
+  { const obs = use('no_claims').filter(o => o.claims?.[0]), del = obs.filter(o => o.claims[1] < o.claims[0]), s = sum(obs, o => o.claims), r = rem(s);
+    if (del.length >= 2 && r >= .5) { const ex = del.flatMap(o => o.claims[2] || [])[0]; add('no_claims', `Bạn hay xoá câu khẳng định AI chèn (đã xoá ${pct(r)}${ex ? `, vd “${ex.slice(0, 50)}”` : ''}) → AI không viết số liệu, cam kết tuyệt đối`, { no_claims: true }); } }
+  // chữ phụ đề: cùng một cặp sai → đúng ở ≥ 2 video → từ điển chính tả của thương hiệu (mỗi cặp một điều, tối đa 12)
+  { const cnt = new Map();
+    for (const o of all) for (const [f, t] of new Map((o.words || []).map(([f, t]) => [f.toLocaleLowerCase('vi') + '\u0000' + t, [f, t]])).values()) {
+      const key = 'dict:' + f.toLocaleLowerCase('vi');
+      if (forgot[key] && (o.t || '') <= forgot[key]) continue;
+      const k = key + '\u0000' + t, c = cnt.get(k) || { key, f, t, n: 0 }; c.n++; cnt.set(k, c);
+    }
+    const best = new Map();
+    for (const c of cnt.values()) if (c.n >= 2 && (!best.has(c.key) || best.get(c.key).n < c.n)) best.set(c.key, c);
+    for (const c of [...best.values()].sort((a, b) => b.n - a.n).slice(0, 12)) add(c.key, `Bạn sửa chữ phụ đề “${c.f}” thành “${c.t}” ở ${c.n} video → thêm vào từ điển chính tả của thương hiệu`, { dict: [{ from: c.f, to: c.t }] });
+  }
+  const moved = all.reduce((a, o) => a + (o.moved || 0), 0);
   if (moved) rules.notes.push(`(Thống kê) ${moved} cảnh tự động đã bị bạn chỉnh vị trí/nội dung — chưa tự áp, chỉ ghi nhận`);
   return rules;
 }
@@ -255,16 +319,18 @@ function applyFeedback(p, out) {
   out.applied = [...(out.applied || []), ...(f.notes || []).map(n => '[phản hồi] ' + n)];
   return out;
 }
+const NO_SRC = { emoji: 'emoji_pop/emoji', text: 'chữ nổi to (text pop)', photo: 'ảnh' };
+export const CLAIM_RULE = 'Không viết câu khẳng định tuyệt đối, cam kết, "nhất" / "số 1" hay số liệu không có trong lời thoại (người dùng hay xoá).';
 // Profile with learned adjustments applied (+ list of what changed). Explicit profile fields always win for caption_style/pack.
-export function effectiveProfile(p) {
+// opts.skip: khoá thói quen tắt cho riêng lần chạy này.
+export function effectiveProfile(p, opts = {}) {
   const out = applyFeedback(p, { ...p, applied: [] });
   if (!p.learn || !p.learned) return out;
-  const r = deriveRules(p.learned), a = r.adjust;
+  const r = deriveRules(p.learned, opts), a = r.adjust;
   const step = (list, v, d) => list[Math.max(1, Math.min(list.length - 1, list.indexOf(v) + d))] || v;
   if (a.drop_src) {
     out.broll_src = (p.broll_src || []).filter(x => !a.drop_src.includes(x));
-    const no = { emoji: 'emoji_pop/emoji', text: 'chữ nổi to (text pop)', photo: 'ảnh' };
-    out.extra = [out.extra, `Không chèn ${a.drop_src.map(k => no[k]).filter(Boolean).join(', ')} (người dùng hay xoá).`].filter(Boolean).join(' ');
+    out.extra = [out.extra, `Không chèn ${a.drop_src.map(k => NO_SRC[k]).filter(Boolean).join(', ')} (người dùng hay xoá).`].filter(Boolean).join(' ');
   }
   if (a.broll_step && p.broll_density !== 'off') out.broll_density = step(STEPS_DENS, p.broll_density, a.broll_step);
   if (a.ai_step) out.ai_density = STEPS_AI[Math.max(0, STEPS_AI.indexOf(p.ai_density) + a.ai_step)] || p.ai_density;
@@ -273,36 +339,81 @@ export function effectiveProfile(p) {
   if (a.music_gain) out.music_gain = (out.music_gain || 0) + a.music_gain;
   if (a.caption_style && !p.caption_style) out.caption_style = a.caption_style;
   if (a.pack && (p.pack === 'auto' || !p.pack)) out.pack = a.pack;
+  if (a.cta) out.cta = a.cta;
+  if (a.no_claims) out.extra = [out.extra, CLAIM_RULE].filter(Boolean).join(' ');
+  if (a.dict) out.dict_learned = a.dict;
   out.applied = [...out.applied, ...r.notes];
+  out.habits = r.items;
   return out;
 }
-// Learn from one project the autopilot produced (called by the Studio lane after the user saves it, or by CLI).
-// S19 M133: ap.profile là id phong cách (thương hiệu / 'chung'), hoặc id hồ sơ cũ (ánh xạ qua aliases).
+// Thói quen của một thương hiệu cho AI dựng / Cắt clip / từ điển (ref = id thương hiệu, '' / 'chung' = Chung).
+// → { id, name, items:[{key, note, off}], active, adjust, dict:[{from,to}], extra } (không ném lỗi: thương hiệu lạ → Chung)
+export function habitsFor(ref, { skip = [] } = {}) {
+  let p; try { p = getProfile(ref || CHUNG); } catch { p = getProfile(CHUNG); }
+  const empty = { id: p.id, name: p.name, learn: !!p.learn, items: [], active: 0, adjust: {}, dict: [], extra: '' };
+  if (!p.learn || !p.learned) return empty;
+  const r = deriveRules(p.learned, { skip }), a = r.adjust;
+  const extra = [a.drop_src?.length ? `Không chèn ${a.drop_src.map(k => NO_SRC[k]).filter(Boolean).join(', ')} (người dùng hay xoá).` : '', a.no_claims ? CLAIM_RULE : '',
+    a.cta ? `Lời kêu gọi (CTA) người dùng hay dùng: "${a.cta}".` : '', a.dict?.length ? `Chính tả người dùng hay sửa: ${a.dict.map(e => `"${e.from}" → "${e.to}"`).join(', ')}.` : ''].filter(Boolean).join(' ');
+  return { ...empty, items: r.items, active: r.items.filter(i => !i.off && !skip.includes(i.key)).length, adjust: a, dict: a.dict || [], extra };
+}
+// Từ điển chính tả đã học của một thương hiệu (dict.mjs gộp vào --fix của captions.py; không bao giờ ném lỗi)
+export function learnedDict(ref) { try { return habitsFor(ref).dict; } catch { return []; } }
+
+// Bản AI giao của dự án (S19 M134): AI dựng (sau khi áp kế hoạch và lưu), Tự động (cuối job), Tự lái (bước export).
+// Lưu lại timeline + phụ đề đúng lúc đó để "Học từ chỉnh sửa" so với các lần lưu sau.
+const rdJ = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+const capsOf = (dir, tl) => typeof tl?.captions === 'string' ? (rdJ(path.join(dir, tl.captions)) || []) : Array.isArray(tl?.captions) ? tl.captions : (rdJ(path.join(dir, 'work/captions.json')) || []);
+export function saveDelivered(dir, source = 'ai') {
+  const tl = rdJ(path.join(dir, 'timeline.json')); if (!tl) return false;
+  let mt = 0; try { mt = fs.statSync(path.join(dir, 'timeline.json')).mtimeMs; } catch {}
+  const f = path.join(dir, '.studio', 'ai_result.json'); fs.mkdirSync(path.dirname(f), { recursive: true });
+  writeAtomic(f, { version: 1, source: String(source).slice(0, 20), at: new Date().toISOString(), ms: Math.max(Date.now(), Math.ceil(mt)), timeline: tl, captions: capsOf(dir, tl) });
+  return true;
+}
+// Learn from one project where AI inserted things (called by the Studio lane after the user saves it, or by CLI).
+// S19 M134: ghi vào phong cách của thương hiệu của Kho chứa dự án (workspaceOfProject: .kho.json, không có thì TL.brand.kit,
+// không có nữa thì Chung). Dự án Tự lái cũ chỉ có autopilot_result.json vẫn học được (không có phụ đề gốc → bỏ phần chữ phụ đề).
 export function learnFromProject(dir) {
   const st = path.join(dir, '.studio');
-  const rd = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
-  const ap = rd(path.join(st, 'autopilot.json')), before = rd(path.join(st, 'autopilot_result.json')), after = rd(path.join(dir, 'timeline.json'));
-  if (!ap?.profile || !before || !after) return { ok: false, why: 'không phải dự án Tự lái hoặc chưa chạy xong' };
+  const after = rdJ(path.join(dir, 'timeline.json')), ai = rdJ(path.join(st, 'ai_result.json')), ap = rdJ(path.join(st, 'autopilot.json'));
+  let before = null, ms = 0, capsBefore = null;
+  if (ai?.timeline) { before = ai.timeline; ms = Math.max(+ai.ms || 0, ai.source === 'autopilot' ? +ap?.finishedMs || 0 : 0); capsBefore = Array.isArray(ai.captions) ? ai.captions : null; }
+  else if (ap?.profile) { before = rdJ(path.join(st, 'autopilot_result.json')); ms = ap.finishedMs || 0; }
+  if (!before || !after) return { ok: false, why: 'dự án chưa có bản AI giao (AI dựng, Tự động hoặc Tự lái)' };
   const mt = fs.statSync(path.join(dir, 'timeline.json')).mtimeMs;
-  if (mt <= (ap.finishedMs || 0) + 1000) return { ok: false, why: 'chưa có chỉnh sửa sau Tự lái' };
-  const id = resolveStyleId(ap.profile);
-  if (!id) return { ok: false, why: 'thương hiệu / hồ sơ đã bị xoá' };
+  if (mt <= ms + 1000) return { ok: false, why: 'chưa có chỉnh sửa sau bản AI giao' };
+  let id; try { id = resolveStyleId(workspaceOfProject(dir, after).brand || CHUNG); } catch { id = null; }
+  if (!id) id = CHUNG; // thương hiệu của Kho đã bị xoá
   if (!getProfile(id).learn) return { ok: false, why: 'phong cách tắt “Học từ chỉnh sửa”' };
   const key = crypto.createHash('md5').update(path.resolve(dir)).digest('hex').slice(0, 10);
-  const o = { ...observe(before, after), t: new Date().toISOString(), dir: path.resolve(dir), name: path.basename(dir) };
+  const o = { ...observe(before, after, { capsBefore, capsAfter: capsBefore ? capsOf(dir, after) : null }), t: new Date().toISOString(), dir: path.resolve(dir), name: path.basename(dir), source: ai?.source || 'autopilot' };
   const p = patchStyle(id, s => {
     s.learned = s.learned || { projects: {} };
+    s.learned.projects = s.learned.projects || {};
     s.learned.projects[key] = o; // re-saving the same project replaces its observation (never double counts)
     s.learned.projects = trimProjects(s.learned.projects);
     s.learned.updated = o.t;
   });
   return { ok: true, profile: id, brand: p.brand, name: p.name, observation: o, rules: deriveRules(p.learned) };
 }
+// Tắt / bật / quên một thói quen của một thương hiệu (trang Thương hiệu). forget: bỏ qua các quan sát tới lúc này cho khoá đó.
+export function setHabit(ref, key, op) {
+  if (typeof key !== 'string' || !/^[a-z_]{2,20}(:.{1,40})?$/.test(key)) throw Object.assign(new Error('Thói quen không hợp lệ'), { status: 400 });
+  if (!['off', 'on', 'forget'].includes(op)) throw Object.assign(new Error('Thao tác lạ'), { status: 400 });
+  return patchStyle(ref, s => {
+    s.learned = s.learned || { projects: {} };
+    const off = new Set(Array.isArray(s.learned.off) ? s.learned.off : []);
+    if (op === 'off') off.add(key); else off.delete(key);
+    s.learned.off = [...off].slice(-100);
+    if (op === 'forget') s.learned.forgot = { ...(s.learned.forgot && typeof s.learned.forgot === 'object' ? s.learned.forgot : {}), [key]: new Date().toISOString() };
+  });
+}
 // Danh sách cho Studio (trang Thương hiệu, panel Tự lái): phong cách + điều đã học + giá trị sau khi áp.
 export function stylesOut() {
   const s = loadStore();
   return { default: s.default, aliases: s.aliases, migrated: s.migrated, list: s.profiles.map(p => { const e = effectiveProfile(p); const r = deriveRules(p.learned);
-    return { ...p, learnedNotes: r.notes, learnedN: r.n, effective: { broll_density: e.broll_density, broll_src: e.broll_src, sound: e.sound, music: e.music, caption_style: e.caption_style, pack: e.pack, ai_density: e.ai_density } }; }) };
+    return { ...p, learnedNotes: r.notes, learnedN: r.n, habits: r.items, effective: { broll_density: e.broll_density, broll_src: e.broll_src, sound: e.sound, music: e.music, caption_style: e.caption_style, pack: e.pack, ai_density: e.ai_density, cta: e.cta } }; }) };
 }
 
 // ---------- CLI ----------

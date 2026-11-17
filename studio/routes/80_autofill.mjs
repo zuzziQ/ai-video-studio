@@ -4,6 +4,7 @@
 //        (Kho của thương hiệu đi cùng "media"; "kho" riêng = chỉ Kho, không lấy ảnh/clip của dự án)
 //        -> job "autofill"; rewrites timeline.json in place (history snapshot + timeline.json.bak first); job.out = summary
 import fs from 'node:fs'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+import { saveDelivered } from '../../scripts/profile.mjs';
 
 const DENS = ['thua', 'vua', 'day', 'ratday'], LEVELS = ['nhe', 'vua', 'phongphu'], SRCS = ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'kho', 'lib', 'stock', 'stockvid', 'aiimg'];
 const GOALS = ['auto', 'banhang', 'bds', 'khoahoc', 'review', 'tintuc', 'kechuyen', 'doanhnghiep', 'amthuc', 'giaitri'];
@@ -55,6 +56,8 @@ export default ctx => {
         // S12 · M99: đoạn nhạc nào có bài hợp mood trong Nhac/ của Kho thì dùng bài đó (media/kho_*)
         if (b.music) { try { const { khoMusicBeds } = await import(pathToFileURL(S('kho_media.mjs')).href); const n = await khoMusicBeds(path.dirname(tlf)); if (n) sum.kho_music = n; } catch (e) { console.error('kho music:', e.message); } }
       }
+      // S19 M134: bản AI giao (b-roll / SFX tự động) để "Học từ chỉnh sửa" so với các lần lưu sau; xoá phần tự động thì thôi
+      if (mode !== 'clear') try { saveDelivered(path.dirname(tlf), 'autofill'); } catch (e) { console.error('autofill delivered:', e.message); }
       ctx.job.out = sum;
     });
     return ctx.json(res, ok ? { ok } : { error: 'Đang có tác vụ khác chạy' }), true;

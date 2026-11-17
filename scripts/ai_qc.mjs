@@ -984,7 +984,7 @@ export async function runQC(src, o = {}) {
         try {
           const [{ runAssist, check }, { dictSources }] = await Promise.all([import('./assist.mjs'), import('./dict.mjs')]);
           const W = capWords(caps).map(x => ({ w: x.w.w, s: x.w.s, e: x.w.e })), ds = dictSources({ dir, timeline: tl });
-          const input = check('transcript', { words: W, dict: [...ds.brand, ...ds.project], names: [...new Set([ds.kit?.title, ...ds.auto.map(e => e.to)].filter(Boolean))], industry: tl.ads?.industry || '' });
+          const input = check('transcript', { words: W, dict: [...(ds.learned || []), ...ds.brand, ...ds.project], names: [...new Set([ds.kit?.title, ...ds.auto.map(e => e.to)].filter(Boolean))], industry: tl.ads?.industry || '' });
           const r = await runAssist('transcript', input, { model: o.model || 'sonnet' });
           const n = spellFromTranscript(caps, spell, r.suggestions, W);
           if (n) applied.push({ op: 'transcript', n });

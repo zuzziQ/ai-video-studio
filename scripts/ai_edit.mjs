@@ -106,7 +106,7 @@ LUẬT KỊCH BẢN (bắt buộc, thắng các mục bên dưới khi mâu thu�
 - KHÔNG sửa chữ phụ đề ("captions" chỉ dùng để đặt "hl" / "br", giữ nguyên "words").
 ` : '';
   return `Bạn là editor video ngắn tiếng Việt chuyên nghiệp. Hãy lên bản dựng cho video người nói (talking-head) ${vertical ? 'dọc 9:16' : 'ngang 16:9'}, dài ${tl.duration}s.
-Mục tiêu video: ${o.goal || 'khác'}. Giọng điệu: ${o.tone || 'tự nhiên'}. Mật độ graphic: ${n[0]}–${n[1]} cảnh.${o.extra ? `\nYêu cầu thêm của người dùng: ${o.extra}` : ''}
+Mục tiêu video: ${o.goal || 'khác'}. Giọng điệu: ${o.tone || 'tự nhiên'}. Mật độ graphic: ${n[0]}–${n[1]} cảnh.${o.extra ? `\nYêu cầu thêm của người dùng: ${o.extra}` : ''}${o.learned?.extra ? `\nThói quen đã học của thương hiệu ${o.learned.brand || ''} (người dùng hay sửa bản AI như vậy, làm theo): ${o.learned.extra}` : ''}
 Brand: ${JSON.stringify(tl.brand || {})}
 
 # Lời thoại (mỗi dòng là một phụ đề C<chỉ số> [giây bắt đầu–kết thúc], từng từ dạng <chỉ số từ>:<từ>; ${script ? 'chữ theo kịch bản của người dùng' : 'giọng nói nhận dạng tự động nên có thể sai chính tả'})
@@ -365,6 +365,36 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     ...(script ? { script: { marks: marks.length, missing: miss.map(m => ({ kind: m.kind, text: m.text, t0: m.t0 })) } } : {}) };
 }
 
+// S19 M134: chính tả đã học "sai → đúng" (từng từ, không phân biệt hoa thường, giữ dấu câu hai đầu). Trả số từ đã sửa.
+export function applyDict(caps, dict) {
+  const m = new Map((Array.isArray(dict) ? dict : []).filter(e => e && typeof e.from === 'string' && typeof e.to === 'string' && !/\s/.test(e.from)).map(e => [e.from.normalize('NFC').toLocaleLowerCase('vi'), e.to]));
+  if (!m.size) return 0;
+  let n = 0;
+  for (const c of caps || []) for (const w of c.words || []) {
+    const x = /^([,.!?:;"'“”…()[\]-]*)(.*?)([,.!?:;"'“”…()[\]-]*)$/su.exec(String(w.w ?? '').normalize('NFC'));
+    const to = x && m.get(x[2].toLocaleLowerCase('vi'));
+    if (to && to !== x[2]) { w.w = x[1] + to + x[3]; n++; }
+  }
+  return n;
+}
+// S19 M134: thói quen đã học (opts.learned của 20_ai.mjs) áp lên kế hoạch: bỏ loại graphic người dùng hay xoá, không nhạc /
+// chỉnh dB, kiểu phụ đề hay đổi, chính tả (plan.dict, Studio áp cho mọi dòng phụ đề). Ghi plan.learned = các điều đã áp.
+const KIND_OF = { emoji: t => t === 'emoji_pop', text: t => t === 'text', photo: t => t === 'photo' };
+export function applyLearned(plan, L) {
+  if (!L || typeof L !== 'object') return plan;
+  const drop = (Array.isArray(L.drop) ? L.drop : []).filter(k => Object.hasOwn(KIND_OF, k));
+  if (drop.length) {
+    const before = plan.scenes.length;
+    plan.scenes = plan.scenes.filter(s => s._base || !drop.some(k => KIND_OF[k](s.type)));
+    if (plan.scenes.length < before) plan.dropped.push(`bỏ ${before - plan.scenes.length} cảnh theo thói quen của thương hiệu`);
+  }
+  if (L.music === 'off') plan.music = null;
+  else if (plan.music && Number.isFinite(+L.music_gain) && +L.music_gain) plan.music.gain = Math.max(-30, Math.min(-8, +(plan.music.gain + +L.music_gain).toFixed(1)));
+  if (typeof L.caption_style === 'string' && L.caption_style) plan.caption_style = L.caption_style;
+  if (Array.isArray(L.dict) && L.dict.length) plan.dict = L.dict.slice(0, 50);
+  plan.learned = (Array.isArray(L.notes) ? L.notes : []).slice(0, 30);
+  return plan;
+}
 // Apply a plan: earlier AI items (and untouched recipe items) are replaced; anything the user edited (_orig) or added stays.
 export function applyPlan(tl, caps, plan) {
   const starter = !!tl._starter; delete tl._starter; // never-opened "Video mới" project: its starter scenes are placeholders
@@ -373,7 +403,8 @@ export function applyPlan(tl, caps, plan) {
   if (plan.hook) tl.title = plan.hook;
   tl.scenes = [...(tl.scenes || []).filter(s => !mine(s)), ...plan.scenes];
   tl.audio = tl.audio || {};
-  tl.audio.music = [...(tl.audio.music || []).filter(m => !m._ai && !(m.t0 <= .05 && m.t1 >= tl.duration - .1)), plan.music];
+  // plan.music null (thói quen "không nhạc", M134): bỏ nhạc _ai cũ, không thêm nhạc mới
+  tl.audio.music = [...(tl.audio.music || []).filter(m => !m._ai && !(plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1)), ...(plan.music ? [plan.music] : [])];
   tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !x._ai), ...plan.sfx];
   let n = 0;
   for (const e of plan.captions) {
@@ -382,6 +413,7 @@ export function applyPlan(tl, caps, plan) {
     e.words.forEach((w, j) => { const cw = c.words[j]; cw.w = w.w; if (w.hl) cw.hl = true; else delete cw.hl; if (w.br) cw.br = true; else delete cw.br; });
     c.words = c.words.filter(w => w.w); n++;
   }
+  applyDict(caps, plan.dict);
   return n;
 }
 
@@ -408,7 +440,7 @@ async function main() {
     onTick: () => { const s = (Date.now() - t0) / 1000; say(Math.min(.88, p + .7 * (1 - Math.exp(-s / 45))), `Claude đang lên bản dựng… ${Math.round(s)}s`); },
     onRaw: res => fs.writeFileSync(path.join(dir, '.studio/ai_raw.txt'), res) });
   say(.92, 'Kiểm tra và sửa kết quả');
-  const plan = validate(raw, ctx);
+  const plan = applyLearned(validate(raw, ctx), o.learned);
   // S13 · M111: text too long for its graphic → one short call for shorter lines instead of a "…" cut (cut kept if it fails)
   if (plan.cuts.length && !args.includes('--no-shorten')) {
     say(.925, `Viết ngắn lại ${plan.cuts.length} dòng chữ quá dài`);
@@ -416,7 +448,7 @@ async function main() {
     console.log(`chữ quá dài: ${plan.cuts.length} · Claude viết ngắn lại ${n}`);
   }
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
-  try { const k = await (await import('./kho_media.mjs')).khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
+  if (plan.music) try { const k = await (await import('./kho_media.mjs')).khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
   // S13 · M104: render the plan once and move graphics off the speaking face / captions / unsafe edges before it is applied
   if (!args.includes('--no-place')) {
     say(.93, 'Đặt graphic né mặt, phụ đề và mép khung');
