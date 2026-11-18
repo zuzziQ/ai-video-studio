@@ -226,6 +226,8 @@
     const ok = await copy(PHRASE);
     S.toast(`${n} ghi chú đã lưu vào .studio/notes.md. ${ok ? `Đã chép câu “${PHRASE}”` : `Gõ “${PHRASE}”`}: dán vào Claude Code mở ở thư mục dự án để Claude sửa hết.`);
   }
+  // S22 M154: "Sửa hết lỗi" của thanh Hỏi Claude nhắc ghi chú ghim còn mở và giao luôn (cùng luồng nút Giao Claude sửa hết)
+  S.pins = { open: () => (S.TL ? items().filter(i => !i.done).length : 0), give };
   $('#insp')?.addEventListener('click', e => {
     const b = e.target.closest('.pnotes [data-pn], .pnotes [data-pn-k]'); if (!b || !S.TL) return;
     if (b.dataset.pn === 'pin') return setMode(!mode);

@@ -55,7 +55,9 @@
   .va-col b { font-size: var(--text-sm); } .va-col p { margin: 0; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); line-height: 1.45; }
   .va-col .hk { color: rgb(var(--color-warning)); font-weight: 700; font-size: var(--text-xs); }
   #modalbox:has(.va-grid) { width: min(1100px, 94vw); max-width: 94vw; }
-  #modalbox:has(.qc-list) { width: min(640px, 94vw); }`;
+  #modalbox:has(.qc-list) { width: min(640px, 94vw); }
+  /* S22 M154: Cơ bản không có thẻ A/B ở panel Kiểm tra; "3 hook cho A/B" là gợi ý nhanh của thanh Hỏi Claude */
+  body.wf-basic #vabox { display: none; }`;
   document.head.appendChild(css);
   // Data-driven values (ring score, number of variant columns) arrive as data-v="--v:72" and are set with style.setProperty after insert.
   const applyVars = root => (root || document).querySelectorAll('[data-v]').forEach(el => el.dataset.v.split(';').forEach(p => { const i = p.indexOf(':'); if (i > 0) el.style.setProperty(p.slice(0, i).trim(), p.slice(i + 1).trim()); }));
@@ -70,15 +72,19 @@
   const dirty = () => $('#status')?.classList.contains('dirty');
 
   // ---------- run QC as a job ----------
-  async function runQc({ fix = false, claude = true, after, only } = {}) {
-    if (dirty() && !await S.saveNow()) return;
+  // fail(msg): S22 M154 — thanh Hỏi Claude đợi kết quả (S.qc.fixAll), lỗi thì báo về thay vì treo
+  async function runQc({ fix = false, claude = true, after, only, fail } = {}) {
+    if (dirty() && !await S.saveNow()) return fail?.('Chưa lưu được dự án');
     const r = await S.api('/api/qc/run', { fix, claude, ...(only ? { only } : {}) });
-    if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
+    if (!r.ok) { S.toast(r.error || 'Đang có tác vụ khác chạy'); return fail?.(r.error || 'Đang có tác vụ khác chạy'); }
     S.modal(`<h3><i class="ti ti-shield-check"></i> ${only ? `Đang áp dụng ${only.length} gợi ý sửa…` : fix ? 'Đang kiểm tra & tự sửa…' : 'Đang kiểm tra chất lượng…'}</h3>
       <div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre>
       <p class="muted">Render ảnh bằng engine, đo chữ/mặt/phụ đề, trộn thử âm thanh${claude ? ', rồi Claude xem các khung hình (30–120 giây)' : ''}.</p>`);
     S.pollJob(async j => {
-      if (j.state !== 'done') return S.modal(`<h3>Lỗi kiểm tra</h3><p>${esc(j.error || j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      if (j.state !== 'done') {
+        if (fail) { S.closeModal(); return fail(j.error || j.step || 'Kiểm tra chưa xong'); }
+        return S.modal(`<h3>Lỗi kiểm tra</h3><p>${esc(j.error || j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      }
       await load();
       if (fix) await S.reload();
       if (after) return after(last);
@@ -205,8 +211,8 @@
   }
 
   // ---------- variants ----------
-  async function runVariants() {
-    const kind = $('#vakind')?.value || 'hook', exp = $('#vaexp')?.checked;
+  async function runVariants(o = {}) {
+    const kind = o.kind || $('#vakind')?.value || 'hook', exp = o.export ?? $('#vaexp')?.checked;
     if (dirty() && !await S.saveNow()) return;
     const r = await S.api('/api/variants/run', { n: 3, kind, export: !!exp });
     if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
@@ -268,7 +274,7 @@
     if (a === 'fix') runQc({ fix: false, claude });
     if (a === 'show') { if (last) showResult(); }
     if (a === 'ads') adsDialog();
-    if (a === 'variants') runVariants();
+    if (a === 'variants') runVariants({});
     if (a === 'compare') loadVa().then(showVariants);
   });
 
@@ -347,5 +353,15 @@
     runQc({ fix: true, claude: true, after: q => { exportQc = q; passQc = true; $('#export').click(); } });
   }, true);
 
+  // S22 M154: thanh Hỏi Claude (75_ask.js) — bước Kiểm tra
+  //   brief()        → { score, issues: [{ t, kind, msg, sev }] } của lần kiểm tra gần nhất (bộ định tuyến giải thích lỗi) | null
+  //   fixAll()       → Promise<{ q } | { error }>: kiểm tra + sửa hết (job qc, fix), timeline mới đã nạp; thanh đưa qua Studio.review
+  //   variants(kind) → 3 phiên bản A/B (job variants, hộp So sánh như nút của thẻ A/B)
+  S.qc = {
+    get last() { return last; },
+    brief: () => (last ? { score: last.score, issues: (last.issues || []).filter(i => !i.fixed).map(i => ({ t: i.t, kind: i.kind_vi || i.kind, msg: i.msg, sev: i.severity })) } : null),
+    fixAll: () => new Promise(ok => runQc({ fix: true, claude: $('#qcclaude')?.checked !== false, after: q => { S.closeModal(); rerender(); ok({ q }); }, fail: error => ok({ error }) })),
+    variants: kind => runVariants({ kind }),
+  };
   S.onReady(() => { load().then(rerender); loadVa().then(rerender); });
 })();
