@@ -108,8 +108,9 @@ body.np-busy > *:not(#modal):not(.toast) { visibility: hidden; }
 
 /* ---------- main grid ---------- */
 main { position: absolute; top: 50px; left: 0; right: 0; bottom: var(--tlh); display: grid; grid-template-columns: 68px 312px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
-body.expanded main { grid-template-columns: 68px minmax(0, 1fr); }
-body.expanded #lib, body.expanded #right { display: none; }
+/* S23 M161: bố cục theo Studio.layout (features/76_layout.js gắn data-ask / data-tl / data-focus … lên body). Nút ⤢ = data-focus */
+body[data-focus] main { grid-template-columns: 68px minmax(0, 1fr); }
+body[data-focus] #lib, body[data-focus] #right { display: none; }
 
 /* rail: label on the 11px scale; a long label ("Chuyển cảnh", "Thương hiệu") wraps to two lines inside the 60px button */
 #rail { background: rgb(var(--color-surface)); border-right: 1px solid rgb(var(--color-line)); display: flex; flex-direction: column; align-items: center; padding: var(--space-2) 0; gap: var(--space-050); overflow-y: auto; overflow-x: hidden; }
@@ -332,6 +333,18 @@ body.expanded #lib, body.expanded #right { display: none; }
 
 /* ---------- center / preview (stays neutral grey: --stage-*) ---------- */
 #center { display: flex; flex-direction: column; min-width: 0; background: rgb(var(--color-canvas)); }
+/* S23 M161: Hỏi Claude cạnh khung (data-ask=side, video dọc): #center thành hai cột, #askbar sang cột phải của nó.
+   Giao diện cột đầy đủ là M163. Thanh ẩn (bước Cài đặt) thì không chừa cột. */
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 22vw, 340px); grid-template-rows: auto minmax(0, 1fr) auto auto; }
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) > * { grid-column: 1; min-width: 0; }
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #avs-notices { grid-row: 1; }
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #stagewrap { grid-row: 2; }
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #rvbar { grid-row: 3; }
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #controls { grid-row: 4; }
+body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #askbar { grid-column: 2; grid-row: 1 / -1; border-top: 0; border-left: 1px solid rgb(var(--color-line)); justify-content: flex-start; overflow-y: auto; }
+/* S23 M161: dải báo Studio.notice ở vùng riêng đầu #center: chiếm chỗ (khung co lại) thay vì đè đỉnh khung ở 1024 px (PR 190) */
+#center > #avs-notices { position: static; transform: none; z-index: auto; width: 100%; max-width: 640px; margin: var(--space-2) auto 0; padding: 0 var(--space-3); flex: none; }
+#center > #avs-notices:empty { display: none; }
 #stagewrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
   background: radial-gradient(ellipse at 50% 45%, rgb(var(--stage-glow)) 0%, rgb(var(--stage-bg)) 70%); }
 #stagebox { position: relative; border-radius: var(--radius-xs); overflow: hidden; box-shadow: 0 0 0 1px rgb(var(--color-white) / .06), var(--shadow-overlay); background: rgb(var(--stage-frame)); }
@@ -505,6 +518,15 @@ body.landscape .clipcard .cth { width: 80px; aspect-ratio: 16/9; }
 /* ---------- timeline ---------- */
 #tlwrap { position: absolute; left: 0; right: 0; bottom: 0; height: var(--tlh); background: rgb(var(--color-surface)); border-top: 1px solid rgb(var(--color-line)); display: flex; flex-direction: column; }
 #tlwrap::before { content: ""; position: absolute; top: -4px; left: 0; right: 0; height: 8px; cursor: ns-resize; z-index: 6; }
+/* S23 M161: timeline 3 mức (data-tl). strip 40 px = dải tua (#tlstrip; ảnh nhỏ, vạch cắt là M162), compact 120 px = thước +
+   Video chính + Phụ đề, track khác thành vạch 4 px (khối thành vạch màu), full = như cũ, kéo cao thấp. Kéo mép trên bắt về mức gần nhất. */
+body[data-tl="strip"] #tlhead, body[data-tl="strip"] #tl { display: none; }
+body[data-tl="compact"] #tlhead { display: none; }
+body[data-tl="compact"] #tracks .track:not(.video):not([data-track="cap"]), body[data-tl="compact"] .lrow:not([data-lk="video"]):not([data-lk="cap"]) { height: 4px !important; overflow: hidden; }
+body[data-tl="compact"] #tracks .track:not(.video):not([data-track="cap"]) .blk { top: 0 !important; height: 3px; padding: 0; font-size: 0; pointer-events: none; }
+body[data-tl="compact"] .lrow:not([data-lk="video"]):not([data-lk="cap"]) > * { display: none; }
+body[data-tl="compact"] #tracks .track.video, body[data-tl="compact"] .lrow[data-lk="video"] { height: 48px !important; }
+body[data-tl="compact"] .track.video .clip { height: 40px; }
 #tlhead { height: var(--h-lg); display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-3); border-bottom: 1px solid rgb(var(--color-line)); flex: none; }
 #tlhead .tools { display: flex; align-items: center; gap: var(--space-050); }
 #tlhead .vsep { width: 1px; height: 20px; background: rgb(var(--color-line-strong)); margin: 0 var(--space-1); }

@@ -74,6 +74,7 @@
       ['⇧ ← →', 'Lùi / tiến 1 giây'],
       ['+ / −', 'Phóng to / thu nhỏ timeline'],
       ['⇧Z', 'Vừa khung (preview và timeline)'],
+      ['`', 'Timeline: dải tua → gọn → đầy đủ (⇧ ngược lại; kéo mép trên cũng đổi)'],
     ]],
     ['Element trên khung', [
       ['← → ↑ ↓', 'Dời 1 px (khi vừa chọn element trên khung)'],
