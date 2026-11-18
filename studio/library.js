@@ -88,7 +88,7 @@ function panelTemplates() {
     (TEMPLATES == null ? '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang tải mẫu…</div>'
       : !all.length ? empty('ti-layout-grid-add', 'Chưa có mẫu nào', 'Mẫu sẽ xuất hiện ở đây khi có trong thư mục templates/. Bạn có thể bấm “Lưu thành mẫu” để biến dự án này thành mẫu đầu tiên.')
         : !list.length ? empty('ti-filter-off', 'Không có mẫu trong mục này', 'Chọn mục khác hoặc xoá ô tìm.')
-          : `<div class="tgrid">${list.map(t => `<div class="tpl" data-tpl="${esc(t.id)}">
+          : `<div class="tgrid">${list.map(t => `<div class="tpl" data-tpl="${esc(t.id)}" tabindex="0">
         <div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" data-dbg="${esc(t.preview?.jpg || '')}">
           ${t.preview?.jpg ? '' : `<span class="ph">${esc(pk(t.pack)?.icon || '🎬')}</span>`}
           ${t.preview?.mp4 ? `<video muted loop playsinline preload="none" data-src="${t.preview.mp4}"></video>` : ''}
@@ -408,6 +408,47 @@ function libInsert(d, where, o = {}) {
   if (how === 'clip' && m.kind !== 'audio') { setTime(o.t); return insertMediaClip(m); }
   return insertMedia(m, at);
 }
+// S21 M147: mục thư viện xem chi tiết được ở cột phải (features/69_libdetail.js). Bấm một lần (hoặc Enter / Space khi focus) = xem chi
+// tiết; bấm đúp, nút "Thêm tại playhead" / "Áp dụng" trong chi tiết và kéo thả (M143) = chèn ngay qua libAct. Nút nhỏ trong ô (nghe
+// thử, Dùng mẫu, + nhạc / SFX, Nhạc của bạn) vẫn làm việc của nó.
+const LIB_ITEMS = [['tpl', 'data-tpl'], ['text', 'data-tp'], ['cs', 'data-cs'], ['sticker', 'data-st'], ['fx', 'data-fx'], ['shape', 'data-shadd'],
+  ['music', 'data-mus'], ['sfx', 'data-sfx'], ['trans', 'data-tr'], ['filter', 'data-flt']];
+function libItemOf(el) {
+  if (!el?.closest || el.closest('[data-aud],[data-use],[data-addmusic],[data-addsfx],[data-mymus]')) return null;
+  for (const [k, a] of LIB_ITEMS) { const b = el.closest(`[${a}]`); if (b) return [k, b.getAttribute(a), b]; }
+  return null;
+}
+// Hành vi chèn / áp của mục (cũng là hành vi bấm cũ). how = 'all': chuyển cảnh, bộ lọc cho mọi clip.
+function libAct(kind, id, how) {
+  if (kind === 'tpl') { const tp = (TEMPLATES || []).find(x => x.id === id); return tp && applyTemplate(tp); }
+  if (kind === 'text') return addText(TEXT_PRESETS[+id]);
+  if (kind === 'cs') { pushUndo(); TL.caption_style = id || undefined; changed(); return renderPanel(); }
+  if (kind === 'sticker') return addSticker(id);
+  if (kind === 'fx') { const [i, j] = id.split(':').map(Number); return packs()[i]?.items[j] && addPackItem(i, j); }
+  if (kind === 'shape') return window.Studio?.addShape?.(id);
+  if (kind === 'music') return addMusic(id);
+  if (kind === 'sfx') return addSfx(id);
+  if (kind === 'trans') {
+    if (how === 'all') {
+      pushUndo(); TL.clips.forEach((c, i) => { if (i) { if (id) c.transition = { type: id, dur: r2(transDur) }; else delete c.transition; } }); changed(true); renderPanel();
+      return toast(id ? `Đã áp dụng “${id}” cho ${TL.clips.length - 1} chỗ nối` : 'Đã bỏ chuyển cảnh ở mọi chỗ nối');
+    }
+    if (sel?.kind !== 'clip') { const k = clipAtT(T); if (k && k.i > 0) { select(compOf(k.c)); } else return toast('Chọn một clip (không phải clip đầu)'); }
+    return setTransition(sel.idx, id, transDur);
+  }
+  if (kind === 'filter') {
+    if (how === 'all') { setFilter(0, id, true); return toast('Đã áp dụng cho mọi clip'); }
+    const k = sel?.kind === 'clip' ? clipLayout()[sel.idx] : clipAtT(T); if (!k) return toast('Chưa có clip');
+    if (sel?.kind !== 'clip') select(compOf(k.c));
+    return setFilter(k.i, id);
+  }
+}
+$('#libbody').addEventListener('dblclick', e => { const it = libItemOf(e.target); if (it) { e.preventDefault(); e.stopPropagation(); libAct(it[0], it[1]); } });
+$('#libbody').addEventListener('keydown', e => {
+  if ((e.key !== 'Enter' && e.key !== ' ') || e.metaKey || e.ctrlKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const it = libItemOf(e.target); if (!it || it[2] !== e.target || !window.Studio?.libDetail) return;
+  e.preventDefault(); e.stopPropagation(); Studio.libDetail.pick(it[0], it[1]);
+});
 (() => {
   let dz = null;
   window.addEventListener('dragover', e => { if (![...e.dataTransfer.types].includes('Files')) return; e.preventDefault(); if (!dz) { dz = document.createElement('div'); dz.id = 'drop'; dz.innerHTML = '<i class="ti ti-cloud-upload"></i>Thả để thêm vào Media'; document.body.appendChild(dz); } });
@@ -479,15 +520,15 @@ function panelAudio() {
     const rows = LIB.music.map(f => f.replace('.mp3', '')).filter(m => !q || (m + ' ' + (MOOD_VI[m.replace(/_\d+$/, '')] || '')).toLowerCase().includes(q));
     $('#libbody').innerHTML = seg + `<div class="help">${(TL.audio?.music || []).length ? `Đang có ${(TL.audio.music).length} đoạn nhạc trên timeline.` : 'Chưa có nhạc nền.'} Bấm + để thêm từ playhead tới hết video.</div>
       ${myMusicBlock()}
-      <div class="alist">${rows.map(m => { const b = m.replace(/_\d+$/, ''), n = m.match(/_(\d+)$/)?.[1]; return `<div class="arow">
+      <div class="alist">${rows.map(m => { const b = m.replace(/_\d+$/, ''), n = m.match(/_(\d+)$/)?.[1]; return `<div class="arow" data-mus="${m}" tabindex="0">
         <button class="pl" data-aud="music:${m}"><i class="ti ti-player-play-filled"></i></button><span class="mi"><i class="ti ${MOOD_IC[b] || 'ti-music'}"></i></span>
         <div class="mid"><b>${esc(MOOD_VI[b] || b)}${n ? ' ' + n : ''}</b><small>${esc(m)}.mp3</small></div><button class="add" data-addmusic="${m}" title="Thêm tại playhead"><i class="ti ti-plus"></i></button></div>`; }).join('')}</div>`;
     $('#mymus-up')?.addEventListener('change', e => uploadMyMusic([...e.target.files]));
   } else {
     const rows = LIB.sfx.map(f => f.replace(/\.\w+$/, '')).filter(s => !q || s.includes(q));
     $('#libbody').innerHTML = seg + `<button class="wide" data-pact="autosfx"><i class="ti ti-wand"></i> Tự đặt SFX theo graphic</button>
-      <div class="alist">${rows.map(s => `<div class="arow sfx" data-addsfx="${s}" title="Bấm để thêm tại playhead">
-        <button class="pl" data-aud="sfx:${s}"><i class="ti ti-player-play-filled"></i></button><div class="mid"><b>${esc(s.replace(/_/g, ' '))}</b></div><i class="ti ti-plus add2"></i></div>`).join('')}</div>`;
+      <div class="alist">${rows.map(s => `<div class="arow sfx" data-sfx="${s}" tabindex="0" title="Bấm để xem chi tiết, bấm đúp để thêm tại playhead">
+        <button class="pl" data-aud="sfx:${s}"><i class="ti ti-player-play-filled"></i></button><div class="mid"><b>${esc(s.replace(/_/g, ' '))}</b></div><i class="ti ti-plus add2" data-addsfx="${s}" title="Thêm tại playhead"></i></div>`).join('')}</div>`;
   }
   refreshAud();
 }
@@ -601,9 +642,14 @@ $('#libbody').addEventListener('click', async e => {
     if (t.type === 'checkbox') { touch(c.obj); c.obj.hidden = !t.checked || undefined; changed(true); return; }
     return select(c, true);
   }
+  if ((b = libItemOf(t))) { // S21 M147: bấm = xem chi tiết; bấm thứ hai của bấm đúp bỏ qua (dblclick chèn)
+    e.stopPropagation(); // ô Hình khối: 64_shapes.js không chèn ngay
+    if (!window.Studio?.libDetail) return libAct(b[0], b[1]);
+    if (e.detail < 2) Studio.libDetail.pick(b[0], b[1]);
+    return;
+  }
   if ((b = q('[data-cat]'))) { tplCat = b.dataset.cat; return renderPanel(); }
   if ((b = q('[data-use]'))) { const tp = TEMPLATES.find(x => x.id === b.dataset.use); if (tp) applyTemplate(tp); return; }
-  if ((b = q('[data-tpl]'))) { TP.back = false; return openTplDetail(b.dataset.tpl, tplFilter(tplCat, query)); }
   if ((b = q('[data-mtab]'))) { mediaTab = b.dataset.mtab; return renderPanel(); }
   if ((b = q('[data-atab]'))) { audioTab = b.dataset.atab; return renderPanel(); }
   if ((b = q('[data-kg]'))) { khoGroup = b.dataset.kg; return renderPanel(); }
@@ -619,23 +665,7 @@ $('#libbody').addEventListener('click', async e => {
   if ((b = q('[data-addsfx]'))) return addSfx(b.dataset.addsfx);
   if (q('[data-pact="autosfx"]')) return autoSfx();
   if (q('#addtext')) return addText();
-  if ((b = q('[data-tp]'))) return addText(TEXT_PRESETS[+b.dataset.tp]);
-  if ((b = q('[data-cs]'))) { pushUndo(); TL.caption_style = b.dataset.cs || undefined; changed(); return renderPanel(); }
-  if ((b = q('[data-st]'))) return addSticker(b.dataset.st);
-  if ((b = q('[data-fx]'))) { const [i, j] = b.dataset.fx.split(':').map(Number); return addPackItem(i, j); }
-  if ((b = q('[data-tr]'))) {
-    if (sel?.kind !== 'clip') { const k = clipAtT(T); if (k && k.i > 0) { select(compOf(k.c)); } else return toast('Chọn một clip (không phải clip đầu)'); }
-    return setTransition(sel.idx, b.dataset.tr, transDur);
-  }
-  if (q('[data-trall]')) {
-    const ty = sel?.obj.transition?.type || 'fade'; pushUndo();
-    TL.clips.forEach((c, i) => { if (i) c.transition = { type: ty, dur: r2(transDur) }; }); changed(true); renderPanel(); return toast(`Đã áp dụng “${ty}” cho ${TL.clips.length - 1} chỗ nối`);
-  }
-  if ((b = q('[data-flt]'))) {
-    const k = sel?.kind === 'clip' ? clipLayout()[sel.idx] : clipAtT(T); if (!k) return;
-    if (sel?.kind !== 'clip') select(compOf(k.c));
-    return setFilter(k.i, b.dataset.flt);
-  }
+  if (q('[data-trall]')) return libAct('trans', sel?.obj.transition?.type || 'fade', 'all');
   if (q('[data-flall]')) { const k = sel?.kind === 'clip' ? clipLayout()[sel.idx] : clipAtT(T); setFilter(0, k?.c.filter?.preset || '', true); return toast('Đã áp dụng cho mọi clip'); }
 });
 $('#libbody').addEventListener('input', e => {

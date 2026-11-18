@@ -8,6 +8,7 @@
   const VL = { title: 'Tiêu đề', subtitle: 'Phụ đề', headline: 'Tiêu đề', name: 'Tên', role: 'Chức danh', label: 'Nhãn', accent: 'Màu nhấn', ink: 'Màu chữ',
     ground: 'Màu nền', background: 'Màu nền', prefix: 'Tiền tố', suffix: 'Hậu tố', start: 'Từ số', end: 'Đến số', exit: 'Kiểu thoát', glow: 'Phát sáng' };
   const vlabel = v => VL[v.id] || VL[String(v.label || '').toLowerCase()] || v.label || v.id;
+  S.hfVarLabel = vlabel; // S21 M147: chi tiết khối ở cột phải
   function field(v, val, vi) {
     const a = `data-hv="${esc(v.id)}" data-vt="${v.type}"`, cur = val ?? vi ?? v.def ?? '';
     const opts = v.options?.map(o => (typeof o === 'object' ? [o.value, o.label || o.value] : [o, o]));
