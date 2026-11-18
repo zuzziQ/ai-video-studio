@@ -109,6 +109,10 @@ test('chỗ nối: Studio.layout thay body.expanded, CSS theo data-*', () => {
   assert.ok(!read('studio/features/74_review.js').includes("classList.contains('expanded')"));
   const css = read('studio/studio.css');
   assert.ok(!css.includes('body.expanded'), 'studio.css còn body.expanded');
-  for (const k of ['body[data-ask="side"] #center', 'body[data-tl="strip"]', 'body[data-tl="compact"]', 'body[data-focus] main', '#center > #avs-notices'])
+  // vùng giữa hẹp (1024 px, Claude cạnh khung ~280 px): thanh nút phát co theo container, không đẩy ⤢ / thời gian ra ngoài
+  assert.ok(!/#controls \{[^}]*grid-template-columns: 1fr auto 1fr/.test(css), '#controls không dùng grid 1fr auto 1fr (con tràn khi hẹp)');
+  for (const k of ['container: ctl / inline-size', '@container ctl (max-width: 400px)', '@container ctl (max-width: 330px)'])
+    assert.ok(css.includes(k), `studio.css thiếu ${k}`);
+  for (const k of ['body[data-ask="side"] #center','body[data-tl="strip"]', 'body[data-tl="compact"]', 'body[data-focus] main', '#center > #avs-notices'])
     assert.ok(css.includes(k), `studio.css thiếu ${k}`);
 });
