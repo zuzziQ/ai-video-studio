@@ -565,6 +565,13 @@ canvas.wave { position: absolute; left: 0; top: 0; }
 @keyframes toast { from { opacity: 0; transform: translate(-50%, -8px); } }
 #drop { position: fixed; inset: 0; background: rgb(var(--color-accent) / .18); border: 3px dashed rgb(var(--color-accent-text)); z-index: 70; display: flex; flex-direction: column; gap: var(--space-3); align-items: center; justify-content: center; font-size: var(--text-xl); font-weight: 700; color: rgb(var(--color-accent-text-strong)); pointer-events: none; backdrop-filter: blur(2px); }
 #drop .ti { font-size: 48px; }
+/* S20 M143: kéo mục thư viện thả vào khung / timeline (features/65_drop.js) */
+#libbody [draggable="true"] { -webkit-user-drag: element; }
+body.libdrag #stagebox, body.libdrag #tlinner { outline: 1px dashed rgb(var(--color-drop) / .45); outline-offset: -1px; }
+#stagebox.drophot::after { content: ''; position: absolute; inset: 0; border: 2px dashed rgb(var(--color-drop)); background: rgb(var(--color-drop) / .08); pointer-events: none; border-radius: inherit; }
+#stagebox .dropdot { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid rgb(var(--color-drop)); border-radius: 50%; background: rgb(var(--color-drop) / .25); box-shadow: 0 0 0 1px rgb(var(--color-black) / .4); pointer-events: none; z-index: 2; }
+#tlinner.drophot { background: rgb(var(--color-drop) / .05); }
+.track.drophot { background: rgb(var(--color-drop) / .14); box-shadow: inset 0 0 0 1px rgb(var(--color-drop) / .6); }
 
 /* ---------- popup mẫu ---------- */
 #tplpop { position: fixed; inset: 0; z-index: 60; background: rgb(var(--color-scrim) / .72); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: var(--space-6); }

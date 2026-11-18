@@ -84,6 +84,7 @@
   --color-accent-text-strong: var(--navy-200);
   --color-accent-soft: var(--navy-600);      /* use with alpha: rgb(var(--color-accent-soft) / 0.22) */
   --color-focus: var(--navy-300);
+  --color-drop: var(--navy-300);             /* S20 M143: vùng thả hợp lệ khi kéo mục thư viện (khung, track) */
   --color-brand-red: var(--brand-red);
   --color-info: var(--navy-300);
   --color-success: var(--success-400);
