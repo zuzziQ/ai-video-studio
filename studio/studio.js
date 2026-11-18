@@ -201,6 +201,7 @@ function drawOverlay() {
     for (const y of guides.gy || []) h += `<div class="guide h" ${box(0, y * K, DW * K, 0)}></div>`;
   }
   ov.innerHTML = h; applyDyn(ov);
+  for (const f of window.Studio?._ov || []) f(); // S20 M140: thanh nổi theo khung chọn (66_canvas_cmds.js)
 }
 function pick(px, py) {
   if (!win) return null;
@@ -1479,6 +1480,10 @@ const Studio = window.Studio = {
   get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
   $, esc, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),
+  // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
+  get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
+  FONTS, SWATCH, ANIM_LIST, rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
+  removeSel, duplicateSel, splitAtPlayhead, startInlineEdit: c => startInlineEdit(c), compByCid: cid => compByCid(cid), _ov: [],
   _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
   // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … }, { step: 'build', level: 'basic' })

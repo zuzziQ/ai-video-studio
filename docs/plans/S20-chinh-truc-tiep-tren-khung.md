@@ -50,7 +50,7 @@ Mẫu chung (đã đối chiếu tài liệu trợ giúp của CapCut, Clipchamp
 
 ### `M140` Thanh nổi theo ngữ cảnh và menu chuột phải
 - Thanh nổi trên (hoặc dưới khi sát mép trên) khung chọn: chữ → font, cỡ, màu, đậm, hoạt ảnh, ⋯; cảnh / sticker / ảnh → Thay (mở thư viện đúng loại), Lớp ▲▼, Khoá, Nhân bản, Xoá, ⋯ (mở tab inspector đúng). Không che element: đặt theo `rectOf` + kích thước khung, tự lật.
-- Menu chuột phải (khung + khối timeline): Cắt, Chép, Dán, Nhân bản, Xoá, Đưa lên / xuống / trên cùng / dưới cùng, Khoá, Ẩn, Về thiết kế, Ghi chú cho Claude. Một bảng lệnh `features/64_canvas_cmds.js` dùng chung cho thanh nổi, menu, phím (`M141`).
+- Menu chuột phải (khung + khối timeline): Cắt, Chép, Dán, Nhân bản, Xoá, Đưa lên / xuống / trên cùng / dưới cùng, Khoá, Ẩn, Về thiết kế, Ghi chú cho Claude. Một bảng lệnh `features/66_canvas_cmds.js` dùng chung cho thanh nổi, menu, phím (`M141`).
 - Ẩn khi đang kéo, đang gõ, đang phát.
 
 ### `M141` Phím tắt, clipboard, thứ tự lớp, khoá từng element
