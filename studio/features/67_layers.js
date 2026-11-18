@@ -27,7 +27,8 @@
       <i class="ti ti-grip-vertical grip ${drag ? '' : 'no'}" title="Kéo để đổi lớp"></i><i class="ti ${iconOf(c)} ic"></i>
       <div class="mid"><div class="t1">${esc(c.label || S.typeName(o.type) || '')}</div>${sub && sub !== c.label ? `<div class="t2">${esc(sub)}</div>` : ''}</div>${tools}</div>`;
   }
-  // S23 M160 (PR 178): cảnh engine vẽ ở lớp nền, đọc theo thứ tự phần tử data-cid trong preview tại playhead (Layers.backSet).
+  // S23 M160 (PR 178): cảnh engine vẽ ở lớp nền, đọc theo thứ tự phần tử data-cid trong preview tại playhead (Layers.backSet);
+  // S23 M169: cộng cảnh chỉ có back theo khai báo module (window.drawnScenes của engine, Layers.backWith).
   let back = new Set();
   function backNow() {
     const doc = S.win?.document, sc = scenes(); if (!doc) return new Set();
@@ -36,7 +37,8 @@
       const c = S.compByCid(el.getAttribute('data-cid'));
       if (c?.kind === 'scene' || (c?.kind === 'line' && c.scene?.type === 'text')) seq.push(sc.indexOf(c.scene || c.obj));
     }
-    return L.backSet(seq);
+    let drawn = []; try { drawn = S.win.drawnScenes?.() || []; } catch { /* engine chưa sẵn */ }
+    return L.backWith(L.backSet(seq), drawn); // S23 M169: cộng cảnh nền của module không gắn data-cid
   }
   function html() {
     if (dragC) return last; // đang kéo dòng: giữ nguyên DOM (playhead / timeline vẽ lại không cắt ngang thao tác kéo)

@@ -397,7 +397,12 @@ function handsOff(s, all) {
   HANDOFF.set(s, h);
   return h;
 }
+// S23 M169: cảnh nào module trả back / front ở lần compose gần nhất (chỉ số trong TL.scenes), cho bảng Lớp của Studio đọc
+// lớp nền của module không gắn data-cid (window.drawnScenes, 67_layers.js). Chỉ ghi lại, không đổi HTML ra.
+let DRAWN = [];
+window.drawnScenes = () => DRAWN;
 function compose(t) {
+  DRAWN = [];
   const D = TL.duration || 1e9, all = (TL.scenes || []).filter(s => !s.hidden), hand = [], live = [];
   for (const s of all) {
     if (t < s.t0) continue;
@@ -421,6 +426,7 @@ function compose(t) {
     if (v) { r.back = envWrap(r.back, v, full); r.front = envWrap(r.front, v, full); r.cover = false; }
     if (r.cover) cover = true;
     if (r.person) person = true;
+    DRAWN.push({ i: TL.scenes.indexOf(s0), back: !!r.back, front: !!r.front });
     if (r.back) back.push(r.back);
     if (r.front) front.push(r.front);
     if (t < s0.t1 && (s.hideCaptions ?? (r.hideCaptions || DEFAULT_HIDE_CAPS.has(s.type)))) hideCaps = true;

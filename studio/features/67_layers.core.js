@@ -34,6 +34,14 @@
     const k = s.findIndex((v, j) => j > 0 && v < s[j - 1]);
     return new Set(k < 0 ? [] : s.slice(0, k));
   }
+  // S23 M169: thêm cảnh nền theo khai báo của module (drawn = window.drawnScenes() của engine: [{ i, back, front }]). Module cũ
+  // không gắn data-cid (vd slam_bg) không có trong seq của backSet; cảnh chỉ có back (không front) là cảnh nền. Cảnh có cả hai
+  // phần giữ kết quả theo DOM (thân chọn được của nó nằm ở front).
+  function backWith(set, drawn) {
+    const out = new Set(set || []);
+    for (const d of drawn || []) if (d && d.i >= 0 && d.back && !d.front) out.add(d.i);
+    return out;
+  }
   // Mảng chứa và phần tử đổi chỗ của một lớp (giống CanvasCmds.layerOf của M140): cảnh và chữ thêm một dòng đổi trong TL.scenes,
   // chữ graphic trong lines, node trong nodes. Phụ đề, clip, huy hiệu: null (không kéo được).
   function layerOf(c, scenes) {
@@ -92,7 +100,7 @@
     return i < 0 ? stack[0] : stack[(i + 1) % stack.length];
   }
 
-  const T = { VIS, drawKey, backSet, layerList, layerOf, canDrag, canDrop, reorder, dropOn, normBox, touches, marqueeHits, mergeSel, nextBelow };
+  const T = { VIS, drawKey, backSet, backWith, layerList, layerOf, canDrag, canDrop, reorder, dropOn, normBox, touches, marqueeHits, mergeSel, nextBelow };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.Layers = T;
 })(typeof window !== 'undefined' ? window : globalThis);
