@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchChrome as launchWithProfile } from './chrome_profile.mjs';
 
 // ---------- Chrome flags ----------
 export const BASE_FLAGS = ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'];
@@ -85,7 +86,8 @@ export async function launchChrome(puppeteer, { extra = [], quiet = false, shell
   const note = m => { if (!quiet) console.error(`[chrome] ${m}`); };
   const shellExe = shell && shellState !== false ? (shellState || findHeadlessShell()) : null;
   const chrome = opts.executablePath;
-  const open = (exe, mode) => puppeteer.launch({ headless: true, ...opts, ...(exe === shellExe ? { headless: 'shell' } : {}), executablePath: exe, args: chromeArgs(mode, extra) });
+  // every launch gets its own managed profile (chrome_profile.mjs, M158): no puppeteer temp dir to fail on EBUSY
+  const open = (exe, mode) => launchWithProfile(puppeteer, { headless: true, ...opts, ...(exe === shellExe ? { headless: 'shell' } : {}), executablePath: exe, args: chromeArgs(mode, extra) });
   const done = (browser, mode, renderer, exe) => {
     decided = mode;
     if (shellExe) shellState = exe === shellExe ? shellExe : false; // Chrome won over the shell: do not try it again

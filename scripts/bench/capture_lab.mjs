@@ -30,6 +30,7 @@ import puppeteer from 'puppeteer-core';
 import { findChrome } from '../platform.mjs';
 import { interceptCdn } from '../net_cache.mjs';
 import { launchChrome, renderPlan, BACKGROUND_FLAGS, chromeArgs } from '../render_hw.mjs';
+import { launchChrome as launchWithProfile } from '../chrome_profile.mjs';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -253,7 +254,7 @@ async function cmdBeginFrame() {
   try {
     const exe = shellPath(); res.exe = path.basename(path.dirname(path.dirname(exe)));
     const mode = opt('--gpu', '1') === '0' ? 'swiftshader' : 'gpu';
-    browser = await puppeteer.launch({ headless: 'shell', executablePath: exe, args: chromeArgs(mode, [...BACKGROUND_FLAGS, ...flags]), protocolTimeout: 30000 });
+    browser = await launchWithProfile(puppeteer, { headless: 'shell', executablePath: exe, args: chromeArgs(mode, [...BACKGROUND_FLAGS, ...flags]), protocolTimeout: 30000 });
     res.chrome = mode;
     const bs = await browser.target().createCDPSession();
     const { targetId } = await bs.send('Target.createTarget', { url: 'about:blank', enableBeginFrameControl: true });

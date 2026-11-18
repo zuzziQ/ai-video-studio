@@ -16,8 +16,10 @@ import { shortErr } from './err_text.mjs';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 import { rmSync } from './fs_rm.mjs';
 import { spawn, execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin, claudeBin } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { runClaude } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -166,7 +168,7 @@ Sửa toàn bộ lỗi trên (giữ nguyên phong cách và id P = '__ID__'). Tr
 // ---------- validation in the real engine ----------
 export async function validatePack(code, id, { outDir, vertical = true } = {}) {
   const problems = [], warnings = [], stills = [];
-  try { new Function(code); } catch (e) { return { ok: false, problems: ['Lỗi cú pháp JS: ' + e.message], warnings, stills }; }
+  try { new vm.Script(code, { filename: 'pack.js' }); } catch (e) { return { ok: false, problems: ['Lỗi cú pháp JS: ' + e.message], warnings, stills }; }
   const bad = code.match(/Date\.now|Math\.random|performance\.now|setTimeout|setInterval|requestAnimationFrame|\bfetch\s*\(|XMLHttpRequest/g);
   if (bad) problems.push(`Không được dùng ${[...new Set(bad)].join(', ')} (mọi hoạt ảnh phải thuần theo t)`);
   if (!/^\s*(?:\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\(\s*\)\s*=>|function\b)/.test(code)) problems.push('Toàn bộ file phải bọc trong IIFE (() => { … })();');
@@ -174,7 +176,7 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
   if (code.length > 40000) warnings.push(`Mã dài ${Math.round(code.length / 1024)} KB (nên ≤ 22 KB)`);
   const ft = footage();
   const { default: puppeteer } = await import('puppeteer-core');
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'] });
+  const b = await launchChrome(puppeteer, { executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'] });
   try {
     const [W, H] = vertical ? [360, 640] : [640, 360];
     const pg = await b.newPage(); const errs = [];
@@ -218,9 +220,17 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
       let s = 0, n = 0; for (let i = 0; i < A.length; i += 4) { const d = Math.max(Math.abs(A[i] - B[i]), Math.abs(A[i + 1] - B[i + 1]), Math.abs(A[i + 2] - B[i + 2])); s += d; if (d > 28) n++; }
       return Math.max(s / (A.length / 4) / .6, n / (A.length / 4) * 400); // ≥ 1 ≈ visible: mean diff ≥ .6 or ≥ .25 % of pixels clearly changed
     }, a, c);
-    const render = async (t, setup) => { errs.length = 0; const r = await pg.evaluate(async (t, setup) => { try { eval(setup); await window.renderFrame(t); return { ok: 1, cids: [...document.querySelectorAll('#stage [data-cid]')].map(e => e.dataset.cid), cap: document.querySelector('#cap')?.innerText || '' }; } catch (e) { return { err: e.message }; } }, t, setup); if (r.err) errs.push(r.err); return r; };
+    // setup is data, applied by one fixed function in the page (no code strings): { caption_style, scenes, fx, hl, make }
+    //   hl = caption index whose first word is highlighted; make = { pack, i, at, cid } → scenes = [items[i].make(at) + cid]
+    const render = async (t, setup) => { errs.length = 0; const r = await pg.evaluate(async (t, s) => { try {
+      TL.caption_style = s.caption_style ?? undefined;
+      TL.fx = s.fx || [];
+      if (s.make) TL.scenes = [Object.assign(PACKS.filter(x => x.id === s.make.pack).pop().items[s.make.i].make(s.make.at), { cid: s.make.cid })];
+      else TL.scenes = s.scenes || [];
+      if (s.hl != null) TL.captions[s.hl].words[0].hl = true;
+      await window.renderFrame(t); return { ok: 1, cids: [...document.querySelectorAll('#stage [data-cid]')].map(e => e.dataset.cid), cap: document.querySelector('#cap')?.innerText || '' }; } catch (e) { return { err: e.message }; } }, t, setup); if (r.err) errs.push(r.err); return r; };
     const save = async (name) => { if (!outDir) return; const f = path.join(outDir, name); fs.writeFileSync(f, await pg.screenshot({ type: 'jpeg', quality: 80 })); stills.push(name); };
-    const capSet = `TL.caption_style = ${JSON.stringify(meta.caption)};`;
+    const cap = { caption_style: meta.caption };
     const base = {};
     const T = 4;
     for (const [i, it] of meta.items.entries()) {
@@ -232,8 +242,8 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
       const times = [a + Math.min(.25, (z - a) / 4), (a + z) / 2, z - Math.min(.15, (z - a) / 6)].map(x => +x.toFixed(2));
       let maxd = 0, cidOk = false, err = null;
       for (const t of times) {
-        if (!base[t]) { await render(t, `${capSet} TL.scenes = []; TL.fx = [];`); base[t] = await shot(); }
-        const r = await render(t, `${capSet} TL.fx = []; TL.scenes = [Object.assign(${JSON.stringify(sc)}, { cid: 'v${i}' })];`);
+        if (!base[t]) { await render(t, { ...cap, scenes: [], fx: [] }); base[t] = await shot(); }
+        const r = await render(t, { ...cap, fx: [], scenes: [{ ...sc, cid: 'v' + i }] });
         if (r.err || errs.length) { err = r.err || errs.join(' | '); break; }
         if (r.cids.includes('v' + i)) cidOk = true;
         maxd = Math.max(maxd, await diff(base[t], await shot()));
@@ -249,7 +259,7 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
     const ci = Math.min(2, caps.length - 1), c = caps[ci];
     if (c) {
       const tc = +(c.words[Math.min(1, c.words.length - 1)].e + .05).toFixed(2);
-      const r = await render(tc, `${capSet} TL.scenes = []; TL.fx = []; TL.captions[${ci}].words[0].hl = true;`);
+      const r = await render(tc, { ...cap, scenes: [], fx: [], hl: ci });
       if (r.err) problems.push(`Kiểu phụ đề lỗi: ${r.err}`);
       else if (!r.cids.includes(c.cid)) problems.push('Phụ đề: #cap thiếu data-cid (dùng ${cidOf(c)})');
       else if (!r.cap.trim()) problems.push('Phụ đề không hiện chữ');
@@ -276,7 +286,7 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
       if (rec.badT.length) problems.push('recipe có cảnh sai t0/t1: ' + rec.badT.join(', '));
       if (!rec.emptyOk) problems.push('recipe lỗi khi captions rỗng');
       if (rec.music && !MOODS.includes(String(rec.music).replace(/_2$/, ''))) warnings.push(`music "${rec.music}" không có trong thư viện`);
-      const set = `TL.scenes = ${JSON.stringify(rec.r.scenes)}.map((s, i) => ({ ...s, cid: 'r' + i })); TL.fx = ${JSON.stringify(rec.r.fx || [])}; TL.caption_style = ${JSON.stringify(rec.r.caption_style || meta.caption)};`;
+      const set = { scenes: rec.r.scenes.map((s, i) => ({ ...s, cid: 'r' + i })), fx: rec.r.fx || [], caption_style: rec.r.caption_style || meta.caption };
       const dur = tl.duration;
       const ts = [.8, 2, dur * .3, dur * .5, dur * .7, dur - 1.2].map(x => +Math.max(.1, Math.min(dur - .1, x)).toFixed(2));
       let firstHtml = null;
@@ -294,7 +304,7 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
     const other = [];
     for (const [i, it] of meta.items.entries()) {
       if (!it.mod || !it.make) continue;
-      const r = await render(5, `${capSet} TL.fx = []; TL.scenes = [Object.assign(PACKS.filter(x => x.id === ${JSON.stringify(id)}).pop().items[${i}].make(4), { cid: 'h${i}' })];`);
+      const r = await render(5, { ...cap, fx: [], make: { pack: id, i, at: 4, cid: 'h' + i } });
       if (r.err || errs.length) other.push(`${it.type}: ${r.err || errs.join(' | ')}`);
       else if (i === 0) await save(`other_orientation.jpg`);
     }
@@ -419,7 +429,7 @@ async function applyToProject(id, dir, title) {
   if (!tpl) throw new Error('Không có style ' + id);
   const caps = typeof tl.captions === 'string' ? rd(path.join(path.dirname(tlFile), tl.captions), []) : tl.captions || [];
   const { default: puppeteer } = await import('puppeteer-core');
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files'] });
+  const b = await launchChrome(puppeteer, { executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files'] });
   try {
     const pg = await b.newPage(); const errs = []; pg.on('pageerror', e => errs.push(e.message));
     await pg.goto(pathToFileURL(path.join(SKILL, 'engine/index.html')).href, { waitUntil: 'domcontentloaded' });

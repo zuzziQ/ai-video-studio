@@ -11,6 +11,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { videoArgs } from './encoder_cli.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -58,7 +59,7 @@ function entryFor(idOrTpl) {
 const CHROME = findChrome();
 
 async function open(W = 1280, H = 720) {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
+  const browser = await launchChrome(puppeteer, { executablePath: CHROME, headless: true,
     args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'] });
   const page = await browser.newPage();
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
