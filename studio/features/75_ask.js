@@ -249,6 +249,17 @@
     const e = TH.items.find(x => x.id === id);
     if (!e?.card || e.card.state === state) return paintThread(true);
     save({ ...e, card: { ...e.card, state } });
+    reveal(id);
+  }
+  // M175: thẻ đổi trạng thái (Nhận thêm Hoàn tác, Bỏ thêm Xem) thì cao lên; cuộn cho đáy thẻ nằm trên ô hỏi dính đáy, không thì
+  // nút mới bị ô hỏi che và bấm chuột trúng chip phạm vi.
+  function reveal(id) {
+    requestAnimationFrame(() => {
+      const r = document.getElementById('right'), el = threadEl.querySelector(`[data-askid="${id}"]`), comp = bar.querySelector('.ask-comp');
+      if (!r || !el || S.right?.tab !== 'claude') return;
+      const lim = (comp ? comp.getBoundingClientRect().top : r.getBoundingClientRect().bottom) - 8, b = el.getBoundingClientRect().bottom;
+      if (b > lim) r.scrollTop += b - lim;
+    });
   }
   // Thẻ kết quả: spec = { title, sub?, what?, mode, items, pick?, drop?, strict?, accept? } (what = AskCore.changeSummary). strict: việc ghi đè cả timeline (bản mới chụp
   //   lúc chạy) → chỉ Xem lại được khi timeline còn như lúc tạo thẻ. drop(): đóng mà không Nhận lần đầu (trả phần ngoài timeline).
@@ -590,7 +601,9 @@
     check();
     if (bar.hidden) { S.toast('Cài đặt không có Hỏi Claude'); return false; }
     S.layout?.revealRight?.();
-    if (S.right?.tab !== 'claude') S.right?.show?.('claude');
+    // M175: gọi show cả khi đang ở Claude — tab tự về lúc không chọn gì mang cờ RT.auto, không tiêu cờ thì / rồi bấm element để
+    // lấy chip lại nhảy sang Thuộc tính
+    S.right?.show?.('claude');
     if (focus) { inp.focus(); inp.select(); }
     return true;
   }

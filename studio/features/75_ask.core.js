@@ -13,6 +13,10 @@
 // của panel (75_ask.js runAction); kết quả qua Studio.review hoặc ô đề xuất Studio.assistPanel của panel đó.
 'use strict';
 (function (root) {
+  // So hai bản timeline / phụ đề: bỏ _orig, sắp khoá — job phía server đọc lại timeline từ đĩa đổi thứ tự khoá (M175: thẻ
+  // "Thêm nhạc & SFX" từng báo "1 dòng phụ đề" dù phụ đề không đổi).
+  const sameKey = x => JSON.stringify(x, (k, v) => (k === '_orig' ? undefined
+    : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(kk => [kk, v[kk]])) : v));
   const STEPS = { prep: 'Chuẩn bị', source: 'Nguồn', build: 'Dựng', check: 'Kiểm tra', ship: 'Xuất và đăng' };
   const ELEM_KINDS = ['line', 'cap', 'node', 'badge', 'scene'];
   // = TRANS_TYPES của studio/clips.js (id); đổi ở đó thì đổi ở đây
@@ -222,7 +226,7 @@
   function changedSpan(a, b) {
     let lo = Infinity, hi = -Infinity;
     const hit = (t0, t1) => { if (Number.isFinite(+t0)) { lo = Math.min(lo, +t0); hi = Math.max(hi, Number.isFinite(+t1) ? +t1 : +t0); } };
-    const key = x => JSON.stringify(x, (k, v) => (k === '_orig' ? undefined : v));
+    const key = sameKey;
     const diff = (xa = [], xb = []) => { const s = new Set(xa.map(key)); for (const x of xb) if (!s.has(key(x))) hit(x.t0 ?? x.t, x.t1 ?? x.t0 ?? x.t); };
     diff(a.TL?.scenes, b.TL?.scenes); diff(a.CAP, b.CAP); diff(a.TL?.audio?.sfx, b.TL?.audio?.sfx); diff(a.TL?.audio?.music, b.TL?.audio?.music);
     const sa = clipStarts(a.TL || {}), cb = b.TL?.clips || [], ca = a.TL?.clips || [];
@@ -301,7 +305,7 @@
   //   chỗ nối đổi chuyển cảnh. Cảnh cùng loại vừa mất vừa thêm tính là "sửa". Tối đa 6 dòng ngắn.
   const SCENE_VI = { text: 'chữ', broll: 'b-roll', media: 'b-roll', media_card: 'thẻ ảnh', image: 'ảnh', video: 'video', lower_third: 'tên dưới' };
   function changeSummary(a, b) {
-    const key = x => JSON.stringify(x, (k, v) => (k === '_orig' ? undefined : v));
+    const key = sameKey;
     const delta = (xa = [], xb = []) => {
       const m = new Map();
       for (const x of xa) m.set(key(x), (m.get(key(x)) || 0) + 1);

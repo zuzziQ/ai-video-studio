@@ -92,28 +92,32 @@ Chữ trắng trên nút chính navy-600 11,1:1, trên hover navy-500 8,4:1. `--
 11. **Không `style="..."` trong markup.** Giá trị theo dữ liệu (vị trí, cỡ, ảnh nền, bộ lọc, màu swatch) đặt bằng thuộc tính `data-d*` và `applyDyn()` của `studio.js` (xem `references/studio.md`); màu là dữ liệu video (mẫu chữ, swatch, mặc định brand kit) giữ nguyên với ghi chú `design-token-ok`.
 12. **Cỡ chữ** chỉ theo thang `--text-*`; cỡ px còn lại trong CSS là cỡ icon (`.ti`) hoặc emoji, không phải chữ. Khoảng cách theo `--space-*` (lưới 4, thêm 2/6 cho điều khiển dày), bo góc `--radius-*`, chuyển động `--duration-*` + `--ease-*` (riêng đồng hồ 3 giây của thẻ tác giả là thời gian, không phải chuyển động). `studio.css` đặt `small` = `--text-2xs` cho cả trang (mặc định trình duyệt cho 10px), nên `<small>` của tính năng cũng ≥ 11px trừ khi tính năng tự đặt cỡ khác.
 
-## 6. Vùng bố cục (S23, nghiệm thu `M166`)
+## 6. Vùng bố cục (S23 nghiệm thu `M166`, S24 nghiệm thu `M175`)
 
 Một cấu trúc riêng, không ghép CapCut / Premiere: **khung video ở giữa và luôn lớn nhất có thể, "người làm" ở cạnh**. Vùng do lõi
-`studio/features/76_layout.core.js` quyết (khổ × chế độ × bề rộng cửa sổ), gắn lên `body` bằng `data-ask`, `data-tl`, `data-lib`,
+`studio/features/76_layout.core.js` quyết (khổ × chế độ × bề rộng cửa sổ), gắn lên `body` bằng `data-tl`, `data-lib`,
 `data-right`, `data-controls`, `data-narrow`, `data-focus`; CSS bố cục chỉ đọc các thuộc tính này, không tự đo cửa sổ.
 
 | Vùng | Cơ bản | Chuyên nghiệp | Cỡ |
 |---|---|---|---|
 | Thanh icon trái | luôn có | luôn có | 68 px |
 | Thư viện | ngăn trượt đè lên khung (`data-lib=flyout`), tự đóng | cột (`panel`), gấp bằng `[` | ngăn 420 px; cột `--libw: clamp(312px, 22vw, 420px)` |
-| Cột phải | cột Claude khi video dọc (`claude`), không có khi ngang | Thuộc tính · Lớp · Dự án, gấp bằng `]` | 340 px; Cơ bản cột Claude `clamp(300px, 24vw, 380px)` (thay cột phải), Chuyên nghiệp video dọc Hỏi Claude cạnh khung `clamp(260px, 22vw, 340px)` |
-| Hỏi Claude | video dọc: cột cạnh khung; ngang / cửa sổ < 1280 px: một dòng dưới khung | video dọc ≥ 1280 px: cạnh khung; còn lại một dòng dưới khung | dòng 47 px |
+| Cột phải | Thuộc tính · Claude, gấp bằng `]` | Thuộc tính · Lớp · Claude, gấp bằng `]` | 340 px, mọi khổ (`C35`: Cơ bản giống Chuyên nghiệp, chỉ ít mục chỉnh tay hơn) |
+| Claude | tab Claude ở cột phải; không chọn gì → Claude | như Cơ bản | `/`, ✦ mở tab (mở cột đang gấp); ô hỏi dính đáy tab, luồng cuộn cùng `#right` |
+| Xem lại kết quả | thanh Nhận / Bỏ `#rvbar` ngay dưới khung | như Cơ bản | không nằm trong tab Claude (gắn với bản đang xem trước) |
+| Chú thích | chấm số 24 px / khung vùng trên khung, ô hỏi nổi 268 px cạnh chấm | như Cơ bản | phím C; lớp chỉ nhận chuột khi bật chế độ |
 | Nút phát | một dòng dưới khung | một dòng dưới khung | không xếp dọc (chốt 2026-11-18) |
 | Timeline (`--tlh`) | dải tua 40 px | đầy đủ 300 px (180 px tới cửa sổ − 320 px) | gọn 120 px; cửa sổ hẹp mặc định gọn |
 | Điểm | vòng điểm trên thanh bước | như Cơ bản | rê chuột thấy lý do |
 
 Luật:
 
-1. **Ngưỡng** `C31`: tỉ lệ khung < 0,8 → Claude cạnh khung; ≥ 0,8 → dưới khung; cửa sổ < 1280 px → luôn dưới khung. Đổi ngưỡng ở
-   `LayoutCore`, không viết `@media` mới cho vùng.
+1. **Một chỗ cho AI, một chỗ cho chỉnh tay** (`C34`–`C37`): mọi lối vào Claude (✦, `/`, "Hỏi Claude về mục này", Hỏi ngay của chú thích,
+   việc từ popover thanh bước) đi vào tab Claude qua `Studio.ask.open` / `Studio.right.show('claude')`; không tạo thanh hay cột Claude
+   mới, không đặt ô AI trong Thuộc tính. Ngưỡng cửa sổ (< 1280 px) và gấp cột ở `LayoutCore`, không viết `@media` mới cho vùng.
 2. **Chừa chỗ cho khung:** timeline mọi mức để lại ít nhất 320 px cho thanh trên + khung + nút phát (`FULL.keep`); thứ nổi (thông báo,
    dải báo) không đè khung xem: thông báo là chuông trên thanh đầu, dải báo ở vùng riêng đầu `#center`.
-3. **Thanh nổi, khung chọn, chấm ghim** nằm trong `#stagewrap`; chấm ghim nghỉ 12 px, mở 24 px; khung chọn xoay theo element.
-4. **Kiểm tra:** sửa bố cục thì chạy `node --test scripts/tests/s23_layout_matrix.test.mjs` và đo lại trên Studio thật ít nhất 1024×768
+3. **Thanh nổi, khung chọn, chú thích** nằm trong `#stagewrap`; chấm chú thích 24 px, khung vùng viền 2 px màu nhấn (nháp: nét đứt màu
+   cảnh báo) và không nhận chuột; khung chọn xoay theo element. Ô hỏi nổi (`.pinpop`) đặt bên phải chấm, hết chỗ thì bên trái.
+4. **Kiểm tra:** sửa bố cục thì chạy `node --test scripts/tests/s23_layout_matrix.test.mjs scripts/tests/s24_layout_matrix.test.mjs` và đo lại trên Studio thật ít nhất 1024×768
    Chuyên nghiệp (ô chật nhất) và 1920×1080 Cơ bản video dọc: không tràn ngang, không cuộn kép, khung không bị che, `#play` bấm được.
