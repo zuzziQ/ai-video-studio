@@ -627,7 +627,7 @@ const captions = {
 };
 
 // ---------------------------------------------------------------- trợ lý Gợi ý mẫu
-const ASPECTS = ['9:16', '16:9', '1:1'];
+const ASPECTS = ['9:16', '16:9']; // M167 (C33): khổ soạn; template / yêu cầu ghi 1:1 → 9:16 / không lọc
 const templates = {
   label: 'Gợi ý mẫu',
   check(raw) {

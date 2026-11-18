@@ -317,6 +317,7 @@ export async function buildRow(job, i, { preview = false, dirOverride, log = () 
     if (get('f:script') || get('f:video')) log('dự án hiện tại: bỏ qua cột lời đọc / video (giữ giọng của dự án)');
   } else {
     const tpl = sub(src.doc), vert = tpl.aspect !== '16:9', [w, h] = wh(vert);
+    if (tpl.aspect && !['9:16', '16:9'].includes(tpl.aspect)) log(`mẫu ghi khổ ${tpl.aspect}: dự án chỉ soạn 9:16 / 16:9 (C33), dựng 9:16; bản vuông chọn ở Xuất thêm khổ`);
     const video = get('f:video'), script = get('f:script');
     const mode = job.voice === 'auto' || !job.voice ? (video ? 'video' : script ? 'tts' : 'none') : job.voice;
     let caps = [], dur = +get("f:dur") || +job.dur || tpl.base_dur || 20;
@@ -367,8 +368,10 @@ export async function buildRow(job, i, { preview = false, dirOverride, log = () 
     }
   }
   tl._batch = { source: job.source, row: i + 1, sheet: path.basename(job.sheet) };
-  if (preview) { const vert = (tl.height || 1) > (tl.width || 1); [tl.width, tl.height] = wh(vert); }
-  else if (src.kind === 'project') { const vert = (tl.height || 720) > (tl.width || 1280); [tl.width, tl.height] = wh(vert); }
+  // M167 (C33): khổ soạn chỉ 9:16 / 16:9, luật như Studio (LayoutCore.frameOf): rộng > cao → 16:9, còn lại (kể cả vuông cũ) → 9:16
+  const vertOf = t => !((t.width || 1080) > (t.height || 1920));
+  if (src.kind === 'project' && tl.width && tl.width === tl.height) log('dự án mẫu khổ 1:1 (bản cũ): bản dựng theo 9:16; bản vuông chọn ở Xuất thêm khổ');
+  if (preview || src.kind === 'project') [tl.width, tl.height] = wh(vertOf(tl));
   fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl, null, 1));
   return { dir, name, tl };
 }

@@ -19,7 +19,8 @@
     ['banhang', 'ti-shopping-bag', 'Bán hàng', 'Bán hàng'], ['review', 'ti-star', 'Review', 'Review'],
     ['chiase', 'ti-message-circle', 'Chia sẻ kinh nghiệm', 'Chia sẻ'], ['tintuc', 'ti-news', 'Tin tức', 'Tin tức'],
     ['doanhnghiep', 'ti-building', 'Doanh nghiệp', 'Doanh nghiệp'], ['khac', 'ti-dots', 'Việc khác', 'Khác']];
-  const ASPECTS = [['9:16', 'Dọc 9:16', 'TikTok, Reels, Shorts'], ['16:9', 'Ngang 16:9', 'YouTube, Facebook'], ['1:1', 'Vuông 1:1', 'Bài đăng Facebook, Instagram']];
+  // M167 (C33): chỉ hai khổ soạn; vuông 1:1 là bản xuất thêm (Xuất → Xuất thêm khổ), không còn là khổ của dự án
+  const ASPECTS = [['9:16', 'Dọc 9:16', 'TikTok, Reels, Shorts'], ['16:9', 'Ngang 16:9', 'YouTube, Facebook']];
   const PLATFORMS = [['tiktok', 'ti-brand-tiktok', 'TikTok'], ['youtube', 'ti-brand-youtube', 'YouTube'], ['facebook', 'ti-brand-facebook', 'Facebook'],
     ['instagram', 'ti-brand-instagram', 'Instagram'], ['zalo', 'ti-message-dots', 'Zalo']];
   const STEPS = ['Thương hiệu', 'Kho', 'Mục đích'];
@@ -164,7 +165,7 @@
     W = { step: Math.min(step ?? ST?.step ?? 0, 2), kit, logoFile: null, logoUrl: kit?.logoUrl ? avsUrl(kit.logoUrl) : '', colors: [kit?.primary || '', kit?.accent || ''],
       name: kit?.title || kit?.name || '', phone: kit?.phone || '', website: kit?.website || '', handle: kit?.handle || '',
       files: [], uploading: 0, kho: null, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: {}, pImage: null, pUrl: '', bAi: null, pAi: null,
-      purpose: ST?.purpose || '', aspect: ST?.aspect || '9:16', platforms: [...(ST?.platforms || [])], busy: false };
+      purpose: ST?.purpose || '', aspect: ST?.aspect === '16:9' ? '16:9' : '9:16', platforms: [...(ST?.platforms || [])], busy: false };
     const ov = document.createElement('div');
     ov.className = 'onb-ov'; ov.id = 'onb-wiz';
     ov.innerHTML = '<div class="onb-card" role="dialog" aria-modal="true" aria-labelledby="onb-title"></div>';
@@ -397,7 +398,7 @@
 
   const stepPurpose = () => `<div class="onb-f"><label>Lĩnh vực</label><div class="onb-pick">${PURPOSES.map(([id, ic, name]) => `<button data-pp="${id}" class="${W.purpose === id ? 'on' : ''}" aria-pressed="${W.purpose === id}"><i class="ti ${ic}"></i>${name}</button>`).join('')}</div>
       <p class="onb-hint" id="onb-sug">${W.purpose ? 'Đang tìm mẫu hợp…' : 'Chọn một lĩnh vực để xem gợi ý.'}</p></div>
-    <div class="onb-f"><label>Khổ hình hay dùng${tip('Đổi được cho từng video khi xuất.')}</label><div class="onb-seg">${ASPECTS.map(([id, name, sub]) => `<button data-as="${id}" class="${W.aspect === id ? 'on' : ''}" aria-pressed="${W.aspect === id}">${name}<small>${sub}</small></button>`).join('')}</div></div>
+    <div class="onb-f"><label>Khổ hình hay dùng${tip('Khổ soạn của video mới. Bản vuông 1:1 cho bài đăng Facebook, Instagram: chọn thêm khi xuất.')}</label><div class="onb-seg">${ASPECTS.map(([id, name, sub]) => `<button data-as="${id}" class="${W.aspect === id ? 'on' : ''}" aria-pressed="${W.aspect === id}">${name}<small>${sub}</small></button>`).join('')}</div></div>
     <div class="onb-f"><label>Nền tảng đăng${tip('Chọn nhiều nơi được. Studio gợi ý khổ và độ dài theo nơi đăng.')}</label><div class="onb-chips">${PLATFORMS.map(([id, ic, name]) => `<button data-pf="${id}" class="${W.platforms.includes(id) ? 'on' : ''}" aria-pressed="${W.platforms.includes(id)}"><i class="ti ${ic}"></i>${name}</button>`).join('')}</div></div>
     <div class="onb-note"><i class="ti ti-settings"></i><div>Kết nối YouTube, Telegram và chọn AI (Claude hoặc Ollama chạy trên máy): làm sau trong Cài đặt, ở nút <b>Mô hình &amp; giọng</b> và <b>Lịch đăng</b>.</div></div>`;
   function wirePurpose(box) {

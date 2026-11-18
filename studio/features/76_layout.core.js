@@ -3,7 +3,7 @@
 // Ra: vùng của từng phần — askPos side|bottom (Hỏi Claude cạnh / dưới khung), tl strip|compact|full, lib panel|flyout|none,
 // right panel|claude|none, controls row (luôn dòng dưới khung từ M165). 76_layout.js gắn kết quả lên body (data-ask, data-tl, …) và đặt --tlh;
 // M162 (dải tua), M163 (Claude cạnh khung), M165 (hai cột) đọc qua Studio.layout. Không DOM: chạy trong trình duyệt
-// (window.LayoutCore) và Node (scripts/tests/s23_layout.test.mjs).
+// (window.LayoutCore) và Node (scripts/tests/s23_layout.test.mjs). M167: khổ soạn của dự án (frameOf, C33).
 'use strict';
 (function (root) {
   const SIDE_RATIO = 0.8;   // C31: tỉ lệ khung < 0,8 (dọc, 4:5 trở xuống) → Claude cạnh khung
@@ -72,8 +72,25 @@
   // Phím `: dải tua → gọn → đầy đủ → dải tua (Shift: chiều ngược).
   const cycle = (tl, back = false) => TLS[(TLS.indexOf(normTl(tl) || 'full') + (back ? TLS.length - 1 : 1)) % TLS.length];
 
+  // M167 (C33): Studio chỉ soạn hai khổ, 9:16 và 16:9. Khổ vuông (và khổ lạ như 4:5) chỉ là bản xuất thêm (Xuất thêm khổ).
+  const CREATE_ASPECTS = ['9:16', '16:9'];
+  // Khổ khi tạo dự án (onboarding, template, làm hàng loạt): 16:9 giữ, mọi khổ khác (1:1, 4:5, rỗng) → 9:16.
+  const createAspect = v => (v === '16:9' ? '16:9' : '9:16');
+  const even = n => 2 * Math.round(n / 2);
+  // Khổ soạn của một dự án theo timeline.width / height. Luật: rộng > cao → 16:9, còn lại (kể cả vuông) → 9:16.
+  // legacy: tỉ lệ thật không phải 9:16 / 16:9 (dự án 1:1 cũ) → 76_layout.js hiện dải báo trên khung; to = cỡ khi đổi sang khổ soạn.
+  function frameOf(w, h) {
+    const W = +w > 0 ? +w : 1080, H = +h > 0 ? +h : 1920, r = W / H, land = W > H;
+    const aspect = land ? '16:9' : '9:16', ratio = land ? 16 / 9 : 9 / 16;
+    const legacy = Math.abs(r - ratio) / ratio > 0.02;
+    const source = !legacy ? aspect : Math.abs(r - 1) < 0.02 ? '1:1' : `${W}×${H}`;
+    const to = !legacy ? null : land ? { width: even(H * 16 / 9), height: H } : { width: W, height: even(W * 16 / 9) };
+    return { aspect, ratio, legacy, source, to };
+  }
+
   const T = { SIDE_RATIO, NARROW, TLS, PINS, MODES, TL_H, FULL, PIN_LABEL, TL_LABEL, normMode, normPin, normTl, isNarrow,
-    defaultTl, tlKey, askPos, compute, toggleFold, foldKey, flyoutClick, tlHeight, clampFull, maxFull, snap, cycle };
+    defaultTl, tlKey, askPos, compute, toggleFold, foldKey, flyoutClick, tlHeight, clampFull, maxFull, snap, cycle,
+    CREATE_ASPECTS, createAspect, frameOf };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.LayoutCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);
