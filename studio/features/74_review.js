@@ -216,6 +216,7 @@ body.rv-new #overlay, body.rv-new .cbar, body.rv-new .cmenu { visibility: hidden
       $('#controls').before(bar); bar.addEventListener('click', onBar);
       bar.addEventListener('pointerdown', e => { if (e.button === 0 && e.target.closest?.('[data-rv="before"]')) { R.ptr = true; setBefore(true); } });
       bar.addEventListener('pointerout', e => { const b = e.target.closest?.('[data-rv="before"]'); if (R?.ptr && b && !b.contains(e.relatedTarget)) { R.ptr = false; setBefore(false); } });
+      S.ask?.place?.(); // S23 M163: Cơ bản video dọc → thanh vào cột Claude ngay, không nháy dưới khung
       requestAnimationFrame(refit);
     }
     const sc = bar.querySelector('.rv-list')?.scrollTop || 0;

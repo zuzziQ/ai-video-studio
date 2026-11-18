@@ -8,6 +8,10 @@
 //   'text' → 3 biến thể), Kiểm tra (S.qc.fixAll, giải thích lỗi qua bộ định tuyến, S.qc.variants, ghi chú ghim S.pins), Xuất và đăng
 //   (Studio.publish.write / cover, Studio.schedule.next). Kết quả sửa video qua Studio.review: xem trước,
 //   Nhận = một bước ⌘Z, Bỏ = như cũ. Chỉ gọi mô hình khi người dùng gửi (C23). Phím / mở thanh; ✦ trên thanh nổi và đầu Thuộc tính.
+// S23 M163 (C30, C31): hai dạng theo Studio.layout (AskCore.formOf). 'col' — Cơ bản, video dọc: cột Claude thay cột phải, gợi ý
+//   xếp dọc, kết quả không giới hạn cao, thanh xem lại (#rvbar của 74_review.js) và khi chọn element thì #insp (mục chính + Núm,
+//   01_level.core.js) dời vào cột. 'row' — video ngang, Chuyên nghiệp, cửa sổ hẹp: một dòng dưới khung, gợi ý hiện khi gõ.
+//   CSS bố cục ở khối "S23 M163" cuối studio.css.
 'use strict';
 (() => {
   const S = window.Studio, AC = window.AskCore;
@@ -71,14 +75,40 @@
   // ---------- thanh ----------
   const bar = document.createElement('div');
   bar.id = 'askbar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Hỏi Claude');
-  bar.innerHTML = `<div class="ask-row"><i class="ti ti-sparkles ask-ic" aria-hidden="true"></i><span class="ask-chip" title="Phạm vi đang hỏi"></span>
+  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div><div class="ask-row"><i class="ti ti-sparkles ask-ic" aria-hidden="true"></i><span class="ask-chip" title="Phạm vi đang hỏi"></span>
     <input data-ask-in type="text" maxlength="300" placeholder="Hỏi Claude…  ( / )" aria-label="Hỏi Claude">
     <button class="primary" data-ask="send" title="Gửi (Enter)" aria-label="Gửi"><i class="ti ti-send"></i></button></div>
-    <div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-out" aria-live="polite"></div>`;
+    <div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-out" aria-live="polite"></div>
+    <div class="ask-slot ask-rv"></div><div class="ask-slot ask-insp" role="region" aria-label="Element đang chọn"></div>`;
   ($('#controls') || $('#stagewrap'))?.after(bar);
   const inp = bar.querySelector('[data-ask-in]'), chipEl = bar.querySelector('.ask-chip'), quickEl = bar.querySelector('.ask-quick'), outEl = bar.querySelector('.ask-out');
   const refit = () => window.dispatchEvent(new Event('resize'));
   requestAnimationFrame(refit);
+
+  // ---------- S23 M163: cột / dòng ----------
+  const slotRv = bar.querySelector('.ask-rv'), slotIn = bar.querySelector('.ask-insp');
+  let FORM = '';
+  // Đặt thanh xem lại và #insp đúng chỗ theo dạng; gọi mỗi lần vẽ lại (check) và khi bố cục đổi. Chỉ dời DOM khi lệch chỗ.
+  function place() {
+    const f = scope() ? AC.formOf(S.layout?.get()) : 'row'; // thanh ẩn (Cài đặt): trả mọi thứ về chỗ cũ
+    let moved = false;
+    if (f !== FORM) { FORM = f; bar.dataset.form = f; moved = true; }
+    const rv = $('#rvbar'), ins = $('#insp'), right = $('#right');
+    const want = AC.colParts(f, { review: !!rv, sel: !!S.sel, detail: !!S.right?.detail });
+    if (rv) {
+      if (want.rv && rv.parentNode !== slotRv) { slotRv.append(rv); moved = true; }
+      else if (!want.rv && rv.parentNode === slotRv) { $('#controls')?.before(rv); moved = true; }
+    }
+    if (ins && right) {
+      if (want.insp && ins.parentNode !== slotIn) { slotIn.append(ins); moved = true; }
+      else if (!want.insp && ins.parentNode === slotIn) { right.append(ins); moved = true; }
+    }
+    if (moved) refit(); // khung xem co giãn theo phần vừa vào / ra cột
+  }
+  S.layout?.on(() => place());
+  // Dòng: gợi ý chỉ hiện khi đang gõ (CSS :focus-within) → khung xem co giãn theo
+  bar.addEventListener('focusin', () => { if (FORM === 'row') requestAnimationFrame(refit); });
+  bar.addEventListener('focusout', () => { if (FORM === 'row') requestAnimationFrame(refit); });
 
   const busy = () => AS.st === 'running' || AS.st === 'working' || S.elemAi?.st === 'running';
   function paintScope(sc) {
@@ -112,6 +142,7 @@
   }
   // Vẽ lại khi phạm vi đổi (chọn element, đổi bước, khoảng chọn); rẻ: so một chuỗi
   function check() {
+    place();
     const sc = scope(), sig = JSON.stringify([sc?.kind, sc?.chip, sc?.cid, sc?.knobs, sc?.qc, step(), busy(), S.PPS, AS.range]);
     const was = !bar.hidden;
     // đổi bước: câu trả lời / lỗi của bước trước không còn đúng chỗ (vd. "Dán link trang bán…" khi đã sang Kiểm tra)
@@ -397,6 +428,6 @@
     runAction({ action, params: { ...params }, reply: '' }, sc);
     return true;
   }
-  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange };
+  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange, place, get form() { return FORM; } };
   requestAnimationFrame(() => paint(true));
 })();
