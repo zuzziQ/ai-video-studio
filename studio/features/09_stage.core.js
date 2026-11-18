@@ -10,12 +10,13 @@
   //   card: s.card = {x, y, w, h} góc trên trái — slate.js frame_grid, media_card; vertical.js hook_card, bubble_screen.
   //   wh:   s.w, s.h, tâm ngang cố định, s.y là tâm dọc — vertical.js follow_cta (nút Follow có khung).
   // Loại khác (chữ, sticker, emoji, logo…) chỉ có cỡ (size) nên chỉ có tay nắm góc phóng đều.
-  const GEO = { frame_grid: 'card', media_card: 'card', hook_card: 'card', bubble_screen: 'card', follow_cta: 'wh' };
+  const GEO = { frame_grid: 'card', media_card: 'card', hook_card: 'card', bubble_screen: 'card', follow_cta: 'wh', shape: 'card' };
   const CARD_DEF = {
     frame_grid: [{ x: 80, y: 140, w: 560, h: 1000 }, { x: 150, y: 96, w: 980, h: 551 }],
     media_card: [{ x: 110, y: 360, w: 500, h: 290 }],
     hook_card: [{ x: 50, y: 78, w: 620, h: 407 }],
     bubble_screen: [{ x: 8, y: 545, w: 704, h: 455 }],
+    shape: [{ x: 210, y: 490, w: 300, h: 300 }, { x: 490, y: 210, w: 300, h: 300 }], // engine/shape.js DEF (S20 M144)
   };
   const WH_DEF = { follow_cta: { cx: 360, y: 858, w: 306, h: 98 } };
   // Cảnh tự đọc s.rot theo nghĩa riêng (engine/modules.js stamp, ui_showcase; engine/broll.js) — engine không xoay chồng.

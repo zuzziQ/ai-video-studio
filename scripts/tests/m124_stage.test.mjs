@@ -15,6 +15,7 @@ test('chỉ cảnh engine đọc được rộng/cao mới có tay nắm cạnh'
 test('bảng GEO khớp engine: mỗi loại card đọc s.card, follow_cta đọc s.w/s.h', () => {
   const src = ['engine/slate.js', 'engine/vertical.js'].map(f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8')).join('\n');
   for (const [t, g] of Object.entries(C.GEO)) {
+    if (t === 'shape') continue; // engine/shape.js: kiểm ở s20_shape.test.mjs
     const body = src.slice(src.indexOf(`  ${t}(s, t`)).slice(0, 900);
     assert.ok(body.length > 10, `không thấy module ${t}`);
     assert.match(body, g === 'card' ? /\.\.\.\(s\.card \|\| \{\}\)/ : /s\.w \?\?.*s\.h \?\?/, t);

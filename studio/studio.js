@@ -54,6 +54,7 @@ const TYPE_VI = {
   frame_grid: 'Khung video lưới', title_card: 'Thẻ kết', media_card: 'Thẻ media', led_text: 'Chữ LED', neon_text: 'Chữ neon', logo_row: 'Hàng logo',
   diagram: 'Sơ đồ', text: 'Chữ thêm', spotlight: 'Spotlight', bubble_screen: 'Bubble + màn hình', hook_card: 'Thẻ mở đầu', grid_bg: 'Nền lưới',
   icon_tap: 'Logo + tay bấm', sticker: 'Sticker', follow_cta: 'Nút Follow', broll: 'B-roll', emoji_pop: 'Emoji', photo: 'Ảnh / clip phủ',
+  shape: 'Hình khối', // S20 M144 (engine/shape.js), track Graphic qua trackOf
 };
 const FONTS = [['', 'Mặc định'], ['var(--sans)', 'Be Vietnam Pro'], ['var(--disp)', 'Montserrat'], ["'Inter'", 'Inter'], ["'Playfair Display',serif", 'Playfair Display'],
   ["'DM Serif Display',serif", 'DM Serif Display'], ["'Lexend'", 'Lexend'], ["'Oswald'", 'Oswald'], ["'Nunito'", 'Nunito'], ["'Bungee'", 'Bungee'], ["'Pacifico'", 'Pacifico']];
