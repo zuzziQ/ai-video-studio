@@ -25,7 +25,10 @@
     const off = how => (C.layerTarget(L.arr, L.item, how) < 0 ? 'disabled' : '');
     return `<span class="sep"></span>${btn('up', 'ti-arrow-bar-up', 'Đưa lên một lớp', off('up'))}${btn('down', 'ti-arrow-bar-down', 'Đưa xuống một lớp', off('down'))}`;
   };
-  function barHtml(c) {
+  // S22 M153: ✦ đầu thanh = mở thanh Hỏi Claude dưới khung, phạm vi = element đang chọn
+  const askBtn = () => (S.ask ? `${btn('ask', 'ti-sparkles', 'Hỏi Claude (/)', 'class="ask"')}<span class="sep"></span>` : '');
+  function barHtml(c) { return askBtn() + barCore(c); }
+  function barCore(c) {
     const o = c.obj, k = C.barKind(c), size = Math.round(S.getPos(c)?.size || 0);
     const color = `<button data-cb="color" class="sw" title="Màu" aria-label="Màu"><b data-dfill="${esc(o.color || '#ffffff')}"></b></button>`; // design-token-ok: màu chữ của video
     const sizeCtl = size ? `${btn('sz-', 'ti-minus', 'Nhỏ hơn')}<span class="num" title="Cỡ chữ">${size}</span>${btn('sz+', 'ti-plus', 'To hơn')}` : '';
@@ -81,6 +84,7 @@
       case 'hide': S.touch(o); o.hidden = !o.hidden || undefined; return S.changed(true);
       case 'reset': { if (!o._orig) return; S.pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note' && k !== 'note_at' && k !== 'locked') delete o[k]; Object.assign(o, orig); return S.changed(true); }
       case 'note': return focusNote();
+      case 'ask': return S.ask?.open();
       case 'seek': return S.setTime(c.t0);
       case 'more': { const r = el.getBoundingClientRect(); return openMenu(r.left, r.bottom + 4); }
     }
