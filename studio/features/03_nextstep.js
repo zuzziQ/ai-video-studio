@@ -1,24 +1,21 @@
-// AI Video Studio — cột phải khi không chọn gì: ngữ cảnh của bước đang mở bên trái (S14 M113; thay thẻ "Bước tiếp theo" +
-// "Sẵn sàng x/6" của M84, đợt S10) và điểm 0–100 từng bước (S14 M114). Rà hiện trạng, tiêu chí: docs/plans/S14-xuat-cot-phai-diem.md.
-// S23 M164 (C32): điểm 5 bước nằm trên thanh bước (vòng điểm + popover, 03_stepscore.js); ở đây chỉ còn tiêu chí đạt / thiếu của
-// bước đang mở, mỗi chỗ thiếu một nút Sửa. Điểm tính bằng lõi thuần 02_score.core.js (window.ScoreCore) từ dữ liệu sẵn có, không gọi Claude: timeline, lời
+// AI Video Studio — dữ liệu điểm 0–100 từng bước (S14 M113, M114) và chỗ sửa của từng tiêu chí. Rà hiện trạng, tiêu chí:
+// docs/plans/S14-xuat-cot-phai-diem.md. S23 M164 (C32): điểm 5 bước + tiêu chí đạt / thiếu nằm ở vòng điểm + popover của thanh bước
+// (03_stepscore.js, đọc Studio.nextStep.state / fix / _paint). S24 M174 (C37): bỏ tab Dự án của cột phải — file này không vẽ gì ở
+// cột phải nữa; "Cài đặt dự án" là panel wf-project ở bước Chuẩn bị (01_workflow.js). Điểm tính bằng lõi thuần 02_score.core.js (window.ScoreCore) từ dữ liệu sẵn có, không gọi Claude: timeline, lời
 // thoại, PACKS[].needs của gói, GET /api/source (phụ đề cháy sẵn M110), GET /api/ai/fillers, QC nhanh M105 `GET /api/qc/quick`,
 // QC đầy đủ `GET /api/qc`, bản xuất M112 `Studio.exports` (exportsView của scripts/exports_log.mjs qua GET /api/exports).
-// Nút Sửa → Studio.workflow.focus(panel, chỗ cần làm) theo bảng TASKS: mở đúng panel bên trái và tô sáng.
+// fix(task) → Studio.workflow.focus(panel, chỗ cần làm) theo bảng TASKS: mở đúng panel bên trái và tô sáng.
 // C17: bấm Xuất khi bước Kiểm tra dưới ScoreCore.WARN_BELOW thì hiện cảnh báo kèm chỗ thiếu và nút "Vẫn xuất" (không chặn).
-// Nội dung cũ của inspector (Dự án, Thương hiệu) vẫn trong mục thu gọn "Cài đặt dự án". Không thêm route.
+// Không thêm route.
 'use strict';
 (() => {
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc, C = window.ScoreCore;
   if (!C) return console.error('03_nextstep: thiếu 02_score.core.js');
-  const store = {
-    get(k, d) { try { return localStorage.getItem('avs.' + k) ?? d; } catch { return d; } },
-    set(k, v) { try { localStorage.setItem('avs.' + k, v); } catch {} },
-  };
   const ORDER = C.STEPS;
-  S._proj = S._proj || []; // S21 M150: fn() -> Element | null, chèn giữa khối điểm và "Cài đặt dự án" mỗi lần tab Dự án vẽ lại
-  const NAME = { prep: 'Chuẩn bị', source: 'Nguồn', build: 'Dựng', check: 'Kiểm tra', ship: 'Xuất và đăng' };
-  // dữ liệu ngoài timeline, đọc lại tối đa mỗi 8 s (focus cửa sổ, đổi bước, inspector vẽ lại)
+  // S21 M150: hook khối thêm của tab Dự án cũ (fn() -> Element | null, 73_pins.js). M174 bỏ tab Dự án: giữ mảng để 73_pins đẩy vào
+  // không lỗi, không vẽ ở đâu cả; danh sách ghim chuyển sang tab Claude ở M173.
+  S._proj = S._proj || [];
+  // dữ liệu ngoài timeline, đọc lại tối đa mỗi 8 s (focus cửa sổ, đổi bước, mở popover điểm)
   const D = { qc: null, quick: null, src: null, fill: null, dir: null, ready: false };
   let fetchedAt = 0, busy = null;
 
@@ -27,11 +24,7 @@
     if (at != null && S.setTime) S.setTime(at);
     return S.workflow ? S.workflow.focus(id, sel) : typeof openPanel === 'function' && openPanel(id);
   };
-  const brand = () => (S.TL && S.TL.brand) || {};
-  const capOn = () => (S.CAP || []).length > 0 && S.TL.caption_style !== 'none' && S.TL.burnin?.mode !== 'off';
-  const aiScenes = () => (S.TL.scenes || []).filter(s => (s._ai || s._auto) && !s._base).length;
   const latest = () => (S.exports && S.exports.latest()) || null;
-  const when = iso => { try { return new Date(iso).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }); } catch { return ''; } };
 
   // chỗ sửa của từng tiêu chí (id = id mục của ScoreCore): go: [panel, [selector…]]. Nhãn, câu vì sao, điểm: ScoreCore.
   const TASKS = {
@@ -64,22 +57,9 @@
       deliver: ['wf-export', ['[data-xp="give"]', '.xp-it']],
     },
   };
-  // nút đi tiếp khi bước đã xong việc chính
-  const NEXT = {
-    prep: ['Sang bước Nguồn', 'ti-arrow-right', () => S.workflow.goStep('source')],
-    source: ['Sang bước Dựng', 'ti-arrow-right', () => S.workflow.goStep('build')],
-    build: ['Sang bước Kiểm tra', 'ti-arrow-right', () => S.workflow.goStep('check')],
-    check: ['Sang bước Xuất', 'ti-arrow-right', () => S.workflow.goStep('ship')],
-    ship: ['Mở gói đăng', 'ti-send', go('wf-publish')],
-  };
-
+  // danh sách tiêu chí trong hộp cảnh báo Xuất (C17); khối .ns của tab Dự án cũ đã bỏ (M174)
   const css = document.createElement('style');
   css.textContent = `
-  #insp > .ns { display: flex; flex-direction: column; gap: 12px; padding: 12px; min-width: 0; }
-  .ns-step { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .ns-rh { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .ns-k { font-size: 11px; font-weight: 600; color: var(--tx2); text-transform: uppercase; letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .ns-rh b { margin-left: auto; color: var(--tx); font-size: 12px; flex: none; font-variant-numeric: tabular-nums; }
   .ns-tasks { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
   .ns-tasks li { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r);
     color: var(--tx2); font-size: 12px; line-height: 1.4; min-width: 0; }
@@ -92,18 +72,6 @@
   .ns-tasks li.is-done { color: var(--tx); } .ns-tasks li.is-done > .ti { color: var(--ok); }
   .ns-tasks li.is-next { border-color: var(--acc-line); background: var(--acc-soft); color: var(--tx); }
   .ns-tasks li.is-opt:not(.is-done) > .ti { color: var(--warn); }
-  .ns-res { border: 1px solid var(--line); background: var(--bg2); border-radius: var(--r); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--tx2); line-height: 1.5; min-width: 0; }
-  .ns-v { color: var(--tx); overflow-wrap: anywhere; min-width: 0; }
-  .ns-v.is-warn { color: var(--warn); }
-  .ns-lnk { align-self: flex-start; background: none; border: 0; padding: 0; height: auto; color: var(--acc); cursor: pointer; font-size: 12px; text-decoration: underline; }
-  .ns-go { gap: 8px; justify-content: center; white-space: normal; height: auto; min-height: 32px; }
-  .ns-more { border-top: 1px solid var(--line); margin: 0 -12px; }
-  .ns-more > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 12px; font-weight: 600; color: var(--tx2); }
-  .ns-more > summary::-webkit-details-marker { display: none; }
-  .ns-more > summary:hover { color: var(--tx); }
-  .ns-more > summary .ti-chevron-right { margin-left: auto; transition: transform .15s; }
-  .ns-more[open] > summary .ti-chevron-right { transform: rotate(90deg); }
-  .ns-link { color: var(--acc); cursor: pointer; text-decoration: underline; }
   #modalbox .ns-warn { margin: 8px 0 12px; }
   `;
   document.head.appendChild(css);
@@ -131,7 +99,7 @@
   }
   const scores = () => C.score(input()).steps;
 
-  // bước cột phải nói tới: bước đang mở bên trái; Cài đặt / Tự lái → bước đầu còn việc chính chưa xong
+  // bước đang nói tới: bước đang mở bên trái; Cài đặt / Tự lái → bước đầu còn việc chính chưa xong
   function stepNow(sc = scores()) {
     const st = S.workflow?.step;
     if (ORDER.includes(st)) return st;
@@ -173,89 +141,15 @@
     el.focus({ preventScroll: true }); setTimeout(() => el.classList.remove('wf-flash'), 1600);
   }
 
-  function result(step) {
-    const row = (k, v, warn, act) => `<div class="ns-res"><span class="ns-k">${esc(k)}</span><span class="ns-v ${warn ? 'is-warn' : ''}">${v}</span>${act || ''}</div>`;
-    const lnk = (a, t) => `<button class="ns-lnk" data-ns="${a}">${esc(t)}</button>`;
-    const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
-    const quick = () => {
-      const q = D.quick;
-      if (!q) return row('QC nhanh', 'Đang đọc…');
-      if (q.none || q.error) return row('QC nhanh', 'Chưa kiểm tra nhanh lần nào.', false, aiScenes() ? lnk('quick', 'Kiểm tra nhanh') : '');
-      const n = (q.issues || []).length;
-      return row('QC nhanh', `${n ? `${n} chỗ cần xem` : 'Không thấy lỗi vị trí'}${q.fix ? ` · đã sửa ${q.fixed}/${q.before}` : ''}${q.stale ? ' · đã sửa video sau lần này' : ''}`,
-        n > 0 || q.stale, lnk('quick', n ? 'Xem và sửa' : q.stale ? 'Kiểm tra lại' : 'Xem lại'));
-    };
-    if (step === 'prep') { const b = brand(); return row('Thương hiệu của dự án', b.name ? esc(b.name) : 'Chưa có', !b.name); }
-    if (step === 'source') return row('Video nguồn', `${mmss(S.TL.duration || 0)} · ${(S.CAP || []).length} câu lời thoại${capOn() ? ' · phụ đề bật' : ''}`);
-    if (step === 'build') return row('Graphic', `${(S.TL.scenes || []).length} cảnh${aiScenes() ? ` · ${aiScenes()} do AI đặt` : ''}`) + quick();
-    if (step === 'check') {
-      const q = D.qc, full = !q ? row('QC đầy đủ', 'Đang đọc…') : q.none || q.error ? row('QC đầy đủ', 'Chưa chạy.')
-        : row('QC đầy đủ', `${q.score ?? '?'} điểm · ${(q.issues || []).filter(i => !i.fixed).length} chỗ chưa sửa`, (q.score ?? 100) < 60, lnk('qc', 'Mở kết quả'));
-      return full + quick();
-    }
-    if (step === 'ship') {
-      if (!S.exports?.loaded?.()) return row('Bản xuất gần nhất', 'Đang đọc…');
-      const x = latest();
-      if (!x) return row('Bản xuất gần nhất', 'Chưa xuất bản nào.');
-      const name = String(x.files[0]?.file || '').split(/[\\/]/).pop(), ok = C.fresh(x, S.exports.edited?.());
-      return row('Bản xuất gần nhất', `${esc(name)}<br>${esc(when(x.at))}${x.missing ? ' · file đã bị xoá' : ok ? '' : ' · đã sửa video sau bản này'}`,
-        x.missing || !ok, lnk('export', 'Mở bản xuất'));
-    }
-    return '';
-  }
-
-  // danh sách tiêu chí; data = thuộc tính nút Sửa (cột phải: data-ns-i, hộp cảnh báo Xuất: data-nsx-i)
+  // danh sách tiêu chí; data = thuộc tính nút Sửa (hộp cảnh báo Xuất: data-nsx-i)
   const list = (st, data, only) => `<ul class="ns-tasks">${st.tasks.map((t, k) => (only && t.done ? '' : `<li class="${t.done ? 'is-done' : ''} ${t === st.next ? 'is-next' : ''} ${t.opt ? 'is-opt' : ''}">
     <i class="ti ${t.done ? 'ti-circle-check' : t.opt ? 'ti-alert-circle' : 'ti-circle-dashed'}"></i>
     <span>${esc(t.label)}${t.opt && !t.done ? ' (nên làm)' : ''}${t.lost ? ` <em>−${t.lost}</em>` : ''}${t.done ? '' : `<small>${esc(t.miss)}</small>`}</span>
     ${t.done ? '' : `<button ${data}="${k}" title="Mở chỗ sửa ở thanh trái"><i class="ti ti-tool"></i>Sửa</button>`}</li>`)).join('')}</ul>`;
 
-  function html() {
-    // S23 M164 (C32): không còn dải chip 5 bước + thanh tiến độ: điểm từng bước ở vòng điểm trên thanh bước (03_stepscore.js)
-    const sc = scores(), cur = stepNow(sc), st = state(cur, sc), i = ORDER.indexOf(cur), todo = st.next, main = todo && !todo.opt;
-    const nx = NEXT[cur];
-    return `<div class="ns-rh" aria-live="polite"><span class="ns-k">Bước ${i + 1}/5 · ${esc(NAME[cur])}</span><b>${D.ready ? `${st.score}/100` : 'Đang đọc…'}</b></div>
-      ${list(st, 'data-ns-i')}
-      ${result(cur)}
-      <button class="primary ns-go" data-ns="go"><i class="ti ${main ? 'ti-tool' : nx[1]}"></i>${esc(main ? 'Sửa: ' + todo.label : nx[0])}</button>`;
-  }
-
   const onPaint = []; // S23 M164: vòng điểm trên thanh bước (03_stepscore.js) vẽ lại khi dữ liệu điểm vừa đọc xong
   function paint() {
-    const top = $('#insp > .ns [data-ns="top"]'); if (top && S.TL) top.innerHTML = html();
     for (const f of onPaint) { try { f(); } catch (e) { console.error(e); } }
-  }
-
-  // inspector "không chọn gì" (projectPanel của studio.js) vừa vẽ lại: thêm khối bước, gom phần cũ vào mục thu gọn
-  function wrap() {
-    const insp = $('#insp');
-    if (!insp || (S.right?.tab ? S.right.tab !== 'project' : S.sel) || !S.TL || insp.querySelector(':scope > .ns') || !insp.querySelector(':scope > .ihead[data-proj]')) return;
-    const box = document.createElement('div'); box.className = 'ns';
-    box.innerHTML = `<div data-ns="top" class="ns-step">${html()}</div>
-      <details class="ns-more"${store.get('nsMore', '') === '1' ? ' open' : ''}><summary><i class="ti ti-settings"></i>Cài đặt dự án<i class="ti ti-chevron-right"></i></summary></details>`;
-    const det = box.querySelector('details');
-    det.append(...insp.childNodes);
-    det.addEventListener('toggle', () => store.set('nsMore', det.open ? '1' : ''));
-    insp.appendChild(box);
-    for (const f of S._proj) { try { const el = f(); if (el) det.before(el); } catch (e) { console.error(e); } } // S21 M150: khối thêm của tab Dự án (73_pins.js)
-    refresh();
-  }
-
-  const insp = $('#insp');
-  if (insp) {
-    new MutationObserver(wrap).observe(insp, { childList: true });
-    insp.addEventListener('click', e => {
-      const b = e.target.closest('[data-ns], [data-ns-i]'); if (!b || !S.TL) return;
-      const st = state();
-      if (b.dataset.nsI != null) { const t = st.tasks[+b.dataset.nsI]; return t && fix(t)(); }
-      const a = b.dataset.ns;
-      if (a === 'go') return st.next && !st.next.opt ? fix(st.next)() : NEXT[st.step][2]();
-      if (a === 'brands') return go('brands')();
-      if (a === 'export') return go('wf-export', ['.xp-it'])();
-      if (a === 'qc') return go('wf-qc', ['#qcbox'])();
-      // QC nhanh: hộp 3 khung của 20_ai.js (Studio.ai.openQuick), không có thì panel AI dựng
-      if (a === 'quick') return S.ai?.openQuick ? S.ai.openQuick() : go('wf-aihelp')();
-    });
   }
 
   // ---------- C17: cảnh báo khi Xuất mà bước Kiểm tra dưới WARN_BELOW (không chặn) ----------
@@ -283,10 +177,10 @@
     guardExport().catch(err => { console.error(err); openExport(); });
   }, true);
 
-  // đổi bước bên trái (01_workflow.js lọc thanh trái trước hook này) → vẽ lại cột phải theo bước mới
+  // đổi bước bên trái (01_workflow.js lọc thanh trái trước hook này) → vòng điểm vẽ lại, đọc lại dữ liệu
   let lastStep = null;
-  (S._rail || []).push(() => { const st = S.workflow?.step; if (st !== lastStep) { lastStep = st; if (S.TL && (S.right?.tab ? S.right.tab === 'project' : !S.sel) && S.renderInspector) S.renderInspector(); else paint(); refresh(); } }); // vẽ lại cả Cài đặt dự án (thương hiệu vừa áp ở bước ①)
+  (S._rail || []).push(() => { const st = S.workflow?.step; if (st !== lastStep) { lastStep = st; paint(); refresh(); } });
   window.addEventListener('focus', () => refresh());
-  S.onReady(() => { wrap(); refresh(true); });
+  S.onReady(() => refresh(true));
   S.nextStep = { refresh: () => refresh(true), peek: () => refresh(), state, scores, paint, steps: ORDER, guardExport, fix, ready: () => D.ready, _paint: onPaint, editBrand };
 })();

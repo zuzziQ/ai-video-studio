@@ -17,7 +17,8 @@
   // id panel -> [bước, thứ tự, mức]. Mức 'pro' bị ẩn ở chế độ Cơ bản; ở bước có bảng LevelCore.BASIC_RAIL chỉ panel trong bảng hiện.
   const PANELS = {
     // S12 (M97): Kho thay Media ở Chuẩn bị; Media (file của dự án đang mở) chuyển sang bước Dựng
-    brands: ['prep', 1], products: ['prep', 2], kho: ['prep', 3], media: ['build', 2],
+    // S24 M174: Cài đặt dự án (wf-project) — trước ở tab Dự án của cột phải — ngay sau Thương hiệu
+    brands: ['prep', 1], 'wf-project': ['prep', 1.5], products: ['prep', 2], kho: ['prep', 3], media: ['build', 2],
     // S13 (M107): Nguồn = video của dự án này (thẻ Video nguồn) + Lời thoại (tab Làm sạch lời nói); Cắt clip từ video dài chỉ
     // hiện trên thanh trái khi video nguồn > 5 phút, lúc nào cũng mở được từ menu ⋯
     'wf-new': ['source', 1], words: ['source', 2], ai: ['source', 3], longform: ['source', 4],
@@ -403,6 +404,15 @@
     $('#libbody').innerHTML = `<p class="wf-hint">Đổi lúc nào cũng được, lưu trên máy này.</p><div data-wf="lv">
       ${opt('basic', 'ti-user', 'Cơ bản', `Claude lái, bạn duyệt: mỗi bước vài công cụ chính, Thuộc tính gọn. Công cụ khác mở bằng ${CK}.`)}
       ${opt('pro', 'ti-user-star', 'Chuyên nghiệp', 'Hiện đủ mọi công cụ, tab Lớp và mọi mục Thuộc tính.')}</div>`;
+  });
+
+  // S24 M174 (C37): Cài đặt dự án của video đang mở (tên, khổ, thương hiệu riêng, gói style, phụ đề, ghi chú chung, vị trí mặt).
+  // HTML + sự kiện ở studio.js (Studio.project, projectPanel cũ của tab Dự án); ở đây chỉ gắn vào bước Chuẩn bị.
+  S.addPanel('wf-project', 'ti-settings', 'Dự án', () => {
+    const body = $('#libbody');
+    if (!TL || !S.project) { body.innerHTML = '<p class="wf-hint">Mở một dự án để chỉnh cài đặt của video.</p>'; return; }
+    body.innerHTML = `<p class="wf-hint">Chỉ áp cho video này. Bộ thương hiệu dùng chung sửa ở mục Thương hiệu.</p>${S.project.html()}`;
+    S.project.mount(body);
   });
 
   // ---------- inspector (S22 M151): ở body.wf-basic renderInspector thu mục phụ sau "Thêm thuộc tính" (LevelCore.splitSections) ----------

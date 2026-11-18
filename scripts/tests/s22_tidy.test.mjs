@@ -10,26 +10,26 @@ const R = req('../../studio/features/68_right.core.js');
 const L = req('../../studio/features/01_level.core.js');
 const read = f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
 
-test('cột phải: không chọn gì, không chi tiết thư viện → Dự án ở mọi bước, mọi chế độ', () => {
+test('cột phải: không chọn gì, không chi tiết thư viện → Claude ở mọi bước, mọi chế độ (S24 M174)', () => {
   for (const level of ['basic', 'pro']) {
     const keys = L.rightTabs(level);
-    assert.equal(R.initialTab('props', false, keys), 'project', `${level}: tab Thuộc tính đã lưu mà không chọn gì`);
+    assert.equal(R.initialTab('props', false, keys), 'claude', `${level}: tab Thuộc tính đã lưu mà không chọn gì`);
     assert.equal(R.initialTab('props', true, keys), 'props');
     assert.equal(R.initialTab('props', false, keys, true), 'props', 'có chi tiết mục thư viện');
     // đổi bước = vẽ lại cột phải với had = has = false
-    assert.equal(R.nextTab({ tab: 'props', had: false, has: false, keys }), 'project', `${level}: đổi bước`);
+    assert.equal(R.nextTab({ tab: 'props', had: false, has: false, keys }), 'claude', `${level}: đổi bước`);
     assert.equal(R.nextTab({ tab: 'props', had: false, has: false, detail: true, keys }), 'props');
-    assert.equal(R.nextTab({ tab: 'project', had: false, has: false, keys }), 'project');
+    assert.equal(R.nextTab({ tab: 'claude', had: false, has: false, keys }), 'claude');
   }
   assert.equal(R.nextTab({ tab: 'layers', had: false, has: false, keys: L.rightTabs('pro') }), 'layers', 'Lớp không bị giành');
-  assert.equal(R.nextTab({ tab: 'layers', had: false, has: false, keys: L.rightTabs('basic') }), 'project', 'Cơ bản không có Lớp');
+  assert.equal(R.nextTab({ tab: 'layers', had: false, has: false, keys: L.rightTabs('basic') }), 'claude', 'Cơ bản không có Lớp');
   assert.equal(R.propsUsable(false, false), false); assert.equal(R.propsUsable(true, false), true); assert.equal(R.propsUsable(false, true), true);
 });
 
 test('studio.js không còn ô "Chưa chọn element", tab Thuộc tính tắt khi không có gì để xem', () => {
   const s = read('studio/studio.js');
   assert.doesNotMatch(s, /<b>Chưa chọn element<\/b>/);
-  assert.match(s, /C\.initialTab\(rtStore\.get\(\), has, keys, !!RT\.detail\)/);
+  assert.match(s, /C\.initialTab\(saved, has, keys, !!RT\.detail\)/);
   assert.match(s, /propsUsable\(!!sel, !!RT\.detail\)/);
 });
 

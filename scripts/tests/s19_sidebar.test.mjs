@@ -35,9 +35,9 @@ test('Cài đặt dự án: không tab, không lặp kiểu phụ đề / SFX / 
   assert.ok(!pp.includes('data-pact="autosfx"'), 'SFX tự động ở panel Âm thanh');
   assert.match(pp, /<details class="pp-more"><summary>[^<]*<i class="ti ti-adjustments"><\/i>Chỉnh riêng cho video này<\/summary>[\s\S]*\$\{bf\('primary'[\s\S]*\$\{bf\('logo'[^`]*<\/details>/, 'ô thương hiệu riêng nằm trong mục thu gọn');
   assert.match(pp, /data-pact="brandkit"/); assert.match(pp, /data-pact="open-text"/); assert.match(pp, /data-pact="open-audio"/);
-  assert.match(pp, /<div class="ihead" data-proj>/);
+  assert.match(pp, /<div class="pp-panel" data-proj>/);
   for (const a of ['brandkit', 'open-text', 'open-audio']) assert.match(JS, new RegExp(`if \\(pa === '${a}'\\) return `));
-  assert.match(NS, /insp\.querySelector\(':scope > \.ihead\[data-proj\]'\)/, '03_nextstep nhận ra panel dự án mới');
-  // S21 M145: Cài đặt dự án nằm ở tab Dự án của cột phải (không còn là "không chọn gì")
-  assert.match(NS, /if \(S\.TL && \(S\.right\?\.tab \? S\.right\.tab === 'project' : !S\.sel\) && S\.renderInspector\) S\.renderInspector\(\)/, 'đổi bước vẽ lại cả Cài đặt dự án khi tab Dự án đang mở, chỉ khi đã có dự án');
+  // S24 M174: Cài đặt dự án là panel wf-project ở bước Chuẩn bị (không còn tab Dự án của cột phải, 03_nextstep không vẽ nó)
+  assert.match(read('studio/features/01_workflow.js'), /S\.addPanel\('wf-project'/);
+  assert.ok(!NS.includes('data-proj'));
 });

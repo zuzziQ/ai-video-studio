@@ -7,24 +7,24 @@ import fs from 'node:fs';
 const C = createRequire(import.meta.url)('../../studio/features/68_right.core.js');
 const read = f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
 
-test('ba tab theo thứ tự Thuộc tính · Lớp · Dự án', () => {
-  assert.deepEqual(C.KEYS, ['props', 'layers', 'claude', 'project']);
+test('ba tab theo thứ tự Thuộc tính · Lớp · Claude (S24 M174 bỏ Dự án)', () => {
+  assert.deepEqual(C.KEYS, ['props', 'layers', 'claude']);
   assert.ok(C.valid('layers')); assert.equal(C.valid('x'), false);
 });
 
 test('tab lúc mở: tab đã lưu nếu hợp lệ, không thì theo trạng thái chọn', () => {
   assert.equal(C.initialTab('layers', false), 'layers');
   assert.equal(C.initialTab(null, true), 'props');
-  assert.equal(C.initialTab('bogus', false), 'project');
+  assert.equal(C.initialTab('bogus', false), 'claude');
 });
 
 test('tự đổi tab khi chọn / bỏ chọn, không giành tab Lớp', () => {
-  assert.equal(C.nextTab({ tab: 'project', had: false, has: true }), 'props');
-  assert.equal(C.nextTab({ tab: 'props', had: true, has: false }), 'project');
+  assert.equal(C.nextTab({ tab: 'claude', had: false, has: true, auto: true }), 'props'); // Claude tự về khi bỏ chọn → chọn lại thì Thuộc tính
+  assert.equal(C.nextTab({ tab: 'props', had: true, has: false }), 'claude');
   assert.equal(C.nextTab({ tab: 'props', had: true, has: false, detail: true }), 'props'); // đang xem chi tiết mục thư viện
   assert.equal(C.nextTab({ tab: 'layers', had: false, has: true }), 'layers');
   assert.equal(C.nextTab({ tab: 'layers', had: true, has: false }), 'layers');
-  assert.equal(C.nextTab({ tab: 'project', had: true, has: true }), 'project'); // người dùng tự bấm Dự án khi đang chọn: giữ
+  assert.equal(C.nextTab({ tab: 'claude', had: true, has: true, auto: true }), 'claude'); // đang chọn sẵn: không giành
   assert.equal(C.nextTab({ tab: 'props', had: true, has: true }), 'props');
   assert.equal(C.nextTab({ tab: 'nope', had: false, has: true }), 'props');
   assert.equal(C.tabForDetail(), 'props');
@@ -37,6 +37,6 @@ test('studio.js / index.html / 67_layers / 03_nextstep nối đúng', () => {
   const ly = read('studio/features/67_layers.js');
   assert.match(ly, /S\.right\.addTab\('layers'/);
   assert.doesNotMatch(ly, /S\.addCompTab\(/);
-  assert.match(read('studio/features/03_nextstep.js'), /S\.right\.tab !== 'project'/);
+  assert.doesNotMatch(read('studio/features/03_nextstep.js'), /'project'/); // S24 M174: không còn tab Dự án
   assert.match(read('studio/library.js'), /Studio\.right\.refresh\(\)/);
 });

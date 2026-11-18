@@ -42,10 +42,10 @@ test('askKey: chỉ phím / trần', () => {
   assert.equal(L.askKey({ key: '?' }), false);
 });
 
-test('tab Claude ở cả hai chế độ, thứ tự Thuộc tính · Lớp · Claude (Dự án còn tới M174)', () => {
-  assert.deepEqual(R.KEYS, ['props', 'layers', 'claude', 'project']);
-  assert.deepEqual(V.rightTabs('basic'), ['props', 'claude', 'project']);
-  assert.deepEqual(V.rightTabs('pro'), ['props', 'layers', 'claude', 'project']);
+test('tab Claude ở cả hai chế độ, thứ tự Thuộc tính · Lớp · Claude (Dự án bỏ ở M174)', () => {
+  assert.deepEqual(R.KEYS, ['props', 'layers', 'claude']);
+  assert.deepEqual(V.rightTabs('basic'), ['props', 'claude']);
+  assert.deepEqual(V.rightTabs('pro'), ['props', 'layers', 'claude']);
   assert.ok(R.valid('claude', V.rightTabs('basic')));
   // Claude giữ nguyên khi chọn / bỏ chọn (chip phạm vi đổi theo element), như Lớp
   assert.equal(R.nextTab({ tab: 'claude', had: false, has: true }), 'claude');
