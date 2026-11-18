@@ -406,6 +406,9 @@ body.expanded #lib, body.expanded #right { display: none; }
 .isec-h { width: 100%; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) 0; background: transparent; border: 0; border-radius: 0; color: rgb(var(--color-fg)); font-size: var(--text-xs); font-weight: 700; text-align: left; }
 .isec-h:hover { background: transparent; color: rgb(var(--color-accent-text)); }
 .isec-h:focus-visible { outline: 2px solid rgb(var(--color-accent-text)); outline-offset: -2px; }
+/* S22 M151: chế độ Cơ bản — mục ngoài Núm / Hỏi Claude / mục chính thu sau nút này */
+.isec-more { width: 100%; justify-content: flex-start; gap: var(--space-2); margin: var(--space-2) 0; background: transparent; border: 1px dashed rgb(var(--color-line-strong)); color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); font-weight: 600; }
+.isec-more:hover { background: rgb(var(--color-surface-raised)); color: rgb(var(--color-fg)); }
 .isec-h > .ti:first-child { font-size: 15px; color: rgb(var(--color-fg-subtle)); }
 .isec-h span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isec-h .car { font-size: 14px; color: rgb(var(--color-fg-subtle)); transform: rotate(-90deg); transition: transform .12s; }

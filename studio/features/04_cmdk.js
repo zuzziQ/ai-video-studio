@@ -1,6 +1,8 @@
 // AI Video Studio — ô tìm công cụ ⌘K / Ctrl K (M84, đợt S10).
 // Tìm mọi panel trên thanh trái (kể cả panel đang ẩn theo bước), 5 bước + Cài đặt và các lệnh (Lưu, Xuất, Hoàn tác…).
 // Gõ không dấu vẫn khớp ("xuat" → Xuất, "broll" → B-roll). ↑↓ chọn, Enter mở, Esc đóng. Editor không có phím tắt K nào khác.
+// S22 M151 (C24): ở chế độ Cơ bản vẫn tìm thấy công cụ chỉ có ở Chuyên nghiệp (nhãn "Chuyên nghiệp"); chọn thì hộp hỏi
+// "Mở ở Chuyên nghiệp" (đổi chế độ rồi mở) hoặc "Chỉ mở lần này" (giữ Cơ bản) — không công cụ nào mất.
 'use strict';
 (() => {
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc;
@@ -46,10 +48,11 @@
     const rail = typeof RAIL !== 'undefined' ? RAIL : [];
     for (const [id, ic, name] of rail) {
       const m = W()?.meta(id), g = W()?.groupOf(id);
-      if (m && m.level === 'pro' && W().level === 'basic') continue;
+      const pro = !!W()?.hidden?.(id);
       const tab = g?.tabs.find(t => t[0] === id)?.[1];
       const label = g ? `${g.name} › ${tab || name}` : name;
-      out.push({ label, ic: g ? g.icon : ic, kind: m ? `Công cụ · ${STEP_N[m.step] || ''}` : 'Công cụ', kw: `${id} ${name} ${g ? g.name : ''} ${ALIAS[id] || ''} cong cu panel`, run: () => openPanel(id) });
+      out.push({ label, ic: g ? g.icon : ic, kind: m ? `${pro ? 'Chuyên nghiệp' : 'Công cụ'} · ${STEP_N[m.step] || ''}` : 'Công cụ', pro,
+        kw: `${id} ${name} ${g ? g.name : ''} ${ALIAS[id] || ''} cong cu panel${pro ? ' chuyen nghiep pro' : ''}`, run: () => openPanel(id) });
     }
     for (const [label, ic, kw, run, show] of COMMANDS) if (show()) out.push({ label, ic, kind: 'Lệnh', kw, run });
     for (const it of out) { it.n = norm(it.label); it.k = norm(it.label + ' ' + it.kw); it.c = it.k.replace(/ /g, ''); }
@@ -86,6 +89,11 @@
   #cmdk li[aria-selected="true"] { background: var(--acc-soft); }
   #cmdk li[aria-selected="true"] .ti { color: var(--acc); }
   #cmdk .ck-empty { padding: 16px 12px; font-size: 13px; color: var(--tx3); }
+  #cmdk li.pro small { color: var(--acc); }
+  #cmdk li.ck-pro { display: flex; flex-direction: column; align-items: stretch; gap: 8px; height: auto; padding: 12px; cursor: default; }
+  #cmdk li.ck-pro[aria-selected="true"] { background: transparent; }
+  #cmdk .ck-pro p { margin: 0; font-size: 13px; color: var(--tx); }
+  #cmdk .ck-pro div { display: flex; flex-wrap: wrap; gap: 8px; }
   #cmdk .ck-foot { display: flex; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 11px; color: var(--tx3); flex: none; }
   `;
   document.head.appendChild(css);
@@ -97,11 +105,12 @@
     <div class="ck-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> chọn</span><span><kbd>Enter</kbd> mở</span><span><kbd>Esc</kbd> đóng</span></div></div>`;
   document.body.appendChild(root);
   const inp = root.querySelector('#ck-q'), ul = root.querySelector('#ck-list');
-  let all = [], res = [], cur = 0, back = null;
+  let all = [], res = [], cur = 0, back = null, ask = null;
 
   function render() {
     res = search(all, inp.value).slice(0, 40); cur = Math.min(cur, Math.max(0, res.length - 1));
-    ul.innerHTML = res.length ? res.map((it, i) => `<li role="option" id="ck-o${i}" data-ck="${i}" aria-selected="${i === cur}"><i class="ti ${esc(it.ic)}"></i><span>${esc(it.label)}</span><small>${esc(it.kind)}</small></li>`).join('')
+    ask = null;
+    ul.innerHTML = res.length ? res.map((it, i) => `<li role="option" id="ck-o${i}" data-ck="${i}" aria-selected="${i === cur}"${it.pro ? ' class="pro"' : ''}><i class="ti ${esc(it.ic)}"></i><span>${esc(it.label)}</span><small>${esc(it.kind)}</small></li>`).join('')
       : `<li class="ck-empty" role="option" aria-disabled="true">Không thấy công cụ nào khớp “${esc(inp.value)}”</li>`;
     mark();
   }
@@ -116,7 +125,21 @@
     root.hidden = false; render(); inp.focus();
   }
   function closeCk(restore = true) { if (root.hidden) return; root.hidden = true; if (restore && back?.isConnected) back.focus?.(); back = null; }
-  function run(i) { const it = res[i]; if (!it) return; closeCk(false); try { it.run(); } catch (e) { console.error(e); S.toast('Không mở được: ' + it.label); } }
+  function go(it) { closeCk(false); try { it.run(); } catch (e) { console.error(e); S.toast('Không mở được: ' + it.label); } }
+  function run(i) {
+    const it = res[i]; if (!it) return;
+    if (!it.pro || W()?.level !== 'basic') return go(it);
+    // C24: công cụ chỉ có ở Chuyên nghiệp — hỏi trong hộp, Enter = Mở ở Chuyên nghiệp
+    ask = it; inp.removeAttribute('aria-activedescendant');
+    ul.innerHTML = `<li class="ck-pro" role="option" aria-selected="true"><p>«${esc(it.label)}» là công cụ của chế độ Chuyên nghiệp.</p>
+      <div><button class="primary" data-ckpro="pro"><i class="ti ti-user-star"></i> Mở ở Chuyên nghiệp</button><button data-ckpro="once">Chỉ mở lần này</button></div></li>`;
+    ul.querySelector('[data-ckpro="pro"]').focus();
+  }
+  function answer(how) {
+    const it = ask; if (!it) return; ask = null;
+    if (how === 'pro') W()?.setLevel('pro');
+    go(it);
+  }
 
   inp.addEventListener('input', () => { cur = 0; render(); });
   inp.addEventListener('keydown', e => {
@@ -127,7 +150,13 @@
     e.stopPropagation();
   });
   ul.addEventListener('mousemove', e => { const li = e.target.closest('[data-ck]'); if (li && +li.dataset.ck !== cur) { cur = +li.dataset.ck; mark(); } });
-  ul.addEventListener('click', e => { const li = e.target.closest('[data-ck]'); if (li) run(+li.dataset.ck); });
+  ul.addEventListener('click', e => { const p = e.target.closest('[data-ckpro]'); if (p) return answer(p.dataset.ckpro); const li = e.target.closest('[data-ck]'); if (li) run(+li.dataset.ck); });
+  ul.addEventListener('keydown', e => { // hộp hỏi "Mở ở Chuyên nghiệp": Esc về danh sách, phím mũi tên giữa hai nút
+    if (!ask) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); render(); inp.focus(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') { e.preventDefault(); const bs = [...ul.querySelectorAll('[data-ckpro]')]; bs[(bs.indexOf(document.activeElement) + 1) % bs.length]?.focus(); }
+    e.stopPropagation();
+  });
   root.addEventListener('mousedown', e => { if (e.target === root) { e.preventDefault(); closeCk(); } });
   // ⌘K / Ctrl K ở mọi nơi (cả khi đang gõ trong ô khác); chặn mặc định của trình duyệt (Ctrl K = ô tìm web)
   document.addEventListener('keydown', e => {

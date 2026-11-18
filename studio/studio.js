@@ -448,11 +448,14 @@ const KIND_IC = { clip: 'ti-movie', line: 'ti-letter-t', cap: 'ti-badge-cc', nod
 // mọi selector cũ (#insp [data-f=…], 03_nextstep, workflow.focus) chạy như trước. Chưa nạp lõi thì giữ hành vi cũ (không có dải tab).
 const RT = { tab: null, had: false, detail: null, ext: {} };
 const rtStore = { get() { try { return localStorage.getItem('avs.rtab'); } catch { return null; } }, set(v) { try { localStorage.setItem('avs.rtab', v); } catch { /* chế độ riêng tư */ } } };
+// S22 M151: chế độ Cơ bản / Chuyên nghiệp (01_workflow.js đặt body.wf-basic; lõi features/01_level.core.js): Cơ bản không có tab Lớp.
+const uiLevel = () => (document.body.classList.contains('wf-basic') ? 'basic' : 'pro');
+const rtKeys = () => (window.LevelCore ? LevelCore.rightTabs(uiLevel()) : window.RightCore?.KEYS || []);
 function rightTab() {
   const C = window.RightCore; if (!C) return sel ? 'props' : 'project';
-  const has = !!sel;
-  if (RT.tab == null) RT.tab = C.initialTab(rtStore.get(), has);
-  else RT.tab = C.nextTab({ tab: RT.tab, had: RT.had, has, detail: !!RT.detail });
+  const has = !!sel, keys = rtKeys();
+  if (RT.tab == null) RT.tab = C.initialTab(rtStore.get(), has, keys);
+  else RT.tab = C.nextTab({ tab: RT.tab, had: RT.had, has, detail: !!RT.detail, keys });
   RT.had = has;
   return RT.tab;
 }
@@ -460,23 +463,25 @@ function rightTabsBar(tab) {
   const bar = $('#rtabs'), C = window.RightCore; if (!bar) return;
   if (!C) { bar.hidden = true; return; }
   bar.hidden = false;
-  bar.innerHTML = C.TABS.map(([k, l, ic]) => `<button role="tab" data-rtab="${k}" aria-selected="${k === tab}" class="${k === tab ? 'on' : ''}" tabindex="${k === tab ? 0 : -1}"><i class="ti ${ic}"></i><span>${l}</span>${k === 'props' && sel ? '<b class="dot" aria-hidden="true"></b>' : ''}</button>`).join('');
+  bar.innerHTML = C.tabsFor(rtKeys()).map(([k, l, ic]) => `<button role="tab" data-rtab="${k}" aria-selected="${k === tab}" class="${k === tab ? 'on' : ''}" tabindex="${k === tab ? 0 : -1}"><i class="ti ${ic}"></i><span>${l}</span>${k === 'props' && sel ? '<b class="dot" aria-hidden="true"></b>' : ''}</button>`).join('');
 }
 function showRightTab(k) {
   if (!window.RightCore?.valid(k)) return;
+  // C24: tab chỉ có ở Chuyên nghiệp (Lớp) mở từ nút / lệnh khi đang Cơ bản → đổi sang Chuyên nghiệp rồi mở, không mất tính năng
+  if (!RightCore.valid(k, rtKeys())) { if (Studio.workflow?.setLevel) Studio.workflow.setLevel('pro'); else return; }
   RT.tab = k; RT.had = !!sel; rtStore.set(k); renderInspector();
 }
 $('#insp').addEventListener('click', e => { const b = e.target.closest('[data-rtgo]'); if (b) showRightTab(b.dataset.rtgo); });
 $('#rtabs')?.addEventListener('click', e => { const b = e.target.closest('[data-rtab]'); if (b) showRightTab(b.dataset.rtab); });
 $('#rtabs')?.addEventListener('keydown', e => { // ← → giữa các tab (role=tablist)
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  const K = window.RightCore?.KEYS || [], i = K.indexOf(RT.tab), n = K[(i + (e.key === 'ArrowRight' ? 1 : K.length - 1)) % K.length];
+  const K = rtKeys(), i = K.indexOf(RT.tab), n = K[(i + (e.key === 'ArrowRight' ? 1 : K.length - 1)) % K.length];
   e.preventDefault(); e.stopPropagation(); showRightTab(n); $(`#rtabs [data-rtab="${n}"]`)?.focus();
 });
 // S21 M146: Thuộc tính dạng mục xếp chồng (lõi features/68_sections.core.js). Mỗi tab cũ ([key, label, html] của inspTabs và
 // Studio.addInspectorTab) thành một mục thu gọn được; mở / đóng nhớ theo loại element (avs.isec). Mục đóng không vẽ thân (tính năng
 // như 60_keyframes chỉ chạy khi thân mục có trong DOM). Dải mục .isecbar dính dưới đầu: bấm = mở + cuộn tới, tô mục đang thấy.
-const SECT = { state: null, go: null, pin: 0 };
+const SECT = { state: null, go: null, pin: 0, more: false };
 const sectKind = c => (c.kind === 'scene' ? 'scene:' + (c.obj.type || '') : c.kind);
 function sectState() {
   if (!SECT.state) { let v = null; try { v = localStorage.getItem('avs.isec'); } catch { /* chế độ riêng tư */ } SECT.state = window.SectCore ? SectCore.parse(v) : {}; }
@@ -513,7 +518,7 @@ function renderInspector() {
   if (!sel) {
     if (RT.detail) { el.innerHTML = RT.detail.html; RT.detail.mount?.(el); return; } // M147: chi tiết mục thư viện
     el.innerHTML = `<div class="rempty"><i class="ti ti-pointer"></i><b>Chưa chọn element</b><p>Bấm một element trên khung hoặc một khối trên timeline để xem thuộc tính. Bấm một mục ở thư viện bên trái để xem chi tiết của mục đó.</p>
-      <div class="acts"><button data-rtgo="layers"><i class="ti ti-stack-2"></i> Lớp</button><button data-rtgo="project"><i class="ti ti-layout-dashboard"></i> Dự án</button></div></div>`;
+      <div class="acts">${rtKeys().includes('layers') ? '<button data-rtgo="layers"><i class="ti ti-stack-2"></i> Lớp</button>' : ''}<button data-rtgo="project"><i class="ti ti-layout-dashboard"></i> Dự án</button></div></div>`;
     return;
   }
   const c = sel, o = c.obj;
@@ -521,8 +526,13 @@ function renderInspector() {
   const tabs = inspTabs(c);
   for (const h of Studio._insp) { const t = h(c); if (t) tabs.push(...(Array.isArray(t[0]) ? t : [t])); }
   const SC = window.SectCore, kind = sectKind(c), st = sectState();
-  const secs = SC ? SC.visible(SC.normalize(tabs), document.body.classList.contains('wf-basic')) : tabs.map(([key, label, html]) => ({ key, label, html, icon: 'ti-point' }));
+  // S22 M151: Cơ bản chỉ hiện Núm + Hỏi Claude + mục chính; mục khác thu sau "Thêm thuộc tính" (bấm mở, nhớ trong phiên: SECT.more)
+  const all = SC ? SC.normalize(tabs) : tabs.map(([key, label, html]) => ({ key, label, html, icon: 'ti-point' }));
+  const sp = SC?.split ? SC.split(all, uiLevel() === 'basic') : { main: all, more: [] };
+  if (SECT.go && sp.more.some(s => s.key === SECT.go)) SECT.more = true; // mở mục ẩn từ chỗ khác (chuyển cảnh, dải mục): mở luôn phần thêm
+  const secs = SECT.more ? [...sp.main, ...sp.more] : sp.main, nMore = sp.more.length;
   const open = secs.map((s, i) => (SC ? SC.isOpen(st, kind, s.key, i === 0) : true));
+  const moreBtn = nMore ? `<button class="isec-more" data-act="secmore" aria-expanded="${!!SECT.more}"><i class="ti ${SECT.more ? 'ti-chevron-up' : 'ti-dots-circle-horizontal'}"></i><span>${SECT.more ? 'Ẩn bớt thuộc tính' : `Thêm thuộc tính (${nMore})`}</span></button>` : '';
   const clip = c.kind === 'clip', ic = (act, on, icn, tip) => `<button class="icon ${on ? 'on' : ''}" data-act="${act}" aria-pressed="${on}" title="${tip}" aria-label="${tip}"><i class="ti ${icn}"></i></button>`;
   el.innerHTML = `<div class="itop"><div class="ihead"><span class="iic"><i class="ti ${KIND_IC[c.kind]}"></i></span><div class="it"><h3>${esc(c.kind === 'line' && c.scene.type === 'text' ? (o.text || 'Chữ thêm') : c.label)}</h3>
       <div class="sub"><span class="pill">${esc(tag)}</span><a class="time" data-act="seek"><i class="ti ti-clock-play"></i> ${fmt(c.t0)} – ${fmt(c.t1)}</a></div></div>
@@ -532,7 +542,7 @@ function renderInspector() {
     ${secs.length > 1 ? `<nav class="isecbar" aria-label="Mục thuộc tính">${secs.map((s, i) => `<button data-secgo="${esc(s.key)}" class="${open[i] ? 'open' : ''}">${esc(s.label)}</button>`).join('')}</nav>` : ''}</div>
     <div class="ibody">${multi.length && !clip ? alignBlock() : ''}${secs.map((s, i) => `<div class="isec ${open[i] ? 'open' : ''}" data-sec="${esc(s.key)}">
       <button class="isec-h" data-sect="${esc(s.key)}" aria-expanded="${open[i]}"><i class="ti ${s.icon}"></i><span>${esc(s.label)}</span><i class="ti ti-chevron-down car"></i></button>
-      ${open[i] ? `<div class="isec-b">${s.html}</div>` : ''}</div>`).join('')}${clip ? '' : actions(c) + noteBlock(o)}</div>`;
+      ${open[i] ? `<div class="isec-b">${s.html}</div>` : ''}</div>`).join('')}${moreBtn}${clip ? '' : actions(c) + noteBlock(o)}</div>`;
   requestAnimationFrame(sectAfter);
 }
 // Cài đặt dự án (cột phải khi không chọn gì; 03_nextstep.js gom vào mục thu gọn dưới khối bước). Chủ repo báo 2026-11-17: phần này
@@ -740,6 +750,7 @@ $('#insp').addEventListener('click', async e => {
   const a = b.dataset.act;
   if (a === 'seek') setTime(c.t0);
   if (a === 'desel') select(null);
+  if (a === 'secmore') { SECT.more = !SECT.more; renderInspector(); return; } // S22 M151: "Thêm thuộc tính" ở Cơ bản
   if (a === 'lock') toggleLock();
   if (a === 'more') { const r = b.getBoundingClientRect(); Studio.cmdMenu?.(r.right - 200, r.bottom + 4); }
   if (a === 'hide') { touch(o); o.hidden = !o.hidden || undefined; changed(true); }
