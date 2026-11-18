@@ -41,7 +41,7 @@ test('Hỏi Claude cạnh khung chỉ khi video dọc (< 0,8) và cửa sổ ≥
     assert.equal(r.askPos, side ? 'side' : 'bottom', `${c.asp} ${c.w}`);
     // Cơ bản: cột Claude thay cột phải khi cạnh khung, không cột phải khi dưới khung; Chuyên nghiệp luôn Thuộc tính
     assert.equal(r.right, c.mode === 'pro' ? 'panel' : side ? 'claude' : 'none', `${c.asp} ${c.w} ${c.mode}`);
-    assert.equal(r.lib, c.mode === 'pro' ? 'panel' : 'flyout');
+    assert.equal(r.lib, c.mode === 'pro' ? (c.w < 1280 ? 'none' : 'panel') : 'flyout'); // M168: Chuyên nghiệp hẹp tự gấp thư viện
   }
 });
 

@@ -30,7 +30,7 @@
   let wasCur = false;
   rail.addEventListener('click', e => { const b = e.target.closest('[data-p]'); wasCur = !!b && b.classList.contains('on'); }, true); // trước openPanel (library.js)
   rail.addEventListener('click', e => {
-    const b = e.target.closest('[data-p]'); if (!b) return;
+    const b = e.target.closest('[data-p]'); if (!b || S._restoring) return; // M168: mở lại panel của tab lúc tải ≠ mở tay
     const st = S.layout.get();
     if (st.lib === 'flyout') return setOpen(LC.flyoutClick(open, wasCur));
     if (st.mode === 'pro' && (st.foldLib || wasCur)) S.layout.set('foldLib', !st.foldLib);

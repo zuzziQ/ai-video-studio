@@ -173,7 +173,9 @@ viewport mà không có tổ tiên cắt, không vùng cuộn dọc lồng nhau 
 Claude cạnh khung. Khổ vuông hiện là bản xuất thêm (`export_multi`). Ghi `M167`.
 
 Cả 54 ô đạt các tiêu chí trên. Ô chật: Chuyên nghiệp 1024×768 video 16:9 khung chỉ 264×149 (thư viện 312 + cột phải 340 chiếm 652 px
-của 1024) → `M168`. 16:9 Cơ bản 1024 dùng đủ bề ngang (576×324).
+của 1024) → `M168`. Sau `M168` (2026-11-18, Chuyên nghiệp cửa sổ < 1280 px tự gấp thư viện, timeline gọn): 16:9 1024×768 khung
+576×324 (trước 264×149), 9:16 1024×768 273×486 (khung bị giới hạn bởi chiều cao); 1280×800 và 1440×900 không đổi (thư viện mở,
+16:9 520×293 / 675×380, 9:16 190×338 / 246×438 ở timeline đầy đủ). 16:9 Cơ bản 1024 dùng đủ bề ngang (576×324).
 
 **Thử bằng chuột thật** (CDP `Input.dispatchMouseEvent`: con trỏ thật của trình duyệt, không `dispatchEvent` trên DOM), 16:9 Chuyên
 nghiệp + Cơ bản 1440×900, 9:16 Cơ bản 1024 / 1440 / 1920, 9:16 Chuyên nghiệp 1440:

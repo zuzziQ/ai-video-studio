@@ -3,7 +3,8 @@
 //                                      aspect, source, legacy } (M167: khổ soạn 9:16 | 16:9, khổ thật, dự án khổ cũ → dải báo #lay-band)
 //   Studio.layout.set(k, v)        k: 'tl' (strip|compact|full, nhớ avs.tl.<chế độ> / avs.tl.narrow), 'pin' (auto|side|bottom,
 //                                  nhớ avs.layout.pin), 'focus' (nút ⤢: ẩn hai cột, không nhớ), 'fullH' (px của mức đầy đủ, avs.tl.h)
-//                                  'foldLib' / 'foldRight' (M165: Chuyên nghiệp gấp thư viện / cột phải, nhớ avs.col.lib / avs.col.right)
+//                                  'foldLib' / 'foldRight' (M165: Chuyên nghiệp gấp thư viện / cột phải, nhớ avs.col.lib / avs.col.right;
+//                                  M168: cửa sổ < 1280 px thư viện tự gấp, mở tay nhớ avs.col.libNarrow tới khi bề rộng qua ngưỡng)
 //   Studio.layout.on(fn)           fn(state, prev) sau mỗi lần đổi; trả hàm gỡ. M162 (dải tua), M163 (Claude cạnh khung),
 //                                  M165 (hai cột) đăng ký ở đây thay vì tự đo cửa sổ.
 //   Studio.layout.cycleTl(back) / dragStart() / drag(h) / dragEnd(h): phím ` và kéo mép trên timeline (studio.js).
@@ -30,13 +31,14 @@
   function compute() {
     const width = innerWidth, m = mode(), narrow = LC.isNarrow(width);
     const r = LC.compute({ ratio: ratio(), mode: m, width, pin: store.get('layout.pin', 'auto'), tl: store.get(LC.tlKey(m, narrow), ''), focus,
-      foldLib: store.get('col.lib', '') === 'off', foldRight: store.get('col.right', '') === 'off' });
+      foldLib: store.get('col.lib', '') === 'off', foldRight: store.get('col.right', '') === 'off', narrowLib: store.get('col.libNarrow', '') || null });
     const f = frame();
     return { ...r, ratio: f.ratio, aspect: f.aspect, source: f.source, legacy: f.legacy, width, tlH: LC.tlHeight(r.tl, +store.get('tl.h', LC.FULL.def), innerHeight) };
   }
 
   const ATTR = { askPos: 'data-ask', tl: 'data-tl', lib: 'data-lib', right: 'data-right', controls: 'data-controls' };
   function apply() {
+    if (!LC.isNarrow(innerWidth)) store.set('col.libNarrow', null); // M168: qua ngưỡng 1280 px → lần sau hẹp lại thì tự gấp lại
     const prev = cur, st = compute(); cur = st;
     for (const [k, a] of Object.entries(ATTR)) if (!(dragging && k === 'tl')) body.setAttribute(a, st[k]);
     body.toggleAttribute('data-narrow', st.narrow);
@@ -47,13 +49,15 @@
     if (same) return;
     if (S.TL) { S.fit?.(); if (prev && prev.tl !== st.tl) { S.renderTimeline?.(); if (st.tl !== 'strip' && S.zoomPending) S.zoomFit?.(); } } // fit đọc cỡ #stagewrap mới; timeline vừa hiện lại thì vừa khung
     for (const fn of subs) { try { fn({ ...st }, prev && { ...prev }); } catch (e) { console.error(e); } }
+    if (prev && st.autoFold && !prev.autoFold && st.foldLib && !prev.foldLib) S.toast?.('Cửa sổ hẹp: đã gấp thư viện (phím [ để mở)'); // M168
   }
 
   function set(k, v) {
     if (k === 'tl') { const t = LC.normTl(v); if (!t) return; const c = cur || compute(); store.set(LC.tlKey(c.mode, c.narrow), t); }
     else if (k === 'pin') store.set('layout.pin', LC.normPin(v) === 'auto' ? null : LC.normPin(v));
     else if (k === 'focus') focus = !!v;
-    else if (k === 'foldLib' || k === 'foldRight') store.set(k === 'foldLib' ? 'col.lib' : 'col.right', v ? 'off' : null); // M165, nhớ theo máy
+    else if (k === 'foldLib') { const f = LC.foldStore(LC.autoFoldLib(mode(), innerWidth), !!v); store.set(f.key, f.val); } // M165 / M168 (cửa sổ hẹp nhớ riêng)
+    else if (k === 'foldRight') store.set('col.right', v ? 'off' : null); // M165, nhớ theo máy
     else if (k === 'fullH') store.set('tl.h', LC.clampFull(v, innerHeight));
     else return;
     apply();

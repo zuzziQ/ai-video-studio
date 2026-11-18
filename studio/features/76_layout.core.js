@@ -35,18 +35,27 @@
   }
 
   // o: { ratio, mode, width, pin, tl (mức đã nhớ của tlKey), focus (nút ⤢: ẩn hai cột),
-  //      foldLib / foldRight (M165: Chuyên nghiệp gấp thư viện bằng phím [, cột phải bằng ]; Cơ bản bỏ qua) }
+  //      foldLib / foldRight (M165: Chuyên nghiệp gấp thư viện bằng phím [, cột phải bằng ]; Cơ bản bỏ qua),
+  //      narrowLib ('open' | null, M168: lần người dùng mở tay thư viện khi cửa sổ hẹp) }
   function compute(o = {}) {
     const mode = normMode(o.mode), narrow = isNarrow(o.width), pin = normPin(o.pin), focus = !!o.focus;
-    const foldLib = mode === 'pro' && !!o.foldLib, foldRight = mode === 'pro' && !!o.foldRight;
+    const autoFold = autoFoldLib(mode, o.width);
+    const foldLib = mode === 'pro' && (autoFold ? o.narrowLib !== 'open' : !!o.foldLib), foldRight = mode === 'pro' && !!o.foldRight;
     const ask = askPos(o.ratio, o.width, pin);
     const tl = normTl(o.tl) || defaultTl(mode, narrow);
     let lib = mode === 'basic' ? 'flyout' : foldLib ? 'none' : 'panel';
     let right = mode === 'pro' ? (foldRight ? 'none' : 'panel') : ask === 'side' ? 'claude' : 'none';
     if (focus) { lib = 'none'; if (right === 'panel') right = 'none'; }
     const controls = 'row'; // M165: chủ repo chốt 2026-11-18 nút phát luôn một dòng dưới khung (cột dọc khó hiểu với người dựng)
-    return { mode, narrow, pin, focus, foldLib, foldRight, askPos: ask, tl, lib, right, controls };
+    return { mode, narrow, pin, focus, foldLib, foldRight, autoFold, askPos: ask, tl, lib, right, controls };
   }
+
+  // M168: Chuyên nghiệp, cửa sổ < 1280 px → thư viện tự gấp (như phím [): 312 + 340 px hai cột để khung 16:9 còn 264×149 ở 1024.
+  // Mở tay (phím [, bấm nút thanh trái) nhớ ở narrowLib = 'open', không tự gấp lại cho tới khi bề rộng qua ngưỡng (76_layout.js xoá).
+  // Trạng thái gấp của cửa sổ rộng (foldLib, avs.col.lib) giữ riêng, không bị lần tự gấp ghi đè.
+  const autoFoldLib = (mode, width) => normMode(mode) === 'pro' && isNarrow(width);
+  // Gấp / mở thư viện (v = muốn gấp) ghi vào khoá nào: cửa sổ hẹp → col.libNarrow, rộng → col.lib (M165). Giá trị null = xoá khoá.
+  const foldStore = (autoFold, v) => (autoFold ? { key: 'col.libNarrow', val: v ? null : 'open' } : { key: 'col.lib', val: v ? 'off' : null });
 
   // M165, phím [ / ]: đảo trạng thái gấp của một cột. st = { foldLib, foldRight }; which 'lib' | 'right'.
   const toggleFold = (st, which) => (which === 'lib' ? { ...st, foldLib: !st?.foldLib } : which === 'right' ? { ...st, foldRight: !st?.foldRight } : { ...st });
@@ -90,7 +99,7 @@
 
   const T = { SIDE_RATIO, NARROW, TLS, PINS, MODES, TL_H, FULL, PIN_LABEL, TL_LABEL, normMode, normPin, normTl, isNarrow,
     defaultTl, tlKey, askPos, compute, toggleFold, foldKey, flyoutClick, tlHeight, clampFull, maxFull, snap, cycle,
-    CREATE_ASPECTS, createAspect, frameOf };
+    CREATE_ASPECTS, createAspect, frameOf, autoFoldLib, foldStore };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.LayoutCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

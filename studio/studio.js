@@ -1836,7 +1836,8 @@ function loadTabUI() {
   if (!ui) return;
   // hoàn tác chỉ dùng lại khi timeline trên đĩa vẫn là bản tab này đã thấy (không bị tab / cửa sổ khác sửa)
   if (ui.saved === META.saved && Array.isArray(ui.undo)) { undoStack = ui.undo.filter(x => typeof x === 'string'); redoStack = (ui.redo || []).filter(x => typeof x === 'string'); }
-  if (ui.panel) document.querySelector(`#rail [data-p="${CSS.escape(ui.panel)}"]`)?.click();
+  // S23 M168: mở lại panel của tab không phải lần người dùng mở thư viện (78_cols.js bỏ qua, thư viện gấp / tự gấp giữ nguyên)
+  if (ui.panel) { Studio._restoring = true; try { document.querySelector(`#rail [data-p="${CSS.escape(ui.panel)}"]`)?.click(); } finally { Studio._restoring = false; } }
   if (+ui.pps > 0) setZoom(+ui.pps);
   if (ui.sel) { const c = compByCid(ui.sel); if (c) select(c); }
   if (+ui.t >= 0) setTime(Math.min(+ui.t, TL.duration || 0));

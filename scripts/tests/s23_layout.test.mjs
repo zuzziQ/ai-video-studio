@@ -20,12 +20,12 @@ test('bảng khổ × chế độ × bề rộng (C29, C31)', () => {
     ['9:16', 'pro', 1440, 'side', 'full', 'panel', 'panel', 'row'],
     ['9:16', 'basic', 1280, 'side', 'strip', 'flyout', 'claude', 'row'],
     ['9:16', 'basic', 1279, 'bottom', 'compact', 'flyout', 'none', 'row'],
-    ['9:16', 'pro', 1024, 'bottom', 'compact', 'panel', 'panel', 'row'],
+    ['9:16', 'pro', 1024, 'bottom', 'compact', 'none', 'panel', 'row'], // M168: cửa sổ hẹp tự gấp thư viện
     ['4:5', 'basic', 1600, 'bottom', 'strip', 'flyout', 'none', 'row'], // 0,8 không < 0,8
     ['1:1', 'pro', 1600, 'bottom', 'full', 'panel', 'panel', 'row'],
     ['16:9', 'basic', 1920, 'bottom', 'strip', 'flyout', 'none', 'row'],
     ['16:9', 'pro', 1920, 'bottom', 'full', 'panel', 'panel', 'row'],
-    ['16:9', 'pro', 1024, 'bottom', 'compact', 'panel', 'panel', 'row'],
+    ['16:9', 'pro', 1024, 'bottom', 'compact', 'none', 'panel', 'row'],
   ];
   for (const [k, mode, width, ask, tl, lib, right, controls] of rows) {
     const r = L.compute({ ratio: RATIO[k], mode, width });
