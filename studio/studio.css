@@ -337,14 +337,10 @@ body[data-focus] #lib, body[data-focus] #right { display: none; }
    Giao diện cột đầy đủ là M163. Thanh ẩn (bước Cài đặt) thì không chừa cột. */
 body[data-ask="side"] #center:has(> #askbar:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 22vw, 340px); grid-template-rows: auto minmax(0, 1fr) auto auto; }
 body[data-ask="side"] #center:has(> #askbar:not([hidden])) > * { grid-column: 1; min-width: 0; }
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #avs-notices { grid-row: 1; }
 body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #stagewrap { grid-row: 2; }
 body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #rvbar { grid-row: 3; }
 body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #controls { grid-row: 4; }
 body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #askbar { grid-column: 2; grid-row: 1 / -1; border-top: 0; border-left: 1px solid rgb(var(--color-line)); justify-content: flex-start; overflow-y: auto; }
-/* S23 M161: dải báo Studio.notice ở vùng riêng đầu #center: chiếm chỗ (khung co lại) thay vì đè đỉnh khung ở 1024 px (PR 190) */
-#center > #avs-notices { position: static; transform: none; z-index: auto; width: 100%; max-width: 640px; margin: var(--space-2) auto 0; padding: 0 var(--space-3); flex: none; }
-#center > #avs-notices:empty { display: none; }
 #stagewrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
   background: radial-gradient(ellipse at 50% 45%, rgb(var(--stage-glow)) 0%, rgb(var(--stage-bg)) 70%); }
 #stagebox { position: relative; border-radius: var(--radius-xs); overflow: hidden; box-shadow: 0 0 0 1px rgb(var(--color-white) / .06), var(--shadow-overlay); background: rgb(var(--stage-frame)); }

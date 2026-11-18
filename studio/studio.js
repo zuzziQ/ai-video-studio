@@ -1252,7 +1252,9 @@ function setZoom(v) { PPS = clamp(v, 8, 300); $('#zoom').value = PPS; renderTime
 $('#zoom').addEventListener('input', e => setZoom(+e.target.value));
 $('#zin').addEventListener('click', () => setZoom(PPS * 1.3));
 $('#zout').addEventListener('click', () => setZoom(PPS / 1.3));
-function zoomFit() { setZoom(($('#tlscroll').clientWidth - 60) / Math.max(1, TL.duration)); $('#tlscroll').scrollLeft = 0; }
+// S23 M161: timeline đang ẩn (mức dải tua) thì bề rộng = 0 → không đặt PPS nhỏ nhất; 76_layout.js gọi lại khi timeline hiện
+let ZFIT = false;
+function zoomFit() { const w = $('#tlscroll').clientWidth; if (!w) { ZFIT = true; return; } ZFIT = false; setZoom((w - 60) / Math.max(1, TL.duration)); $('#tlscroll').scrollLeft = 0; }
 $('#zfit').addEventListener('click', zoomFit);
 $('#tsnap').addEventListener('click', () => { SNAP = !SNAP; $('#tsnap').classList.toggle('on', SNAP); toast(SNAP ? 'Bật nam châm' : 'Tắt nam châm'); });
 $('#tsplit').addEventListener('click', splitAtPlayhead);
@@ -1770,7 +1772,7 @@ document.addEventListener('click', e => { const t = e.target.closest?.('.tip'); 
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get PPS() { return PPS; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
-  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit,
+  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
