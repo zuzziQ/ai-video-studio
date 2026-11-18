@@ -5,6 +5,8 @@
 //   Inspector phụ đề: "Tự nhấn từ khoá", "Ngắt dòng hợp nghĩa" → xem trước số thay đổi → Nhận / Bỏ (chỉ đổi hl/br, không đổi chữ và thời gian).
 //   Panel Mẫu: hàng "Gợi ý cho video này" (3 mẫu có thật + lý do); lỗi hoặc thiếu AI thì ẩn hàng, gallery như cũ.
 //   Studio.coverSheet(): lưới 9 khung hình thu nhỏ + thời điểm cho trợ lý ảnh bìa (dùng trong 52_publish.js).
+// S22 M152: kết quả xem qua Studio.review (74_review.js): Viết lại = 3 biến thể (bấm dòng / phím 1–3 xem trên khung, Nhận mới áp);
+//   Tự nhấn từ khoá / Ngắt dòng = danh sách dòng phụ đề có mốc thời gian (bấm dòng nhảy tới và phát, Nhận từng dòng hoặc tất cả).
 'use strict';
 (() => {
   const S = window.Studio, { $, esc } = S;
@@ -33,7 +35,9 @@
   .ais-tgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
   .ais-why { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); line-height: 1.4; margin-top: var(--space-050); overflow-wrap: anywhere;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .ais-tsug .tpl .use { padding: var(--space-1); font-size: var(--text-2xs); }`;
+  .ais-tsug .tpl .use { padding: var(--space-1); font-size: var(--text-2xs); }
+  .ais-out .as-row[data-id] { cursor: pointer; border-radius: var(--radius-control); }
+  .ais-out .as-row.rv-on { background: rgb(var(--color-accent-soft) / .22); box-shadow: inset 2px 0 0 rgb(var(--color-accent)); }`;
   document.head.appendChild(css);
 
   // ---------- ngữ cảnh chung ----------
@@ -82,12 +86,34 @@
         return { mode, text: o.text || '', context: speechAround(c ? c.t0 : S.T), brand: brand(), purpose: await purpose(), max };
       },
       onAccept: f => {
+        if (S.review?.owner === 'rewrite') S.review.close('accepted'); // "Dùng" thẳng ở dòng: đóng bản xem trước rồi áp
         if (typeof touch === 'function') touch(o, 'text'); else S.pushUndo(); // eslint-disable-line no-undef -- studio.js (pushUndo + _orig)
         o.text = f.value; S.changed(true);
       },
     });
     RW.set(o, { mode, panel: p });
     return p;
+  }
+  // S22 M152: 3 câu viết lại thành 3 biến thể của Studio.review — xem trên khung, Nhận mới áp (một bước ⌘Z)
+  const rwFields = p => p.state.res?.fields || [];
+  function markRows(out, p) {
+    const pk = S.review?.owner === 'rewrite' ? S.review.picked : -1, fs = rwFields(p);
+    out.querySelectorAll('.as-row[data-id]').forEach(r => { const on = fs[pk]?.id === r.dataset.id; r.classList.toggle('rv-on', on); r.setAttribute('aria-current', String(on)); });
+  }
+  function reviewRewrite(o, p, out) {
+    const fs = rwFields(p), c = S.compOf(o), RV = S.review;
+    if (!RV || p.state.state !== 'done' || !fs.length || !c) return;
+    const cid = o.cid;
+    RV.open({ owner: 'rewrite', title: 'Viết lại · ' + (MODES.find(m => m[0] === RW.get(o)?.mode)?.[1] || ''), mode: 'variants',
+      items: fs.map(f => ({ label: String(f.display || f.value).slice(0, 48), sub: String(f.value), t0: c.t0, t1: c.t1,
+        apply(tl, cap, commit) { const at = window.ReviewCore.locate(tl, cap, cid); if (!at?.obj) return false; if (commit) window.ReviewCore.markOrig(at.obj); at.obj.text = f.value; return true; } })),
+      onPick: () => markRows(out.isConnected ? out : $('#insp .ais-out > div') || out, p),
+      onAccept: (its, n) => {
+        const k = its[0]?.i; for (const g of fs) p.state.mark[g.id] = g === fs[k] ? 'done' : 'skip';
+        const el = $('#insp .ais-out > div'); if (el) p.mount(el);
+        S.toast(n ? 'Đã thay chữ · ⌘Z để hoàn tác' : 'Chữ không còn trên timeline');
+      } });
+    markRows(out, p);
   }
   function injectRewrite() {
     const c = S.sel;
@@ -102,15 +128,23 @@
     const menu = wrap.querySelector('.ais-menu'), btn = wrap.querySelector('[data-rw=menu]'), out = wrap.querySelector('.ais-out > div');
     const show = on => { menu.hidden = !on; btn.setAttribute('aria-expanded', String(on)); };
     wrap.addEventListener('click', e => {
+      const row = e.target.closest('.ais-out .as-row[data-id]');
+      if (row && !e.target.closest('button')) { // bấm một dòng = xem biến thể đó trên khung (C27)
+        const cur = RW.get(o), i = cur ? rwFields(cur.panel).findIndex(f => f.id === row.dataset.id) : -1;
+        if (i < 0 || row.classList.contains('done') || row.classList.contains('skip')) return;
+        if (S.review?.owner !== 'rewrite') reviewRewrite(o, cur.panel, out);
+        return S.review?.pick(i);
+      }
       const b = e.target.closest('[data-rw]'); if (!b) return;
       e.stopPropagation();
       if (b.dataset.rw === 'menu') return show(menu.hidden);
       show(false);
       if (!String(o.text || '').trim() && b.dataset.rw !== 'write') return S.toast('Chữ đang trống: dùng Viết giúp');
-      const p = rwPanel(o, b.dataset.rw); p.mount(out); p.start();
+      if (S.review?.owner === 'rewrite') S.review.close('replaced');
+      const p = rwPanel(o, b.dataset.rw); p.mount(out); p.start().then(() => reviewRewrite(o, p, out));
     });
     const cur = RW.get(o);
-    if (cur) cur.panel.mount(out); // inspector vẽ lại (sau khi Dùng) → giữ đề xuất đang xem
+    if (cur) { cur.panel.mount(out); markRows(out, cur.panel); } // inspector vẽ lại (sau khi Dùng) → giữ đề xuất đang xem
   }
 
   // ---------- inspector phụ đề: Tự nhấn từ khoá / Ngắt dòng hợp nghĩa ----------
@@ -120,6 +154,7 @@
   async function runCaps(mode) {
     if (CS.state === 'running') return;
     if (!(S.CAP || []).length) return S.toast('Chưa có phụ đề');
+    if (capsMine()) S.review.close('replaced');
     Object.assign(CS, { state: 'running', mode, step: 'Đang gửi…', progress: 0, error: '', res: null, sig: S.CAP.map(sigOf) }); paintCaps();
     try {
       const lines = S.CAP.map(c => ({ words: (c.words || []).map(w => w.w), hl: (c.words || []).flatMap((w, j) => (w.hl ? [j] : [])), br: (c.words || []).flatMap((w, j) => (w.br ? [j] : [])) }));
@@ -127,8 +162,26 @@
       CS.state = 'done';
     } catch (e) { CS.state = e.state === 'cancelled' ? 'idle' : 'error'; CS.error = e.message; }
     paintCaps();
+    if (CS.state === 'done') reviewCaps();
+  }
+  // S22 M152: mỗi dòng phụ đề đổi = một mục có mốc thời gian trong Studio.review (Nhận từng dòng hoặc tất cả, mỗi lần một bước ⌘Z)
+  const capsMine = () => S.review?.owner === 'caps';
+  function setCapWords(c, mode, idx) { const set = new Set(idx); c.words.forEach((w, j) => { if (set.has(j)) w[mode] = true; else delete w[mode]; }); }
+  function reviewCaps() {
+    const r = CS.res, RV = S.review; if (!RV || !r?.fields?.length) return;
+    const sig = CS.sig, mode = r.mode;
+    let n = 0, skip = 0;
+    RV.open({ owner: 'caps', title: CAPM[mode][0], mode: 'list',
+      items: r.fields.map(f => { const ci = f.value.c, c = S.CAP[ci] || {}; return { label: String(f.display || ''), sub: f.current ? 'Hiện tại: ' + f.current : '', t0: c.t0 || 0, t1: c.t1 || c.t0 || 0,
+        apply(tl, cap) { const x = cap[ci]; if (!x || sigOf(x) !== sig[ci]) return false; setCapWords(x, mode, f.value[mode]); return true; } }; }),
+      onAccept: (its, k) => { n += k; skip += its.length - k; },
+      onClose: reason => {
+        if (n || skip) S.toast(`Đã áp ${CAPM[mode][2]} cho ${n} dòng phụ đề` + (skip ? ` · bỏ ${skip} dòng đã sửa sau khi gửi` : '') + ' · ⌘Z để hoàn tác');
+        if (CS.res === r) { Object.assign(CS, { state: 'idle', res: null }); paintCaps(); } // một khung xem lại một lúc: đóng = xong lượt này
+      } });
   }
   function acceptCaps() {
+    if (capsMine()) return S.review.accept();
     const r = CS.res; if (!r) return;
     S.pushUndo();
     let n = 0, skip = 0;
@@ -171,7 +224,7 @@
       const k = b.dataset.capai;
       if (k === 'stop') return S.assistCancel();
       if (k === 'ok') return acceptCaps();
-      if (k === 'no') { Object.assign(CS, { state: 'idle', res: null }); return paintCaps(); }
+      if (k === 'no') { if (capsMine()) S.review.close('rejected'); Object.assign(CS, { state: 'idle', res: null }); return paintCaps(); }
       runCaps(k);
     });
     paintCaps();

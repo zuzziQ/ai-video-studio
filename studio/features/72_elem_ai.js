@@ -1,7 +1,9 @@
 // S21 M149: mục "Hỏi Claude" trong Thuộc tính (đứng sau mục đầu) cho element đang chọn — ô nhập + gợi ý nhanh, bản vá có kiểm
-// (route studio/routes/72_elem_ai.mjs, lõi scripts/elem_ai.mjs), xem trước khác biệt cũ → mới và áp tạm lên preview; Nhận = một bước
-// ⌘Z, Bỏ = về như cũ. "3 biến thể": một lượt mô hình trả 3 bản vá (kiểu chữ / hoạt ảnh / vị trí), ảnh nhỏ dựng bằng engine headless
-// (POST /api/elem/shots), bấm một ảnh = áp (một bước ⌘Z). Chỉ gọi mô hình khi người dùng bấm (C23), Huỷ được.
+// (route studio/routes/72_elem_ai.mjs, lõi scripts/elem_ai.mjs), khác biệt cũ → mới; Nhận = một bước ⌘Z, Bỏ = về như cũ.
+// "3 biến thể": một lượt mô hình trả 3 bản vá (kiểu chữ / hoạt ảnh / vị trí), ảnh dựng bằng engine headless (POST /api/elem/shots).
+// S22 M152: kết quả xem qua Studio.review (74_review.js): dời playhead tới element + phát lặp, trước / sau, chia đôi, phóng to;
+// bản xem trước vẽ ở khung riêng, không ghi vào timeline. C27: bấm biến thể (hoặc phím 1/2/3) chỉ xem trên khung, Nhận mới áp.
+// Chỉ gọi mô hình khi người dùng bấm (C23), Huỷ được.
 // "Gợi ý núm" (M148): element có trường núm (window.Knobs.allowed) → mô hình đề xuất 2–3 núm, server kiểm bằng KnobsCore.validateMap,
 // ở đây kiểm lại bằng Knobs.validateMap; "Thêm núm" lưu vào obj.knob_map (một bước ⌘Z), mục Núm vẽ thêm các núm đó.
 (() => {
@@ -10,7 +12,9 @@
   const QUICK = ['nổi hơn', 'hợp thương hiệu', 'gọn hơn'];
   const FOCUS_IC = { style: 'ti-typography', anim: 'ti-sparkles', pos: 'ti-arrows-move' };
   // st: idle | running | edit (bản vá đang xem trước) | variants | error. Một trạng thái cho cả trang, gắn với cid của element.
-  const ST = { cid: null, st: 'idle', ask: '', step: '', res: null, err: null, errKind: '', pv: null, shots: null, shotErr: '', run: 0 };
+  const ST = { cid: null, st: 'idle', ask: '', step: '', res: null, err: null, errKind: '', shots: null, shotErr: '', run: 0 };
+  const OWNER = 'elem_ai';
+  const RV = () => S.review, mine = () => !!RV()?.active && RV().owner === OWNER;
   const css = document.createElement('style');
   css.textContent = `
 #insp .eai { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -27,14 +31,17 @@
 #insp .eai-why, #insp .eai-warn { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
 #insp .eai-warn { color: rgb(var(--color-warning-text)); }
 #insp .eai-tag { font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); display: flex; align-items: center; gap: var(--space-1); }
-#insp .eai-vars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
-#insp .eai-var { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); padding: var(--space-1); white-space: normal; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-raised)); text-align: left; min-width: 0; }
-#insp .eai-var:hover, #insp .eai-var:focus-visible { border-color: rgb(var(--color-accent)); }
-#insp .eai-var .th { width: 100%; aspect-ratio: 9 / 16; border-radius: var(--radius-control); overflow: hidden; background: rgb(var(--color-surface-muted)); display: flex; align-items: center; justify-content: center; color: rgb(var(--color-fg-subtle)); }
-#insp .eai-vars.wide .eai-var .th { aspect-ratio: 16 / 9; }
+#insp .eai-vars { display: flex; flex-direction: column; gap: var(--space-2); }
+#insp .eai-var { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: start; gap: var(--space-1) var(--space-2); padding: var(--space-1); white-space: normal; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-raised)); text-align: left; min-width: 0; }
+#insp .eai-vars.wide .eai-var { grid-template-columns: minmax(0, 1fr); }
+#insp .eai-var:hover, #insp .eai-var:focus-visible { border-color: rgb(var(--color-line-hover)); }
+#insp .eai-var[aria-pressed="true"] { border-color: rgb(var(--color-accent)); background: rgb(var(--color-accent-soft) / .22); }
+#insp .eai-var .th { grid-row: span 3; width: 100%; aspect-ratio: 9 / 16; border-radius: var(--radius-control); overflow: hidden; background: rgb(var(--color-surface-muted)); display: flex; align-items: center; justify-content: center; color: rgb(var(--color-fg-subtle)); }
+#insp .eai-vars.wide .eai-var .th { grid-row: auto; aspect-ratio: 16 / 9; }
 #insp .eai-var .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
-#insp .eai-var b { font-size: var(--text-2xs); color: rgb(var(--color-fg)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#insp .eai-var small { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); line-height: 1.3; overflow-wrap: anywhere; }`;
+#insp .eai-var b { font-size: var(--text-xs); color: rgb(var(--color-fg)); display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+#insp .eai-var b kbd { font-size: var(--text-2xs); padding: 0 var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-line-strong)); color: rgb(var(--color-fg-muted)); font-weight: 400; }
+#insp .eai-var small { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); line-height: 1.35; overflow-wrap: anywhere; }`;
   document.head.appendChild(css);
 
   // ---------- đọc / áp trường trừu tượng (cùng hàm của inspector) ----------
@@ -63,39 +70,28 @@
     for (const k of ['text', 'font', 'weight', 'style', 'anim', 'color', 'bg']) if (patch[k] != null) o[k] = patch[k];
     if (patch.italic != null) o.italic = patch.italic;
   }
-  // Tìm lại element trong một bản sao timeline theo cid (s3, s3l1, s3n0, s3b, c5) — để dựng ảnh biến thể mà không đụng preview.
-  function locate(tl, cap, cid) {
-    let m = /^c(\d+)$/.exec(cid); if (m) return { obj: cap[+m[1]] };
-    m = /^s(\d+)(?:(l|n)(\d+)|(b))?$/.exec(cid); if (!m) return null;
-    const s = tl.scenes?.[+m[1]]; if (!s) return null;
-    if (m[4]) return { obj: s.badge, scene: s };
-    if (m[2]) return { obj: (m[2] === 'l' ? s.lines : s.nodes)?.[+m[3]], scene: s };
-    return { obj: s, scene: s };
-  }
+  // Tìm lại element trong một bản sao timeline theo cid (s3, s3l1, s3n0, s3b, c5): lõi chung 74_review.core.js
+  const locate = (tl, cap, cid) => window.ReviewCore.locate(tl, cap, cid);
 
-  // ---------- trạng thái xem trước ----------
-  const snap = () => ({ tl: JSON.stringify(S.TL), cap: JSON.stringify(S.CAP) });
-  let reverting = false;
-  function restore(sn, cid) {
-    reverting = true;
-    try { S.TL = JSON.parse(sn.tl); S.CAP = JSON.parse(sn.cap); S.changed(true); const c = cid && S.compByCid(cid); if (c) S.select(c); }
-    finally { reverting = false; }
+  // ---------- xem lại qua Studio.review (S22 M152) ----------
+  // Một mục của khung xem lại: áp bản vá lên bản timeline nào cũng được (bản sao để xem, timeline thật khi Nhận)
+  function reviewItem(c, cid, patch, label, sub) {
+    return { label, sub, t0: c.t0, t1: c.t1,
+      apply(tl, cap, commit) {
+        const at = locate(tl, cap, cid); if (!at?.obj) return false;
+        if (commit) window.ReviewCore.markOrig(at.obj); // như touch(): lần sửa đầu giữ bản thiết kế
+        applyPatch({ ...(S.compByCid(cid) || c), obj: at.obj, scene: at.scene }, patch);
+        return true;
+      } };
   }
-  function startPreview(patch) {
-    const c = S.sel; if (!c) return;
-    if (ST.pv) restore(ST.pv.sn, ST.cid);
-    const cur = S.compByCid(ST.cid) || c;
-    ST.pv = { sn: snap(), patch };
-    applyPatch(cur, patch); S.changed(true);
+  function openReview(mode, items) {
+    const rv = RV(); if (!rv) return;
+    rv.open({ owner: OWNER, title: mode === 'variants' ? 'Hỏi Claude · 3 biến thể' : 'Hỏi Claude', mode, items,
+      onPick: () => paint(),
+      onAccept: (its, n) => { S.toast(n ? `Đã áp “${its[0].label}” · ⌘Z để hoàn tác` : 'Element không còn trên timeline'); reset(); paint(); },
+      onClose: reason => { if (reason !== 'accepted' && (ST.st === 'edit' || ST.st === 'variants')) { reset(); paint(); } } });
   }
-  function dropPreview(cid = ST.cid) { const pv = ST.pv; ST.pv = null; if (pv) restore(pv.sn, cid); }
-  // Nhận: về đúng trạng thái trước khi xem, chụp một bước hoàn tác (touch), rồi áp bản vá
-  function commit(patch, msg) {
-    if (ST.pv) dropPreview();
-    const c = S.compByCid(ST.cid); if (!c) return S.toast('Element không còn trên timeline');
-    S.touch(c.obj); applyPatch(c, patch); S.changed(true);
-    S.toast(msg + ' · ⌘Z để hoàn tác');
-  }
+  const closeMine = () => { if (mine()) RV().close('replaced'); };
   // Thêm núm gợi ý vào element: kiểm lại lần cuối, gộp theo id, tối đa 4 núm của AI; một bước hoàn tác
   function addKnobs(list) {
     const c = S.compByCid(ST.cid); if (!c || !window.Knobs) return;
@@ -104,12 +100,6 @@
     S.touch(o); o.knob_map = [...keep, ...v.knobs].slice(-4); S.changed(true);
     S.toast(`Đã thêm ${v.knobs.length} núm vào mục Núm · ⌘Z để hoàn tác`);
   }
-  // Chọn element khác / bỏ chọn khi đang xem trước → bỏ bản xem trước (giữ lựa chọn mới)
-  S._ov.push(() => {
-    if (!ST.pv || reverting) return;
-    const now = S.sel?.obj?.cid || null;
-    if (now !== ST.cid) setTimeout(() => { if (ST.pv && (S.sel?.obj?.cid || null) !== ST.cid) { dropPreview(now); reset(); } }, 0);
-  });
   function reset() { Object.assign(ST, { st: 'idle', res: null, err: null, errKind: '', step: '', shots: null, shotErr: '' }); }
 
   // ---------- gọi route ----------
@@ -120,7 +110,7 @@
     allowed: knobAllowed(c), existing: window.Knobs.tableFor(c).map(k => ({ id: k.id, label: k.label })), ask: ST.ask });
   async function go(mode) {
     const c = S.sel; if (!c || ST.st === 'running') return;
-    if (ST.pv) dropPreview();
+    closeMine();
     if (mode === 'edit' && !ST.ask.trim()) { ST.st = 'error'; ST.err = 'Nhập điều muốn sửa, hoặc bấm một gợi ý nhanh.'; ST.errKind = 'input'; return paint(); }
     Object.assign(ST, { cid: c.obj.cid, st: 'running', step: 'Đang gửi…', res: null, err: null, errKind: '', shots: null, shotErr: '' });
     paint();
@@ -139,8 +129,17 @@
       if (!v.knobs.length) { ST.st = 'error'; ST.err = 'Núm gợi ý không hợp lệ: ' + (v.errors || []).slice(0, 2).join('; '); return paint(); }
       ST.res = { ...r, knobs: v.knobs }; ST.st = 'knobs'; return paint();
     }
-    if (r.mode === 'variants' || r.variants) { ST.st = 'variants'; paint(); shots(run); }
-    else { ST.st = 'edit'; if (S.sel?.obj?.cid === ST.cid) startPreview(r.patch); paint(); }
+    const c = S.compByCid(ST.cid);
+    if (!c) { ST.st = 'error'; ST.err = 'Element không còn trên timeline'; return paint(); }
+    if (r.mode === 'variants' || r.variants) {
+      ST.st = 'variants';
+      openReview('variants', r.variants.map(v => reviewItem(c, ST.cid, v.patch, v.label, v.diff.map(d => `${d.label}: ${d.from} → ${d.to}`).join(' · '))));
+      paint(); shots(run);
+    } else {
+      ST.st = 'edit';
+      openReview('list', [reviewItem(c, ST.cid, r.patch, String(c.label || 'Element').slice(0, 40), r.diff.map(d => `${d.label}: ${d.to}`).join(' · '))]);
+      paint();
+    }
   }
   async function cancel() { await S.api('/api/elem/ai/cancel', {}).catch(() => {}); ST.run++; reset(); paint(); }
   async function shots(run) {
@@ -171,17 +170,17 @@
     }
     const r = ST.res; if (!r) return '';
     const by = `<div class="eai-why">${esc(r.provider === 'ollama' ? 'Ollama' : 'Claude')} · ${Math.round((r.ms || 0) / 100) / 10} s</div>`;
-    if (ST.st === 'edit') return `<div class="eai-tag"><i class="ti ti-eye"></i> Đang xem trước trên khung</div>${diffHtml(r.diff)}${r.why ? `<div class="eai-why">${esc(r.why)}</div>` : ''}${warnHtml(r.warnings)}
+    if (ST.st === 'edit') return `<div class="eai-tag"><i class="ti ti-eye"></i> ${mine() ? 'Đang phát lặp trên khung · giữ \\ để xem bản cũ' : 'Đã đóng xem trước'}</div>${diffHtml(r.diff)}${r.why ? `<div class="eai-why">${esc(r.why)}</div>` : ''}${warnHtml(r.warnings)}
       <div class="acts"><button class="primary" data-eai="accept"><i class="ti ti-check"></i> Nhận</button><button data-eai="reject"><i class="ti ti-x"></i> Bỏ</button></div>${by}`;
     if (ST.st === 'knobs') return `<div class="eai-diff">${r.knobs.map(k => `<div class="d"><span>${esc(k.label)}</span><div>${esc(k.fields.map(f => f.f.replace(/^vars\./, '')).join(' · '))}</div></div>`).join('')}</div>${warnHtml(r.warnings)}
       <div class="acts"><button class="primary" data-eai="addknobs"><i class="ti ti-adjustments-horizontal"></i> Thêm ${r.knobs.length} núm</button><button data-eai="reject"><i class="ti ti-x"></i> Bỏ</button></div>${by}`;
     if (ST.st === 'variants') {
-      const wide = S.DW > S.DH;
-      return `<div class="eai-vars ${wide ? 'wide' : ''}">${r.variants.map((v, i) => {
+      const wide = S.DW > S.DH, pk = mine() ? RV().picked : -1;
+      return `<div class="eai-vars ${wide ? 'wide' : ''}" role="radiogroup" aria-label="Biến thể">${r.variants.map((v, i) => {
         const img = ST.shots?.[i], th = img ? `<img src="${img}" alt="">` : ST.shots ? `<i class="ti ${FOCUS_IC[v.focus] || 'ti-photo'}"></i>` : '<i class="ti ti-loader-2"></i>';
-        return `<button class="eai-var" data-eaivar="${i}" title="${esc(v.diff.map(d => `${d.label}: ${d.from} → ${d.to}`).join('\n') + (v.why ? '\n' + v.why : ''))}"><span class="th">${th}</span><b>${esc(v.label)}</b><small>${esc(v.diff.map(d => d.label).join(', '))}</small></button>`;
-      }).join('')}</div><div class="eai-why">Bấm một phương án để áp (⌘Z để hoàn tác).</div>${ST.shotErr ? `<div class="eai-warn">${esc(ST.shotErr)}</div>` : ''}${warnHtml(r.warnings)}
-      <div class="acts"><button data-eai="reject"><i class="ti ti-x"></i> Đóng</button></div>${by}`;
+        return `<button class="eai-var" role="radio" data-eaivar="${i}" aria-checked="${pk === i}" aria-pressed="${pk === i}" title="${esc(v.why || v.label)}"><span class="th">${th}</span><b><kbd>${i + 1}</kbd>${esc(v.label)}</b><small>${esc(v.diff.map(d => `${d.label}: ${d.from} → ${d.to}`).join(' · '))}</small></button>`;
+      }).join('')}</div><div class="eai-why">Bấm hoặc phím 1 / 2 / 3 để xem trên khung; Nhận mới áp.</div>${ST.shotErr ? `<div class="eai-warn">${esc(ST.shotErr)}</div>` : ''}${warnHtml(r.warnings)}
+      <div class="acts">${pk >= 0 ? `<button class="primary" data-eai="accept"><i class="ti ti-check"></i> Nhận “${esc(r.variants[pk].label)}”</button>` : ''}<button data-eai="reject"><i class="ti ti-x"></i> ${pk >= 0 ? 'Bỏ' : 'Đóng'}</button></div>${by}`;
     }
     return '';
   }
@@ -200,7 +199,7 @@
 
   S.addInspectorTab(c => {
     if (!KINDS.has(c.kind) || (c.kind === 'scene' && c.obj.type === 'hf' && !S.getPos(c))) return null;
-    if (c.obj.cid !== ST.cid && !ST.pv && ST.st !== 'running') { ST.cid = c.obj.cid; reset(); }
+    if (c.obj.cid !== ST.cid && !mine() && ST.st !== 'running') { ST.cid = c.obj.cid; reset(); }
     return ['ai', 'Hỏi Claude', S.sect('', html())];
   });
 
@@ -211,15 +210,22 @@
     const q = e.target.closest('[data-eaiq]');
     if (q) { ST.ask = q.dataset.eaiq; return go('edit'); }
     const v = e.target.closest('[data-eaivar]');
-    if (v) { const it = ST.res?.variants?.[+v.dataset.eaivar]; if (it) { commit(it.patch, 'Đã áp “' + it.label + '”'); reset(); paint(); } return; }
+    if (v) { // C27: bấm biến thể = xem trên khung, chưa áp
+      const i = +v.dataset.eaivar, it = ST.res?.variants?.[i]; if (!it) return;
+      if (!mine()) { const c = S.compByCid(ST.cid); if (!c) return S.toast('Element không còn trên timeline'); openReview('variants', ST.res.variants.map(x => reviewItem(c, ST.cid, x.patch, x.label, ''))); }
+      RV().pick(i); return paint();
+    }
     const a = e.target.closest('[data-eai]')?.dataset.eai; if (!a) return;
     if (a === 'send') return go('edit');
     if (a === 'variants') return go('variants');
     if (a === 'knobs') return go('knobs');
     if (a === 'addknobs') { const ks = ST.res?.knobs || []; reset(); addKnobs(ks); return paint(); }
     if (a === 'cancel') return cancel();
-    if (a === 'accept') { const p = ST.pv?.patch || ST.res?.patch; reset(); if (p) commit(p, 'Đã nhận sửa của AI'); return paint(); }
-    if (a === 'reject') { dropPreview(); reset(); return paint(); }
+    if (a === 'accept') { // Nhận qua khung xem lại = một bước ⌘Z; khung đã đóng thì mở lại rồi Nhận
+      if (!mine() && ST.st === 'edit' && ST.res?.patch) { const c = S.compByCid(ST.cid); if (!c) return S.toast('Element không còn trên timeline'); openReview('list', [reviewItem(c, ST.cid, ST.res.patch, 'Sửa của AI', '')]); }
+      if (mine()) RV().accept(); return paint();
+    }
+    if (a === 'reject') { if (mine()) RV().close('rejected'); reset(); return paint(); }
     if (a === 'engines') { const b = document.getElementById('eng-btn'); if (b) b.click(); else S.toast('Mở menu ⋯ → Mô hình & giọng'); }
   });
 })();
