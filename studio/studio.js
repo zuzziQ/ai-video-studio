@@ -454,7 +454,7 @@ const rtKeys = () => (window.LevelCore ? LevelCore.rightTabs(uiLevel()) : window
 function rightTab() {
   const C = window.RightCore; if (!C) return sel ? 'props' : 'project';
   const has = !!sel, keys = rtKeys();
-  if (RT.tab == null) RT.tab = C.initialTab(rtStore.get(), has, keys);
+  if (RT.tab == null) RT.tab = C.initialTab(rtStore.get(), has, keys, !!RT.detail);
   else RT.tab = C.nextTab({ tab: RT.tab, had: RT.had, has, detail: !!RT.detail, keys });
   RT.had = has;
   return RT.tab;
@@ -463,19 +463,22 @@ function rightTabsBar(tab) {
   const bar = $('#rtabs'), C = window.RightCore; if (!bar) return;
   if (!C) { bar.hidden = true; return; }
   bar.hidden = false;
-  bar.innerHTML = C.tabsFor(rtKeys()).map(([k, l, ic]) => `<button role="tab" data-rtab="${k}" aria-selected="${k === tab}" class="${k === tab ? 'on' : ''}" tabindex="${k === tab ? 0 : -1}"><i class="ti ${ic}"></i><span>${l}</span>${k === 'props' && sel ? '<b class="dot" aria-hidden="true"></b>' : ''}</button>`).join('');
+  // M156: không chọn gì, không chi tiết thư viện → Thuộc tính không có gì để xem: tắt nút, chú thích cách mở
+  const off = k => k === 'props' && C.propsUsable && !C.propsUsable(!!sel, !!RT.detail);
+  bar.innerHTML = C.tabsFor(rtKeys()).map(([k, l, ic]) => `<button role="tab" data-rtab="${k}" aria-selected="${k === tab}" class="${k === tab ? 'on' : ''}" tabindex="${k === tab ? 0 : -1}"${off(k) ? ' disabled title="Bấm một element trên khung, timeline hoặc một mục thư viện để xem thuộc tính"' : ''}><i class="ti ${ic}"></i><span>${l}</span>${k === 'props' && sel ? '<b class="dot" aria-hidden="true"></b>' : ''}</button>`).join('');
 }
 function showRightTab(k) {
   if (!window.RightCore?.valid(k)) return;
   // C24: tab chỉ có ở Chuyên nghiệp (Lớp) mở từ nút / lệnh khi đang Cơ bản → đổi sang Chuyên nghiệp rồi mở, không mất tính năng
   if (!RightCore.valid(k, rtKeys())) { if (Studio.workflow?.setLevel) Studio.workflow.setLevel('pro'); else return; }
+  if (k === 'props' && RightCore.propsUsable && !RightCore.propsUsable(!!sel, !!RT.detail)) return; // M156: không có gì để xem
   RT.tab = k; RT.had = !!sel; rtStore.set(k); renderInspector();
 }
 $('#insp').addEventListener('click', e => { const b = e.target.closest('[data-rtgo]'); if (b) showRightTab(b.dataset.rtgo); });
 $('#rtabs')?.addEventListener('click', e => { const b = e.target.closest('[data-rtab]'); if (b) showRightTab(b.dataset.rtab); });
 $('#rtabs')?.addEventListener('keydown', e => { // ← → giữa các tab (role=tablist)
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  const K = rtKeys(), i = K.indexOf(RT.tab), n = K[(i + (e.key === 'ArrowRight' ? 1 : K.length - 1)) % K.length];
+  const K = rtKeys().filter(k => k !== 'props' || !RightCore.propsUsable || RightCore.propsUsable(!!sel, !!RT.detail)), i = K.indexOf(RT.tab), n = K[(i + (e.key === 'ArrowRight' ? 1 : K.length - 1)) % K.length];
   e.preventDefault(); e.stopPropagation(); showRightTab(n); $(`#rtabs [data-rtab="${n}"]`)?.focus();
 });
 // S21 M146: Thuộc tính dạng mục xếp chồng (lõi features/68_sections.core.js). Mỗi tab cũ ([key, label, html] của inspTabs và
@@ -517,9 +520,7 @@ function renderInspector() {
   if (tab === 'layers') { if (RT.ext.layers) RT.ext.layers(el); else el.innerHTML = '<div class="rempty">Chưa có bảng Lớp.</div>'; return; }
   if (!sel) {
     if (RT.detail) { el.innerHTML = RT.detail.html; RT.detail.mount?.(el); return; } // M147: chi tiết mục thư viện
-    el.innerHTML = `<div class="rempty"><i class="ti ti-pointer"></i><b>Chưa chọn element</b><p>Bấm một element trên khung hoặc một khối trên timeline để xem thuộc tính. Bấm một mục ở thư viện bên trái để xem chi tiết của mục đó.</p>
-      <div class="acts">${rtKeys().includes('layers') ? '<button data-rtgo="layers"><i class="ti ti-stack-2"></i> Lớp</button>' : ''}<button data-rtgo="project"><i class="ti ti-layout-dashboard"></i> Dự án</button></div></div>`;
-    return;
+    RT.tab = 'project'; rightTabsBar('project'); el.dataset.rtab = 'project'; el.innerHTML = projectPanel(); return; // M156: không còn ô "Chưa chọn element"
   }
   const c = sel, o = c.obj;
   const tag = { clip: 'Video', line: c.scene?.type === 'text' ? 'Chữ thêm' : 'Chữ graphic', cap: 'Phụ đề', node: 'Sơ đồ', badge: 'Huy hiệu', sfx: 'Âm thanh', music: 'Nhạc nền', scene: sceneName(o) }[c.kind] || c.tag || c.kind;

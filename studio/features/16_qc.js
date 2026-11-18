@@ -38,6 +38,11 @@
   .qc-c-ok { color: rgb(var(--color-success)); } .qc-c-warn { color: rgb(var(--color-warning)); } .qc-c-bad { color: rgb(var(--color-danger)); }
   .qc-sub { font-weight: 400; font-size: var(--text-xs); }
   .ai-row.qc-mt { margin-top: var(--space-3); } .ai-row.qc-mt2 { margin-top: var(--space-2); } .ai-row.qc-click { cursor: pointer; } .qc-nf { flex: none; }
+  /* M156 (K7): 20_ai.js nạp sau và đặt .ai-row > * { flex: 1 } — ô tick bị kéo dài, nằm xa chữ. Ô tick đứng sát chữ, chữ chiếm phần còn lại. */
+  .ai-row.qc-click { align-items: flex-start; } .ai-row.qc-click > input.qc-nf { flex: none; width: auto; margin: var(--space-050) 0 0; }
+  .ai-row.qc-click > span { flex: 1 1 auto; min-width: 0; line-height: 1.4; }
+  .qc-tip { display: inline-flex; vertical-align: -2px; margin-left: var(--space-1); color: rgb(var(--color-fg-subtle)); cursor: help; }
+  .qc-tip:hover, .qc-tip:focus-visible { color: rgb(var(--color-fg)); outline: none; }
   .qc-lbl { flex: none; width: 88px; } .qc-push { margin-left: auto; }
   p.qc-hint { margin: var(--space-050) 0 0 96px; font-size: var(--text-xs); }
   .qc-chk { cursor: pointer; margin-right: var(--space-3); }
@@ -233,17 +238,19 @@
   }
 
   // ---------- AI panel cards (inserted whenever 20_ai.js renders its "Dựng giúp" tab) ----------
+  // M156 (C26): một dòng hiện, phần dài vào (i) (Studio.tip của M155 nếu đã có).
+  const tip = h => (S.tip ? S.tip(h) : `<span class="qc-tip" tabindex="0" role="img" title="${esc(h)}" aria-label="${esc(h)}"><i class="ti ti-info-circle" aria-hidden="true"></i></span>`);
   function cards() {
     const q = last, v = va;
     return `<div class="ai-card" id="qcbox"><h4><i class="ti ti-shield-check"></i> Kiểm tra chất lượng</h4>
-      <p>Máy dò chữ tràn khung, graphic che mặt, phụ đề bị đè, đoạn trống > 6 giây, phụ đề quá dài, file thiếu, hook, độ to âm thanh; rồi Claude xem các khung hình để soi hook, chính tả, nhịp.</p>
+      <p>Soát bố cục, phụ đề, âm thanh rồi gợi ý sửa.${tip('Máy dò chữ tràn khung, graphic che mặt, phụ đề bị đè, đoạn trống > 6 giây, phụ đề quá dài, file thiếu, hook, độ to âm thanh; Claude xem khung hình để soi hook, chính tả, nhịp.')}</p>
       ${q ? `<div class="qc-score qc-tight">${ring(q.score)}<div class="qc-sum">${q.counts?.initial ?? q.issues.length} vấn đề${q.counts?.fixed ? `, đã sửa ${q.counts.fixed}` : ''}${q.counts?.new ? `, ${q.counts.new} phát sinh` : ''}<br><span class="muted">${new Date(q.created).toLocaleString('vi-VN')}</span></div></div>` : ''}
-      <label class="ai-row qc-click"><input type="checkbox" id="qcclaude" class="qc-nf" checked><span>Nhờ Claude xem khung hình <span class="muted">· chậm hơn</span></span></label>
+      <label class="ai-row qc-click"><input type="checkbox" id="qcclaude" class="qc-nf" checked><span>Nhờ Claude xem khung hình <span class="muted">· chậm hơn</span>${tip('Claude soi hook, chính tả, nhịp trên các khung hình. Bỏ tích thì chỉ chạy máy dò, nhanh hơn.')}</span></label>
       <div class="acts"><button class="mini primary" data-qc="fix" title="Kiểm tra rồi liệt kê gợi ý sửa; bạn chọn mục nào thì mới sửa mục đó"><i class="ti ti-wand"></i> Kiểm tra & gợi ý sửa</button>
       ${q ? '<button class="mini" data-qc="show"><i class="ti ti-list-details"></i> Kết quả</button>' : ''}</div>
-      <div class="ai-row qc-mt2"><span>Kiểm tra quảng cáo: <b>${S.TL.ads?.on ? 'bật' : 'tắt'}</b>${S.TL.ads?.on ? ` <span class="muted">· ${AD_IND[S.TL.ads.industry || '']}${S.TL.ads.product ? ` · hồ sơ ${esc(S.TL.ads.product)}` : ''}</span>` : ''}</span><button class="mini" data-qc="ads" class="qc-push"><i class="ti ti-speakerphone"></i> Thiết lập</button></div></div>
+      <div class="ai-row qc-mt2"><span>Kiểm tra quảng cáo: <b>${S.TL.ads?.on ? 'bật' : 'tắt'}</b>${S.TL.ads?.on ? ` <span class="muted">· ${AD_IND[S.TL.ads.industry || '']}${S.TL.ads.product ? ` · hồ sơ ${esc(S.TL.ads.product)}` : ''}</span>` : ''}</span><button class="mini qc-push" data-qc="ads"><i class="ti ti-speakerphone"></i> Thiết lập</button></div></div>
       <div class="ai-card" id="vabox"><h4><i class="ti ti-versions"></i> Nhiều phiên bản (A/B)</h4>
-      <p>Tạo 3 dự án anh em với hook mở đầu khác nhau (Claude viết) và/hoặc gói style khác nhau, để đăng thử xem bản nào giữ chân người xem tốt hơn.</p>
+      <p>3 bản khác hook hoặc style để đăng thử.${tip('Tạo 3 dự án anh em với hook mở đầu khác nhau (Claude viết) và/hoặc gói style khác nhau, để đăng thử xem bản nào giữ chân người xem tốt hơn.')}</p>
       <div class="ai-row"><select id="vakind"><option value="hook">Khác hook mở đầu</option><option value="style">Khác gói style</option><option value="both">Khác cả hai</option></select></div>
       <label class="ai-row qc-click"><input type="checkbox" id="vaexp" class="qc-nf"><span>Xuất luôn video 720p để so sánh</span></label>
       <div class="acts"><button class="mini primary" data-qc="variants"><i class="ti ti-copy"></i> Tạo 3 phiên bản</button>${v ? '<button class="mini" data-qc="compare"><i class="ti ti-columns-3"></i> So sánh</button>' : ''}</div></div>`;
@@ -270,7 +277,7 @@
     const box = $('#modalbox'); if (!box) return;
     if (box.querySelector('#xgo') && !box.querySelector('#qcx')) {
       const act = box.querySelector('.actions');
-      act?.insertAdjacentHTML('beforebegin', `<label class="qcx"><input type="checkbox" id="qcx" ${saved?.qc ? 'checked' : ''}><span><b>AI kiểm tra & sửa trước khi xuất</b><br><small>Tự sửa chữ tràn khung, graphic che mặt, đoạn trống, phụ đề dài…; Claude soát chính tả và hook. Hoàn tác được.</small></span></label>`);
+      act?.insertAdjacentHTML('beforebegin', `<label class="qcx"><input type="checkbox" id="qcx" ${saved?.qc ? 'checked' : ''}><span><b>AI kiểm tra & sửa trước khi xuất</b>${tip('Tự sửa chữ tràn khung, graphic che mặt, đoạn trống, phụ đề dài…; Claude soát chính tả và hook. Hoàn tác được.')}<br><small>Hoàn tác được.</small></span></label>`);
       if (saved && passQc) { // re-opened by us after the QC run: restore the form, then export
         const q = box.querySelector(`[name=xq][value="${saved.quality}"]`); if (q) q.checked = true;
         if ($('#xfrom')) $('#xfrom').value = saved.from; if ($('#xto')) $('#xto').value = saved.to;
