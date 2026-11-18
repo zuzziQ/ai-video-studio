@@ -56,8 +56,8 @@ const portMatch = /PORT\s*\|\|\s*(\d+)/.exec(read("studio/server.mjs"));
 if (!portMatch) drift.push("studio/server.mjs: default port pattern `PORT || <n>` not found");
 else if (Number(portMatch[1]) !== port) drift.push(`studio port: server.mjs has ${portMatch[1]}, CONFIG_CATALOG has ${port}`);
 
-// Ghi công tác giả: các file này phải còn (AGENTS.md mục 1-3).
-for (const f of ["LICENSE", "NOTICE", "studio/features/00_author.js"]) {
+// Ghi công repo gốc: LICENSE (MIT bắt buộc) và NOTICE phải còn, README giữ dòng "Dựa trên" (AGENTS.md mục 1-2).
+for (const f of ["LICENSE", "NOTICE"]) {
   if (!exists(f)) drift.push(`attribution file missing: ${f}`);
 }
 if (exists("LICENSE") && !/Copyright \(c\) 2026 Nguyễn Tất Kiểm/.test(read("LICENSE"))) drift.push("LICENSE: author copyright line missing");

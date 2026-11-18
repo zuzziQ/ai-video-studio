@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { ROOT } from '../check_studio_tokens.mjs';
 
 const read = rel => readFileSync(join(ROOT, rel), 'utf8');
-const SHELL = ['studio/studio.css', 'studio/studio.js', 'studio/library.js', 'studio/features/00_author.js', 'studio/theme/components.css'];
+const SHELL = ['studio/studio.css', 'studio/studio.js', 'studio/library.js', 'studio/theme/components.css'];
 const FEATURES = readdirSync(join(ROOT, 'studio/features')).filter(f => f.endsWith('.js')).map(f => 'studio/features/' + f);
 // Set inside the engine iframe (fonts the video uses), not by the Studio's CSS.
 const ENGINE = new Set(['--sans', '--disp']);

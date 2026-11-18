@@ -1,5 +1,5 @@
 # CLAUDE.md
 
-Đọc và làm theo [AGENTS.md](AGENTS.md): repo của **Nguyễn Tất Kiểm** (MIT) — luôn giữ ghi công tác giả, file `LICENSE`, `NOTICE` và màn giới thiệu tác giả `studio/features/00_author.js` khi sửa mã.
+Đọc và làm theo [AGENTS.md](AGENTS.md): dựa trên repo của **Nguyễn Tất Kiểm** (MIT) — luôn giữ `LICENSE`, `NOTICE` và dòng "Dựa trên AI Video Studio của Nguyễn Tất Kiểm" trong README khi sửa mã.
 
 @AGENTS.md

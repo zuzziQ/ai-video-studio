@@ -93,7 +93,7 @@ test('launcher không đối số không mở clip-mau; trình cài không tạo
   assert.match(read('studio.cmd'), /node "%HERE%studio\\server\.mjs" %\* --open/);
   assert.match(read('studio.sh'), /exec node "\$HERE\/studio\/server\.mjs" "\$@" --open/);
   // ghi công tác giả cuối trình cài vẫn còn
-  for (const f of ['install.ps1', 'install.sh']) assert.match(read(f), /Tác giả: Nguyễn Tất Kiểm/, f);
+  for (const f of ['install.ps1', 'install.sh']) assert.match(read(f), /Dựa trên AI Video Studio của Nguyễn Tất Kiểm/, f);
 });
 
 test('trang chủ: nút "Xem thử dự án mẫu", nhắc bước Chuẩn bị khi chưa có thương hiệu', () => {

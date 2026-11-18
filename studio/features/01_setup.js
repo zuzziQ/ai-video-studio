@@ -1,6 +1,6 @@
 // Kiểm tra máy (ROADMAP S15 M115, references/studio.md): Studio cần những thư viện nào, máy này có chưa, cài bằng lệnh gì.
 // - Dữ liệu: GET /api/setup/check (studio/routes/01_setup.mjs, danh sách lấy từ install.ps1 / scripts/setup.sh), có cache 5 phút.
-// - Tự hiện SAU màn tác giả (#author, 00_author.js) khi chưa xem lần nào, hoặc khi có mục bắt buộc mới thiếu so với lần bấm "Để sau";
+// - Tự hiện khi chưa xem lần nào, hoặc khi có mục bắt buộc mới thiếu so với lần bấm "Để sau";
 //   02_onboarding.js chờ Studio.setupGate (đóng màn này) rồi mới mở hướng dẫn người mới.
 // - Thiếu mục bắt buộc: chấm đỏ trên nút ⋯ + mục "Kiểm tra máy… (thiếu N)" tô đỏ trong menu (mở lại màn từ đó).
 // - Bấm một tính năng (POST tới API của nó) khi thư viện nó cần đang thiếu, hoặc lỗi trả về nhắc tới thư viện thiếu
@@ -284,12 +284,11 @@
     }
   }).observe(document.body, { childList: true, subtree: true });
 
-  // ---------- lần đầu: sau màn tác giả ----------
-  const afterAuthor = fn => { const t = setInterval(() => { if (!document.getElementById('author')) { clearInterval(t); fn(); } }, 250); };
+  // ---------- lần đầu ----------
   Studio.onReady(() => { if (R) syncChip(); }); // nút ⋯ và nhãn menu do 01_workflow.js tạo sau file này
   load(false).then(r => {
     const m = missingReq(r).map(i => i.id);
     const auto = !r.seen || m.some(id => !(r.later || []).includes(id));
-    if (auto) afterAuthor(() => open()); else gateDone();
+    if (auto) open(); else gateDone();
   }).catch(e => { console.error('setup', e); gateDone(); });
 })();

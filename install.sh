@@ -65,5 +65,5 @@ $([ -d "$HOME/Applications/AI Video Studio.app" ] && echo '  Hoặc bấm app "A
 
   Trình duyệt sẽ mở http://localhost:5186
 
-  Tác giả: Nguyễn Tất Kiểm · Tặng khoá học AI miễn phí: https://nguyentatkiem.com.vn/aiplusntk/
+  Dựa trên AI Video Studio của Nguyễn Tất Kiểm (MIT): https://github.com/nguyentatkiem/ai-video-studio
 EOF

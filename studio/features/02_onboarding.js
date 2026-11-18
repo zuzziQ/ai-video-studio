@@ -1,5 +1,5 @@
 // Lần đầu mở Studio (ROADMAP M83, references/studio.md): hướng dẫn 3 bước + trang chủ khi chưa mở dự án.
-// - Hướng dẫn mở SAU màn tác giả (00_author.js, overlay #author) khi $AVS_HOME/onboarding.json chưa done/skipped.
+// - Hướng dẫn mở SAU màn Kiểm tra máy (01_setup.js, Studio.setupGate) khi $AVS_HOME/onboarding.json chưa done/skipped.
 //   (a) Thương hiệu → /api/brands/save + /api/brands/logo (51_brands); (b) Kho → /api/kho/create|set|pick-folder|upload (12_workspace,
 //   S12/M97: Kho của thương hiệu vừa lưu, không cần dự án đang mở)
 //   + /api/products/save (53_products); (c) Mục đích → /api/onboarding (02_onboarding.mjs).
@@ -641,8 +641,8 @@
     let pid = null; try { pid = sessionStorage.getItem('avs-onb-tpl'); sessionStorage.removeItem('avs-onb-tpl'); } catch { /* không có sessionStorage */ }
     if (pid) openTemplates(pid === '-' ? '' : pid);
   });
-  // The author screen (#author, 00_author.js) always comes first, then the machine check (01_setup.js, S15 M115): wait for both.
-  const afterAuthor = fn => { const t = setInterval(() => { if (!document.getElementById('author')) { clearInterval(t); (Studio.setupGate || Promise.resolve()).then(fn); } }, 250); };
+  // The machine check (01_setup.js, S15 M115) comes first: wait for Studio.setupGate (set once 01_setup has loaded its state).
+  const afterSetup = fn => setTimeout(() => (Studio.setupGate || Promise.resolve()).then(fn), 250);
   loadState().then(async s => {
     if (!s) return;
     if (!s.project) {
@@ -652,11 +652,11 @@
       const drop = () => { if (mb && /Chưa mở dự án/.test(mb.textContent) && HOME && !document.getElementById('modal').hidden) { Studio.closeModal(); return true; } };
       if (mb && !drop()) { const mo = new MutationObserver(() => drop() && mo.disconnect()); mo.observe(mb, { childList: true }); setTimeout(() => mo.disconnect(), 15000); }
     }
-    if (!s.done && !s.skipped) afterAuthor(() => openWizard());
+    if (!s.done && !s.skipped) afterSetup(() => openWizard());
     else if (!s.project && (await brandCount()) === 0) {
       // S17 M125: đã qua hướng dẫn nhưng chưa có thương hiệu: vào thẳng bước Chuẩn bị (Thương hiệu → Kho), mỗi phiên một lần
       let seen = false; try { seen = !!sessionStorage.getItem('avs-onb-prep'); sessionStorage.setItem('avs-onb-prep', '1'); } catch { /* không có sessionStorage */ }
-      if (!seen) afterAuthor(() => openWizard(0));
+      if (!seen) afterSetup(() => openWizard(0));
     }
   }).catch(e => console.error('onboarding', e));
 })();
