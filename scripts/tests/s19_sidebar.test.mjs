@@ -12,8 +12,11 @@ const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'
 const read = f => fs.readFileSync(path.join(SKILL, f), 'utf8');
 const NS = read('studio/features/03_nextstep.js'), JS = read('studio/studio.js'), BR = read('studio/features/51_brands.js');
 
-test('thẻ điểm của bước gọi workflow.goStep (thanh bước trên + panel trái nhảy theo)', () => {
-  assert.match(NS, /if \(b\.dataset\.nsStep\) \{ if \(S\.workflow\?\.goStep && S\.workflow\.step !== b\.dataset\.nsStep\) return S\.workflow\.goStep\(b\.dataset\.nsStep\);/);
+// S23 M164 (C32): thẻ điểm 5 bước rời tab Dự án, thành vòng điểm trên thanh bước (bấm nút bước = goStep của 01_workflow.js);
+// popover điểm kiểm ở s23_score_stepper.test.mjs
+test('tab Dự án không còn thẻ điểm 5 bước; bấm mục trong popover thanh bước đổi bước trước khi giao việc', () => {
+  assert.ok(!NS.includes('data-ns-step'));
+  assert.match(read('studio/features/03_stepscore.js'), /if \(S\.workflow\?\.step !== step\) S\.workflow\?\.goStep\(step\);/);
 });
 
 test('nút Sửa của bước Chuẩn bị mở biểu mẫu thương hiệu; ô đích có thật trong panel Thương hiệu', () => {

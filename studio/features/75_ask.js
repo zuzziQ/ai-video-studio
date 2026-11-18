@@ -375,6 +375,15 @@
     if (bar.hidden) return S.toast('Cài đặt không có thanh Hỏi Claude');
     inp.focus(); inp.select();
   }
-  S.ask = { open, refresh: () => paint(true), get range() { return AS.range; }, clearRange };
+  // S23 M164: giao một việc của bước từ nơi khác (popover điểm trên thanh bước, 03_stepscore.js), như bấm gợi ý nhanh.
+  // Phạm vi là cả bước (không tính element đang chọn); việc không có trong phạm vi của bước, hoặc thanh đang chạy → false.
+  function run(action, params = {}, st = step()) {
+    const sc = AC.scopeOf({ step: st, qc: !!S.qc?.last });
+    if (!sc || busy() || !AC.actionsOf(sc).some(a => a.id === action)) return false;
+    check();
+    runAction({ action, params: { ...params }, reply: '' }, sc);
+    return true;
+  }
+  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange };
   requestAnimationFrame(() => paint(true));
 })();
