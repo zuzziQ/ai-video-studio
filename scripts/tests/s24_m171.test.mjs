@@ -20,7 +20,7 @@ test('logEntry: giữ đúng trường, bỏ trường lạ, chặn ảnh, kẹp
   assert.equal(e.text.length, 1200);
   assert.deepEqual(e.scope, { kind: 'range', chip: '0:04–0:09', cid: 'c1', a: 4.12 });
   assert.equal(AC.logEntry(entry('a2', { q: 'xem data:image/jpeg;base64,/9j/4AAQ' })).q, ''); // ảnh nhúng trong chữ: bỏ cả chuỗi
-  const bad = AC.logEntry(entry('a3', { step: 'hack', src: 'evil', scope: { kind: 'region' } }));
+  const bad = AC.logEntry(entry('a3', { step: 'hack', src: 'evil', scope: { kind: 'hack' } }));
   assert.equal(bad.step, 'build'); assert.equal(bad.src, 'ask'); assert.equal(bad.scope.kind, 'step');
   assert.equal(AC.logEntry(entry('a<script>', {})).id, 'ascript');
 });

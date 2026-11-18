@@ -1,6 +1,9 @@
 // S22 M153: thanh Hỏi Claude — định tuyến câu hỏi tự do vào một việc của phạm vi (lõi scripts/ask_route.mjs + 75_ask.core.js,
 // giao diện studio/features/75_ask.js). Chỉ chạy khi người dùng gửi (C23); mô hình theo Mô hình & giọng (Claude hoặc Ollama).
-//   POST /api/ask         {ask, step, sel?, range?, info?} → {ok, run} · 400 dữ liệu sai · 409 đang có một lượt khác
+//   POST /api/ask         {ask, step, sel?, range?, region?, info?} → {ok, run} · 400 dữ liệu sai · 409 đang có một lượt khác
+//   S24 M173: phạm vi region {x, y, w, h, t} (px thiết kế) → server cắt vùng đó từ khung hình gốc tại t (AskCore.frameAt: ảnh
+//   của dãy khung, không có thì ffmpeg lấy từ video nguồn) ra <tmp>/avs-ask-<pid>/region.jpg, mô hình đọc ảnh bằng Read (chỉ
+//   Claude xem được ảnh). Cắt không được (chưa mở dự án, thiếu khung / ffmpeg) thì hỏi bằng toạ độ.
 //   GET  /api/ask         → {state: idle|running|done|error|cancelled, run, step, …kết quả: action, params, reply, warnings, scope,
 //                            provider, ms | error, kind (theo LlmError)}
 //   POST /api/ask/cancel  → {ok, cancelled}
@@ -11,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { killTree } from '../../scripts/platform.mjs';
 
@@ -22,19 +26,46 @@ export default ctx => {
   const load = async () => { R ??= await imp('scripts/ask_route.mjs'); L ??= await imp('scripts/llm.mjs'); A ??= await imp('scripts/assist.mjs'); };
   const timeout = () => (+process.env.AVS_ASSIST_TIMEOUT_S > 0 ? +process.env.AVS_ASSIST_TIMEOUT_S : 120) * 1000;
 
+  // ---------- M173: cắt vùng từ khung hình gốc ----------
+  const inProj = rel => {
+    const root = ctx.project?.dir;
+    if (!root || typeof rel !== 'string' || !rel || rel.includes('\0') || /^[a-z]+:\/\//i.test(rel)) return null;
+    const p = path.resolve(root, rel.replace(/^\/+/, ''));
+    return p.startsWith(path.resolve(root) + path.sep) && fs.existsSync(p) ? p : null;
+  };
+  const ffmpeg = (args, ms = 20000) => new Promise((ok, no) => execFile('ffmpeg', ['-v', 'error', '-y', ...args], { timeout: ms, windowsHide: true }, e => (e ? no(e) : ok())));
+  async function cropRegion(input) {
+    const g = input.scope, tl = ctx.readProject?.()?.timeline, f = tl && R.AskCore.frameAt(tl, g.t);
+    if (!f) return null;
+    const dir = path.join(os.tmpdir(), `avs-ask-${process.pid}`), out = path.join(dir, 'region.jpg');
+    fs.mkdirSync(dir, { recursive: true });
+    const vf = `scale=${input.ctx.dw}:${input.ctx.dh},crop=${g.w}:${g.h}:${g.x}:${g.y}`;
+    const seq = inProj(f.seq), vid = !seq && inProj(f.video);
+    if (!seq && !vid) return null;
+    await (ctx.askCrop || ffmpeg)(seq ? ['-i', seq, '-frames:v', '1', '-vf', vf, out] : ['-ss', String(f.at), '-i', vid, '-frames:v', '1', '-vf', vf, out]);
+    return fs.existsSync(out) ? { dir, file: 'region.jpg' } : null;
+  }
+
   async function ask(input, me, rec) {
+    let img = null;
+    if (input.scope.kind === 'region') {
+      rec.step = 'Đang cắt ảnh vùng…';
+      img = await cropRegion(input).catch(() => null);
+      input.ctx.image = img ? img.file : false;
+    }
     const prompt = A.assertCleanPrompt(R.routerPrompt(input));
     let provider = 'claude';
     const t0 = Date.now(), ms = timeout();
     const out = await L.askJSON(prompt, {
-      shape: 'object', retries: 1, model: 'sonnet', task: 'text', cwd: os.tmpdir(), timeout: ms, timeoutMsg: `AI quá ${Math.round(ms / 1000)} giây chưa trả lời. Thử lại sau.`,
+      shape: 'object', retries: 1, model: 'sonnet', task: img ? 'vision' : 'text', cwd: img ? img.dir : os.tmpdir(), ...(img ? { args: ['--allowedTools', 'Read'] } : {}),
+      timeout: ms, timeoutMsg: `AI quá ${Math.round(ms / 1000)} giây chưa trả lời. Thử lại sau.`,
       onProc: pr => { me.proc = pr; if (me.cancelled) killTree(pr); },
       onTick: s => { if (rec.state === 'running') rec.step = `Claude đang đọc câu hỏi… ${Math.round(s)} s`; },
       onAttempt: n => { if (n) rec.step = 'AI trả kết quả lỗi, đang hỏi lại…'; },
       run: async (p, o) => { const r = await (ctx.askRun || L.runLLM)(p, o); provider = r?.provider || 'claude'; return r; },
       validate: v => R.normPick(v, input),
     });
-    return { ...out, scope: input.scope, provider, ms: Date.now() - t0 };
+    return { ...out, scope: input.scope, provider, ms: Date.now() - t0, ...(input.scope.kind === 'region' ? { image: !!img } : {}) };
   }
 
   // ghi qua tệp tạm rồi đổi tên: đang ghi mà tắt máy không làm hỏng lịch sử cũ

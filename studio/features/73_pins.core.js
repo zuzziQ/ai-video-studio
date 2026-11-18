@@ -3,6 +3,9 @@
 // Chạy trong trình duyệt (window.PinsCore) và trong Node (scripts/tests/s21_pins.test.mjs).
 //   Ghim trên element: obj.note (như cũ) + obj.note_at = {x, y, t, done?} (px thiết kế, giây).
 //   Ghim chung (cả video): TL.pins = [{x, y, t, text, done?}].
+// S24 M173 (C37): ghim thành chú thích "Để sau" của chế độ chú thích. Chú thích vùng = ghim chung có thêm w, h (px thiết kế):
+//   TL.pins = [{x, y, w, h, t, text, done?}] — notes.md vẫn ghi như ghim (writeNotes của server.mjs, x / y là góc trên-trái).
+//   dragRect(a, b) → vùng kéo trên khung hoặc null khi kéo quá ngắn (= bấm).
 'use strict';
 (function (root) {
   const WIN = 0.5; // ghim hiện khi playhead trong ±WIN giây của t (ghim element: thêm cả khoảng hiện của element)
@@ -24,7 +27,9 @@
     (Array.isArray(pins) ? pins : []).forEach((p, idx) => {
       if (!p || !txt(p.text)) return;
       const t = num(p.t) ?? 0;
-      out.push({ kind: 'pin', key: 'p:' + idx, idx, t, x: num(p.x), y: num(p.y), text: txt(p.text), done: !!p.done, t0: t, t1: t, label: 'Cả video' });
+      const w = num(p.w), h = num(p.h), rect = w > 0 && h > 0;
+      out.push({ kind: 'pin', key: 'p:' + idx, idx, t, x: num(p.x), y: num(p.y), ...(rect ? { w, h } : {}), text: txt(p.text), done: !!p.done, t0: t, t1: t,
+        label: rect ? `Vùng ${Math.round(w)}×${Math.round(h)}` : 'Cả video' });
     });
     out.sort((a, b) => a.t - b.t || (a.kind === b.kind ? 0 : a.kind === 'el' ? -1 : 1));
     out.forEach((it, i) => { it.n = i + 1; });
@@ -52,11 +57,21 @@
   }
 
   // Chữ ký để vẽ lại khi có đổi (danh sách ở tab Dự án, lớp ghim trên khung).
-  const sig = items => (items || []).map(i => [i.key, i.n, i.t, i.x, i.y, i.done ? 1 : 0, i.text].join('|')).join('\n');
+  const sig = items => (items || []).map(i => [i.key, i.n, i.t, i.x, i.y, i.w, i.h, i.done ? 1 : 0, i.text].join('|')).join('\n');
+
+  // Kéo trên khung (px thiết kế): a, b = điểm đầu / cuối. Ngắn hơn DRAG px theo một chiều = bấm (null); kẹp trong khung DW×DH.
+  const DRAG = 12;
+  function dragRect(a, b, DW, DH) {
+    if (!a || !b) return null;
+    const p = clampPt(a.x, a.y, DW, DH), q = clampPt(b.x, b.y, DW, DH);
+    const w = Math.abs(q.x - p.x), h = Math.abs(q.y - p.y);
+    if (w < DRAG || h < DRAG) return null;
+    return { x: Math.min(p.x, q.x), y: Math.min(p.y, q.y), w, h };
+  }
 
   const mmss = t => { t = Math.max(0, +t || 0); return `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`; };
 
-  const P = { WIN, collect, showAt, visibleAt, clampPt, attachTo, anchor, sig, mmss };
+  const P = { WIN, DRAG, collect, showAt, visibleAt, clampPt, attachTo, anchor, dragRect, sig, mmss };
   if (typeof module === 'object' && module.exports) module.exports = P;
   else root.PinsCore = P;
 })(typeof window !== 'undefined' ? window : globalThis);
