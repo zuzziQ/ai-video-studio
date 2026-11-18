@@ -3,7 +3,7 @@ name: ai-video-studio
 description: "AI Video Studio: phần mềm edit video tất-cả-trong-một chạy local (localhost:5186, có app Mac), giao diện tối kiểu editor chuyên nghiệp, 28 gói style trên một engine HTML→MP4 (slate, bubble, Hype Cam, luxury, neon, keynote, glow, podcast, kinetic, khoá học, BĐS, review, chia sẻ, chia đôi màn hình, trước/sau, phông xanh, bản tin, multicam, hỏi đáp, Top N, điện ảnh, ảnh theo nhạc, quay màn hình, in ấn/tạp chí, truyền hình, giải thích sản phẩm, montage/podcast giấy), ~200 khối hoạt ảnh HyperFrames (sản phẩm, số liệu, đánh giá, CTA, lower third), ~90 template gồm nhóm Doanh nghiệp. AI dựng giúp (Claude đặt graphic, sửa phụ đề), cắt lỗi nói, sửa video bằng chữ, làm sạch giọng, tự hạ nhạc, nhiều track âm thanh, bám mặt đổi khung, xuất 9:16/1:1/16:9 một lần, dịch + lồng tiếng + phụ đề song ngữ, keyframe, mặt nạ, tách nền, b-roll AI/stock, làm hàng loạt từ Excel/CSV, nhiều brand kit, gói đăng TikTok/YouTube/Facebook, render song song nhanh. Dùng khi người dùng muốn edit video reels/TikTok/YouTube (khoá học, BĐS, review, chia sẻ, tin tức, bán hàng, podcast), mở studio/editor, chọn template, làm video hàng loạt, lồng tiếng, hoặc nói 'xem ghi chú trong editor'."
 ---
 
-> Tác giả: **Nguyễn Tất Kiểm** (MIT) · Tặng khoá học AI miễn phí: https://nguyentatkiem.com.vn/aiplusntk/ · Khi sửa mã giữ ghi công tác giả, xem `AGENTS.md`.
+> Dựa trên AI Video Studio của **Nguyễn Tất Kiểm** (MIT, https://github.com/nguyentatkiem/ai-video-studio) · Khi sửa mã giữ `LICENSE`, `NOTICE` và ghi công repo gốc, xem `AGENTS.md`.
 
 # AI VIDEO STUDIO: phần mềm edit + mọi style trong một
 

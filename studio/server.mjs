@@ -455,7 +455,7 @@ function sendLocked(res) {
 <ul><li>Bấm đúp <b>AI Video Studio</b> ngoài Desktop (hoặc <code>studio.cmd</code> / <code>./studio.sh</code>). Studio đang chạy thì lối tắt chỉ mở lại trình duyệt đúng trang.</li>
 <li>Hoặc mở link “Mở lại trong trình duyệt” in trong cửa sổ server.</li></ul>
 <p class="note">Mã phiên nằm ở ~/.ai-video-studio/studio-${PORT}.token (chỉ tài khoản của bạn đọc được), đổi mỗi lần bật Studio.</p>
-<p class="note">Tác giả: Nguyễn Tất Kiểm · <a href="https://nguyentatkiem.com.vn/aiplusntk/">Tặng khoá học AI miễn phí</a></p></body>`);
+</body>`);
 }
 // S18 M129: dự án của request theo mã tab trong header X-AVS-Project; không có mã thì dự án mặc định. Mã của tab đã đóng (hay
 // quá 8 tab nên bị đẩy ra) → 409 tabClosed với mọi /api trừ /api/tabs, để trang đó biết mà mở lại, không đọc / ghi nhầm dự án khác.
@@ -635,6 +635,6 @@ server.listen(PORT, '127.0.0.1', () => {
   const link = `http://localhost:${PORT}`;
   console.log(`AI Video Studio ${VERSION} → ${link}`);
   console.log(`Mở lại trong trình duyệt: ${launchUrl(PORT, TOKEN)}`);
-  console.log('Tác giả: Nguyễn Tất Kiểm · Tặng khoá học AI miễn phí: https://nguyentatkiem.com.vn/aiplusntk/');
+  console.log('Dựa trên AI Video Studio của Nguyễn Tất Kiểm (MIT): https://github.com/nguyentatkiem/ai-video-studio');
   if (args.includes('--open')) openPath(launchUrl(PORT, TOKEN));
 });

@@ -139,7 +139,6 @@
   more.innerHTML = `<hr data-wf="tail">
     <button data-wf="longform"><i class="ti ti-scissors"></i> Cắt clip từ video dài…</button>
     <button data-wf="settings"><i class="ti ti-settings"></i> Cài đặt…</button><hr>
-    <button data-wf="author" title="Tác giả · Tặng khoá học AI miễn phí"><i class="ti ti-user-heart"></i> Tác giả: Nguyễn Tất Kiểm</button>
     <div class="wf-ver">AI Video Studio <span data-wf="ver"></span></div>`;
   document.body.appendChild(more);
   const tail = more.querySelector('[data-wf="tail"]');
@@ -200,8 +199,6 @@
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeMore(); $('#wf-pop')?.remove(); } });
   more.querySelector('[data-wf="settings"]').addEventListener('click', () => { closeMore(); goStep('settings'); });
-  // ghi công tác giả (AGENTS.md): nút Tác giả chuyển từ thanh trên vào menu ⋯, vẫn mở lại màn tác giả của 00_author.js
-  more.querySelector('[data-wf="author"]').addEventListener('click', () => { closeMore(); S.showAuthor?.(); });
   more.querySelector('[data-wf="longform"]').addEventListener('click', () => { closeMore(); openPanel('longform'); });
 
   // ---------- thanh trái theo bước ----------

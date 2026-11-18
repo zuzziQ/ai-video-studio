@@ -4,10 +4,6 @@
 >
 > Bản này (`zuzziQ/ai-video-studio`, riêng tư) phát triển độc lập từ phần mềm gốc và thêm: **cổng quảng cáo trong QC** (kiểm chính sách nền tảng, claim sản phẩm, tính nguyên bản trước khi xuất), **luồng 5 bước** Chuẩn bị → Nguồn → Dựng → Kiểm tra → Xuất và đăng có **điểm cho từng bước**, **Kho dự án theo thương hiệu**, **AI dựng né mặt và phụ đề**, **QC nhanh ngay sau khi dựng**, **lịch sử xuất** và màn **Kiểm tra máy** có nút cài giúp. Danh sách việc và trạng thái ở [docs/ROADMAP.md](docs/ROADMAP.md).
 
-> **Tác giả: Nguyễn Tất Kiểm** · 🎁 **Tặng khoá học AI miễn phí:** <https://nguyentatkiem.com.vn/aiplusntk/>
->
-> Mã nguồn mở theo giấy phép MIT. Khi sao chép, sửa hoặc phát hành lại (kể cả nhờ AI sửa), **giữ nguyên ghi công tác giả**. Xem [mục 16. Bản quyền và ghi công](#16-bản-quyền-và-ghi-công).
-
 **Phần mềm edit video chạy ngay trên máy của bạn (macOS và Windows 10/11), có AI hỗ trợ.** Làm Reels, TikTok, YouTube Shorts và video ngang YouTube cho khoá học, bất động sản, review, chia sẻ, tin tức, bán hàng, podcast.
 
 Giao diện tối kiểu editor chuyên nghiệp. Phần mềm có **28 gói style**, **90 template có video xem trước**, **khoảng 200 khối hoạt ảnh HyperFrames**, AI dựng giúp bằng Claude, b-roll và âm thanh tự động, làm hàng loạt từ Excel. Bạn còn có thể **clone style từ bất kỳ video nào** bạn thích.
@@ -921,12 +917,12 @@ Dữ liệu của bạn nằm ngoài repo, ở `~/.ai-video-studio/` (Windows: `
 
 ## 16. Bản quyền và ghi công
 
-**Tác giả: Nguyễn Tất Kiểm** · 🎁 Tặng khoá học AI miễn phí: <https://nguyentatkiem.com.vn/aiplusntk/>
+Dựa trên [AI Video Studio](https://github.com/nguyentatkiem/ai-video-studio) của Nguyễn Tất Kiểm (giấy phép MIT).
 
 - **Mã nguồn:** giấy phép MIT, xem [LICENSE](LICENSE) và [NOTICE](NOTICE). Bạn được dùng, sửa, phát hành lại, kể cả cho mục đích thương mại.
 - **Ghi công khi sao chép hoặc sửa lại:** áp dụng cho mọi người, mọi công cụ AI (Claude, ChatGPT, Cursor, Copilot…) và mọi bản fork.
   - **Bắt buộc theo giấy phép MIT:** giữ nguyên dòng `Copyright (c) 2026 Nguyễn Tất Kiểm` và toàn văn giấy phép trong file `LICENSE`, trong mọi bản sao hoặc phần đáng kể của phần mềm.
-  - **Tác giả đề nghị thêm:** giữ file `NOTICE`, màn giới thiệu tác giả khi mở phần mềm (`studio/features/00_author.js`) và dòng *"Dựa trên AI Video Studio của Nguyễn Tất Kiểm"* cùng link repo gốc trong README của bản bạn phát hành.
+  - **Bản này giữ thêm:** file `NOTICE` và dòng *"Dựa trên AI Video Studio của Nguyễn Tất Kiểm"* cùng link repo gốc trong README. Màn giới thiệu tác giả trong app (`00_author.js` của repo gốc) đã bỏ từ 2026-11-18, theo quyết định của chủ repo (`C28` trong ROADMAP).
   - Không ghi bản sửa đổi là của mình làm từ đầu, không xoá tên tác giả gốc.
   - Hướng dẫn cho AI sửa mã nằm ở [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md).
 - **Video mẫu** (`sample/`, cùng các ảnh xem trước trong `templates/previews/`, `studio/thumbs/`, `docs/images/` được làm từ video này): thuộc chủ sở hữu repo. Chỉ được dùng để xem thử và học cách dùng phần mềm. **Không** dùng lại, cắt ghép hay đăng lại cho mục đích khác.

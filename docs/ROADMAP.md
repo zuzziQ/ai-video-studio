@@ -311,6 +311,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S22-che-do-va-hoi-claude.md` (kiểm 
 - [x] **`C25`** (`area/llm`): **một lối vào Hỏi Claude (`S22`).** Đề xuất: thanh dưới khung xem trước có phạm vi theo bước + lựa chọn; mục Hỏi Claude trong Thuộc tính và các nút AI trùng thành lối tắt / gợi ý nhanh của thanh. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C26`** (`area/infra`): **chữ giải thích (`S22`).** Đề xuất: dưới một ô tối đa một dòng; phần dài vào biểu tượng (i); test chặn đoạn dài. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C27`** (`area/llm`): **bấm biến thể thì áp hay xem trước (`S22`).** Đề xuất: xem trước trên khung, Nhận mới áp (đổi hành vi `M149`). Chốt 2026-11-18: theo đề xuất.
+- [x] **`C28`** (`area/docs`): **bỏ màn giới thiệu tác giả trong app.** Chủ repo chốt 2026-11-18: bỏ thẻ tác giả `studio/features/00_author.js` và nút Tác giả ở menu ⋯; giữ `LICENSE`, `NOTICE` (MIT bắt buộc) và dòng "Dựa trên AI Video Studio của Nguyễn Tất Kiểm" + link repo gốc ở README, log khởi động, cuối trình cài. Thay luật mục 2–5 cũ của `AGENTS.md`.
 
 ## 5. Ưu tiên tiếp theo
 
