@@ -271,6 +271,17 @@ Lập 2026-11-18, kế hoạch `docs/plans/S21-cot-phai-thuoc-tinh.md` (Premiere
 - [x] **`M149`** (`area/llm`): Hỏi Claude sửa element (bản vá trường cho phép, xem trước khác biệt, Nhận / Bỏ một bước hoàn tác) + Biến thể 3 phương án dựng ảnh nhỏ từ preview; "Gợi ý núm" cho khối lạ. Sau `M146`; theo `C23`. Xong 2026-11-18: lõi `scripts/elem_ai.mjs` (trường cho phép theo loại element, lọc kiểu / biên, prompt, chuẩn hoá 3 biến thể khác nhau), route `72_elem_ai` (`/api/elem/ai` ô job riêng + huỷ, `/api/elem/shots` ảnh nhỏ bằng engine headless của QC), mục Hỏi Claude sau mục đầu (`72_elem_ai.js`: gợi ý nhanh, cũ → mới, xem trước trên khung, Nhận / Bỏ, 3 ảnh biến thể bấm để áp, mỗi lần áp một bước ⌘Z, lỗi thiếu mô hình → Mô hình & giọng); test `s21_elem_ai`; thử bằng chuột trong Studio với CLI mô hình giả lập. Gợi ý núm: mô hình đề xuất 2–3 núm theo trường của mục Núm, kiểm bằng `KnobsCore.validateMap` (server) và `Knobs.validateMap` (trình duyệt), Thêm núm lưu `obj.knob_map` (một bước ⌘Z); Hỏi Claude là mục thứ hai sau Núm (`SectCore.SECOND`).
 - [x] **`M150`** (`area/infra`): ghi chú ghim trên khung (x, y, t), danh sách + Giao Claude sửa hết ở tab Dự án, vẫn ghi `note` để `.studio/notes.md` giữ định dạng. Sau `M145`. Xong 2026-11-18: chế độ ghim (nút ở thanh dưới preview, phím C), ghim element = `note` + `note_at {x, y, t, done?}`, ghim chung `TL.pins` (thêm một dòng vào `writeNotes` của `server.mjs`), chấm có số trên lớp `.pinlayer` (±0.5 s / khoảng element, bám element khi element dời), ô nhập nổi Sửa / Xong / Xoá / Đã làm, mỗi thao tác một bước ⌘Z; khối "Ghi chú cho Claude (N)" ở tab Dự án qua hook `Studio._proj` của `03_nextstep.js` + Giao Claude sửa hết (lưu rồi chép câu, `C23`); lõi `73_pins.core.js`, test `s21_pins`; thử bằng chuột trong Studio trên bản sao `sample/clip-mau`.
 
+### **`S22`** Cơ bản / Chuyên nghiệp tách rõ, Hỏi Claude theo bước, xem trước kết quả rõ hơn, bớt chữ giải thích
+
+Lập 2026-11-18, kế hoạch `docs/plans/S22-che-do-va-hoi-claude.md` (kiểm kê Studio thật: Cơ bản gần như giống Chuyên nghiệp, 3 hộp thoại lần mở đầu, 140 khối chữ giải thích, 11 lối vào Claude khác tên, xem trước Hỏi Claude không dời playhead). Cơ bản = Claude lái, người dùng duyệt; Chuyên nghiệp = đủ công cụ từng element.
+
+- [ ] **`M151`** (`area/infra`): chế độ thật — lõi `01_level.core.js` (mục thanh trái theo bước × mức, tab cột phải, mục Thuộc tính theo mức), công tắc Cơ bản | Chuyên nghiệp trên thanh đầu, Cơ bản ẩn tab Lớp và thu gọn mục phụ, mục ẩn mở bằng ⌘K kèm "Mở ở Chuyên nghiệp". Theo `C13`, `C24`.
+- [ ] **`M152`** (`area/llm`): khung xem lại `Studio.review` (lõi `74_review.core.js`): tới chỗ đổi + phát lặp, trước / sau, chia đôi, phóng to, biến thể xem trên khung rồi mới áp (phím 1 / 2 / 3); nối Hỏi Claude (`M149`) và Viết lại; thử `M149` với mô hình thật. Theo `C27`; song song `M151`.
+- [ ] **`M153`** (`area/llm`): thanh Hỏi Claude dưới khung xem trước, phạm vi theo bước + lựa chọn, gợi ý nhanh theo phạm vi, `/` mở, ✦ trên thanh nổi / Thuộc tính; route `75_ask` định tuyến câu hỏi tự do vào danh sách việc của phạm vi (kiểm tham số). Theo `C25`; sau `M152`.
+- [ ] **`M154`** (`area/llm`): việc của Chuẩn bị / Nguồn / Kiểm tra / Xuất và đăng trên thanh Hỏi Claude (gọi hàm sẵn có, kết quả qua `Studio.review` hoặc ô đề xuất), bỏ nút AI trùng ở panel, giữ nút chính. Sau `M153`.
+- [ ] **`M155`** (`area/infra`): bớt chữ giải thích — `Studio.tip` (i), `.help` dài sang tooltip, bỏ đoạn mở đầu panel, bỏ dòng dưới từng ô của hướng dẫn đầu; test `s22_help`. Theo `C26`; sau `M151`.
+- [ ] **`M156`** (`area/infra`): gọn chỗ — một màn lần mở đầu (Kiểm tra máy và thiếu khung hình thành dải báo), cột phải không chọn gì thì về Dự án ở mọi bước, sửa ô "Nhờ Claude xem khung hình"; thử lại `M141` bằng chuột. Sau `M151`.
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -285,7 +296,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S21-cot-phai-thuoc-tinh.md` (Premiere
 - [ ] **`C10`** (`area/infra`): **thời hạn giữ file mặc định (`S09`).** Đề xuất: nguồn 14 ngày sau khi job xong, kết quả 60 ngày, 3 phiên bản gần nhất mỗi dự án; admin đổi được theo tài khoản.
 - [ ] **`C11`** (`area/security`): **cách đăng nhập server (`S09`).** Đề xuất: tài khoản riêng trên server trước; đăng nhập bằng Google hoặc AD để sau.
 - [ ] **`C12`** (`area/infra`): **server vẫn lưu bằng JSON, không dùng cơ sở dữ liệu (`S09`).** Đề xuất: vẫn JSON vì server là một tiến trình duy nhất ghi; job đã xong chuyển sang file theo tháng; xem lại khi vượt khoảng 10.000 job đang hoạt động.
-- [ ] **`C13`** (`area/infra`): **chế độ mặc định của giao diện (`S10`).** Đề xuất: người mới (chưa có `onboarding.json`) vào chế độ Cơ bản; người đang dùng giữ Chuyên nghiệp như hiện nay; đổi được bất cứ lúc nào.
+- [x] **`C13`** (`area/infra`): **chế độ mặc định của giao diện (`S10`).** Đề xuất: người mới (chưa có `onboarding.json`) vào chế độ Cơ bản; người đang dùng giữ Chuyên nghiệp như hiện nay; đổi được bất cứ lúc nào. Chốt 2026-11-18: theo đề xuất.
 - [ ] **`C14`** (`area/infra`): **Studio giữ giao diện tối (`S10`).** Hệ thiết kế chung của hub chỉ có giao diện sáng và chặn màu tím (mục 8.3). Đề xuất: Studio giữ nền tối (phần mềm dựng video cần nền tối để không làm lệch cảm nhận màu video), đổi màu nhấn tím `#8B7BFF` sang navy 82X. 2026-11-16: chủ repo cho bắt đầu `S10` theo đề xuất này.
 - [x] **`C15`** (`area/infra`): **Tự lái đặt ở đâu (`S13`).** Đề xuất: nút Tự lái trên thanh đầu mở màn hàng đợi riêng, không thuộc bước nào; bước Nguồn nhắc thả nhiều video vào `Nguon/Tha vao day/`. Chốt 2026-11-17: theo đề xuất.
 - [x] **`C16`** (`area/qc`): **QC nhanh tự chạy sau AI dựng hay chờ bấm (`S13`).** Đề xuất: tự chạy (render 3 khung + kiểm hình học, ~10–20 s, không tốn lượt Claude); QC đầy đủ có Claude vẫn chờ bấm. Chốt 2026-11-17: theo đề xuất.
@@ -296,6 +307,10 @@ Lập 2026-11-18, kế hoạch `docs/plans/S21-cot-phai-thuoc-tinh.md` (Premiere
 - [x] **`C21`** (`area/infra`): **bảng Lớp ở đâu (`S21`).** Đề xuất: tab Lớp ở cột phải cạnh Thuộc tính (như Photoshop); panel trái Thành phần giữ Tại đây / Tất cả / Đã chỉnh. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C22`** (`area/infra`): **tab con của inspector thành mục xếp chồng (`S21`).** Đề xuất: có, như Premiere Properties, kèm dải mục nhảy nhanh; chế độ Cơ bản ẩn mục Keyframe / Mặt nạ / Nâng cao như ẩn tab hôm nay. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C23`** (`area/llm`): **Hỏi Claude / Gợi ý núm / Biến thể tốn lượt mô hình (`S21`).** Đề xuất: chỉ chạy khi người dùng bấm, dùng mô hình đang chọn ở Mô hình & giọng (Ollama được), không tự gọi. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C24`** (`area/infra`): **công cụ Chuyên nghiệp ở chế độ Cơ bản (`S22`).** Đề xuất: ẩn khỏi thanh trái, vẫn mở được bằng ⌘K kèm "Mở ở Chuyên nghiệp"; không mất tính năng. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C25`** (`area/llm`): **một lối vào Hỏi Claude (`S22`).** Đề xuất: thanh dưới khung xem trước có phạm vi theo bước + lựa chọn; mục Hỏi Claude trong Thuộc tính và các nút AI trùng thành lối tắt / gợi ý nhanh của thanh. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C26`** (`area/infra`): **chữ giải thích (`S22`).** Đề xuất: dưới một ô tối đa một dòng; phần dài vào biểu tượng (i); test chặn đoạn dài. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C27`** (`area/llm`): **bấm biến thể thì áp hay xem trước (`S22`).** Đề xuất: xem trước trên khung, Nhận mới áp (đổi hành vi `M149`). Chốt 2026-11-18: theo đề xuất.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -315,6 +330,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S21-cot-phai-thuoc-tinh.md` (Premiere
 14. **`S19`**: song song `M132`+`M136` (trang chủ, chỉ báo việc nền), `M133`→`M134` (thương hiệu, hồ sơ, học), `M135` (bộ clip). `M132` chỉ sửa phần nút thanh trên của `15_autopilot.js`; thẻ Hồ sơ kênh của file đó thuộc `M133`.
 15. **`S20`**: `M139` trước (lát đầu); `M140` → `M141` nối tiếp (cùng bảng lệnh); `M142`, `M143` sau `M141`; `M144` song song (engine + panel mới). Không đụng `studio/server.mjs`.
 16. **`S21`**: `M145` trước (nền); rồi song song `M146`, `M147`, `M150`; sau `M146` song song `M148`, `M149`. Chỉ `M145`, `M146` sửa `renderInspector` của `studio/studio.js`.
+17. **`S22`**: `C13`, `C24`–`C27` đã chốt 2026-11-18; song song `M151` ∥ `M152`; `M153` → `M154` sau `M152`; `M155`, `M156` sau `M151`. Không đụng `studio/server.mjs`.
 
 ## 6. Không làm
 
