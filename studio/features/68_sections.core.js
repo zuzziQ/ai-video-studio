@@ -32,8 +32,10 @@
     if (ai > 1) res.splice(1, 0, ...res.splice(ai, 1));
     return res;
   }
-  // Mục thấy được theo chế độ giao diện.
+  // Mục thấy được theo chế độ giao diện (trước S22). S22 M151: studio.js dùng split — ở Cơ bản mục ngoài Núm / Hỏi Claude / mục
+  // chính (LevelCore.splitSections) thu sau "Thêm thuộc tính", kể cả Keyframe / Mặt nạ / Nâng cao, nên không mục nào mất hẳn.
   const visible = (secs, basic) => (basic ? secs.filter(s => !s.pro) : secs);
+  const split = (secs, basic, L = root.LevelCore) => (L ? L.splitSections(secs, basic ? 'basic' : 'pro') : { main: visible(secs, basic), more: basic ? secs.filter(s => s.pro) : [] });
 
   // Trạng thái mở / đóng nhớ theo loại element: { [kind]: { [key]: true|false } } (localStorage avs.isec).
   function parse(str) {
@@ -55,7 +57,7 @@
     return k;
   }
 
-  const T = { PRO, FIRST, SECOND, ICON, iconOf, normalize, visible, parse, isOpen, setOpen, active };
+  const T = { PRO, FIRST, SECOND, ICON, iconOf, normalize, visible, split, parse, isOpen, setOpen, active };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.SectCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

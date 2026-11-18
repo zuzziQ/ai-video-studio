@@ -53,10 +53,11 @@ test('studio.js vẽ mục xếp chồng, bỏ tab con; tính năng nối đúng
   for (const x of ['window.SectCore', 'class="isecbar"', 'data-secgo=', 'data-sect=', 'class="isec-h"', "'avs.isec'", 'data-act="more"', "Studio.cmdMenu?.(", "if (a === 'lock') toggleLock();", "openSect('trans')", 'addInspectorTab(fn) { Studio._insp.push(fn); }'])
     assert.ok(s.includes(x), `studio.js thiếu ${x}`);
   // Ghi chú cho Claude + hàng Ẩn / Nhân bản / Xoá vẫn ở cuối thân
-  assert.match(s, /\.join\(''\)\}\$\{clip \? '' : actions\(c\) \+ noteBlock\(o\)\}<\/div>`;/);
+  // (S22 M151: nút "Thêm thuộc tính" của chế độ Cơ bản đứng ngay trước hàng này)
+  assert.match(s, /\.join\(''\)\}\$\{moreBtn\}\$\{clip \? '' : actions\(c\) \+ noteBlock\(o\)\}<\/div>`;/);
   const wf = read('studio/features/01_workflow.js');
-  assert.match(wf, /const PRO_TABS = \['kf', 'mask', 'json'\]/);
-  assert.match(wf, /body\.wf-basic #insp \.isec\[data-sec=/);
+  // S22 M151: Cơ bản không ẩn hẳn Keyframe / Mặt nạ / Nâng cao bằng CSS nữa — chúng thu sau "Thêm thuộc tính" (s22_level.test.mjs)
+  assert.doesNotMatch(wf, /PRO_TABS|body\.wf-basic #insp \.isec\[data-sec=/);
   assert.doesNotMatch(wf, /\.itabs/);
   const cm = read('studio/features/66_canvas_cmds.js');
   assert.match(cm, /S\.cmdMenu = openMenu;/);

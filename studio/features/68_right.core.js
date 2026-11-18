@@ -7,16 +7,19 @@
 (function (root) {
   const TABS = [['props', 'Thuộc tính', 'ti-adjustments-horizontal'], ['layers', 'Lớp', 'ti-stack-2'], ['project', 'Dự án', 'ti-layout-dashboard']];
   const KEYS = TABS.map(t => t[0]);
-  const valid = t => KEYS.includes(t);
+  // S22 M151: keys = các tab có ở chế độ đang dùng (LevelCore.rightTabs: Cơ bản không có Lớp); bỏ trống = đủ ba tab.
+  const valid = (t, keys = KEYS) => KEYS.includes(t) && keys.includes(t);
+  const tabsFor = (keys = KEYS) => TABS.filter(t => keys.includes(t[0]));
 
   // Tab khi mở Studio: tab đã lưu (avs.rtab) nếu hợp lệ, không thì Thuộc tính khi có chọn, Dự án khi không.
-  const initialTab = (saved, has) => (valid(saved) ? saved : has ? 'props' : 'project');
+  const initialTab = (saved, has, keys = KEYS) => (valid(saved, keys) ? saved : has ? 'props' : 'project');
 
   // Tab sau khi trạng thái chọn đổi (had → has). Tự đổi như Adobe nhưng không giành tab người dùng đang dùng:
   //   Dự án + vừa chọn element → Thuộc tính; Thuộc tính + vừa bỏ chọn (không có chi tiết mục thư viện) → Dự án;
   //   Lớp giữ nguyên (bấm dòng trong bảng Lớp là chọn, không được nhảy khỏi bảng).
-  function nextTab({ tab, had, has, detail = false }) {
-    if (!valid(tab)) return has ? 'props' : 'project';
+  //   Tab không có ở chế độ đang dùng (vd. Lớp khi vừa đổi sang Cơ bản) → như tab hỏng.
+  function nextTab({ tab, had, has, detail = false, keys = KEYS }) {
+    if (!valid(tab, keys)) return has ? 'props' : 'project';
     if (has && !had && tab === 'project') return 'props';
     if (!has && had && tab === 'props' && !detail) return 'project';
     return tab;
@@ -24,7 +27,7 @@
   // Mở chi tiết mục thư viện (M147) luôn đưa về Thuộc tính.
   const tabForDetail = () => 'props';
 
-  const T = { TABS, KEYS, valid, initialTab, nextTab, tabForDetail };
+  const T = { TABS, KEYS, valid, tabsFor, initialTab, nextTab, tabForDetail };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.RightCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

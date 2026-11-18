@@ -7,12 +7,14 @@
 'use strict';
 (() => {
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc;
-  const DEFAULT_LEVEL = 'pro'; // C13 chưa chốt: đổi thành 'basic' khi chủ repo quyết người mới vào chế độ Cơ bản
+  // S22 M151: bảng mục theo bước × chế độ, tab cột phải, mục Thuộc tính ở lõi features/01_level.core.js (window.LevelCore).
+  // C13: chưa chọn chế độ thì người mới (chưa có onboarding.json) vào Cơ bản, người đang dùng giữ Chuyên nghiệp.
+  const L = window.LevelCore;
   const MAX_RAIL = 8; // S20 M142: 8 mục để bước Dựng có Lớp mà Hiệu ứng không bị đẩy vào Thêm…
   const STEPS = [['prep', 'Chuẩn bị', 'ti-briefcase'], ['source', 'Nguồn', 'ti-video'], ['build', 'Dựng', 'ti-layers-subtract'],
     ['check', 'Kiểm tra', 'ti-shield-check'], ['ship', 'Xuất và đăng', 'ti-send']];
   const SETTINGS = ['settings', 'Cài đặt', 'ti-settings'];
-  // id panel -> [bước, thứ tự, mức]. Mức 'pro' bị ẩn ở chế độ Cơ bản.
+  // id panel -> [bước, thứ tự, mức]. Mức 'pro' bị ẩn ở chế độ Cơ bản; ở bước có bảng LevelCore.BASIC_RAIL chỉ panel trong bảng hiện.
   const PANELS = {
     // S12 (M97): Kho thay Media ở Chuẩn bị; Media (file của dự án đang mở) chuyển sang bước Dựng
     brands: ['prep', 1], products: ['prep', 2], kho: ['prep', 3], media: ['build', 2],
@@ -30,7 +32,6 @@
   };
   // nút header (id) -> 'park' (giấu, panel của bước làm thay) | 'menu' (vào ⋯) | 'bar' (giữ trên thanh đầu, cạnh ⋯). Nút không có ở đây và không có opts.step -> 'menu'.
   const TOPS = { 'ap-topbtn': 'bar', aibtn: 'park', 'pub-btn': 'park', newproj: 'park', aspect: 'park', 'eng-btn': 'menu', 'app-reveal': 'menu', 'bk-sw': 'menu', fitall: 'menu' };
-  const PRO_TABS = ['kf', 'mask', 'json']; // mục Thuộc tính ẩn ở Cơ bản: Keyframe, Mặt nạ, Nâng cao (JSON) — trùng SectCore.PRO (68_sections.core.js)
   // M84: việc trùng gộp thành một mục trên thanh trái + dải tab trên panel. Panel thành viên vẫn mở được bằng id
   // (#rail [data-p=x] còn trong DOM, chỉ ẩn); mục trên thanh trái mở lại tab dùng gần nhất.
   const GROUPS = [
@@ -47,7 +48,8 @@
     get(k, d) { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } },
     set(k, v) { try { localStorage.setItem('avs.' + k, v); } catch {} },
   };
-  let level = store.get('uiLevel', DEFAULT_LEVEL) === 'basic' ? 'basic' : 'pro';
+  const savedLevel = store.get('uiLevel', '');
+  let level = L ? L.initialLevel(savedLevel, null) : savedLevel === 'basic' ? 'basic' : 'pro';
   let step = store.get('step', '');
   // 'queue' (C15): màn hàng đợi Tự lái, như Cài đặt không nằm trên thanh bước; mở bằng nút Tự lái, không mở lại khi vào Studio
   const stepIds = [...STEPS.map(s => s[0]), 'settings', 'queue'];
@@ -76,7 +78,7 @@
   #wf-more .selwrap .ti { left: 8px; }
   #wf-more > button .pct { margin-left: auto; }
   #wf-more hr { border: 0; border-top: 1px solid var(--line); margin: 0 4px; width: calc(100% - 8px); }
-  #wf-more .wf-lv { display: flex; align-items: center; gap: 8px; padding: 4px 8px; color: var(--tx2); font-size: 12px; }
+  #wf-lvbar { flex: none; } #wf-lvbar button { gap: 4px; } #wf-lvbar .ti { font-size: 14px; }
   .wf-seg { display: inline-flex; background: var(--bg1); border: 1px solid var(--line2); border-radius: var(--rs); padding: 4px; gap: 4px; }
   .wf-seg button { height: 24px; padding: 0 8px; font-size: 12px; background: transparent; border-color: transparent; color: var(--tx2); }
   .wf-seg button.on { background: var(--bg4); color: var(--tx); }
@@ -115,7 +117,7 @@
   #wf-tabs button.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
   #libbody .seg [data-mtab="broll"] { display: none; } /* B-roll động đã có tab riêng trong mục B-roll */
   .wf-bq { display: flex; gap: 8px; margin-bottom: 8px; } .wf-bq input { flex: 1; min-width: 0; height: 32px; } .wf-bq button { height: 32px; }
-  ${PRO_TABS.map(k => `body.wf-basic #insp .isec[data-sec="${k}"], body.wf-basic #insp .isecbar [data-secgo="${k}"]`).join(', ')} { display: none; }
+  @media (max-width: 1180px) { #wf-lvbar button span { display: none; } }
   @media (max-width: 1180px) { #wf-steps button:not(.on) span { display: none; } #wf-steps button:not(.on) { padding: 0 6px; } #wf-steps .ln { width: 8px; } }
   `;
   document.head.appendChild(css);
@@ -131,7 +133,10 @@
   const moreBtn = document.createElement('button'); moreBtn.id = 'wf-morebtn'; moreBtn.className = 'icon'; moreBtn.title = 'Thêm: lịch sử, thư mục, mô hình, cài đặt';
   moreBtn.innerHTML = '<i class="ti ti-dots"></i>'; $('#save').before(moreBtn);
   const more = document.createElement('div'); more.id = 'wf-more'; more.hidden = true;
-  more.innerHTML = `<div class="wf-lv"><span>Chế độ</span><div class="grow"></div><span class="wf-seg" data-wf="lv"></span></div><hr data-wf="tail">
+  // S22 M151: công tắc Cơ bản | Chuyên nghiệp trên thanh đầu, ngay trước ⋯ (trước đây nằm trong menu ⋯)
+  const lvBar = document.createElement('span'); lvBar.id = 'wf-lvbar'; lvBar.className = 'wf-seg'; lvBar.dataset.wf = 'lv';
+  lvBar.setAttribute('role', 'group'); lvBar.setAttribute('aria-label', 'Chế độ giao diện'); moreBtn.before(lvBar);
+  more.innerHTML = `<hr data-wf="tail">
     <button data-wf="longform"><i class="ti ti-scissors"></i> Cắt clip từ video dài…</button>
     <button data-wf="settings"><i class="ti ti-settings"></i> Cài đặt…</button><hr>
     <button data-wf="author" title="Tác giả · Tặng khoá học AI miễn phí"><i class="ti ti-user-heart"></i> Tác giả: Nguyễn Tất Kiểm</button>
@@ -147,7 +152,7 @@
     const how = TOPS[el.id] || (opts.step ? 'step' : 'menu');
     if (how === 'park') return toPark(el);
     if (how === 'menu') return toMenu(el);
-    if (how === 'bar') return moreBtn.before(el);
+    if (how === 'bar') return lvBar.before(el);
     // nút mới gắn bước: giấu nút, thêm một mục trên thanh trái mở bằng nút đó
     toPark(el);
     const id = 'wf-btn-' + (el.id || Math.random().toString(36).slice(2, 8));
@@ -161,17 +166,24 @@
   // tính năng đã gọi addTopButton trước khi file này chạy (không có ở bản hiện tại, phòng khi đổi thứ tự)
   for (const el of [...top.children]) if (el.matches('button.ghost:not(#export):not(#save)')) placeTop(el, {});
 
+  const CK = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
+  const LV_TIP = { basic: `Cơ bản: Claude lái, ít công cụ. Công cụ khác vẫn mở bằng ${CK}`, pro: 'Chuyên nghiệp: đủ công cụ từng element' };
   function renderLv() {
     for (const seg of document.querySelectorAll('[data-wf="lv"]'))
-      seg.innerHTML = [['basic', 'Cơ bản'], ['pro', 'Chuyên nghiệp']].map(([k, l]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}">${l}</button>`).join('');
+      seg.innerHTML = [['basic', 'Cơ bản', 'ti-user'], ['pro', 'Chuyên nghiệp', 'ti-user-star']].map(([k, l, ic]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}" aria-pressed="${level === k}" title="${esc(LV_TIP[k])}" aria-label="${l}"><i class="ti ${ic}"></i><span>${l}</span></button>`).join('');
   }
-  function setLevel(v) {
+  // quiet: đặt chế độ lúc mở Studio (C13), không báo toast
+  function setLevel(v, quiet = false) {
     level = v === 'basic' ? 'basic' : 'pro'; store.set('uiLevel', level);
     document.body.classList.toggle('wf-basic', level === 'basic');
-    renderLv(); renderRail(); S.renderInspector?.();
+    renderLv();
+    // panel đang mở chỉ có ở Chuyên nghiệp: về mục đầu của bước (panel vẫn mở được bằng ⌘K)
+    if (level === 'basic' && panel && hidden(panel) && step && step !== 'queue') goStep(step); else renderRail();
+    S.renderInspector?.();
     if (panel === 'wf-mode') renderPanel();
-    S.toast(level === 'basic' ? 'Chế độ Cơ bản: ẩn công cụ nâng cao' : 'Chế độ Chuyên nghiệp: hiện đủ công cụ');
+    if (!quiet) S.toast(level === 'basic' ? `Chế độ Cơ bản: Claude lái, công cụ khác mở bằng ${CK}` : 'Chế độ Chuyên nghiệp: hiện đủ công cụ');
   }
+  const hidden = id => level === 'basic' && meta(id).level === 'pro';
   document.addEventListener('click', e => { const b = e.target.closest('[data-lv]'); if (b && b.closest('[data-wf="lv"]')) setLevel(b.dataset.lv); });
 
   function openMore() {
@@ -196,7 +208,8 @@
   const meta = id => {
     const o = S._popts[id] || {}, t = PANELS[id];
     const st = stepIds.includes(o.step) ? o.step : t ? t[0] : 'build';
-    return { step: st, order: t ? t[1] : 100, level: o.level === 'pro' || (!o.level && t?.[2] === 'pro') ? 'pro' : 'basic', known: !!(t || stepIds.includes(o.step)) };
+    const opt = o.level || t?.[2];
+    return { step: st, order: t ? t[1] : 100, level: L ? L.railLevel(id, st, opt) : opt === 'pro' ? 'pro' : 'basic', known: !!(t || stepIds.includes(o.step)) };
   };
   let overflow = [];
   function filterRail(rail) {
@@ -388,18 +401,18 @@
   S.addPanel('wf-mode', 'ti-adjustments', 'Giao diện', () => {
     const opt = (k, ic, t, d) => `<div class="wf-card pick ${level === k ? 'on' : ''}" data-lv="${k}"><h4><i class="ti ${ic}"></i>${t}</h4><p>${d}</p></div>`;
     $('#libbody').innerHTML = `<p class="wf-hint">Đổi lúc nào cũng được, lưu trên máy này.</p><div data-wf="lv">
-      ${opt('basic', 'ti-user', 'Cơ bản', 'Ẩn công cụ nâng cao: Keyframe, Mặt nạ, tham số JSON, Agent, Tạo style, Hiệu năng, Thành phần.')}
-      ${opt('pro', 'ti-user-star', 'Chuyên nghiệp', 'Hiện đủ mọi công cụ.')}</div>`;
+      ${opt('basic', 'ti-user', 'Cơ bản', `Claude lái, bạn duyệt: mỗi bước vài công cụ chính, Thuộc tính gọn. Công cụ khác mở bằng ${CK}.`)}
+      ${opt('pro', 'ti-user-star', 'Chuyên nghiệp', 'Hiện đủ mọi công cụ, tab Lớp và mọi mục Thuộc tính.')}</div>`;
   });
 
-  // ---------- inspector (S21 M146): renderInspector bỏ mục Keyframe / Mặt nạ / Nâng cao khi body.wf-basic; đổi chế độ thì vẽ lại ----------
+  // ---------- inspector (S22 M151): ở body.wf-basic renderInspector thu mục phụ sau "Thêm thuộc tính" (LevelCore.splitSections) ----------
 
   // ---------- M113: mở đúng panel rồi tô sáng chỗ cần làm (cột phải 03_nextstep; nút sửa của M114) ----------
   // focus(id, sel): id panel (tra bước qua PANELS/meta, nhóm có tab thì mở đúng tab); sel = selector hoặc mảng selector thử
   // lần lượt trong #libbody (panel có thể vẽ muộn: thử lại tới ~2 s), không thấy thì tô thẻ đầu của panel.
   let flashT = 0;
   function focus(id, sel) {
-    if (RAIL.some(r => r[0] === id)) { if (level === 'basic' && meta(id).level === 'pro') setLevel('pro'); openPanel(id); }
+    if (RAIL.some(r => r[0] === id)) { if (hidden(id)) setLevel('pro'); openPanel(id); }
     else if (stepIds.includes(id)) return goStep(id);
     else return S.toast('Chưa có công cụ này');
     const sels = (Array.isArray(sel) ? sel : sel ? [sel] : []).filter(Boolean);
@@ -421,7 +434,12 @@
   }
 
   // cho 03_nextstep / 04_cmdk: đổi bước, tra bước/nhóm của panel, mở panel + tô sáng (focus)
-  S.workflow = { STEPS, SETTINGS, PANELS, goStep, focus, meta, groupOf, setLevel, get step() { return step; }, get level() { return level; }, openMore, closeMore };
+  S.workflow = { STEPS, SETTINGS, PANELS, goStep, focus, meta, groupOf, setLevel, hidden, get step() { return step; }, get level() { return level; }, openMore, closeMore };
+  // C13: chưa từng chọn chế độ → hỏi trạng thái hướng dẫn; người mới (chưa có onboarding.json) vào Cơ bản, còn lại Chuyên nghiệp
+  if (L && !L.LEVELS.includes(savedLevel)) S.api('/api/onboarding').then(r => {
+    if (!r || r.error || store.get('uiLevel', '')) return; // lỗi đọc: giữ Chuyên nghiệp, hỏi lại lần sau; người dùng đã bấm công tắc trong lúc chờ
+    setLevel(L.initialLevel('', !!r.isNew), true);
+  }).catch(() => {});
   S.onReady(() => { if (want && meta(panel).step !== want) goStep(want); else renderRail(); });
   renderRail();
 })();
