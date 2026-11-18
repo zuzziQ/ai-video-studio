@@ -133,7 +133,7 @@
   }
   function place() {
     const k = cur?.item?.key || (cur?.draft && 'draft'), b = k && layer.querySelector(`.pin[data-pin="${CSS.escape(k)}"]`);
-    if (!b) { if (cur?.item) pop.hidden = true; return; }
+    if (!b) { if (cur?.item) hidePop(); return; }
     pop.hidden = false;
     const r = b.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
     let x = r.right + 8, y = r.top;
@@ -141,14 +141,16 @@
     y = Math.max(8, Math.min(y, vh - h - 8));
     pop.style.left = x + 'px'; pop.style.top = y + 'px';
   }
-  function close() { cur = null; pop.hidden = true; sigVis = ''; render(); }
+  // ô nhập ẩn đi thì trả focus (để C / Esc / ⌘Z lại là phím tắt của Studio)
+  const hidePop = () => { if (pop.contains(document.activeElement)) document.activeElement.blur(); pop.hidden = true; };
+  function close() { cur = null; hidePop(); sigVis = ''; render(); }
 
   // một bước hoàn tác cho mỗi thay đổi; fn sửa TL / element, trả false nếu không có gì đổi
   function apply(fn) {
     S.pushUndo();
     fn();
     if (Array.isArray(S.TL.pins) && !S.TL.pins.length) delete S.TL.pins;
-    cur = null; pop.hidden = true; sigVis = '';
+    cur = null; hidePop(); sigVis = '';
     S.changed(true);
   }
   const objOf = it => (it?.kind === 'el' ? S.compByCid(it.cid)?.obj : null);
