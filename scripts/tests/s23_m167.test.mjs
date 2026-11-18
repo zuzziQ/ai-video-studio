@@ -33,7 +33,7 @@ test('createAspect: mọi khổ ngoài 16:9 → 9:16', () => {
 
 test('dự án 1:1 cũ xếp theo khổ soạn 9:16 (không theo tỉ lệ thật 1)', () => {
   const r = L.compute({ ratio: L.frameOf(1080, 1080).ratio, mode: 'basic', width: 1600 });
-  assert.equal(r.askPos, 'side'); assert.equal(r.right, 'claude');
+  assert.equal(r.right, 'panel'); // S24 M170: cột phải có tab Claude ở mọi khổ
   // cùng ô với dự án 9:16 thật
   assert.deepEqual(r, L.compute({ ratio: L.frameOf(1080, 1920).ratio, mode: 'basic', width: 1600 }));
 });

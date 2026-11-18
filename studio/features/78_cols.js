@@ -3,7 +3,8 @@
 //     khi bấm ra ngoài (khung, cột phải, timeline, thanh trên), Esc, thả một mục từ thư viện, hoặc vừa chèn xong (bấm một mục trong
 //     ngăn làm dự án đổi). Đang kéo một mục thì ngăn mờ đi để thấy chỗ thả.
 //   Chuyên nghiệp: phím [ gấp / mở thư viện, ] gấp / mở cột phải (Studio.layout 'foldLib' / 'foldRight', nhớ theo máy); bấm lại nút
-//     của panel đang mở trên thanh trái cũng gấp / mở thư viện. Cơ bản: [ mở / đóng ngăn trượt.
+//     của panel đang mở trên thanh trái cũng gấp / mở thư viện. Cơ bản: [ mở / đóng ngăn trượt, ] gấp / mở cột phải như
+//     Chuyên nghiệp (S24 M170, C35).
 //   Studio.cols = { open(), close(), toggle(), get isOpen() }
 // CSS ở studio.css (khối "S23 M165"). Lõi thuần: LayoutCore.foldKey / toggleFold / flyoutClick (76_layout.core.js).
 'use strict';
@@ -73,8 +74,8 @@
     if (/INPUT|TEXTAREA|SELECT/.test(a?.tagName) && a.type !== 'checkbox' && a.type !== 'range') return;
     if (a?.isContentEditable || !$('#modal')?.hidden) return;
     const st = S.layout.get();
-    if (st.lib === 'flyout') { if (which === 'lib') { e.preventDefault(); setOpen(!open); } return; }
-    if (st.mode !== 'pro' || st.focus) return;
+    if (which === 'lib' && st.lib === 'flyout') { e.preventDefault(); setOpen(!open); return; }
+    if (st.focus || (which === 'lib' && st.mode !== 'pro')) return; // M170: ] gấp cột phải ở cả hai chế độ
     e.preventDefault();
     const nx = LC.toggleFold(st, which), key = which === 'lib' ? 'foldLib' : 'foldRight';
     S.layout.set(key, nx[key]);

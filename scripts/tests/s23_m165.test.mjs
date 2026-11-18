@@ -10,13 +10,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const LC = createRequire(import.meta.url)(path.join(ROOT, 'studio/features/76_layout.core.js'));
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
-test('Chuyên nghiệp gấp thư viện / cột phải; Cơ bản bỏ qua trạng thái gấp', () => {
+test('Chuyên nghiệp gấp thư viện / cột phải; Cơ bản bỏ qua gấp thư viện, gấp được cột phải (M170)', () => {
   const base = { ratio: 9 / 16, width: 1440 };
   assert.deepEqual([LC.compute({ ...base, mode: 'pro' }).lib, LC.compute({ ...base, mode: 'pro' }).right], ['panel', 'panel']);
   const f = LC.compute({ ...base, mode: 'pro', foldLib: true, foldRight: true });
   assert.deepEqual([f.lib, f.right, f.foldLib, f.foldRight], ['none', 'none', true, true]);
   const b = LC.compute({ ...base, mode: 'basic', foldLib: true, foldRight: true });
-  assert.deepEqual([b.lib, b.right, b.foldLib, b.foldRight], ['flyout', 'claude', false, false]);
+  assert.deepEqual([b.lib, b.right, b.foldLib, b.foldRight], ['flyout', 'none', false, true]);
   assert.equal(LC.compute({ ...base, mode: 'pro', focus: true }).lib, 'none');
 });
 
@@ -49,7 +49,7 @@ test('CSS: ngăn trượt tuyệt đối, cột gấp, thư viện đủ rộng 
   assert.match(css, /body\[data-lib="flyout"\]\[data-libopen\] #lib \{[^}]*visibility: visible/);
   assert.match(css, /body\[data-lib="flyout"\] #lib \{[^}]*width: min\(420px/);
   assert.match(css, /--libw: clamp\(312px, 22vw, 420px\)/);
-  assert.match(css, /body\[data-lib="none"\] #lib, body:not\(\.wf-basic\)\[data-right="none"\] #right \{ display: none; \}/);
+  assert.match(css, /body\[data-lib="none"\] #lib, body\[data-right="none"\] #right \{ display: none; \}/);
   assert.ok(!/data-controls="column"/.test(css), 'không xếp nút phát thành cột dọc');
   // luật ⤢ đứng sau luật cột để thắng khi cùng độ ưu tiên (Cơ bản + ⤢)
   assert.ok(css.indexOf('body[data-focus] main') > css.indexOf('body[data-lib="flyout"] main'));

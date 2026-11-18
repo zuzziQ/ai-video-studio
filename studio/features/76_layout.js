@@ -1,14 +1,15 @@
 // S23 M161: nền bố cục Studio (docs/plans/S23-bo-cuc-theo-kho-video.md mục 2, 4; C29, C31). Lõi thuần 76_layout.core.js.
-//   Studio.layout.get()            → { askPos, tl, lib, right, controls, mode, narrow, pin, focus, tlH, ratio, width,
+//   Studio.layout.get()            → { tl, lib, right (panel|none, cả hai chế độ — S24 M170), controls, mode, narrow, focus, tlH, ratio, width,
 //                                      aspect, source, legacy } (M167: khổ soạn 9:16 | 16:9, khổ thật, dự án khổ cũ → dải báo #lay-band)
-//   Studio.layout.set(k, v)        k: 'tl' (strip|compact|full, nhớ avs.tl.<chế độ> / avs.tl.narrow), 'pin' (auto|side|bottom,
-//                                  nhớ avs.layout.pin), 'focus' (nút ⤢: ẩn hai cột, không nhớ), 'fullH' (px của mức đầy đủ, avs.tl.h)
-//                                  'foldLib' / 'foldRight' (M165: Chuyên nghiệp gấp thư viện / cột phải, nhớ avs.col.lib / avs.col.right;
+//   Studio.layout.set(k, v)        k: 'tl' (strip|compact|full, nhớ avs.tl.<chế độ> / avs.tl.narrow),
+//                                  'focus' (nút ⤢: ẩn hai cột, không nhớ), 'fullH' (px của mức đầy đủ, avs.tl.h)
+//                                  'foldLib' (M165: Chuyên nghiệp gấp thư viện, nhớ avs.col.lib), 'foldRight' (cột phải, cả hai chế độ, avs.col.right;
 //                                  M168: cửa sổ < 1280 px thư viện tự gấp, mở tay nhớ avs.col.libNarrow tới khi bề rộng qua ngưỡng)
-//   Studio.layout.on(fn)           fn(state, prev) sau mỗi lần đổi; trả hàm gỡ. M162 (dải tua), M163 (Claude cạnh khung),
-//                                  M165 (hai cột) đăng ký ở đây thay vì tự đo cửa sổ.
+//   Studio.layout.on(fn)           fn(state, prev) sau mỗi lần đổi; trả hàm gỡ. M162 (dải tua), M165 (hai cột) đăng ký ở đây
+//                                  thay vì tự đo cửa sổ.
+//   Studio.layout.revealRight()    M170: bỏ ⤢ / mở cột phải đang gấp (phím /, nút ✦ mở tab Claude — 75_ask.js).
 //   Studio.layout.cycleTl(back) / dragStart() / drag(h) / dragEnd(h): phím ` và kéo mép trên timeline (studio.js).
-// Gắn lên body: data-ask, data-tl, data-lib, data-right, data-controls, data-narrow, data-focus; đặt --tlh rồi gọi Studio.fit().
+// Gắn lên body: data-tl, data-lib, data-right, data-controls, data-narrow, data-focus; đặt --tlh rồi gọi Studio.fit().
 // CSS bố cục ở studio.css (khối "S23 M161"). Thông báo Studio.notice là nút chuông trên thanh đầu (01_setup.js), không ở khung xem.
 'use strict';
 (() => {
@@ -30,13 +31,13 @@
   const ratio = () => frame().ratio;
   function compute() {
     const width = innerWidth, m = mode(), narrow = LC.isNarrow(width);
-    const r = LC.compute({ ratio: ratio(), mode: m, width, pin: store.get('layout.pin', 'auto'), tl: store.get(LC.tlKey(m, narrow), ''), focus,
+    const r = LC.compute({ ratio: ratio(), mode: m, width, tl: store.get(LC.tlKey(m, narrow), ''), focus,
       foldLib: store.get('col.lib', '') === 'off', foldRight: store.get('col.right', '') === 'off', narrowLib: store.get('col.libNarrow', '') || null });
     const f = frame();
     return { ...r, ratio: f.ratio, aspect: f.aspect, source: f.source, legacy: f.legacy, width, tlH: LC.tlHeight(r.tl, +store.get('tl.h', LC.FULL.def), innerHeight) };
   }
 
-  const ATTR = { askPos: 'data-ask', tl: 'data-tl', lib: 'data-lib', right: 'data-right', controls: 'data-controls' };
+  const ATTR = { tl: 'data-tl', lib: 'data-lib', right: 'data-right', controls: 'data-controls' };
   function apply() {
     if (!LC.isNarrow(innerWidth)) store.set('col.libNarrow', null); // M168: qua ngưỡng 1280 px → lần sau hẹp lại thì tự gấp lại
     const prev = cur, st = compute(); cur = st;
@@ -54,10 +55,9 @@
 
   function set(k, v) {
     if (k === 'tl') { const t = LC.normTl(v); if (!t) return; const c = cur || compute(); store.set(LC.tlKey(c.mode, c.narrow), t); }
-    else if (k === 'pin') store.set('layout.pin', LC.normPin(v) === 'auto' ? null : LC.normPin(v));
     else if (k === 'focus') focus = !!v;
     else if (k === 'foldLib') { const f = LC.foldStore(LC.autoFoldLib(mode(), innerWidth), !!v); store.set(f.key, f.val); } // M165 / M168 (cửa sổ hẹp nhớ riêng)
-    else if (k === 'foldRight') store.set('col.right', v ? 'off' : null); // M165, nhớ theo máy
+    else if (k === 'foldRight') store.set('col.right', v ? 'off' : null); // M165, nhớ theo máy; M170: cả Cơ bản
     else if (k === 'fullH') store.set('tl.h', LC.clampFull(v, innerHeight));
     else return;
     apply();
@@ -78,6 +78,8 @@
     requestAnimationFrame(() => S.fit?.());
   }
   const cycleTl = back => set('tl', LC.cycle((cur || compute()).tl, back));
+  // M170: cột phải đang gấp / ⤢ → hiện lại (trả true nếu có đổi)
+  function revealRight() { const steps = LC.revealRight(cur || compute()); for (const [k, v] of steps) set(k, v); return steps.length > 0; }
 
   // ---------- nút ⤢ ----------
   function paintExpand() {
@@ -101,7 +103,6 @@
   #wf-more .lay-note { padding: 0 var(--space-2) var(--space-1); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }`;
   document.head.appendChild(css);
 
-  const PIN_IC = { auto: 'ti-wand', side: 'ti-layout-sidebar-right', bottom: 'ti-layout-bottombar' };
   const TL_IC = { strip: 'ti-minus', compact: 'ti-layout-rows', full: 'ti-layout-board' };
   let menu = null;
   function mountMenu() {
@@ -110,16 +111,13 @@
     menu = document.createElement('div'); menu.dataset.wf = 'layout';
     tail.before(menu);
     menu.addEventListener('click', e => {
-      const b = e.target.closest('[data-lay-pin],[data-lay-tl]'); if (!b) return;
-      if (b.dataset.layPin) set('pin', b.dataset.layPin); else set('tl', b.dataset.layTl);
+      const b = e.target.closest('[data-lay-tl]'); if (b) set('tl', b.dataset.layTl);
     });
   }
   function paintMenu() {
     if (!menu || !cur) return;
-    const pin = cur.pin, tl = cur.tl;
+    const tl = cur.tl; // M170: bỏ ghim Claude cạnh / dưới khung — Claude là tab cột phải (phím /, gấp cột bằng ])
     menu.innerHTML = `<hr><div class="lay-row"><i class="ti ti-layout"></i><span>Bố cục</span></div>
-      <div class="lay-seg" role="group" aria-label="Hỏi Claude">${LC.PINS.map(k => `<button data-lay-pin="${k}" class="${pin === k ? 'on' : ''}" aria-pressed="${pin === k}"><i class="ti ${PIN_IC[k]}"></i>${esc(LC.PIN_LABEL[k])}</button>`).join('')}</div>
-      ${cur.narrow ? '<div class="lay-note">Cửa sổ hẹp: Claude luôn dưới khung</div>' : ''}
       <div class="lay-seg" role="group" aria-label="Timeline (phím \`)">${LC.TLS.map(k => `<button data-lay-tl="${k}" class="${tl === k ? 'on' : ''}" aria-pressed="${tl === k}" title="Timeline ${esc(LC.TL_LABEL[k].toLowerCase())} (phím \`)"><i class="ti ${TL_IC[k]}"></i>${esc(LC.TL_LABEL[k])}</button>`).join('')}</div>`;
   }
 
@@ -168,7 +166,7 @@
 
   // dải tua (mức strip) là features/77_scrub.js (S23 M162): đăng ký qua Studio.layout.on
 
-  // thanh trong #center hiện / ẩn (Hỏi Claude, xem lại thay đổi) → khung xem co giãn lại
+  // thanh trong #center hiện / ẩn (xem lại thay đổi, dải báo khổ cũ) → khung xem co giãn lại
   if (window.ResizeObserver && $('#stagewrap')) new ResizeObserver(() => S.fit?.()).observe($('#stagewrap'));
 
   // ---------- phím ` ----------
@@ -192,7 +190,7 @@
     get() { return { ...(cur || compute()) }; },
     set,
     on(fn) { if (typeof fn !== 'function') return () => {}; subs.add(fn); return () => subs.delete(fn); },
-    cycleTl, dragStart, drag, dragEnd, refresh: apply,
+    cycleTl, dragStart, drag, dragEnd, revealRight, refresh: apply,
   };
   mountMenu();
   apply();

@@ -220,14 +220,7 @@
     return { t0: r2(Math.max(0, lo)), t1: r2(Math.max(lo, hi)) };
   }
 
-  // ---------- S23 M163 (C30, C31): dạng của thanh theo Studio.layout ----------
-  // 'col': Cơ bản + video dọc (layout.right === 'claude') — cột Claude thay cột phải, gộp gợi ý, kết quả, thanh xem lại
-  // (Studio.review) và khi chọn element thì mục chính + Núm (#insp). Còn lại 'row': một dòng dưới khung, gợi ý hiện khi gõ.
-  const formOf = L => (L && L.askPos === 'side' && L.right === 'claude' ? 'col' : 'row');
-  // Phần nào của Studio nằm trong cột: o = { review (đang xem lại), sel (có element / clip chọn), detail (chi tiết mục thư viện) }
-  const colParts = (form, o = {}) => ({ rv: form === 'col' && !!o.review, insp: form === 'col' && !!(o.sel || o.detail) });
-
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts, formOf, colParts };
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

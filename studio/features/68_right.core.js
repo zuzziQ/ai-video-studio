@@ -1,11 +1,12 @@
-// S21 M145: lõi thuần của cột phải kiểu Adobe — nhóm tab Thuộc tính · Lớp · Dự án. Không DOM: studio.js (renderInspector) gọi
+// S21 M145: lõi thuần của cột phải kiểu Adobe — nhóm tab Thuộc tính · Lớp · Claude · Dự án (S24 M170 thêm Claude, C34). Không DOM: studio.js (renderInspector) gọi
 // các hàm ở đây để quyết định tab đang mở. Chạy trong trình duyệt (window.RightCore) và trong Node (scripts/tests/s21_right.test.mjs).
 //   Thuộc tính (props): element đang chọn; không chọn gì mà đang xem một mục thư viện (M147) thì chi tiết mục đó.
 //   Lớp (layers): bảng lớp tại playhead (67_layers.js, M142).
+//   Claude (claude): Hỏi Claude (75_ask.js, Studio.right.addTab) — giữ nguyên khi chọn / bỏ chọn như Lớp.
 //   Dự án (project): điểm 5 bước, việc thiếu, cài đặt dự án (projectPanel + 03_nextstep.js).
 'use strict';
 (function (root) {
-  const TABS = [['props', 'Thuộc tính', 'ti-adjustments-horizontal'], ['layers', 'Lớp', 'ti-stack-2'], ['project', 'Dự án', 'ti-layout-dashboard']];
+  const TABS = [['props', 'Thuộc tính', 'ti-adjustments-horizontal'], ['layers', 'Lớp', 'ti-stack-2'], ['claude', 'Claude', 'ti-sparkles'], ['project', 'Dự án', 'ti-layout-dashboard']];
   const KEYS = TABS.map(t => t[0]);
   // S22 M151: keys = các tab có ở chế độ đang dùng (LevelCore.rightTabs: Cơ bản không có Lớp); bỏ trống = đủ ba tab.
   const valid = (t, keys = KEYS) => KEYS.includes(t) && keys.includes(t);
@@ -23,7 +24,7 @@
 
   // Tab sau khi trạng thái chọn đổi (had → has). Tự đổi như Adobe nhưng không giành tab người dùng đang dùng:
   //   Dự án + vừa chọn element → Thuộc tính; Thuộc tính + vừa bỏ chọn (không có chi tiết mục thư viện) → Dự án;
-  //   Lớp giữ nguyên (bấm dòng trong bảng Lớp là chọn, không được nhảy khỏi bảng).
+  //   Lớp / Claude giữ nguyên (bấm dòng trong bảng Lớp là chọn, không được nhảy khỏi bảng).
   //   Tab không có ở chế độ đang dùng (vd. Lớp khi vừa đổi sang Cơ bản) → như tab hỏng.
   //   M156: Thuộc tính mà không có gì để xem (kể cả khi đổi bước, đóng chi tiết thư viện) → Dự án.
   function nextTab({ tab, had, has, detail = false, keys = KEYS }) {
