@@ -18,6 +18,7 @@ import { rmSync } from './fs_rm.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin, claudeBin } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { runClaude } from './llm.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -174,7 +175,7 @@ export async function validatePack(code, id, { outDir, vertical = true } = {}) {
   if (code.length > 40000) warnings.push(`Mã dài ${Math.round(code.length / 1024)} KB (nên ≤ 22 KB)`);
   const ft = footage();
   const { default: puppeteer } = await import('puppeteer-core');
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'] });
+  const b = await launchChrome(puppeteer, { executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars'] });
   try {
     const [W, H] = vertical ? [360, 640] : [640, 360];
     const pg = await b.newPage(); const errs = [];
@@ -419,7 +420,7 @@ async function applyToProject(id, dir, title) {
   if (!tpl) throw new Error('Không có style ' + id);
   const caps = typeof tl.captions === 'string' ? rd(path.join(path.dirname(tlFile), tl.captions), []) : tl.captions || [];
   const { default: puppeteer } = await import('puppeteer-core');
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files'] });
+  const b = await launchChrome(puppeteer, { executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files'] });
   try {
     const pg = await b.newPage(); const errs = []; pg.on('pageerror', e => errs.push(e.message));
     await pg.goto(pathToFileURL(path.join(SKILL, 'engine/index.html')).href, { waitUntil: 'domcontentloaded' });

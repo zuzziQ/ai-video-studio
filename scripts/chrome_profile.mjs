@@ -5,6 +5,8 @@
 // được (quá giờ chờ WS endpoint), puppeteer gọi `void browserCloseCallback()` nên lỗi EBUSY thành unhandled rejection
 // và làm sập cả server Studio (M149, /api/elem/shots). Truyền userDataDir riêng thì puppeteer không xoá nữa; ta xoá có
 // thử lại, xoá không được thì để lại cho lần dọn sau (sweepProfiles), không bao giờ ném lỗi ra ngoài.
+//
+// M158: mọi script mở Chrome đi qua đây (render_hw.mjs launchChrome cũng gọi launchChrome này cho từng lần mở).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,6 +41,21 @@ export async function sweepProfiles({ root = profileRoot(), maxAgeMs = 60 * 60 *
   return n;
 }
 
+// Chrome bản thường trên Windows (M158): thư mục dữ liệu mặc định là %USERPROFILE%\AppData\Local\Google\Chrome\User Data,
+// lấy từ known folder LocalAppData (registry ghi "%USERPROFILE%\AppData\Local", mở rộng theo env của tiến trình). Khi
+// USERPROFILE là thư mục tạm chưa có AppData\Local, Chrome không dựng được đường dẫn mặc định, coi như đang dùng thư mục
+// mặc định và tắt DevTools ("DevTools remote debugging requires a non-default data directory") dù đã có --user-data-dir:
+// puppeteer chờ WS endpoint tới hết giờ. chrome-headless-shell không bị. Tạo sẵn thư mục (rỗng) là đủ; hồ sơ thật luôn có sẵn.
+export function ensureWinAppData(env = process.env, { platform = process.platform, mkdir = fs.mkdirSync } = {}) {
+  if (platform !== 'win32') return [];
+  const dirs = [];
+  if (env.USERPROFILE) dirs.push(path.win32.join(env.USERPROFILE, 'AppData', 'Local'));
+  if (env.LOCALAPPDATA) dirs.push(env.LOCALAPPDATA);
+  const made = [];
+  for (const d of [...new Set(dirs)]) { try { mkdir(d, { recursive: true }); made.push(d); } catch { /* không tạo được: để Chrome tự báo */ } }
+  return made;
+}
+
 // puppeteer.launch với hồ sơ riêng. Lỗi khởi động → Error rõ ràng (.reason = 'launch', .code = 'CHROME_START'),
 // hồ sơ được dọn ở nền; Chrome đóng (close hoặc tự chết) → hồ sơ được dọn ở nền.
 export async function launchChrome(puppeteer, opts = {}, { root = profileRoot(), rm } = {}) {
@@ -46,6 +63,7 @@ export async function launchChrome(puppeteer, opts = {}, { root = profileRoot(),
   let dir;
   try { dir = fs.mkdtempSync(path.join(root, PROFILE_PREFIX)); }
   catch (e) { throw Object.assign(new Error(`Không tạo được thư mục tạm cho Chrome: ${e.message}`), { reason: 'launch', code: 'CHROME_START' }); }
+  ensureWinAppData(opts.env || process.env);
   let browser;
   try { browser = await puppeteer.launch({ ...opts, userDataDir: dir }); }
   catch (e) {

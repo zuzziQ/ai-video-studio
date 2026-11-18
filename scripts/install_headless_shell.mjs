@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { shellRoot, findHeadlessShell } from './render_hw.mjs';
 
 const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : null; };
@@ -17,7 +18,7 @@ async function chromeVersion() {
   const exe = findChrome();
   if (!exe) return { exe: null, product: '', version: '' };
   const { default: puppeteer } = await import('puppeteer-core');
-  const b = await puppeteer.launch({ executablePath: exe, headless: true, args: ['--no-first-run'], timeout: 30000 });
+  const b = await launchChrome(puppeteer, { executablePath: exe, headless: true, args: ['--no-first-run'], timeout: 30000 });
   try {
     const product = await b.version();
     return { exe, product, version: (product.match(/\d+(\.\d+){3}/) || [''])[0] };

@@ -23,6 +23,13 @@ node scripts/render.mjs timeline.json x --still 12.5 still.jpg
   `node scripts/install_headless_shell.mjs`, đúng bản Chrome máy đang có; không bắt buộc) thì worker dùng nó thay Chrome đầy đủ.
   `AVS_CHROME_SHELL=<đường dẫn exe>` chỉ định bản khác, `AVS_CHROME_SHELL=0` không dùng. Mở lỗi, hoặc chỉ Chrome đầy đủ mới có GPU,
   thì cả lượt lùi về Chrome cài sẵn. Chrome tự cập nhật thì chạy lại lệnh cài để headless-shell theo kịp.
+- Hồ sơ Chrome (`M149`, `M158`): mọi script mở Chrome (`render_hw.mjs` `launchChrome` và các script gọi riêng như `broll`,
+  `style_lab`, `autopilot`, `ai_edit`, `selftest`) đi qua `scripts/chrome_profile.mjs`: mỗi lần mở một thư mục `%TEMP%/avs-chrome-*`
+  riêng, xoá có thử lại khi đóng (Windows còn khoá file thì để lại, lần mở sau dọn hồ sơ cũ hơn 1 giờ), lỗi khởi động thành
+  `code: 'CHROME_START'`. Không gọi `puppeteer.launch` thẳng (test `s23_chrome_profile` chặn). Chrome bản thường trên Windows
+  không lên khi `USERPROFILE` là thư mục chưa có `AppData\Local` (HOME tạm khi test): Chrome coi như đang dùng thư mục dữ liệu
+  mặc định và tắt DevTools (`DevTools remote debugging requires a non-default data directory`) dù có `--user-data-dir`, puppeteer
+  chờ tới hết giờ. Helper tạo sẵn `%USERPROFILE%\AppData\Local` (và `LOCALAPPDATA` nếu đặt); `chrome-headless-shell` không bị.
 - Chụp khung bằng CDP `Page.captureScreenshot` (jpeg, `optimizeForSpeed`, `captureBeyondViewport:false`); nếu khung chụp
   sai kích thước thì tự quay về `page.screenshot`.
 - Preset x264 (CRF 17 giữ nguyên): các đoạn song song mặc định `veryfast` (SSIM 0,994 so với `medium`, CPU mã hoá ÷2,4); render

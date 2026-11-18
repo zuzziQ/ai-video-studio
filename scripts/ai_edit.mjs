@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
 import { faceZone } from './face_track_project.mjs';
 import { safeOf, designOf } from './ai_qc.mjs'; // ai_qc runs its CLI only when executed directly; Chrome opens only in placePlan
@@ -34,7 +35,7 @@ export function loadProject(p) {
 export async function engineCatalog(tl, caps, dir) {
   const { default: puppeteer } = await import('puppeteer-core');
   const CHROME = findChrome();
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files'] });
+  const b = await launchChrome(puppeteer, { executablePath: CHROME, headless: true, args: ['--allow-file-access-from-files'] });
   try {
     const pg = await b.newPage();
     await pg.goto(pathToFileURL(path.join(SKILL, 'engine/index.html')).href, { waitUntil: 'domcontentloaded' });
