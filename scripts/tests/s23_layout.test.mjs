@@ -99,7 +99,7 @@ test('nút ⤢ (focus): ẩn thanh thư viện và cột Thuộc tính, cột Cl
 
 test('chỗ nối: Studio.layout thay body.expanded, CSS theo data-*', () => {
   const js = read('studio/features/76_layout.js');
-  for (const k of ['S.layout =', 'get()', 'set(', 'on(', "'data-ask'", "'data-tl'", 'LayoutCore', 'avs-notices', 'wf-more'])
+  for (const k of ['S.layout =', 'get()', 'set(', 'on(', "'data-ask'", "'data-tl'", 'LayoutCore', 'wf-more', 'S.zoomPending'])
     assert.ok(js.includes(k), `76_layout.js thiếu ${k}`);
   const st = read('studio/studio.js');
   assert.ok(!/classList\.(toggle|contains|add)\('expanded'\)/.test(st), 'studio.js còn body.expanded');
@@ -113,6 +113,20 @@ test('chỗ nối: Studio.layout thay body.expanded, CSS theo data-*', () => {
   assert.ok(!/#controls \{[^}]*grid-template-columns: 1fr auto 1fr/.test(css), '#controls không dùng grid 1fr auto 1fr (con tràn khi hẹp)');
   for (const k of ['container: ctl / inline-size', '@container ctl (max-width: 400px)', '@container ctl (max-width: 330px)'])
     assert.ok(css.includes(k), `studio.css thiếu ${k}`);
-  for (const k of ['body[data-ask="side"] #center','body[data-tl="strip"]', 'body[data-tl="compact"]', 'body[data-focus] main', '#center > #avs-notices'])
+  for (const k of ['body[data-ask="side"] #center','body[data-tl="strip"]', 'body[data-tl="compact"]', 'body[data-focus] main'])
     assert.ok(css.includes(k), `studio.css thiếu ${k}`);
+});
+
+test('thông báo là chuông trên thanh đầu, không chiếm chỗ khung xem', () => {
+  const st = read('studio/features/01_setup.js'), css = read('studio/studio.css');
+  for (const k of ["'avs-ntbtn'", 'ti-bell', "'data-open'", 'ntSync', 'aria-expanded'])
+    assert.ok(st.includes(k), `01_setup.js thiếu ${k}`);
+  assert.ok(st.includes('#avs-notices:empty, #avs-notices:not([data-open]) { display: none; }'), 'ô thông báo đóng mặc định');
+  assert.ok(!css.includes('#center > #avs-notices') && !read('studio/features/76_layout.js').includes("center.prepend"), 'không đưa thông báo vào #center');
+});
+
+test('timeline ẩn (dải tua) thì vừa khung lại khi hiện, không kẹp PPS nhỏ nhất', () => {
+  const st = read('studio/studio.js');
+  assert.match(st, /function zoomFit\(\) \{ const w = \$\('#tlscroll'\)\.clientWidth; if \(!w\) \{ ZFIT = true; return; \}/);
+  assert.ok(st.includes('fit, zoomFit, get zoomPending()'), 'Studio.zoomFit / zoomPending cho 76_layout.js');
 });

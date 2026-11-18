@@ -6,7 +6,7 @@
 //                                  M165 (hai cột) đăng ký ở đây thay vì tự đo cửa sổ.
 //   Studio.layout.cycleTl(back) / dragStart() / drag(h) / dragEnd(h): phím ` và kéo mép trên timeline (studio.js).
 // Gắn lên body: data-ask, data-tl, data-lib, data-right, data-controls, data-narrow, data-focus; đặt --tlh rồi gọi Studio.fit().
-// CSS bố cục ở studio.css (khối "S23 M161"). Dải báo Studio.notice có vùng riêng đầu #center (không đè đỉnh khung, PR 190).
+// CSS bố cục ở studio.css (khối "S23 M161"). Thông báo Studio.notice là nút chuông trên thanh đầu (01_setup.js), không ở khung xem.
 'use strict';
 (() => {
   const S = window.Studio, LC = window.LayoutCore;
@@ -38,7 +38,7 @@
     paintExpand(); paintMenu(); paintStrip();
     const same = prev && Object.keys(st).every(k => k === 'width' || st[k] === prev[k]);
     if (same) return;
-    if (S.TL) { S.fit?.(); if (prev && prev.tl !== st.tl) S.renderTimeline?.(); } // fit đọc cỡ #stagewrap mới (bố cục tính lại ngay)
+    if (S.TL) { S.fit?.(); if (prev && prev.tl !== st.tl) { S.renderTimeline?.(); if (st.tl !== 'strip' && S.zoomPending) S.zoomFit?.(); } } // fit đọc cỡ #stagewrap mới; timeline vừa hiện lại thì vừa khung
     for (const fn of subs) { try { fn({ ...st }, prev && { ...prev }); } catch (e) { console.error(e); } }
   }
 
@@ -140,15 +140,8 @@
   strip.addEventListener('pointerup', () => (seeking = false));
   strip.addEventListener('dblclick', () => set('tl', 'compact'));
 
-  // ---------- vùng dải báo: đầu #center, chiếm chỗ thay vì đè đỉnh khung ----------
-  {
-    const center = $('#center');
-    let box = document.getElementById('avs-notices');
-    if (!box) { box = document.createElement('div'); box.id = 'avs-notices'; }
-    if (center && box.parentElement !== center) center.prepend(box);
-    // dải báo hiện / ẩn → khung xem co giãn lại
-    if (window.ResizeObserver && $('#stagewrap')) new ResizeObserver(() => S.fit?.()).observe($('#stagewrap'));
-  }
+  // thanh trong #center hiện / ẩn (Hỏi Claude, xem lại thay đổi) → khung xem co giãn lại
+  if (window.ResizeObserver && $('#stagewrap')) new ResizeObserver(() => S.fit?.()).observe($('#stagewrap'));
 
   // ---------- phím ` ----------
   window.addEventListener('keydown', e => {

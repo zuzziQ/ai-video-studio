@@ -1,10 +1,11 @@
 // Kiểm tra máy (ROADMAP S15 M115, references/studio.md): Studio cần những thư viện nào, máy này có chưa, cài bằng lệnh gì.
 // - Dữ liệu: GET /api/setup/check (studio/routes/01_setup.mjs, danh sách lấy từ install.ps1 / scripts/setup.sh), có cache 5 phút.
 // - S22 M156 (K2): lần mở đầu không bật hộp thoại nữa. Thiếu mục bắt buộc (mới so với lần bấm "Để sau") thì hiện dải báo
-//   Studio.notice ở đầu khung (bấm "Kiểm tra máy" mới mở màn đầy đủ); đủ cả thì chỉ ghi đã xem. Studio.setupGate xong ngay
+//   thông báo Studio.notice (chuông trên thanh đầu; bấm "Kiểm tra máy" mới mở màn đầy đủ); đủ cả thì chỉ ghi đã xem. Studio.setupGate xong ngay
 //   để 02_onboarding.js mở màn chào luôn — lần đầu chỉ còn một màn.
-// - Studio.notice(id, {tone, icon, text, acts}) / Studio.notice.clear(id): dải báo dùng chung (63_frames.js dùng khi tự tạo lại
-//   khung hình). Nằm trên khung giữa, dưới #modal; nhiều dải xếp chồng.
+// - Studio.notice(id, {tone, icon, text, acts}) / Studio.notice.clear(id): thông báo dùng chung (63_frames.js dùng khi tự tạo lại
+//   khung hình). S23 M161: không đè khung xem nữa — nút chuông #avs-ntbtn trên thanh đầu (số + màu theo mức nặng nhất, rung khi có
+//   thông báo mới), bấm mở ô #avs-notices dưới nút; hết thông báo thì nút ẩn.
 // - Thiếu mục bắt buộc: chấm đỏ trên nút ⋯ + mục "Kiểm tra máy… (thiếu N)" tô đỏ trong menu (mở lại màn từ đó).
 // - Bấm một tính năng (POST tới API của nó) khi thư viện nó cần đang thiếu, hoặc lỗi trả về nhắc tới thư viện thiếu
 //   (No module named …, spawn ffmpeg ENOENT, puppeteer-core…): hiện thẻ #setup-need nêu đúng thư viện + lệnh cài.
@@ -77,11 +78,20 @@
   #setup-need .sn-f { margin: 0; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); }
   #setup-need .sn-x { position: absolute; top: var(--space-2); right: var(--space-2); }
   #setup-need .sn-act { display: flex; gap: var(--space-2); justify-content: flex-end; }
-  #avs-notices { position: fixed; top: calc(50px + var(--space-2)); left: 50%; transform: translateX(-50%); z-index: 45; /* dưới #modal (50) */
-    width: min(clamp(360px, calc(100vw - 640px), 600px), calc(100vw - 2 * var(--space-4))); display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
-  #avs-notices:empty { display: none; }
-  body:has(#avs-notices > .nt) .toast { top: auto; bottom: var(--space-6); } /* toast cũng ở đỉnh giữa: có dải báo thì toast xuống đáy */
-  #avs-notices .nt { pointer-events: auto; border-radius: var(--radius-card); background: rgb(var(--color-surface-raised)); box-shadow: var(--shadow-raised); }
+  /* S23 M161: chuông thông báo trên thanh đầu + ô bật ra (không chiếm chỗ của khung xem) */
+  #avs-ntbtn { position: relative; flex: none; }
+  #avs-ntbtn[hidden] { display: none; }
+  #avs-ntbtn .nt-n { position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 var(--space-1); border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 700; line-height: 16px; text-align: center; background: rgb(var(--color-accent)); color: rgb(var(--color-white)); pointer-events: none; }
+  #avs-ntbtn[data-tone="warn"] .nt-n { background: rgb(var(--color-warning)); color: rgb(var(--color-black)); }
+  #avs-ntbtn[data-tone="err"] .nt-n { background: rgb(var(--color-danger)); }
+  #avs-ntbtn[aria-expanded="true"] { background: rgb(var(--color-surface-muted)); color: rgb(var(--color-fg)); }
+  #avs-ntbtn.ping .ti { animation: nt-ping var(--duration-slow) var(--ease-spring) 3; transform-origin: 50% 0; }
+  @keyframes nt-ping { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-16deg); } 70% { transform: rotate(16deg); } }
+  #avs-notices { position: fixed; top: calc(50px + var(--space-1)); right: var(--space-4); z-index: 45; /* dưới #modal (50) */
+    width: min(440px, calc(100vw - 2 * var(--space-4))); max-height: calc(100vh - 50px - 2 * var(--space-4)); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2);
+    padding: var(--space-2); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); background: rgb(var(--color-surface)); box-shadow: var(--shadow-raised); }
+  #avs-notices:empty, #avs-notices:not([data-open]) { display: none; }
+  #avs-notices .nt { border-radius: var(--radius-card); background: rgb(var(--color-surface-raised)); }
   #avs-notices .ui-banner { align-items: center; flex-wrap: wrap; font-size: var(--text-sm); }
   #avs-notices .nt-t { flex: 1 1 240px; min-width: 0; margin: 0; overflow-wrap: anywhere; color: rgb(var(--color-fg)); }
   #avs-notices .nt-t > .ti { margin-right: var(--space-1); }
@@ -93,11 +103,50 @@
 
   // ---------- dải báo dùng chung (M156) ----------
   // acts: [{ label, icon, primary, on }] — on() trả false thì giữ dải, còn lại bấm xong dải tự đóng. Gọi lại cùng id = thay nội dung.
-  function notice(id, o = {}) {
+  // S23 M161: nút chuông + ô thông báo. Số và màu (mức nặng nhất) theo các .nt trong ô; hết thì ẩn nút và đóng ô.
+  let ntBtn = null;
+  const ntBox = () => {
     let box = document.getElementById('avs-notices');
-    if (!box) { box = document.createElement('div'); box.id = 'avs-notices'; document.body.appendChild(box); }
+    if (!box) { box = document.createElement('div'); box.id = 'avs-notices'; box.setAttribute('role', 'region'); box.setAttribute('aria-label', 'Thông báo'); document.body.appendChild(box); }
+    if (!ntBtn) {
+      ntBtn = document.createElement('button'); ntBtn.id = 'avs-ntbtn'; ntBtn.className = 'icon'; ntBtn.hidden = true;
+      ntBtn.setAttribute('aria-haspopup', 'true'); ntBtn.setAttribute('aria-expanded', 'false');
+      ntBtn.innerHTML = '<i class="ti ti-bell"></i><span class="nt-n"></span>';
+      const at = document.getElementById('wf-lvbar') || document.getElementById('wf-morebtn') || document.getElementById('save');
+      if (at) at.before(ntBtn); else document.getElementById('top')?.appendChild(ntBtn);
+      ntBtn.addEventListener('click', () => ntOpen(!box.hasAttribute('data-open')));
+      ntBtn.addEventListener('animationend', () => ntBtn.classList.remove('ping'));
+      new MutationObserver(ntSync).observe(box, { childList: true });
+      document.addEventListener('mousedown', e => { if (box.hasAttribute('data-open') && !box.contains(e.target) && !ntBtn.contains(e.target)) ntOpen(false); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && box.hasAttribute('data-open')) ntOpen(false); });
+      addEventListener('resize', () => box.hasAttribute('data-open') && ntPlace());
+    }
+    return box;
+  };
+  function ntPlace() {
+    const box = ntBox(), r = ntBtn.getBoundingClientRect(), w = box.offsetWidth;
+    box.style.right = 'auto'; box.style.top = r.bottom + 4 + 'px';
+    box.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px';
+  }
+  function ntOpen(on) {
+    const box = ntBox(); on = on && box.children.length > 0;
+    box.toggleAttribute('data-open', on); ntBtn.setAttribute('aria-expanded', String(on));
+    if (on) ntPlace();
+  }
+  function ntSync() {
+    const box = ntBox(), list = [...box.children], n = list.length;
+    ntBtn.hidden = !n; if (!n) ntOpen(false);
+    const tone = list.some(e => e.querySelector('.ui-banner--err')) ? 'err' : list.some(e => e.querySelector('.ui-banner--warn')) ? 'warn' : '';
+    if (tone) ntBtn.dataset.tone = tone; else delete ntBtn.dataset.tone;
+    ntBtn.querySelector('.nt-n').textContent = n > 9 ? '9+' : String(n);
+    const first = list[0]?.querySelector('.nt-t')?.textContent.trim() || '';
+    ntBtn.title = n === 1 ? `Thông báo: ${first}` : `${n} thông báo`;
+    ntBtn.setAttribute('aria-label', ntBtn.title);
+  }
+  function notice(id, o = {}) {
+    const box = ntBox();
     let el = box.querySelector(`[data-nt="${CSS.escape(id)}"]`);
-    if (!el) { el = document.createElement('div'); el.className = 'nt'; el.dataset.nt = id; box.appendChild(el); }
+    if (!el) { el = document.createElement('div'); el.className = 'nt'; el.dataset.nt = id; box.appendChild(el); ntBtn.classList.add('ping'); }
     const acts = o.acts || [], tone = ['warn', 'err', 'ok'].includes(o.tone) ? ' ui-banner--' + o.tone : '';
     el.innerHTML = `<div class="ui-banner${tone}" role="${o.tone === 'err' ? 'alert' : 'status'}"><p class="nt-t">${o.icon ? `<i class="ti ${esc(o.icon)}" aria-hidden="true"></i>` : ''}${o.text || ''}</p>
       ${acts.length ? `<div class="nt-act">${acts.map((a, i) => `<button class="ui-btn ui-btn--${a.primary ? 'primary' : 'secondary'} ui-btn--sm" data-nti="${i}">${a.icon ? `<i class="ti ${esc(a.icon)}"></i> ` : ''}${esc(a.label)}</button>`).join('')}</div>` : ''}</div>`;
@@ -105,6 +154,7 @@
       const b = e.target.closest('[data-nti]'); if (!b) return;
       const r = await acts[+b.dataset.nti]?.on?.(); if (r !== false) el.remove();
     };
+    ntSync();
     return el;
   }
   notice.clear = id => document.querySelector(`#avs-notices [data-nt="${CSS.escape(id)}"]`)?.remove();
