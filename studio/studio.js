@@ -312,6 +312,7 @@ function select(c, seek) {
 
 // ---------- inspector ----------
 const opt = (list, cur) => list.map(([v, l]) => `<option value="${esc(v)}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('');
+const fontOpt = cur => (window.KnobsCore ? KnobsCore.fontOptions(FONTS, TL?.brand, cur, esc) : opt(FONTS, cur)); // S21 M148
 const num = (f, v, step = 1) => `<input type="number" data-f="${f}" value="${v ?? ''}" step="${step}">`;
 const sect = (title, body, ic = '') => `<section>${title ? `<div class="sh">${ic ? `<i class="ti ${ic}"></i>` : ''}${title}</div>` : ''}${body}</section>`;
 // S17 M124: QC nhanh trên vị trí hiện tại (vùng an toàn, tràn khung, che mặt đang nói), đo ngay trong preview, không gọi server.
@@ -344,8 +345,11 @@ function posBlock(c) {
     <div class="slrow"><span>Cỡ</span><input type="range" data-f="pct" min="20" max="300" value="${pct}"><b>${pct}%</b></div>
     <div class="stqc">${qcHtml(c)}</div>`, 'ti-arrows-move');
 }
+// S21 M148: thương hiệu trước tiên — màu của TL.brand (bộ đang dùng) thành hàng "Thương hiệu" đứng đầu ô màu; font của bộ đứng đầu ô font.
 function colorBlock(cur) {
-  return `<span class="lbl">Màu</span><div class="sw"><button class="orig ${cur ? '' : 'on'}" data-color="">Gốc</button>
+  const bc = window.KnobsCore?.brandColors(TL.brand) || [], up = String(cur || '').toUpperCase();
+  const brand = bc.length ? `<span class="lbl">Thương hiệu</span><div class="sw sw-brand">${bc.map(c => `<button data-dfill="${c.v}" class="${up === c.v ? 'on' : ''}" data-color="${c.v}" title="${c.label} ${c.v}" aria-label="${c.label} ${c.v}"></button>`).join('')}</div>` : '';
+  return `${brand}<span class="lbl">Màu</span><div class="sw"><button class="orig ${cur ? '' : 'on'}" data-color="">Gốc</button>
     ${SWATCH.map(c => `<button data-dfill="${c}" class="${cur === c ? 'on' : ''}" data-color="${c}" title="${c}"></button>`).join('')}
     <input type="color" data-f="color" value="${cur || '#ffffff'}"></div>`; // design-token-ok: default text colour of the video
 }
@@ -359,7 +363,7 @@ const actions = c => `<div class="acts"><button data-act="hide"><i class="ti ${c
   <button data-act="del" class="danger"><i class="ti ti-trash"></i> Xoá</button>${c.obj._orig ? '<button data-act="reset"><i class="ti ti-restore"></i> Về thiết kế</button>' : ''}</div>`;
 function textBlock(o, withStyle) {
   return sect('Nội dung', `<textarea data-f="text" rows="2" class="big">${esc(o.text || '')}</textarea>`, 'ti-letter-t') +
-    sect('Chữ', `<div class="row"><div><span class="lbl">Font</span><select data-f="font">${opt(FONTS, o.font || '')}</select></div>
+    sect('Chữ', `<div class="row"><div><span class="lbl">Font</span><select data-f="font">${fontOpt(o.font || '')}</select></div>
     <div><span class="lbl">Độ đậm</span><select data-f="weight">${opt([['', 'Mặc định'], ['500', '500'], ['600', '600'], ['700', '700'], ['800', '800'], ['900', '900']], o.weight || '')}</select></div></div>
     ${withStyle ? `<span class="lbl">Kiểu chữ</span><div class="pills">${STYLES.map(([v, l]) => `<button class="${(o.style || 'white') === v ? 'on' : ''}" data-sty="${v}">${l}</button>`).join('')}</div>
     <label class="check"><input type="checkbox" data-f="italic" ${o.italic === false ? '' : 'checked'}> Nghiêng</label>` : ''}
@@ -411,7 +415,7 @@ function inspTabs(c) {
   if (c.kind === 'cap') return [['basic', 'Cơ bản', sect('Nội dung', `<textarea data-f="captext" rows="2" class="big">${esc(capText(o))}</textarea>
       <div class="help">*từ* = từ khoá nổi bật · dấu / = xuống dòng. Bấm từ để bật/tắt nổi bật, Shift+bấm để xuống dòng.</div>
       <div class="wchips">${o.words.map((w, i) => `<span data-w="${i}" class="${w.hl ? 'hl' : ''} ${w.br ? 'br' : ''}">${esc(w.w)}</span>`).join('')}</div>`, 'ti-badge-cc') +
-    sect('Chữ', `<div class="row"><div><span class="lbl">Font</span><select data-f="font">${opt(FONTS, o.font || '')}</select></div>
+    sect('Chữ', `<div class="row"><div><span class="lbl">Font</span><select data-f="font">${fontOpt(o.font || '')}</select></div>
       <div><span class="lbl">Độ đậm</span><select data-f="weight">${opt([['', 'Mặc định'], ['600', '600'], ['700', '700'], ['800', '800'], ['900', '900']], o.weight || '')}</select></div></div>
       ${colorBlock(o.color)}<div class="acts"><button data-act="capall"><i class="ti ti-copy-check"></i> Áp dụng font/cỡ/màu/vị trí cho mọi phụ đề</button></div>`, 'ti-typography')],
     ['pos', 'Vị trí', posBlock(c) + timeBlock(c)]];
@@ -1728,7 +1732,7 @@ const Studio = window.Studio = {
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
-  FONTS, SWATCH, ANIM_LIST, rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
+  FONTS, SWATCH, ANIM_LIST, fontOpt, setTimes: (c, t0, t1) => setTimes(c, t0, t1, false), rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
   removeSel, duplicateSel, splitAtPlayhead,
   // S21 M145: cột phải. addTab(key, render(el)): vẽ thân tab (layers: 67_layers.js). setDetail({html, mount?} | null): chi tiết mục thư viện (M147).
   right: { get tab() { return RT.tab; }, show: showRightTab, addTab(key, render) { RT.ext[key] = render; if (RT.tab === key) renderInspector(); }, refresh: () => renderInspector(),
