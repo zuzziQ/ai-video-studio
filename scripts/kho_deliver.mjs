@@ -13,6 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { AVS_HOME, KINDS, deliveredDir, ensureWorkspace, freeName, inWorkspace, safeName, sub, workspaceFor, workspaceOfProject } from './workspace.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
+import { rmSync } from './fs_rm.mjs';
 
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const VIDEO = KINDS.video;
@@ -56,12 +57,12 @@ const partOf = dst => `${dst}.part.${process.pid}.${crypto.randomBytes(4).toStri
 function claim(tmp, d, name) {
   for (let i = 0; ; i++) {
     const dst = nameIn(d, name);
-    try { fs.linkSync(tmp, dst); fs.rmSync(tmp, { force: true }); return dst; }
+    try { fs.linkSync(tmp, dst); rmSync(tmp, { force: true }); return dst; }
     catch (e) {
       if (e.code === 'EEXIST' && i < 20) continue;
       if (e.code === 'EEXIST') throw e;
       try { fs.closeSync(fs.openSync(dst, 'wx')); } catch (e2) { if (e2.code === 'EEXIST' && i < 20) continue; throw e2; }
-      try { retryBusy(() => fs.renameSync(tmp, dst)); } catch (e3) { fs.rmSync(dst, { force: true }); throw e3; }
+      try { retryBusy(() => fs.renameSync(tmp, dst)); } catch (e3) { rmSync(dst, { force: true }); throw e3; }
       return dst;
     }
   }
@@ -74,7 +75,7 @@ function placeSync(ws, src, d, name) {
     try { fs.linkSync(src, dst); return { dst, how: 'link' }; } catch (e) { if (e.code === 'EEXIST') continue; break; }
   }
   const tmp = partOf(nameIn(d, name));
-  try { fs.copyFileSync(src, tmp); return { dst: claim(tmp, d, name), how: 'copy' }; } finally { fs.rmSync(tmp, { force: true }); }
+  try { fs.copyFileSync(src, tmp); return { dst: claim(tmp, d, name), how: 'copy' }; } finally { rmSync(tmp, { force: true }); }
 }
 async function placeAsync(ws, src, d, name) {
   guard(ws, d);
@@ -83,7 +84,7 @@ async function placeAsync(ws, src, d, name) {
     try { fs.linkSync(src, dst); return { dst, how: 'link' }; } catch (e) { if (e.code === 'EEXIST') continue; break; }
   }
   const tmp = partOf(nameIn(d, name));
-  try { await fs.promises.copyFile(src, tmp); return { dst: claim(tmp, d, name), how: 'copy' }; } finally { fs.rmSync(tmp, { force: true }); }
+  try { await fs.promises.copyFile(src, tmp); return { dst: claim(tmp, d, name), how: 'copy' }; } finally { rmSync(tmp, { force: true }); }
 }
 
 // ---------- sổ giao của dự án: .studio/delivered.json ----------
