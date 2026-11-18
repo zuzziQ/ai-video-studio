@@ -196,6 +196,7 @@ function drawOverlay() {
     const tip = drag?.rot && drag.moved ? `<span class="rottip">${sel.obj.rot || 0}°</span>` : '';
     if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length ? '' : corners + edges + rot}${tip}</div>`;
   }
+  if (marq?.box) h += `<div class="marq" ${box(marq.box.x * K, marq.box.y * K, marq.box.w * K, marq.box.h * K)}></div>`; // S20 M142: hộp quét chọn
   if (guides) {
     for (const x of guides.gx || []) h += `<div class="guide v" ${box(x * K, 0, 0, DH * K)}></div>`;
     for (const y of guides.gy || []) h += `<div class="guide h" ${box(0, y * K, DW * K, 0)}></div>`;
@@ -210,6 +211,26 @@ function pick(px, py) {
     if (c) { const cp = compByCid(c.getAttribute('data-cid')); if (cp && !TRK[cp.track]?.lock) return cp; }
   }
   return null;
+}
+
+// S20 M142: mọi element tại điểm (trên cùng ở đầu), bỏ element khoá / track khoá — cho bấm lặp chọn lớp dưới. Không thay pick().
+function pickAll(px, py) {
+  if (!win) return [];
+  const out = [];
+  for (const el of win.document.elementsFromPoint(px, py)) {
+    const cp = compByCid(el.closest('[data-cid]')?.getAttribute('data-cid'));
+    if (cp && !out.includes(cp) && !cp.obj.locked && !TRK[cp.track]?.lock) out.push(cp);
+  }
+  return out;
+}
+// S20 M142: quét chọn — element tại playhead có hộp chạm hộp quét (bỏ ẩn, khoá, track khoá, element đầy khung).
+let marq = null;
+function marqUpdate(px, py) {
+  marq.box = Layers.normBox(marq.x0, marq.y0, px, py);
+  const items = comps.filter(c => c.kind !== 'clip' && c.kind !== 'sfx' && c.kind !== 'music' && T >= c.t0 - 1e-3 && T < c.t1 && !c.obj.hidden && !c.obj.locked && !TRK[c.track]?.lock)
+    .map(c => ({ c, r: rectOf(c.obj) }));
+  const m = Layers.mergeSel(marq.base, Layers.marqueeHits(items, marq.box, { DW, DH }));
+  sel = m.sel; multi = m.multi;
 }
 
 // ---------- geometry (design px) ----------
@@ -739,11 +760,17 @@ $('#overlay').addEventListener('mousedown', e => {
   const box = $('#stagebox').getBoundingClientRect();
   const px = (e.clientX - box.left) / K, py = (e.clientY - box.top) / K;
   const handle = e.target.closest('.selbox i')?.dataset.h || null, onCrop = e.target.closest('.selbox.crop');
+  let cyc = e.detail < 2 && !handle && !onCrop && !e.shiftKey && !multi.length && !!sel && sel.kind !== 'clip' && !!e.target.closest('.selbox'); // S20 M142: bấm lại element đang chọn
   if (!handle && (!e.target.closest('.selbox') || onCrop || e.shiftKey)) {
     const c = pick(px, py);
     if (e.shiftKey && c && sel && sel.kind !== 'clip' && c.kind !== 'clip') { toggleMulti(c); e.preventDefault(); return; }
-    if (c) { if (c !== sel && !multi.includes(c)) { select(c); revealOnTimeline(c); } }
-    else if (!onCrop) { if (sel) select(null); }
+    if (c) { if (c === sel && !multi.length && e.detail < 2) cyc = true; else if (c !== sel && !multi.includes(c)) { select(c); revealOnTimeline(c); } }
+    else if (!onCrop && window.Layers) { // S20 M142: kéo trên khoảng trống = quét chọn; Shift cộng thêm
+      if (sel && !e.shiftKey) select(null);
+      marq = { x0: px, y0: py, base: e.shiftKey && sel?.kind !== 'clip' ? [sel, ...multi] : [] };
+      drag = { marq: true, sx: e.clientX, sy: e.clientY, moved: false };
+      e.preventDefault(); return;
+    } else if (!onCrop) { if (sel) select(null); }
   }
   if (!sel) return;
   if (sel.kind === 'clip') {
@@ -762,7 +789,7 @@ $('#overlay').addEventListener('mousedown', e => {
   const r = rectOf(sel.obj), edge = handle && /^[nsew]$/.test(handle) ? handle : null;
   drag = { sx: e.clientX, sy: e.clientY, group, handle: edge ? null : handle, edge, b0: edge ? StageCore.boxOf(sel.obj, DW > DH) : null,
     r0: StageCore.union(group.map(g => rectOf(g.c.obj))), lines: stageLines(group.map(g => g.c)),
-    cx: r ? r.x + r.w / 2 : group[0].p0.x, cy: r ? r.y + r.h / 2 : group[0].p0.y, moved: false };
+    cx: r ? r.x + r.w / 2 : group[0].p0.x, cy: r ? r.y + r.h / 2 : group[0].p0.y, moved: false, cyc: cyc && !handle ? { px, py } : null };
   e.preventDefault();
 });
 function cropMove(e, dx, dy) {
@@ -789,6 +816,7 @@ window.addEventListener('mousemove', e => {
   if (!drag) return;
   const dx = (e.clientX - drag.sx) / K, dy = (e.clientY - drag.sy) / K;
   if (!drag.moved && Math.hypot(dx, dy) < 2) return;
+  if (drag.marq) { drag.moved = true; const box = $('#stagebox').getBoundingClientRect(); marqUpdate((e.clientX - box.left) / K, (e.clientY - box.top) / K); return drawOverlay(); }
   if (drag.crop) return cropMove(e, dx, dy);
   if (drag.rot) return rotMove(e);
   if (!drag.moved) { touchAll(drag.group.map(g => g.c)); drag.moved = true; }
@@ -812,6 +840,12 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', () => {
   const d = drag; drag = null; guides = null;
+  if (d?.marq) { marq = null; renderList(); renderTimeline(); renderInspector(); drawOverlay(); return; }
+  if (d && !d.moved && d.cyc) { // S20 M142: bấm (không kéo) lại đúng element đang chọn → lớp kế tiếp bên dưới tại điểm đó
+    const nx = Layers.nextBelow(pickAll(d.cyc.px, d.cyc.py), sel);
+    if (nx && nx !== sel) { select(nx); revealOnTimeline(nx); }
+    return;
+  }
   if (!d?.moved) return;
   if (d.crop) { changed(true); return; }
   changed();
@@ -1484,6 +1518,9 @@ const Studio = window.Studio = {
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
   FONTS, SWATCH, ANIM_LIST, rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
   removeSel, duplicateSel, splitAtPlayhead, startInlineEdit: c => startInlineEdit(c), compByCid: cid => compByCid(cid), _ov: [],
+  // S20 M142: bảng Lớp (67_layers.js): tab thêm của panel Thành phần, danh sách element, track khoá, cuộn timeline tới khối
+  get comps() { return comps; }, trackLocked: c => !!TRK[c?.track]?.lock, revealOnTimeline: c => revealOnTimeline(c), pickAll: (x, y) => pickAll(x, y),
+  addCompTab(key, label, fn, title, first) { if (!COMP_EXT[key]) { COMP_TABS[first ? 'unshift' : 'push']([key, label, title]); if (first) tab = key; } COMP_EXT[key] = fn; if (panel === 'comp') renderComps(); },
   _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
   // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … }, { step: 'build', level: 'basic' })

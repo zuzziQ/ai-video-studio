@@ -57,14 +57,17 @@ const empty = (ic, title, sub) => `<div class="empty"><i class="ti ${ic}"></i><b
 
 // ---------- Thành phần (component list) ----------
 let tab = 'here';
+const COMP_TABS = [['here', 'Tại đây'], ['all', 'Tất cả'], ['edited', 'Đã chỉnh']], COMP_EXT = {}; // S20 M142: tab thêm từ feature (Studio.addCompTab, 67_layers.js: Lớp)
+const compTabs = () => `<div class="seg" id="tabs">${COMP_TABS.map(([k, l, t]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}"${t ? ` title="${esc(t)}"` : ''}>${l}</button>`).join('')}</div>`;
 function renderComps() {
+  if (COMP_EXT[tab]) { $('#libbody').innerHTML = compTabs() + COMP_EXT[tab](); return; }
   const q = query.toLowerCase();
   const items = comps.filter(c => c.kind !== 'sfx' || tab !== 'here')
     .filter(c => tab === 'all' ? true : tab === 'edited' ? !!c.obj._orig || !!c.obj.note : T >= c.t0 - .001 && T < c.t1)
     .filter(c => !q || (c.label + ' ' + (c.sub || '')).toLowerCase().includes(q))
     .sort((a, b) => a.t0 - b.t0);
   const name = c => TRACKS.find(x => x[0] === c.track)?.[1] || 'Khác';
-  $('#libbody').innerHTML = `<div class="seg" id="tabs">${[['here', 'Tại đây'], ['all', 'Tất cả'], ['edited', 'Đã chỉnh']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  $('#libbody').innerHTML = `${compTabs()}
     <div id="list">${items.map(c => `<div class="item ${sel?.obj === c.obj ? 'sel' : ''}" data-cid="${c.obj.cid}">
       ${c.kind === 'clip' ? '<i class="ti ti-movie ck"></i>' : `<input type="checkbox" ${c.obj.hidden ? '' : 'checked'} title="Hiện / ẩn">`}
       <div class="mid"><div class="t1">${c.obj._orig ? '<span class="ed">●</span> ' : ''}${esc(c.label)}</div><div class="t2">${name(c)} · ${fmt(c.t0)}${c.obj.note ? ' · <i class="ti ti-note"></i>' : ''}</div></div>
