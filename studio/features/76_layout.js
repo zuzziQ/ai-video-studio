@@ -1,5 +1,6 @@
 // S23 M161: nền bố cục Studio (docs/plans/S23-bo-cuc-theo-kho-video.md mục 2, 4; C29, C31). Lõi thuần 76_layout.core.js.
-//   Studio.layout.get()            → { askPos, tl, lib, right, controls, mode, narrow, pin, focus, tlH, ratio, width }
+//   Studio.layout.get()            → { askPos, tl, lib, right, controls, mode, narrow, pin, focus, tlH, ratio, width,
+//                                      aspect, source, legacy } (M167: khổ soạn 9:16 | 16:9, khổ thật, dự án khổ cũ → dải báo #lay-band)
 //   Studio.layout.set(k, v)        k: 'tl' (strip|compact|full, nhớ avs.tl.<chế độ> / avs.tl.narrow), 'pin' (auto|side|bottom,
 //                                  nhớ avs.layout.pin), 'focus' (nút ⤢: ẩn hai cột, không nhớ), 'fullH' (px của mức đầy đủ, avs.tl.h)
 //                                  'foldLib' / 'foldRight' (M165: Chuyên nghiệp gấp thư viện / cột phải, nhớ avs.col.lib / avs.col.right)
@@ -22,12 +23,16 @@
   const subs = new Set();
 
   const mode = () => (body.classList.contains('wf-basic') ? 'basic' : 'pro');
-  const ratio = () => (S.DW && S.DH ? S.DW / S.DH : body.classList.contains('landscape') ? 16 / 9 : 9 / 16);
+  // M167 (C33): tỉ lệ = khổ soạn (LayoutCore.frameOf), không phải tỉ lệ thật của dự án: dự án 1:1 cũ soạn và xếp theo 9:16
+  // (Studio chỉ có hai khổ soạn), kèm dải báo trên khung. Chưa tải dự án thì theo body.landscape.
+  const frame = () => (S.TL ? LC.frameOf(S.TL.width, S.TL.height) : LC.frameOf(...(body.classList.contains('landscape') ? [1920, 1080] : [1080, 1920])));
+  const ratio = () => frame().ratio;
   function compute() {
     const width = innerWidth, m = mode(), narrow = LC.isNarrow(width);
     const r = LC.compute({ ratio: ratio(), mode: m, width, pin: store.get('layout.pin', 'auto'), tl: store.get(LC.tlKey(m, narrow), ''), focus,
       foldLib: store.get('col.lib', '') === 'off', foldRight: store.get('col.right', '') === 'off' });
-    return { ...r, ratio: ratio(), width, tlH: LC.tlHeight(r.tl, +store.get('tl.h', LC.FULL.def), innerHeight) };
+    const f = frame();
+    return { ...r, ratio: f.ratio, aspect: f.aspect, source: f.source, legacy: f.legacy, width, tlH: LC.tlHeight(r.tl, +store.get('tl.h', LC.FULL.def), innerHeight) };
   }
 
   const ATTR = { askPos: 'data-ask', tl: 'data-tl', lib: 'data-lib', right: 'data-right', controls: 'data-controls' };
@@ -37,7 +42,7 @@
     body.toggleAttribute('data-narrow', st.narrow);
     body.toggleAttribute('data-focus', st.focus);
     if (!dragging) document.documentElement.style.setProperty('--tlh', st.tlH + 'px');
-    paintExpand(); paintMenu();
+    paintExpand(); paintMenu(); paintBand();
     const same = prev && Object.keys(st).every(k => k === 'width' || st[k] === prev[k]);
     if (same) return;
     if (S.TL) { S.fit?.(); if (prev && prev.tl !== st.tl) { S.renderTimeline?.(); if (st.tl !== 'strip' && S.zoomPending) S.zoomFit?.(); } } // fit đọc cỡ #stagewrap mới; timeline vừa hiện lại thì vừa khung
@@ -112,6 +117,49 @@
       <div class="lay-seg" role="group" aria-label="Hỏi Claude">${LC.PINS.map(k => `<button data-lay-pin="${k}" class="${pin === k ? 'on' : ''}" aria-pressed="${pin === k}"><i class="ti ${PIN_IC[k]}"></i>${esc(LC.PIN_LABEL[k])}</button>`).join('')}</div>
       ${cur.narrow ? '<div class="lay-note">Cửa sổ hẹp: Claude luôn dưới khung</div>' : ''}
       <div class="lay-seg" role="group" aria-label="Timeline (phím \`)">${LC.TLS.map(k => `<button data-lay-tl="${k}" class="${tl === k ? 'on' : ''}" aria-pressed="${tl === k}" title="Timeline ${esc(LC.TL_LABEL[k].toLowerCase())} (phím \`)"><i class="ti ${TL_IC[k]}"></i>${esc(LC.TL_LABEL[k])}</button>`).join('')}</div>`;
+  }
+
+  // ---------- M167: dải báo trên khung (dự án khổ cũ, vd 1:1) ----------
+  // Một dòng đầu #center (trên #stagewrap, M161: vùng riêng, không che khung). "Đổi sang …" ghi timeline.width / height theo khổ soạn
+  // rồi tải lại, để bản dựng khớp khung xem (engine coi vuông là ngang, Studio coi là dọc). "Để sau" ẩn tới khi mở lại tab.
+  const bandCss = document.createElement('style');
+  bandCss.textContent = `
+  #lay-band { flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 34px; padding: 0 var(--space-2) 0 var(--space-3);
+    border-bottom: 1px solid rgb(var(--color-line)); background: rgb(var(--color-warning) / .10); font-size: var(--text-xs); color: rgb(var(--color-fg)); }
+  #lay-band[hidden] { display: none; }
+  #lay-band > .ti { color: rgb(var(--color-warning-text)); flex: none; }
+  #lay-band > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #lay-band > button { flex: none; height: 26px; padding: 0 var(--space-2); font-size: var(--text-2xs); white-space: nowrap; }`;
+  document.head.appendChild(bandCss);
+  let band = null;
+  const bandKey = () => 'avs.band.' + (S.TL ? `${S.TL.width}x${S.TL.height}` : '');
+  function paintBand() {
+    const c = $('#center'), st = cur; if (!c || !st) return;
+    let off = false; try { off = sessionStorage.getItem(bandKey()) === 'off'; } catch {}
+    const show = !!(S.TL && st.legacy && !off);
+    if (!show) { if (band) band.hidden = true; return; }
+    if (!band) {
+      band = document.createElement('div'); band.id = 'lay-band'; band.setAttribute('role', 'status');
+      c.prepend(band);
+      band.addEventListener('click', e => { const b = e.target.closest('[data-band]'); if (b) bandAct(b.dataset.band); });
+    }
+    const sig = `${st.source}|${st.aspect}`;
+    if (band.dataset.sig !== sig) {
+      band.dataset.sig = sig;
+      const why = `Dự án khổ ${st.source} (bản cũ). Studio chỉ soạn 9:16 / 16:9 nên khung xem theo ${st.aspect}. Đổi dự án sang ${st.aspect} để bản dựng khớp khung; bản vuông lấy ở Xuất → Xuất thêm khổ.`;
+      band.title = why;
+      band.innerHTML = `<i class="ti ti-aspect-ratio" aria-hidden="true"></i><span>Dự án khổ <b>${esc(st.source)}</b> cũ · khung xem theo <b>${esc(st.aspect)}</b>, bản vuông lấy ở Xuất thêm khổ</span>
+        <button data-band="fix" class="primary" title="${esc(why)}"><i class="ti ti-arrows-exchange"></i>Đổi sang ${esc(st.aspect)}</button><button data-band="later" class="icon" title="Để sau (ẩn tới khi mở lại tab)" aria-label="Để sau"><i class="ti ti-x"></i></button>`;
+    }
+    band.hidden = false;
+  }
+  async function bandAct(k) {
+    if (k === 'later') { try { sessionStorage.setItem(bandKey(), 'off'); } catch {} paintBand(); S.fit?.(); return; }
+    const to = S.TL && LC.frameOf(S.TL.width, S.TL.height).to; if (!to) return;
+    const was = { width: S.TL.width, height: S.TL.height };
+    S.TL.width = to.width; S.TL.height = to.height;
+    if (await S.saveNow?.()) { location.reload(); return; } // engine + Studio đọc lại khổ từ đầu
+    Object.assign(S.TL, was); S.toast?.('Chưa lưu được, khổ chưa đổi');
   }
 
   // dải tua (mức strip) là features/77_scrub.js (S23 M162): đăng ký qua Studio.layout.on

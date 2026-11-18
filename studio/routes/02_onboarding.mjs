@@ -18,7 +18,9 @@ import { AVS_HOME, fileAllowed } from '../security.mjs';
 import { cardOf, queueThumb, thumbOf, thumbPending } from '../../scripts/home_cards.mjs';
 
 export const PURPOSES = ['bds', 'khoahoc', 'banhang', 'review', 'chiase', 'tintuc', 'doanhnghiep', 'khac'];
-export const ASPECTS = ['9:16', '16:9', '1:1'];
+// M167 (C33): khổ soạn chỉ 9:16 / 16:9; trạng thái cũ ghi 1:1 (khổ hay dùng) đọc thành 9:16, vuông chỉ còn là bản xuất thêm
+export const ASPECTS = ['9:16', '16:9'];
+const LEGACY_ASPECT = { '1:1': '9:16' };
 export const PLATFORMS = ['tiktok', 'youtube', 'facebook', 'instagram', 'zalo'];
 const MAX_BODY = 8192, MAX_RECENT = 24;
 const DEF = { done: false, skipped: false, step: 0, purpose: '', aspect: '', platforms: [], brand: '' };
@@ -28,7 +30,7 @@ const CHECK = {
   skipped: v => (typeof v === 'boolean' ? v : undefined),
   step: v => (Number.isInteger(v) && v >= 0 && v <= 3 ? v : undefined),
   purpose: v => (v === '' || PURPOSES.includes(v) ? v : undefined),
-  aspect: v => (v === '' || ASPECTS.includes(v) ? v : undefined),
+  aspect: v => (v === '' || ASPECTS.includes(v) ? v : LEGACY_ASPECT[v]),
   platforms: v => (Array.isArray(v) && v.length <= PLATFORMS.length && v.every(x => PLATFORMS.includes(x)) ? [...new Set(v)] : undefined),
   brand: v => (typeof v === 'string' && /^([a-z0-9][a-z0-9-]{0,39})?$/.test(v) ? v : undefined),
 };
