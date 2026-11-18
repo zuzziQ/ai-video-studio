@@ -46,15 +46,15 @@ test('cột phải: Cơ bản không có tab Lớp', () => {
   assert.equal(R.nextTab({ tab: 'layers', had: true, has: true }), 'layers');
 });
 
-test('Thuộc tính Cơ bản: Núm + Hỏi Claude + mục chính, còn lại sau "Thêm thuộc tính"', () => {
+test('Thuộc tính Cơ bản: Núm + mục chính (S24 M172: không còn Hỏi Claude), còn lại sau "Thêm thuộc tính"', () => {
   const secs = SC.normalize([['basic', 'Cơ bản', ''], ['anim', 'Hoạt ảnh', ''], ['pos', 'Vị trí', ''], ['kf', 'Keyframe', ''],
-    ['mask', 'Mặt nạ', ''], ['json', 'Nâng cao', ''], ['ai', 'Hỏi Claude', ''], ['knobs', 'Núm', '']]);
+    ['mask', 'Mặt nạ', ''], ['json', 'Nâng cao', ''], ['knobs', 'Núm', '']]);
   const b = L.splitSections(secs, 'basic');
-  assert.deepEqual(b.main.map(s => s.key), ['knobs', 'ai', 'basic']);
+  assert.deepEqual(b.main.map(s => s.key), ['knobs', 'basic']);
   assert.deepEqual(b.more.map(s => s.key), ['anim', 'pos', 'kf', 'mask', 'json']); // không mục nào mất
   const p = L.splitSections(secs, 'pro');
-  assert.equal(p.main.length, 8); assert.equal(p.more.length, 0);
-  // không có mục 'basic' (clip, element của tính năng): mục đầu không phải Núm / Hỏi Claude là mục chính
+  assert.equal(p.main.length, 7); assert.equal(p.more.length, 0);
+  // không có mục 'basic' (clip, element của tính năng): mục đầu không phải Núm là mục chính
   const clip = L.splitSections(SC.normalize([['speed', 'Tốc độ', ''], ['color', 'Màu', ''], ['audio', 'Âm thanh', '']]), 'basic');
   assert.deepEqual(clip.main.map(s => s.key), ['speed']); assert.deepEqual(clip.more.map(s => s.key), ['color', 'audio']);
   assert.deepEqual(L.splitSections([], 'basic'), { main: [], more: [] });

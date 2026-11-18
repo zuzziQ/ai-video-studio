@@ -154,11 +154,11 @@ test('route Gợi ý núm: JSON lỏng → knobs đã kiểm', async () => {
   assert.equal(r.state, 'done'); assert.equal(r.mode, 'knobs'); assert.equal(r.knobs[0].id, 'nhip');
 });
 
-test('thứ tự mục: Núm đứng đầu, Hỏi Claude ngay sau; không có Núm thì Hỏi Claude sau mục đầu của lõi', async () => {
+test('thứ tự mục: Núm đứng đầu; S24 M172 bỏ luật "Hỏi Claude là mục thứ hai" (Thuộc tính không còn mục đó)', async () => {
   const { createRequire } = await import('node:module');
   const SC = createRequire(import.meta.url)('../../studio/features/68_sections.core.js');
   const keys = tabs => SC.normalize(tabs).map(s => s.key);
-  assert.deepEqual(keys([['basic', 'Cơ bản'], ['anim', 'Hoạt ảnh'], ['pos', 'Vị trí'], ['knobs', 'Núm'], ['ai', 'Hỏi Claude']]), ['knobs', 'ai', 'basic', 'anim', 'pos']);
-  assert.deepEqual(keys([['basic', 'Cơ bản'], ['pos', 'Vị trí'], ['kf', 'Keyframe'], ['ai', 'Hỏi Claude']]), ['basic', 'ai', 'pos', 'kf']);
-  assert.deepEqual(keys([['ai', 'Hỏi Claude']]), ['ai']);
+  assert.deepEqual(keys([['basic', 'Cơ bản'], ['anim', 'Hoạt ảnh'], ['pos', 'Vị trí'], ['knobs', 'Núm']]), ['knobs', 'basic', 'anim', 'pos']);
+  assert.deepEqual(keys([['basic', 'Cơ bản'], ['pos', 'Vị trí'], ['kf', 'Keyframe'], ['ai', 'x']]), ['basic', 'pos', 'kf', 'ai']);
+  assert.equal(SC.SECOND, undefined);
 });

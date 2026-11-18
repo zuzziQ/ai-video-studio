@@ -7,11 +7,10 @@
   const PRO = ['kf', 'mask', 'json'];
   // Mục luôn đứng đầu (và vì thế mở sẵn như mục đầu): Núm điều chỉnh (S21 M148, 71_knobs.js).
   const FIRST = ['knobs'];
-  const SECOND = ['ai'];
   const ICON = {
     basic: 'ti-forms', anim: 'ti-sparkles', pos: 'ti-arrows-move', json: 'ti-code', kf: 'ti-timeline-event', mask: 'ti-mask',
     shape: 'ti-shape', hf: 'ti-box', reframe: 'ti-focus-centered', alts: 'ti-arrows-shuffle', fade: 'ti-chart-line', fx: 'ti-wave-sine',
-    trk: 'ti-adjustments-alt', knobs: 'ti-adjustments-horizontal', ai: 'ti-message-chatbot', speed: 'ti-brand-speedtest', color: 'ti-color-filter', audio: 'ti-volume', trans: 'ti-transition-right',
+    trk: 'ti-adjustments-alt', knobs: 'ti-adjustments-horizontal', speed: 'ti-brand-speedtest', color: 'ti-color-filter', audio: 'ti-volume', trans: 'ti-transition-right',
   };
   const iconOf = k => ICON[String(k).replace(/-\d+$/, '')] || 'ti-point';
 
@@ -27,12 +26,9 @@
     }
     const first = s => FIRST.includes(s.key);
     const res = [...out.filter(first), ...out.filter(s => !first(s))];
-    // S21 M149: Hỏi Claude (72_elem_ai.js) luôn là mục thứ hai — sau Núm nếu có, không thì sau mục đầu của lõi; không tự mở sẵn
-    const ai = res.findIndex(s => SECOND.includes(s.key));
-    if (ai > 1) res.splice(1, 0, ...res.splice(ai, 1));
-    return res;
+    return res; // S24 M172: bỏ luật "Hỏi Claude là mục thứ hai" của M149 — Thuộc tính không còn mục đó
   }
-  // Mục thấy được theo chế độ giao diện (trước S22). S22 M151: studio.js dùng split — ở Cơ bản mục ngoài Núm / Hỏi Claude / mục
+  // Mục thấy được theo chế độ giao diện (trước S22). S22 M151: studio.js dùng split — ở Cơ bản mục ngoài Núm / mục
   // chính (LevelCore.splitSections) thu sau "Thêm thuộc tính", kể cả Keyframe / Mặt nạ / Nâng cao, nên không mục nào mất hẳn.
   const visible = (secs, basic) => (basic ? secs.filter(s => !s.pro) : secs);
   const split = (secs, basic, L = root.LevelCore) => (L ? L.splitSections(secs, basic ? 'basic' : 'pro') : { main: visible(secs, basic), more: basic ? secs.filter(s => s.pro) : [] });
@@ -57,7 +53,7 @@
     return k;
   }
 
-  const T = { PRO, FIRST, SECOND, ICON, iconOf, normalize, visible, split, parse, isOpen, setOpen, active };
+  const T = { PRO, FIRST, ICON, iconOf, normalize, visible, split, parse, isOpen, setOpen, active };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.SectCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

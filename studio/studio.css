@@ -839,3 +839,10 @@ body[data-tl="strip"] #tlstrip { display: block; }
 .cbar.v .sep { width: auto; height: 1px; margin: var(--space-050) 0; }
 .cbar.v select { max-width: 76px; }
 .cbar.v .num { min-width: 0; }
+
+/* S24 M172 (C36): Thuộc tính chỉ chỉnh tay; một nút nhỏ đầu thân mở tab Claude với chip element / clip đang chọn (studio.js askRow) */
+#insp .iask { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; height: var(--h-sm); padding: 0 var(--space-2); margin-bottom: var(--space-2); justify-content: flex-start; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); background: none; border: 1px dashed rgb(var(--color-line)); border-radius: var(--radius-control); }
+#insp .iask:hover, #insp .iask:focus-visible { color: rgb(var(--color-fg)); border-color: rgb(var(--color-line-hover)); }
+#insp .iask .ti { color: rgb(var(--color-accent-text)); }
+#insp .iask span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+#insp .iask kbd { flex: none; font-size: var(--text-2xs); padding: 0 var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-line-strong)); color: rgb(var(--color-fg-muted)); }
