@@ -15,6 +15,15 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { killTree } from '../../scripts/platform.mjs';
 
+// Lỗi dựng ảnh → câu ngắn cho giao diện (giao diện vẫn hiện 3 biến thể bằng chữ, chỉ thiếu ảnh nhỏ).
+export function shotError(e) {
+  const m = String(e?.message || e);
+  if (e?.code === 'ERR_MODULE_NOT_FOUND' && /puppeteer/i.test(m)) return { error: 'máy chưa cài puppeteer-core (chạy bước cài của Studio)', kind: 'no-chrome' };
+  if (/Không tìm thấy Google Chrome/.test(m)) return { error: m, kind: 'no-chrome' };
+  if (e?.code === 'CHROME_START') return { error: 'Chrome chạy ngầm không khởi động được nên chưa có ảnh nhỏ; các biến thể vẫn dùng được', kind: 'chrome-start' };
+  return { error: m.slice(0, 200), kind: 'error' };
+}
+
 export default ctx => {
   let E = null, L = null, A = null, seq = 0, cur = null, shooting = false;
   const LAST = { state: 'idle' };
@@ -72,7 +81,7 @@ export default ctx => {
       if (shooting) return J({ error: 'Đang dựng ảnh biến thể, đợi xong rồi thử lại' }, 409);
       shooting = true;
       try { return J({ shots: await shots(await ctx.body(req)) }); }
-      catch (e) { return J({ error: /puppeteer/i.test(e.message) ? 'máy chưa cài puppeteer-core (chạy bước cài của Studio)' : e.message.slice(0, 200) }, e.status || 500); }
+      catch (e) { return J(shotError(e), e.status || (e.code === 'CHROME_START' ? 503 : 500)); }
       finally { shooting = false; }
     }
     if (req.method === 'GET') return J(LAST.rec || { state: 'idle' });
