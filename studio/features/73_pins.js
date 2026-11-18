@@ -202,7 +202,7 @@
     const L = items(), done = L.filter(i => i.done).length;
     const head = `<div class="pnotes-h"><b><i class="ti ti-message-circle"></i>Ghi chú cho Claude (${L.length})</b>${done ? `<small>${done} đã làm</small>` : ''}
       <button data-pn="pin" class="icon${mode ? ' on' : ''}" title="Ghim ghi chú trên khung (C)" aria-label="Ghim ghi chú trên khung"><i class="ti ti-message-circle-plus"></i></button></div>`;
-    if (!L.length) return head + '<p class="help">Bấm nút ghim ở thanh dưới khung xem (hoặc phím C) rồi bấm lên video để ghi chú cho Claude ngay tại chỗ.</p>';
+    if (!L.length) return head + `<p class="help">Bấm nút ghim (phím C) rồi bấm lên video để ghi chú. ${Studio.tip('Nút ghim ở thanh dưới khung xem. Ghi chú gắn đúng chỗ trên video để Claude đọc khi dựng.')}</p>`;
     return head + `<ul class="pnotes-l">${L.map(i => `<li><button data-pn-k="${esc(i.key)}" class="${i.done ? 'done' : ''}" title="Tua tới ${esc(P.mmss(i.t))}${i.kind === 'el' ? ' và chọn element' : ''}">
         <span class="n">${i.n}</span><span class="pnotes-tx"><small>${esc(P.mmss(i.t))} · ${esc(i.label || (i.kind === 'pin' ? 'Cả video' : ''))}${i.x == null ? ' · chưa ghim trên khung' : ''}</small>${esc(i.text)}</span></button></li>`).join('')}</ul>
       <button class="primary pnotes-go" data-pn="give" title="Lưu rồi chép câu cho Claude Code"><i class="ti ti-wand"></i>Giao Claude sửa hết</button>`;

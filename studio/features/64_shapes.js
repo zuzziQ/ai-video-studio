@@ -41,7 +41,7 @@
   }
 
   function panel() {
-    $('#libbody').innerHTML = `<div class="help">Bấm để xem chi tiết ở cột phải; bấm đúp hoặc nút Thêm tại playhead để chèn hình vào giữa khung tại playhead (3 giây). Kéo trên preview để dời, tay nắm cạnh để giãn; màu, viền, hoạt ảnh ở tab Hình bên phải.</div>
+    $('#libbody').innerHTML = `<div class="help">Bấm để xem chi tiết, bấm đúp để chèn tại playhead. ${Studio.tip('Bấm đúp hoặc nút Thêm tại playhead chèn hình vào giữa khung tại playhead (3 giây). Kéo trên preview để dời, tay nắm cạnh để giãn; màu, viền, hoạt ảnh ở tab Hình bên phải.')}</div>
       <div class="shgrid">${KINDS.map(([k, l, svg]) => `<button data-shadd="${k}" title="${l}"><svg viewBox="0 0 24 24">${svg}</svg><small>${l}</small></button>`).join('')}</div>`;
   }
   S.addPanel('shapes', 'ti-shape', 'Hình khối', panel, { step: 'build', level: 'basic' });

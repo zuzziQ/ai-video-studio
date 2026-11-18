@@ -71,7 +71,7 @@
         ${sl('gain', 'Âm lượng', it.gain ?? 0, -40, 12, 1, ' dB')}`, 'ti-wave-square')],
       ['fx', 'Fade & EQ', S.sect('Fade', sl('fade_in', 'Fade vào', it.fade_in || 0, 0, 5, .1, 's') + sl('fade_out', 'Fade ra', it.fade_out || 0, 0, 5, .1, 's'), 'ti-chart-line') +
         S.sect('EQ 3 dải', sl('eq.low', 'Trầm 120Hz', eq.low || 0, -12, 12, 1, ' dB') + sl('eq.mid', 'Trung 1kHz', eq.mid || 0, -12, 12, 1, ' dB') + sl('eq.high', 'Cao 8kHz', eq.high || 0, -12, 12, 1, ' dB') +
-        '<div class="help">Áp khi xuất / Trộn thử. Preview trong editor chỉ phát âm lượng, chưa có fade/EQ.</div>', 'ti-adjustments-horizontal')],
+        `<div class="help">Áp khi xuất / Trộn thử. ${S.tip('Preview trong editor chỉ phát âm lượng, chưa có fade/EQ.')}</div>`, 'ti-adjustments-horizontal')],
       ['trk', 'Track', S.sect('Track', `<label class="sw"><input type="checkbox" data-xt="mute" ${t.mute ? 'checked' : ''}> Tắt tiếng track (M)</label>
         <label class="sw"><input type="checkbox" data-xt="solo" ${t.solo ? 'checked' : ''}> Solo (chỉ nghe các track solo)</label>
         <label class="sw"><input type="checkbox" data-xt="duck" ${t.duck ? 'checked' : ''}> Tự hạ khi có giọng nói</label>
@@ -139,14 +139,14 @@
     $('#libbody').innerHTML = `<div class="ap">
       <section><div class="sh"><i class="ti ti-microphone-2"></i>Làm sạch giọng<span class="badge">offline · ffmpeg</span></div>
         <div class="seg">${PRESETS.map(([k, l]) => `<button data-cl="${k}" class="${cl === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-        <div class="help">Lọc ồn nền (học mẫu ồn từ đoạn yên nhất), giảm vang phòng (gần đúng, bằng expander), giảm xì “s”, nén, tăng độ rõ, chuẩn hoá âm lượng. Không cứu được giọng méo/rè nặng.</div>
+        <div class="help">Lọc ồn, giảm vang, nén và chuẩn hoá âm lượng giọng nói. ${S.tip('Lọc ồn nền (học mẫu ồn từ đoạn yên nhất), giảm vang phòng (gần đúng, bằng expander), giảm xì “s”, nén, tăng độ rõ, chuẩn hoá âm lượng. Không cứu được giọng méo/rè nặng.')}</div>
         <div class="ab"><button data-ab="make" ${abBusy ? 'disabled' : ''}><i class="ti ${abBusy ? 'ti-loader-2' : 'ti-arrows-left-right'}"></i> ${abBusy ? 'Đang tạo…' : `Tạo A/B 5 s quanh ${fmt(S.T)}`}</button></div>
         ${ab ? `<div class="ab"><button data-ab="a" class="${abEl?.dataset.k === 'a' && !abEl.paused ? 'on' : ''}"><i class="ti ti-player-play"></i> A · Gốc</button><button data-ab="b" class="${abEl?.dataset.k === 'b' && !abEl.paused ? 'on' : ''}"><i class="ti ti-player-play"></i> B · Đã làm sạch</button></div>
-          <div class="help">Hai bản cùng độ to (-16 LUFS) để so độ sạch, không phải độ to. Preset “${esc(ab.preset)}”.</div>` : ''}
+          <div class="help">Preset “${esc(ab.preset)}”, hai bản cùng độ to. ${S.tip('Cả hai bản cùng -16 LUFS để so độ sạch, không phải độ to.')}</div>` : ''}
       </section>
       <section><div class="sh"><i class="ti ti-arrow-down-bar"></i>Tự hạ nhạc khi nói<span class="badge">${legacy ? 'kiểu cũ' : dOn ? `${d.amount_db} dB` : 'tắt'}</span></div>
         <label class="sw"><input type="checkbox" data-dk="on" ${dOn ? 'checked' : ''}> Bật (nhạc nền + track có “tự hạ”)</label>
-        ${legacy ? '<div class="help">Dự án đang dùng kiểu cũ (nén sidechain cố định) — giữ nguyên tiếng như trước. Kéo một thanh bên dưới để chuyển sang kiểu mới, hạ đúng số dB khi có giọng.</div>' : ''}
+        ${legacy ? `<div class="help">Đang dùng kiểu cũ (nén sidechain cố định). ${S.tip('Giữ nguyên tiếng như trước. Kéo một thanh bên dưới để chuyển sang kiểu mới, hạ đúng số dB khi có giọng.')}</div>` : ''}
         <div class="slrow"><span>Hạ</span><input type="range" data-dk="amount_db" min="-24" max="-3" step="1" value="${d.amount_db}"><b>${d.amount_db} dB</b></div>
         <div class="slrow"><span>Vào (attack)</span><input type="range" data-dk="attack" min="10" max="300" step="10" value="${d.attack}"><b>${d.attack} ms</b></div>
         <div class="slrow"><span>Nhả (release)</span><input type="range" data-dk="release" min="100" max="1500" step="50" value="${d.release}"><b>${d.release} ms</b></div>
@@ -164,7 +164,7 @@
             <div data-tup="1"><i class="ti ti-cloud-upload"></i><b>Tải file lên…</b></div></div>` : ''}
         </div>`).join('')}
         <div class="acts ap-gap-xs"><button data-tnew="1" class="primary"><i class="ti ti-plus"></i> Thêm track</button></div>
-        <div class="help">Lồng tiếng, nhạc phụ, tiếng môi trường… Mỗi file là một khối trên timeline: kéo để dời, kéo mép để cắt; fade/EQ trong inspector.</div>
+        <div class="help">Lồng tiếng, nhạc phụ, tiếng môi trường… ${S.tip('Mỗi file là một khối trên timeline: kéo để dời, kéo mép để cắt; fade/EQ trong Thuộc tính.')}</div>
       </section>
       <section><div class="sh"><i class="ti ti-player-play"></i>Trộn thử</div>
         <div class="acts ap-flush"><button data-mix="1"><i class="ti ti-adjustments-alt"></i> Lưu & trộn (-14 LUFS)</button></div>

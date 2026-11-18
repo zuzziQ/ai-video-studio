@@ -335,7 +335,7 @@ function alignBlock() {
   const B = [['left', 'ti-layout-align-left', 'Trái'], ['hcenter', 'ti-layout-align-center', 'Giữa ngang'], ['right', 'ti-layout-align-right', 'Phải'],
     ['top', 'ti-layout-align-top', 'Trên'], ['vcenter', 'ti-layout-align-middle', 'Giữa dọc'], ['bottom', 'ti-layout-align-bottom', 'Dưới']];
   return sect(`Căn ${multi.length + 1} element`, `<div class="algrid">${B.map(([k, ic, l]) => `<button data-align="${k}" title="${l}"><i class="ti ${ic}"></i></button>`).join('')}</div>
-    <div class="help">Shift + bấm trên preview để thêm / bỏ element. Kéo một element là dời cả nhóm.</div><div class="acts"><button data-align="none"><i class="ti ti-x"></i> Bỏ chọn nhóm</button></div>`, 'ti-layout-align-center');
+    <div class="help">Shift + bấm trên preview để thêm / bỏ element. ${tip('Kéo một element là dời cả nhóm.')}</div><div class="acts"><button data-align="none"><i class="ti ti-x"></i> Bỏ chọn nhóm</button></div>`, 'ti-layout-align-center');
 }
 function posBlock(c) {
   const p = getPos(c); if (!p) return '';
@@ -394,14 +394,14 @@ function clipTabs(c) {
     ['speed', 'Tốc độ', sect('Tốc độ phát', `<div class="seg4">${[.5, 1, 1.5, 2].map(v => `<button class="${(o.speed || 1) === v ? 'on' : ''}" data-cspeed="${v}">${v}×</button>`).join('')}</div>
         ${rng('speed', o.speed || 1, .25, 4, .05, 'Tốc độ', '×')}
         <div class="stat"><span>Thời lượng</span><b>${r2(k.t1 - k.t0)}s</b><span class="muted">gốc ${r2((o.out ?? 3) - (o.in || 0))}s</span></div>
-        <div class="help">Phụ đề và graphic nằm trong clip giãn/co theo; phía sau tự dồn. Tiếng đổi theo (giữ cao độ).</div>`, 'ti-brand-speedtest')],
+        <div class="help">Phụ đề, graphic giãn/co theo clip; phía sau tự dồn. ${tip('Tiếng đổi tốc độ theo clip nhưng giữ cao độ.')}</div>`, 'ti-brand-speedtest')],
     ['audio', 'Âm thanh', sect('Âm lượng clip', still || !o.audio ? '<div class="help">Clip này không có tiếng.</div>'
       : `${rng('volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, 'Âm lượng', '%')}<div class="acts"><button data-cact="mute" class="${o.mute ? 'on' : ''}"><i class="ti ${o.mute ? 'ti-volume-off' : 'ti-volume'}"></i> ${o.mute ? 'Đang tắt tiếng' : 'Tắt tiếng'}</button></div>`, 'ti-volume')],
     ['color', 'Màu', sect('Bộ lọc', `<div class="flmini">${FILTERS.map(([v, l]) => `<button class="${(f.preset || '') === v ? 'on' : ''}" data-cpreset="${v}"><span data-dbg="${esc(thumb)}" data-dfx="${esc(v ? LUT_CSS[v] : 'none')}"></span><small>${l}</small></button>`).join('')}</div>`, 'ti-color-filter') +
       sect('Điều chỉnh', `${rng('brightness', f.brightness ?? 1, .5, 1.5, .01, 'Độ sáng')}${rng('contrast', f.contrast ?? 1, .5, 1.5, .01, 'Tương phản')}${rng('saturate', f.saturate ?? 1, 0, 2, .01, 'Bão hoà')}
         ${rng('temp', f.temp ?? 0, -1, 1, .01, 'Nhiệt độ')}${rng('hue', f.hue ?? 0, -180, 180, 1, 'Sắc độ', '°')}${rng('blur', f.blur ?? 0, 0, 20, .5, 'Làm mờ', 'px')}
         <div class="acts"><button data-cact="resetcolor"><i class="ti ti-restore"></i> Đặt lại màu</button></div>`, 'ti-adjustments')],
-    ['trans', 'Chuyển cảnh', c.idx === 0 ? sect('', '<div class="help">Clip đầu tiên không có chuyển cảnh vào. Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối.</div>')
+    ['trans', 'Chuyển cảnh', c.idx === 0 ? sect('', `<div class="help">Clip đầu tiên không có chuyển cảnh vào. ${tip('Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối giữa hai clip.')}</div>`)
       : sect('Chuyển cảnh vào clip này', `<div class="trgrid sm"><button class="tr ${o.transition ? '' : 'on'}" data-ctr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
         ${TRANS_TYPES.map(([kk, l, ic]) => `<button class="tr ${o.transition?.type === kk ? 'on' : ''}" data-ctr="${kk}"><span class="demo t-${kk}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
         ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 1.5, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
@@ -413,7 +413,7 @@ function inspTabs(c) {
   if (c.tabs) return c.tabs(c); // feature components bring their own inspector tabs
   if (c.kind === 'line') return [['basic', 'Cơ bản', textBlock(o, true)], ['anim', 'Hoạt ảnh', animBlock(c)], ['pos', 'Vị trí', posBlock(c) + timeBlock(c)]];
   if (c.kind === 'cap') return [['basic', 'Cơ bản', sect('Nội dung', `<textarea data-f="captext" rows="2" class="big">${esc(capText(o))}</textarea>
-      <div class="help">*từ* = từ khoá nổi bật · dấu / = xuống dòng. Bấm từ để bật/tắt nổi bật, Shift+bấm để xuống dòng.</div>
+      <div class="help">*từ* = từ khoá nổi bật · dấu / = xuống dòng. ${tip('Bấm một từ bên dưới để bật/tắt nổi bật, Shift+bấm để xuống dòng sau từ đó.')}</div>
       <div class="wchips">${o.words.map((w, i) => `<span data-w="${i}" class="${w.hl ? 'hl' : ''} ${w.br ? 'br' : ''}">${esc(w.w)}</span>`).join('')}</div>`, 'ti-badge-cc') +
     sect('Chữ', `<div class="row"><div><span class="lbl">Font</span><select data-f="font">${fontOpt(o.font || '')}</select></div>
       <div><span class="lbl">Độ đậm</span><select data-f="weight">${opt([['', 'Mặc định'], ['600', '600'], ['700', '700'], ['800', '800'], ['900', '900']], o.weight || '')}</select></div></div>
@@ -439,7 +439,7 @@ function inspTabs(c) {
     basic += sect('Ảnh / clip', `<select data-f="pmedia">${opt([['', typeof cur === 'object' && cur ? 'Video đã chọn' : '— Chọn từ Media —'], ...list.map(m => [m.path, m.name])], typeof cur === 'string' ? cur : '')}</select><div class="help">Nhập ảnh/video mới ở mục Media bên trái.</div>`, 'ti-photo'); }
   if (o.type === 'frame_grid') basic += sect('Khung video', `<span class="lbl">Làm mờ video (px)</span>${num('blur', typeof o.blur === 'number' ? o.blur : Array.isArray(o.blur) ? o.blur[o.blur.length - 1].v : 0)}<span class="lbl">Vào cảnh</span><select data-f="enter">${opt([['cut', 'Cắt'], ['blur', 'Mờ dần'], ['zoom', 'Phóng to']], o.enter || 'cut')}</select>`);
   basic += timeBlock(c);
-  return [['basic', 'Cơ bản', basic], ['pos', 'Vị trí', posBlock(c) || sect('', '<div class="help">Thành phần này không kéo thả được trên preview. Sửa vị trí trong tab Nâng cao (JSON).</div>')],
+  return [['basic', 'Cơ bản', basic], ['pos', 'Vị trí', posBlock(c) || sect('', `<div class="help">Thành phần này không kéo thả được trên preview. ${tip('Sửa vị trí trong tab Nâng cao (JSON).')}</div>`)],
     ['json', 'Nâng cao', sect('Tham số đầy đủ (JSON)', `<textarea class="code" data-f="json">${esc(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' || k === 'lines' || k === 'nodes' ? undefined : v), 1))}</textarea>
       <div class="acts"><button data-act="json" class="primary"><i class="ti ti-check"></i> Áp dụng JSON</button></div>`, 'ti-code')]];
 }
@@ -565,15 +565,14 @@ function projectPanel() {
       <div class="row">${bf('name', 'Tên hiển thị', 'text', 'Kiệm AI')}${bf('handle', 'Kênh', 'text', '@kiem.ai')}</div>
       <div class="row">${bf('phone', 'Điện thoại', 'text', '09xx…')}${bf('website', 'Website', 'text', 'nguyentatkiem.com')}</div>
       ${bf('logo', 'Logo (đường dẫn trong dự án, si:tên-biểu-tượng hoặc emoji; tải ảnh logo ở bộ thương hiệu)', 'text', 'media/logo.png')}</details>`, 'ti-palette');
-  const style = sect('Gói style', `<select data-pf="pack">${opt([['', '— chọn —'], ...packs().map(p => [p.id, p.icon + ' ' + p.name])], TL.pack || '')}</select>
+  const style = sect('Gói style' + tip('Dựng tự động: thêm intro, graphic theo từ khoá trong lời nói, CTA cuối, nhạc. Bám lời thoại: canh các graphic của mẫu đúng lúc nói, viết lại chữ và thay ảnh mẫu theo nội dung clip. Hoàn tác được.'), `<select data-pf="pack">${opt([['', '— chọn —'], ...packs().map(p => [p.id, p.icon + ' ' + p.name])], TL.pack || '')}</select>
       <div class="help">${esc(pk?.desc || 'Gói quyết định kiểu phụ đề, graphic gợi ý và bản dựng tự động.')}</div>
-      <div class="acts"><button data-pact="recipe" class="primary"><i class="ti ti-wand"></i> Dựng tự động theo gói</button><button data-pact="tplfit"><i class="ti ti-text-recognition"></i> Bám lời thoại</button></div>
-      <div class="help">“Dựng tự động”: thêm intro, graphic theo từ khoá trong lời nói, CTA cuối, nhạc. “Bám lời thoại”: canh các graphic của mẫu đúng lúc nói, viết lại chữ và thay ảnh mẫu theo nội dung clip. Hoàn tác được.</div>`, 'ti-layout-grid');
+      <div class="acts"><button data-pact="recipe" class="primary"><i class="ti ti-wand"></i> Dựng tự động theo gói</button><button data-pact="tplfit"><i class="ti ti-text-recognition"></i> Bám lời thoại</button></div>`, 'ti-layout-grid');
   const caps = sect('Phụ đề', `<div class="pp-line"><span>Kiểu: <b>${esc(capLabel)}</b></span><button data-pact="open-text" class="ghost"><i class="ti ti-arrow-right"></i> Đổi ở panel Chữ</button></div>
       <label class="check"><input type="checkbox" data-pf="caption_reveal" ${TL.caption_reveal === false ? '' : 'checked'}> Hiện từng từ theo lời nói</label>`, 'ti-badge-cc');
   const sfx = sect('Âm thanh', `<div class="pp-line"><span>${(TL.audio?.sfx || []).length} SFX · ${(TL.audio?.music || []).length} nhạc nền</span><button data-pact="open-audio" class="ghost"><i class="ti ti-arrow-right"></i> Mở panel Âm thanh</button></div>`, 'ti-volume');
   const note = sect('Ghi chú chung cho Claude', `<textarea data-pf="note" placeholder="Ví dụ: thêm b-roll ở đoạn 0:12, nhạc sôi động hơn…">${esc(TL.note || '')}</textarea>
-      <div class="help">Bấm vào chữ / khung trên preview hoặc khối trên timeline để chỉnh. Kéo để di chuyển, kéo góc để đổi cỡ.</div>`, 'ti-message-2');
+      <div class="help">Bấm chữ / khung trên preview hoặc khối timeline để chỉnh. ${tip('Kéo để di chuyển, kéo góc để đổi cỡ.')}</div>`, 'ti-message-2');
   const adv = `<details class="pp-more pp-adv"><summary><i class="ti ti-settings-2"></i>Nâng cao</summary>${sect('Vị trí mặt (bubble / PIP / vùng mặt)', `<div class="row"><div><span class="lbl">X</span><input type="number" data-pf="facex" value="${TL.face?.x ?? 360}"></div><div><span class="lbl">Y</span><input type="number" data-pf="facey" value="${TL.face?.y ?? 520}"></div></div>`, 'ti-face-id')}</details>`;
   const meta = `<div class="meta"><span><i class="ti ti-movie"></i> ${(TL.clips || []).length} clip</span><span><i class="ti ti-photo"></i> ${META.frames} khung</span><span><i class="ti ti-clock"></i> ${fmt(TL.duration)}</span><span><i class="ti ti-aspect-ratio"></i> ${DW > DH ? '16:9' : '9:16'}</span></div>`;
   return `<div class="ihead" data-proj><span class="iic"><i class="ti ti-settings"></i></span><div class="it"><h3>${esc(META.name || 'Dự án')}</h3><div class="sub"><span class="pill">Cài đặt dự án</span></div></div></div>
@@ -1735,12 +1734,36 @@ window.addEventListener('resize', fit);
 
 // ---------- boot ----------
 
+// ---------- S22 M155 (C26): (i) giải thích ----------
+// Studio.tip(text[, label]) → HTML một biểu tượng (i); rê chuột hoặc Tab tới thì hiện chữ (role=tooltip, aria-describedby).
+// text là chữ thường (tự esc). Bóng chữ đặt position: fixed theo biểu tượng để không bị panel cuộn cắt; Esc ẩn.
+let tipSeq = 0;
+function tip(text, label = 'Giải thích') {
+  const id = 'tip-' + (++tipSeq);
+  return `<span class="tip" tabindex="0" role="button" aria-label="${esc(label)}" aria-describedby="${id}"><i class="ti ti-info-circle" aria-hidden="true"></i><span class="tip-pop" role="tooltip" id="${id}">${esc(text)}</span></span>`;
+}
+function placeTip(t) {
+  const pop = t.querySelector('.tip-pop'); if (!pop) return;
+  t.classList.remove('tip--off');
+  const r = t.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight, m = 8;
+  const x = Math.max(m, Math.min(r.left + r.width / 2 - pw / 2, innerWidth - pw - m));
+  const y = r.bottom + 6 + ph > innerHeight - m ? Math.max(m, r.top - 6 - ph) : r.bottom + 6;
+  pop.style.setProperty('--tip-x', x + 'px'); pop.style.setProperty('--tip-y', y + 'px');
+  // tổ tiên có transform / backdrop-filter thì fixed tính theo tổ tiên đó: bù phần lệch
+  const a = pop.getBoundingClientRect(), dx = a.left - x, dy = a.top - y;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) { pop.style.setProperty('--tip-x', (x - dx) + 'px'); pop.style.setProperty('--tip-y', (y - dy) + 'px'); }
+}
+for (const ev of ['mouseover', 'focusin']) document.addEventListener(ev, e => { const t = e.target.closest?.('.tip'); if (t && !t.contains(e.relatedTarget)) placeTip(t); });
+// Esc ẩn bóng chữ đang hiện (WCAG 1.4.13); bấm vào (i) chỉ focus, không kích hoạt nhãn / mục chứa nó
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const t = document.activeElement?.closest?.('.tip') || document.querySelector('.tip:hover'); if (t && !t.classList.contains('tip--off')) { t.classList.add('tip--off'); e.stopPropagation(); } }, true);
+document.addEventListener('click', e => { const t = e.target.closest?.('.tip'); if (t && !e.target.closest('.tip-pop a, .tip-pop button')) { e.preventDefault(); e.stopPropagation(); t.focus(); placeTip(t); } }, true);
+
 // ---------- feature API (studio/features/*.js) ----------
 // Features are plain scripts loaded after boot; they read/mutate TL/CAP through this object and call changed() after edits.
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
-  $, esc, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
+  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },

@@ -35,7 +35,7 @@
       <label class="lbl">Độ chính xác</label><div class="tr-models">${MODELS.map(([v, l, d], i) => `<label><input type="radio" name="trm" value="${v}" ${i ? '' : 'checked'}><div><b>${l}</b><small>${d}</small></div></label>`).join('')}</div>
       <div class="row2"><div><label class="lbl">Ngôn ngữ</label><select id="trl"><option value="vi">Tiếng Việt</option><option value="auto">Tự nhận ngôn ngữ</option></select></div>
       <div><label class="lbl">Số chữ mỗi dòng</label><select id="trx"><option value="3">3 (dồn dập)</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6 (dài)</option></select></div></div>
-      ${n ? `<div class="help tr-warn"><i class="ti ti-alert-triangle"></i> Dự án đang có ${n} dòng phụ đề — sẽ được thay bằng bản mới (bản cũ sao lưu trong .studio/, hoàn tác bằng Lịch sử).</div>` : ''}
+      ${n ? `<div class="help tr-warn"><i class="ti ti-alert-triangle"></i> ${n} dòng phụ đề hiện có sẽ được thay bằng bản mới. ${S.tip('Bản cũ sao lưu trong .studio/, hoàn tác bằng Lịch sử.')}</div>` : ''}
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="trgo"><i class="ti ti-wand"></i> Tạo lời thoại</button></div>`);
     $('#trgo').onclick = () => run(next);
   };

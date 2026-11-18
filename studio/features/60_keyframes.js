@@ -47,7 +47,7 @@
         <button data-kfa="add" class="${i >= 0 ? 'on' : 'primary'}" title="Thêm / cập nhật keyframe tại playhead"><i class="ti ti-diamond${i >= 0 ? '-filled' : ''}"></i> ${i >= 0 ? 'Có keyframe' : 'Thêm keyframe'}</button>
         <button data-kfa="next" title="Keyframe sau"><i class="ti ti-chevron-right"></i></button>
         ${i >= 0 ? '<button data-kfa="del" class="danger" title="Xoá keyframe này"><i class="ti ti-trash"></i></button>' : ''}</div>
-        <div class="help">Playhead ${fmt(T)} · ${ks.length} keyframe. ${ks.length ? 'Kéo thành phần trên khung hình hoặc kéo thanh trượt để sửa (tự tạo keyframe tại playhead).' : 'Đặt playhead, bấm Thêm keyframe, dời playhead rồi chỉnh giá trị để tạo chuyển động.'}</div>`, 'ti-diamond') +
+        <div class="help">Playhead ${fmt(T)} · ${ks.length} keyframe. ${Studio.tip(ks.length ? 'Kéo thành phần trên khung hình hoặc kéo thanh trượt để sửa (tự tạo keyframe tại playhead).' : 'Đặt playhead, bấm Thêm keyframe, dời playhead rồi chỉnh giá trị để tạo chuyển động.')}</div>`, 'ti-diamond') +
       sect('Giá trị', PROPS.map(rng).join(''), 'ti-adjustments') +
       (cur ? sect('Kiểu chuyển động', `<select data-kfe>${EASES.map(([k, l]) => `<option value="${k}" ${(cur.ease || 'linear') === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <div class="help">Áp cho đoạn từ keyframe ${fmt(cur.t)} tới keyframe kế tiếp.</div>`, 'ti-chart-bezier') : '') +

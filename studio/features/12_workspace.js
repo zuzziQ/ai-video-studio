@@ -137,7 +137,7 @@
     if (!DATA) { B.innerHTML = '<div class="help">Đang mở Kho…</div>'; return; }
     const opts = [['', 'Kho chung (không theo thương hiệu)'], ...BRANDS.map(b => [b.id, b.title || b.name || b.id])];
     const ws = DATA.ws;
-    B.innerHTML = `<div class="help help--flush">Một thư mục thật trên máy cho mỗi thương hiệu: video quay, ảnh, b-roll, nhạc, logo. Mọi bước sau lấy file từ đây.</div>
+    B.innerHTML = `<div class="help help--flush">Mỗi thương hiệu một thư mục thật trên máy. ${S.tip('Chứa video quay, ảnh, b-roll, nhạc, logo. Mọi bước sau lấy file từ đây.')}</div>
       <div class="kho-row"><select id="kho-brand" aria-label="Thương hiệu">${opts.map(([v, t]) => `<option value="${esc(v)}" ${v === brand ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
       ${DATA.error ? `<div class="kho-warn"><i class="ti ti-alert-triangle"></i><span>${esc(DATA.error)}</span></div>` : `
       <div class="kho-path" title="${esc(ws.root)}"><i class="ti ti-folder"></i><code>${esc(ws.root)}</code><span class="pill">${ws.custom ? 'tự chọn' : 'mặc định'}</span></div>
@@ -150,7 +150,7 @@
   }
   const editBox = ws => `<div class="kho-box"><b>Thư mục làm Kho</b>
     <div class="kho-row"><input id="kho-dir" placeholder="Ví dụ D:\\Videos\\Nha Dep" value="${esc(ws.custom ? ws.root : '')}" spellcheck="false"><button id="kho-pick" title="Mở hộp chọn thư mục"><i class="ti ti-folder-search"></i> Chọn…</button></div>
-    <div class="help help--flush">Thư mục có sẵn được giữ nguyên: Studio chỉ đọc và phân nhóm theo đuôi file, thư mục con tạo khi cần ghi.</div>
+    <div class="help help--flush">Thư mục có sẵn được giữ nguyên. ${S.tip('Studio chỉ đọc và phân nhóm theo đuôi file; thư mục con chỉ tạo khi cần ghi.')}</div>
     <div class="kho-acts"><button class="primary" id="kho-set" ${busy ? 'disabled' : ''}><i class="ti ti-check"></i> Dùng thư mục này</button><button id="kho-cancel">Huỷ</button></div></div>`;
   function body() {
     const items = DATA.items || [];
@@ -165,7 +165,7 @@
   }
   function list() {
     const items = DATA.items || [], s = q.trim().toLowerCase();
-    if (!items.length) return '<div class="help">Kho đang trống. Kéo thả file vào ô ở trên, hoặc chép file vào thư mục Kho rồi bấm tải lại.</div>';
+    if (!items.length) return `<div class="help">Kho đang trống. Kéo thả file vào ô ở trên. ${S.tip('Hoặc chép file vào thư mục Kho rồi bấm tải lại.')}</div>`;
     const hit = items.filter(it => !s || it.rel.toLowerCase().includes(s));
     const html = GROUPS.filter(g => tab === 'all' || tab === (g[0] || 'other')).map(([id, name, icon]) => {
       const g = hit.filter(it => groupOf(it) === id); if (!g.length) return '';

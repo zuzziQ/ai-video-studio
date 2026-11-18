@@ -92,7 +92,7 @@
     const any = vis.some(k => st.v[k.id] !== K.initValue(k, st.base, cx.allowed));
     return ['knobs', 'Núm', `<div id="knpanel">${sect('', rows)}
       <div class="acts"><button data-knall ${any ? '' : 'disabled'}><i class="ti ti-restore"></i> Đặt lại tất cả</button></div>
-      <div class="help">Mỗi núm đổi nhiều trường một lúc (rê vào tên núm để xem trường). Kéo một lần là một bước hoàn tác (⌘Z); bấm đúp thanh để đặt lại núm đó.</div></div>`];
+      <div class="help">Mỗi núm đổi nhiều trường một lúc. ${Studio.tip('Rê vào tên núm để xem các trường. Kéo một lần là một bước hoàn tác (⌘Z); bấm đúp thanh để đặt lại núm đó.')}</div></div>`];
   });
 
   // ---- kéo núm ----

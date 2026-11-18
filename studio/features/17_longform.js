@@ -89,7 +89,7 @@
       <label class="lf-lbl" for="lf-product">Sản phẩm ưu tiên (không bắt buộc)</label>
       <select id="lf-product"><option value="">— Không ưu tiên sản phẩm —</option>${(S.products || []).map(p => `<option value="${esc(p.id)}" ${p.id === S.product ? 'selected' : ''}>${esc(p.name || p.id)}</option>`).join('')}</select>
       <button class="primary lf-go" id="lf-go"><i class="ti ti-sparkles"></i> Tìm khoảnh khắc hay</button>
-      <div class="lf-help">Máy nghe cả video một lần (lưu lại, lần sau không nghe lại), Claude chọn các đoạn tự đứng được — hook mạnh 3 giây đầu, trọn ý — rồi dựng mỗi đoạn thành một dự án (cắt lặng, phụ đề; video ngang vào khung dọc thì tự bám mặt).</div></div>
+      <div class="lf-help">Claude chọn đoạn hay, mỗi đoạn thành một dự án. ${Studio.tip('Máy nghe cả video một lần (lưu lại, lần sau không nghe lại), Claude chọn các đoạn tự đứng được: hook mạnh 3 giây đầu, trọn ý. Mỗi đoạn được cắt lặng, có phụ đề; video ngang vào khung dọc thì tự bám mặt.')}</div></div>
       ${hl.length ? `<label class="lf-lbl">Lần chạy trước</label><select class="lf-runs" id="lf-runs"><option value="">— chọn —</option>${hl.map(r => `<option value="${esc(r.dir)}" ${r.dir === S.dir ? 'selected' : ''}>${esc(r.name)} · ${r.n} clip · ${new Date(r.at).toLocaleString('vi-VN')}</option>`).join('')}</select>` : ''}
       ${S.list ? listHTML() : ''}`;
   }
@@ -186,7 +186,7 @@
       </div>
       <label class="ap-tog lf-tog"><input type="checkbox" id="lf-texp" ${LS('texp') === '0' ? '' : 'checked'}> Xuất MP4 luôn</label>
       <button class="primary lf-go" id="lf-tgo"><i class="ti ti-wand"></i> Tạo video</button>
-      <div class="lf-help">Claude viết kịch bản (hook, 3–5 ý, CTA) → giọng đọc → căn thời gian từng chữ → b-roll động + chữ kinetic + nhạc/SFX. Ra một dự án mở được trong Studio để chỉnh tiếp.</div></div>
+      <div class="lf-help">Từ chủ đề ra một dự án có giọng đọc, b-roll và nhạc. ${Studio.tip('Claude viết kịch bản (hook, 3–5 ý, CTA), rồi giọng đọc, căn thời gian từng chữ, b-roll động + chữ kinetic + nhạc/SFX. Ra một dự án mở được trong Studio để chỉnh tiếp.')}</div></div>
       ${S.topicOut ? topicResult(S.topicOut) : ''}
       ${tp.length ? `<div class="lf-card"><h4><i class="ti ti-history"></i> Đã tạo gần đây</h4>${tp.map((r, i) => `<div class="lf-it"><${r.thumbUrl ? `img src="${avsUrl(r.thumbUrl)}" alt=""` : 'div class="ph"'}>${r.thumbUrl ? '' : '</div>'}
         <div><div class="tt">${esc(r.name)}</div><div class="mt">${new Date(r.at).toLocaleString('vi-VN')}</div>

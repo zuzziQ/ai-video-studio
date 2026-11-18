@@ -22,8 +22,7 @@
     let h;
     if (still) h = '<div class="help">Clip là ảnh tĩnh — chỉnh Tâm X/Y ở tab Cơ bản.</div>';
     else if (!o.reframe?.length) h = `<div class="acts"><button class="primary" data-rf="run"><i class="ti ti-face-id"></i> Bám mặt tự động</button></div>
-      <div class="help">Dò mặt người nói trên máy (YuNet, offline, vài giây cho mỗi phút video), làm mượt chống rung, giữ nguyên khi cắt cảnh, rồi tự dời khung cắt theo mặt.
-      Dùng cho <b>clip ngang trong video dọc</b> (và ngược lại). Clip được chuyển sang chế độ <b>Lấp đầy</b>.</div>`;
+      <div class="help">Cho <b>clip ngang trong video dọc</b> (và ngược lại). ${Studio.tip('Dò mặt người nói trên máy (YuNet, offline, vài giây cho mỗi phút video), làm mượt chống rung, giữ nguyên khi cắt cảnh, rồi tự dời khung cắt theo mặt. Clip được chuyển sang chế độ Lấp đầy.')}</div>`;
     else {
       const same = Math.abs((o.ar || 1.78) - fa) < .02;
       h = `<div class="rfstat ${on ? 'on' : ''}"><i class="ti ${on ? 'ti-face-id' : 'ti-face-id-error'}"></i><div><b>${on ? 'Đang bám mặt' : 'Đã tắt bám mặt'}</b>
@@ -31,11 +30,11 @@
         <div class="acts"><button data-rf="toggle" class="${on ? 'on' : ''}"><i class="ti ${on ? 'ti-toggle-right' : 'ti-toggle-left'}"></i> ${on ? 'Tắt' : 'Bật'}</button>
         <button data-rf="run"><i class="ti ti-refresh"></i> Dò lại</button><button data-rf="clear" class="danger"><i class="ti ti-trash"></i> Xoá</button></div>
         ${(o.fit || 'cover') !== 'cover' ? '<div class="help rf-warn">Bám mặt chỉ có tác dụng ở chế độ Lấp đầy (tab Cơ bản).</div>' : ''}
-        <div class="help">${same ? 'Nguồn cùng khổ với khung nên không cần dời khung; tăng <b>Phóng to</b> ở tab Cơ bản để zoom vào mặt (tâm zoom bám theo mặt).'
-          : 'Khung cắt tự dời theo mặt; Tâm X/Y ở tab Cơ bản bị thay bằng vị trí mặt. Phóng to &gt; 1 sẽ zoom quanh mặt.'}</div>`;
+        <div class="help">${same ? `Nguồn cùng khổ khung: tăng <b>Phóng to</b> để zoom vào mặt. ${Studio.tip('Không cần dời khung. Phóng to ở tab Cơ bản; tâm zoom bám theo mặt.')}`
+          : `Khung cắt tự dời theo mặt. ${Studio.tip('Tâm X/Y ở tab Cơ bản bị thay bằng vị trí mặt. Phóng to lớn hơn 1 sẽ zoom quanh mặt.')}`}</div>`;
     }
     // S17 M124: khung cắt chỉnh tay trên preview (kéo / tay nắm góc) đè bám mặt ở clip này
-    if (o.crop_manual) h = `<div class="help rf-warn"><i class="ti ti-hand-move"></i> Khung cắt đang chỉnh tay (Tâm ${o.ox ?? 50}% / ${o.oy ?? 45}%, zoom ${o.zoom || 1}×): bám mặt và Tâm tự động bỏ qua ở clip này.</div>
+    if (o.crop_manual) h = `<div class="help rf-warn"><i class="ti ti-hand-move"></i> Khung cắt đang chỉnh tay: bám mặt bỏ qua ở clip này. ${Studio.tip(`Tâm ${o.ox ?? 50}% / ${o.oy ?? 45}%, zoom ${o.zoom || 1}×. Bám mặt và Tâm tự động không áp khi khung đã chỉnh tay.`)}</div>
       <div class="acts"><button data-rf="unmanual"><i class="ti ti-restore"></i> Bỏ chỉnh tay</button></div>` + h;
     return ['reframe', 'Bám mặt', `<div id="rfpanel">${h}</div>`];
   });
@@ -83,20 +82,20 @@
     $('#libbody').innerHTML = `<div id="dubp">${CAP.length ? '' : Studio.ctaTranscribe('Dịch và lồng tiếng')}
       ${sect('Ngôn ngữ', `<div class="row"><div><span class="lbl">Gốc</span><select data-db="src">${opt(LANGS, src)}</select></div>
         <div><span class="lbl">Dịch sang</span><select data-db="lang">${opt(LANGS.filter(l => l[0] !== src), s.lang)}</select></div></div>
-        <div class="help">Dịch bằng Claude (lệnh <code>claude</code> trên máy), theo từng câu rồi chia lại khớp từng đoạn phụ đề.</div>`, 'ti-language')}
+        <div class="help">Dịch bằng Claude trên máy. ${Studio.tip('Dùng lệnh claude trên máy, dịch theo từng câu rồi chia lại khớp từng đoạn phụ đề.')}</div>`, 'ti-language')}
       ${sect('Phụ đề song ngữ', `<label class="check"><input type="checkbox" data-db="on" ${S2.on ? 'checked' : ''} ${nTr ? '' : 'disabled'}> Hiện dòng dịch dưới phụ đề${S2.lang ? ` (${esc(S2.lang)})` : ''}</label>
         <span class="lbl">Kiểu</span><div class="seg3">${[['plain', 'Viền tối'], ['box', 'Nền đen'], ['yellow', 'Chữ vàng']].map(([k, l]) => `<button data-dbs="${k}" class="${(S2.style || 'plain') === k ? 'on' : ''}">${l}</button>`).join('')}</div>
         <div class="slrow"><span>Cỡ chữ</span><input type="range" data-db="size" min="16" max="44" step="1" value="${S2.size || (Studio.DH > Studio.DW ? 27 : 25)}"><b>${S2.size || 'tự'}</b></div>
         <div class="acts"><button data-dba="translate" class="${nTr ? '' : 'primary'}"><i class="ti ti-language"></i> ${nTr ? 'Dịch lại' : 'Dịch phụ đề'}</button></div>
-        <div class="help">${nTr ? `${nTr}/${CAP.length} đoạn đã có bản dịch — sửa trực tiếp ở danh sách dưới.` : 'Chưa có bản dịch.'} Dòng dịch tự đặt ngay dưới phụ đề (hoặc trên nếu sát đáy), theo mọi kiểu phụ đề.</div>`, 'ti-badge-cc')}
+        <div class="help">${nTr ? `${nTr}/${CAP.length} đoạn đã có bản dịch.` : 'Chưa có bản dịch.'} ${Studio.tip('Sửa bản dịch trực tiếp ở danh sách dưới. Dòng dịch tự đặt ngay dưới phụ đề (hoặc trên nếu sát đáy), theo mọi kiểu phụ đề.')}</div>`, 'ti-badge-cc')}
       ${sect('Lồng tiếng', `<div class="row"><div><span class="lbl">Giọng đọc</span><select data-db="tts">${opt([['say', 'macOS (offline)'], ['edge', 'Microsoft Edge (cần mạng)'], ['vieneu', 'VieNeu trên máy (tiếng Việt)']], s.tts)}</select></div>
         <div><span class="lbl">Giọng</span><select data-db="voice">${voices.length ? opt(voices, s.voice || voices[0][0]) : '<option value="">(không có giọng)</option>'}</select></div></div>
         <div class="slrow"><span>Giọng gốc</span><input type="range" data-db="vg" min="0" max="100" step="5" value="${vg}"><b>${vg}%</b></div>
         <div class="acts"><button data-dba="dub" class="primary"><i class="ti ti-microphone-2"></i> Tạo lồng tiếng</button></div>
         ${dub ? `<div class="dubfile"><i class="ti ti-wave-sine"></i> ${esc(dub.file)} · ${esc(dub.voice || '')}${trk ? `<label class="check"><input type="checkbox" data-db="dubon" ${trk.mute ? '' : 'checked'}> Dùng khi xuất</label>` : ''}</div>
           <audio controls preload="none" src="${Studio.pbase}${esc(dub.file)}?${Studio.META?.saved || ''}"></audio>` : ''}
-        <div class="help">Mỗi câu đọc riêng, nhanh lên tối đa 1,35× để khớp chỗ trống; câu quá dài sẽ lấn sang câu sau (có báo). Giọng lồng tiếng là một track âm thanh;
-        giọng gốc giảm theo thanh trên khi <b>xuất</b> (preview vẫn phát giọng gốc — nghe thử bản lồng tiếng ở đây). ${s.tts === 'say' ? 'Thêm giọng macOS: Cài đặt › Trợ năng › Nội dung được đọc.' : s.tts === 'vieneu' ? 'VieNeu chỉ đọc tiếng Việt; máy chủ không chạy hoặc dịch sang tiếng khác thì lùi về edge-tts (có báo).' : 'edge-tts gửi câu chữ lên dịch vụ đọc của Microsoft.'}</div>`, 'ti-microphone-2')}
+        <div class="help">${s.tts === 'say' || s.tts === 'vieneu' ? 'Giọng gốc giảm khi xuất; preview vẫn phát giọng gốc.' : '<i class="ti ti-lock"></i> edge-tts gửi câu chữ lên dịch vụ đọc của Microsoft.'}
+        ${Studio.tip('Mỗi câu đọc riêng, nhanh lên tối đa 1,35× để khớp chỗ trống; câu quá dài sẽ lấn sang câu sau (có báo). Giọng lồng tiếng là một track âm thanh; giọng gốc giảm theo thanh trên khi xuất (preview vẫn phát giọng gốc, nghe thử bản lồng tiếng ở đây).' + (s.tts === 'say' ? ' Thêm giọng macOS: Cài đặt › Trợ năng › Nội dung được đọc.' : s.tts === 'vieneu' ? ' VieNeu chỉ đọc tiếng Việt; máy chủ không chạy hoặc dịch sang tiếng khác thì lùi về edge-tts (có báo).' : ''))}</div>`, 'ti-microphone-2')}
       ${nTr ? sect('Bản dịch', `<div class="trlist">${CAP.map((c, i) => c.hidden ? '' : `<div><small>${esc(c.words.map(w => w.w).join(' '))}</small><input data-tri="${i}" value="${esc(c.tr || '')}"></div>`).join('')}</div>`, 'ti-list') : ''}
     </div>`;
   }

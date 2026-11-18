@@ -133,19 +133,19 @@
       <button class="icon" data-bpg="next" title="Trang sau" ${st.page >= st.pages - 1 ? 'disabled' : ''}><i class="ti ti-chevron-right"></i></button>
       ${S.page != null ? `<button class="icon" data-bpg="follow" title="Về trang có dòng đang làm"><i class="ti ti-focus-2"></i></button>` : ''}</div>` : '';
     $('#libbody').innerHTML = `
-    <div class="help bt-intro">Một mẫu + một bảng tính → mỗi dòng một video riêng (thư mục dự án + MP4). Chạy lần lượt, dừng được, chạy tiếp được.</div>
+    <div class="help bt-intro">Một mẫu + một bảng tính → mỗi dòng một video. ${Studio.tip('Mỗi dòng ra một thư mục dự án và một MP4. Chạy lần lượt, dừng được, chạy tiếp được.')}</div>
     <div class="bt-card"><h4><span class="n">1</span>Nguồn</h4>
       <select id="bt-src"><option value="project" ${S.source === 'project' ? 'selected' : ''}>Dự án đang mở (${esc(S.project || '')})</option>
       ${groups.map(g => `<optgroup label="${esc(g)}">${S.sources.filter(s => s.group === g).map(s => `<option value="${esc(s.key)}" ${s.key === S.source ? 'selected' : ''}>${esc(s.name)} · ${s.aspect || ''}</option>`).join('')}</optgroup>`).join('')}</select>
       ${S.needs?.length ? `<div class="help">Cần: ${esc(S.needs.join(', '))}</div>` : ''}
-      ${S.source === 'project' ? '<div class="help">Dự án hiện tại: thay chữ / ảnh / thương hiệu theo từng dòng, giữ nguyên giọng và video.</div>' : ''}</div>
+      ${S.source === 'project' ? `<div class="help">Thay chữ / ảnh / thương hiệu theo từng dòng. ${Studio.tip('Dùng dự án hiện tại làm mẫu; giữ nguyên giọng và video.')}</div>` : ''}</div>
     <div class="bt-card"><h4><span class="n">2</span>Bảng tính</h4>
       <div class="bt-drop" id="bt-drop"><i class="ti ti-table-import"></i> Chọn hoặc thả file .csv / .xlsx<input type="file" id="bt-file" accept=".csv,.xlsx,.tsv,.txt" hidden></div>
       <div class="acts bt-acts-top"><button id="bt-ex"><i class="ti ti-building-community"></i> Dùng ví dụ BĐS (5 căn)</button></div>
       ${S.sheet ? `<div class="bt-file"><i class="ti ti-file-spreadsheet bt-ok"></i><b title="${esc(S.sheet.file)}">${esc(S.sheet.name)}</b><span class="muted">${S.sheet.rows.length} dòng · ${S.sheet.columns.length} cột</span></div>` : ''}</div>
     <div class="bt-card"><h4><span class="n">3</span>Ghép cột <span class="muted">${S.sheet ? `${nMap} đã ghép` : ''}</span>
       ${S.sheet ? `<span class="muted bt-push">dòng</span><select id="bt-prow" class="bt-prow">${S.sheet.rows.map((_, i) => `<option value="${i}" ${i === S.prevRow ? 'selected' : ''}>${i + 1}</option>`).join('')}</select>` : ''}</h4>
-      ${!S.sheet ? '<div class="help">Chọn bảng tính để ghép cột vào chỗ trống <b>{{cột}}</b>, chữ mẫu, ảnh và thông tin thương hiệu.</div>' : `<div class="bt-map">
+      ${!S.sheet ? `<div class="help">Chọn bảng tính để ghép cột vào chỗ trống <b>{{cột}}</b>. ${Studio.tip('Cột ghép được vào chỗ trống {{cột}}, chữ mẫu, ảnh và thông tin thương hiệu.')}</div>` : `<div class="bt-map">
         ${by('placeholder').length ? `<div class="bt-kind">Chỗ trống {{…}}</div>${by('placeholder').map(mapRow).join('')}` : ''}
         <div class="bt-kind">Trường chính</div>${by('field').map(mapRow).join('')}
         ${by('media').length ? `<div class="bt-kind">Ảnh / video trong mẫu</div>${by('media').map(mapRow).join('')}` : ''}
@@ -159,7 +159,7 @@
         <div><label>Độ dài mặc định (s)</label><input id="bt-dur" type="number" min="3" placeholder="theo mẫu" value="${esc(S.dur)}"></div>
         <div class="bt-span2"><label>Chỉ làm các dòng (vd 1-3,5 · trống = tất cả)</label><input id="bt-rows" placeholder="tất cả" value="${esc(S.rows)}"></div>
       </div>
-      <div class="help">Tự động: dòng có cột <b>video</b> → dựng từ video người nói; có cột <b>lời đọc</b> → giọng AI tiếng Việt (macOS “Linh”) + ảnh; không có → ảnh + nhạc của mẫu.</div></div>
+      <div class="help">Tự động chọn theo cột của từng dòng. ${Studio.tip('Dòng có cột video: dựng từ video người nói. Có cột lời đọc: giọng AI tiếng Việt (macOS “Linh”) + ảnh. Không có: ảnh + nhạc của mẫu.')}</div></div>
     <div class="bt-card"><h4><span class="n">5</span>Xem trước & chạy</h4>
       <div class="bt-grid"><div><label>Khung hình tại (s)</label><input id="bt-pt" type="number" step="0.5" min="0" value="${esc(S.prevT)}"></div>
         <div class="bt-end"><button id="bt-prev" ${S.busy || !S.sheet ? 'disabled' : ''}>${S.busy === 'preview' ? '<i class="ti ti-loader-2 spin"></i> Đang dựng…' : `<i class="ti ti-eye"></i> Xem dòng ${S.prevRow + 1}`}</button></div></div>

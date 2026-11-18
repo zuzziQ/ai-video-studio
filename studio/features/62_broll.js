@@ -49,7 +49,7 @@
               <div class="nm">${esc(it.license || '')}</div></div>`).join('')}</div>`
           : `<div class="ui-state ui-state--empty"><i class="ti ti-mood-empty ui-state__icon"></i><b class="ui-state__title">Không có kết quả</b><span>Thử từ khoá tiếng Anh đơn giản hơn${RES.missing.length ? ', hoặc thêm key Pexels/Pixabay' : ''}.</span></div>`}`;
     } else if (tab === 'ai') {
-      h = `<div class="help">Claude đọc phụ đề, chọn câu đáng minh hoạ và đề xuất: <b>b-roll động</b> có sẵn trong thư viện (9.080 preset) hoặc <b>từ khoá ảnh stock</b>. Tick những mục muốn dùng rồi chèn.</div>
+      h = `<div class="help">Claude đề xuất b-roll cho từng câu; tick mục muốn dùng rồi chèn. ${Studio.tip('Claude đọc phụ đề, chọn câu đáng minh hoạ và đề xuất b-roll động có sẵn trong thư viện (9.080 preset) hoặc từ khoá ảnh stock.')}</div>
         <div class="acts"><button class="primary" data-abact="suggest"><i class="ti ti-sparkles"></i> ${SUG ? 'Gợi ý lại' : 'AI gợi ý b-roll'}</button>${SUG?.length ? `<button data-abact="insert"><i class="ti ti-plus"></i> Chèn ${PICK.size} mục</button>` : ''}</div>${SUG?.length && vert() ? `<div class="chips ab-ins">${[['full', 'B-roll động toàn màn'], ['card', 'Dạng thẻ']].map(([k, l]) => `<button class="chip ${INS === k ? 'on' : ''}" data-abins="${k}">${l}</button>`).join('')}</div>` : ''}
         ${SUG ? SUG.length ? `<div class="ablist">${SUG.map((s, i) => `<label class="absug ${PICK.has(i) ? 'on' : ''}"><input type="checkbox" data-abpick="${i}" ${PICK.has(i) ? 'checked' : ''}>
             <div><div class="t"><a data-abseek="${s.t0}">${fmt(s.t0)}–${fmt(s.t1)}</a> <span class="kd ${s.kind}">${s.kind === 'preset' ? 'B-roll động' : 'Ảnh stock'}</span></div>
@@ -58,7 +58,7 @@
             ${s.why ? `<div class="why">${esc(s.why)}</div>` : ''}</div></label>`).join('')}</div>` : '<div class="ui-state ui-state--empty"><b class="ui-state__title">Claude không đề xuất mục nào</b></div>' : ''}`;
     } else {
       const has = KEYS && (KEYS.openai || KEYS.gemini);
-      h = has ? `<div class="help">Tạo ảnh bằng key của bạn (${[KEYS.openai && 'OpenAI gpt-image-1', KEYS.gemini && 'Google Imagen 4'].filter(Boolean).join(', ')}). Ảnh lưu vào media/ và chèn tại playhead 3 s. Có tính phí theo tài khoản của bạn.</div>
+      h = has ? `<div class="help">Tạo ảnh bằng key của bạn, có tính phí theo tài khoản. ${Studio.tip(`Dùng ${[KEYS.openai && 'OpenAI gpt-image-1', KEYS.gemini && 'Google Imagen 4'].filter(Boolean).join(', ')}. Ảnh lưu vào media/ và chèn tại playhead 3 s.`)}</div>
           <textarea id="abgen" rows="4" placeholder="Mô tả ảnh, VD: robot trợ lý đang làm việc trong văn phòng hiện đại, ánh sáng điện ảnh, dọc 9:16">${esc(GEN)}</textarea>
           ${KEYS.openai && KEYS.gemini ? `<select id="abprov"><option value="openai">OpenAI</option><option value="gemini">Google Gemini (Imagen)</option></select>` : ''}
           <div class="acts"><button class="primary" data-abact="gen"><i class="ti ti-photo-ai"></i> Tạo ảnh</button></div>`
