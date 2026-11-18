@@ -3,7 +3,8 @@
 // hình khối: Độ đậm, Bo góc, Kích cỡ · khối HyperFrames: Kích cỡ, Năng lượng + biến số của catalog · gói style: item.knobs).
 // Kéo một lần = một bước hoàn tác; preview vẽ lại theo khung hình (khối HyperFrames: giãn 120 ms); bấm đúp thanh hoặc ↺ để đặt lại.
 // Không gọi Claude, không gọi server (C23). Trạng thái núm lưu trên element: obj.knobs = { base: giá trị gốc, v: { id: giá trị } }.
-// Ra ngoài: window.Knobs.validateMap(map, comp?) — kiểm một bảng núm JSON lạ theo danh sách trường cho phép (M149 "Gợi ý núm").
+// Ra ngoài: window.Knobs.validateMap(map, comp?) — kiểm một bảng núm JSON lạ theo danh sách trường cho phép (M149 "Gợi ý núm"),
+// tableFor(comp?), allowed(comp?). Núm M149 thêm lưu ở obj.knob_map, đọc lại cùng núm của gói style.
 'use strict';
 (() => {
   const S = window.Studio, K = window.KnobsCore;
@@ -31,7 +32,9 @@
     if (target === 'hf' && !block) return null;
     if (!S.getPos(c)?.size) return null;
     const allowed = K.allowedFor(target, block);
-    return { allowed, knobs: K.tableFor(target, { block, varLabel: S.hfVarLabel, extra: packKnobs(o) }) };
+    // M149: núm do "Gợi ý núm" thêm nằm ở obj.knob_map (đã kiểm lại ở đây qua tableFor → validateMap)
+    const extra = [...(packKnobs(o) || []), ...(Array.isArray(o.knob_map) ? o.knob_map : [])];
+    return { allowed, knobs: K.tableFor(target, { block, varLabel: S.hfVarLabel, extra }) };
   }
   // Giá trị hiện có của các trường cho phép (size, dur là trường ảo; vars.<id> là biến của khối).
   function readRaw(c, allowed) {
@@ -143,6 +146,7 @@
   window.Knobs = {
     validateMap: (map, c = S.sel) => K.validateMap(map, ctx(c)?.allowed || null),
     tableFor: (c = S.sel) => ctx(c)?.knobs || [],
+    allowed: (c = S.sel) => ctx(c)?.allowed || null, // M149: danh sách trường núm cho "Gợi ý núm"
     targetOf: K.targetOf,
   };
 })();

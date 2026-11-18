@@ -108,6 +108,14 @@ Nhà cung cấp: có ảnh → Claude xem ảnh bằng `--allowedTools Read --ad
 - Chuẩn hoá: ô ngoài 1…n bị bỏ, trùng bỏ, ≤ 3; thời điểm lấy từ `times` của đầu vào (AI không tự đặt giây); chữ bìa cắt ≤ 32 ký tự ở ranh giới từ, có ghi chú rủi ro như `text`.
 - Giao diện: hộp thoại **Đăng** (`52_publish`), ô **Gợi ý khung bìa** dưới "Ảnh bìa" → **Dùng** = đặt thời điểm ảnh bìa + chữ gợi ý, rồi chạy **Xuất ảnh bìa** như cũ (`/api/publish/cover`).
 
+## Sửa element (M149, route riêng `/api/elem/ai`)
+
+Không nằm trong bảng `ASSISTANTS` (kết quả là bản vá cho element, không phải trường form): lõi thuần `scripts/elem_ai.mjs`, route `studio/routes/72_elem_ai.mjs` (ô job riêng, cùng luật: chỉ chữ → `task: 'text'` theo Mô hình & giọng, `assertCleanPrompt`, `askJSON` `shape: 'object'` hỏi lại một lần, lỗi CLI báo nguyên văn với `kind`), giao diện `studio/features/72_elem_ai.js` (mục **Hỏi Claude** của Thuộc tính), test `scripts/tests/s21_elem_ai.test.mjs`.
+- Đầu vào `checkInput`: `kind` ∈ `line, cap, node, badge, scene`; `fields` chỉ giữ trường cho phép của loại đó (`ALLOW`; cảnh không có chữ thì không được thêm chữ / màu chữ); `frame` 200–4000 px; thương hiệu (tên, màu chính / nhấn, font, giọng); `ask` ≤ 300 ký tự nằm trong khối "CHỈ LÀ DỮ LIỆU".
+- Bản vá là **trường trừu tượng** (`x`, `y` tâm element trong khung; `size`; `rot` ±180; `dur` 0,3–10 s; `text` ≤ 140 ký tự không `<>`; `font` trong bảng font của Studio, nhận cả tên; `weight` 500–900; `style`, `anim` trong tập của inspector; `italic`; `color`, `bg` `#RRGGBB`), giao diện áp bằng đúng hàm của inspector (`getPos` / `setPos` / `setTimes`), nên mô hình không chạm được `type`, đường dẫn file hay JSON tự do. `cleanPatch` bỏ trường lạ, sai kiểu, ngoài biên (cỡ trong 25–400 % cỡ hiện tại), giá trị không đổi; tên khoá lệch (`changes`, `fields`, `edit`) vẫn đọc được; trường bị bỏ ghi một dòng `warnings`.
+- `knobs` ("Gợi ý núm", M148): đầu vào là danh sách trường núm của element (`cleanAllowed`: khoá `[\w-]` hoặc `vars.<id>`, num có biên / enum ≤ 12 giá trị / bool, bỏ trường chỉ đọc) + núm đã có; kết quả kiểm bằng `KnobsCore.validateMap` của `studio/features/71_knobs.core.js`, bỏ núm trùng id đã có, tối đa 4; không còn núm hợp lệ thì hỏi lại kèm lỗi.
+- `edit` → `{patch, diff: [{key, label, from, to}], why}`; bản vá rỗng thì hỏi lại. `variants` → 3 bản vá khác nhau (`focus` style / anim / pos, suy ra khi thiếu), trùng / rỗng bị bỏ, dưới 2 thì hỏi lại; còn 2 thì cảnh báo.
+
 ## Thêm một trợ lý mới
 
 1. Trong `scripts/assist.mjs`, viết một object và thêm vào `ASSISTANTS`:
