@@ -65,7 +65,7 @@ test('75_ask.js: một dạng trong tab Claude, ✦ ở thanh nút phát, / mở
   assert.match(a, /el\.replaceChildren\(bar, none\)/);
   assert.match(a, /btn\.id = 'askbtn'/);
   assert.match(a, /\$\('#expand'\)\?\.before\(btn\)/); // thanh nút phát, không #top (ai-video-studio-039, 045)
-  assert.match(a, /S\.layout\?\.revealRight\?\.\(\);\s+if \(S\.right\?\.tab !== 'claude'\) S\.right\?\.show\?\.\('claude'\);\s+if \(focus\) \{ inp\.focus\(\)/); // M173: askNow mở tab không đặt con trỏ
+  assert.match(a, /S\.layout\?\.revealRight\?\.\(\);(\s+\/\/[^\n]*)*\s+S\.right\?\.show\?\.\('claude'\);\s+if \(focus\) \{ inp\.focus\(\)/); // M175: luôn qua show (tiêu RT.auto) // M173: askNow mở tab không đặt con trỏ
   assert.match(a, /if \(rv && c && rv\.nextElementSibling !== c\) c\.before\(rv\)/);
   for (const k of ['formOf', 'colParts', 'slotRv', 'slotIn', "'#controls') || $('#stagewrap')).after(bar)"]) assert.ok(!a.includes(k), `còn ${k}`);
   assert.match(read('studio/features/74_review.js'), /\$\('#controls'\)\.before\(bar\)/);

@@ -99,3 +99,61 @@ Mỗi mục một PR, lõi thuần có test `scripts/tests/s24_<mục>.test.mjs`
 - `C36` Thuộc tính chỉ chỉnh tay; mọi lối vào AI của element đi qua tab Claude.
 - `C37` Chế độ chú thích thay chế độ ghim: bấm element hoặc kéo vùng, Hỏi ngay / Để sau; bỏ tab Dự án, "Cài đặt dự án" sang
   bước Chuẩn bị.
+
+## 8. Nghiệm thu (`M175`, 2026-11-18)
+
+`main` ở `24b0bbb` (M170–M174 đã merge), server Studio chạy từ worktree, 2 dự án thử chép từ một dự án thật (49,8 s, 2 cảnh, 33
+thành phần, 20 SFX) đổi `width`/`height` thành 9:16 và 16:9; bản 9:16 thêm một ghim cũ chung (`TL.pins`) và một ghim cũ trên cảnh
+(`note` + `note_at`). Đo bằng Chrome chạy ngầm (`puppeteer-core`), viewport đúng cỡ, `localStorage` sạch mỗi ô, theo skill
+`responsive-layout`. Luồng thử bằng chuột thật (bấm / kéo / phím của trình duyệt trong app, không dispatch event) ở 9:16 Chuyên
+nghiệp và 16:9 Cơ bản; mô hình thật (`claude` đã đăng nhập trên máy chủ repo).
+
+**Ma trận bố cục** (24 ô = 3 cửa sổ × 2 khổ × 2 chế độ × cột phải mở / gấp `]`). Mỗi ô kiểm: trang không cuộn ngang / dọc, không phần
+tử tràn viewport mà không có tổ tiên cắt, không vùng cuộn dọc lồng nhau đang cuộn, 9 điểm trong khung `elementFromPoint` ra `#frame` /
+`#stagebox`, khung và `#controls` nằm trên timeline (mức dải tua: trên `#tlstrip`), nút trong `#controls` một hàng, `#play` bấm trúng,
+khung không đè cột phải, tab cột phải vừa (không cắt chữ), không lỗi JS. Lõi thuần giữ các bất biến trong
+`scripts/tests/s24_layout_matrix.test.mjs` (cùng `s23_layout_matrix`).
+
+| Khổ | Cửa sổ | Chế độ | Tab cột phải (mở) | Khung: cột mở / gấp (px) | Đạt |
+|---|---|---|---|---|---|
+| 9:16 | 1024×768 | Cơ bản | Thuộc tính · Claude | 273×486 / 273×486 | ✓ |
+| 9:16 | 1024×768 | Chuyên nghiệp | Thuộc tính · Lớp · Claude | 273×486 / 273×486 | ✓ |
+| 9:16 | 1440×900 | Cơ bản | Thuộc tính · Claude | 393×698 / 393×698 | ✓ |
+| 9:16 | 1440×900 | Chuyên nghiệp | Thuộc tính · Lớp · Claude | 246×438 / 246×438 | ✓ |
+| 9:16 | 1920×1080 | Cơ bản | Thuộc tính · Claude | 494×878 / 494×878 | ✓ |
+| 9:16 | 1920×1080 | Chuyên nghiệp | Thuộc tính · Lớp · Claude | 348×618 / 348×618 | ✓ |
+| 16:9 | 1024×768 | Cơ bản | Thuộc tính · Claude | 576×324 / 864×486 | ✓ |
+| 16:9 | 1024×768 | Chuyên nghiệp | Thuộc tính · Lớp · Claude | 576×324 / 864×486 | ✓ |
+| 16:9 | 1440×900 | Cơ bản | Thuộc tính · Claude | 992×558 / 1241×698 | ✓ |
+| 16:9 | 1440×900 | Chuyên nghiệp | Thuộc tính · Lớp · Claude | 675×380 / 779×438 | ✓ |
+| 16:9 | 1920×1080 | Cơ bản | Thuộc tính · Claude | 1472×828 / 1561×878 | ✓ |
+| 16:9 | 1920×1080 | Chuyên nghiệp | Thuộc tính · Lớp · Claude | 1052×592 / 1099×618 | ✓ |
+
+Mọi ô: cột phải 340 px (gấp: 0), nút phát một dòng 48 px, không tab Dự án, tab mặc định Claude. Khung 9:16 không đổi khi gấp vì bị
+chặn theo chiều cao. Chuyên nghiệp 9:16 ở 1440 / 1920 nhỏ hơn Cơ bản vì timeline mặc định đầy đủ (Cơ bản: dải tua).
+
+**Luồng (chuột thật)**
+
+| Luồng | Kết quả |
+|---|---|
+| `]` gấp cột phải; `/` và ✦ khi cột đang gấp | ✓ mở cột, tab Claude, con trỏ vào ô hỏi |
+| Không chọn gì → Claude; bấm element → Thuộc tính (`RT.auto`); bỏ chọn → Claude (9:16 Chuyên nghiệp, 16:9 Cơ bản) | ✓ |
+| `/`, gõ dở, bấm element để lấy chip | ✗ → sửa: nhảy sang Thuộc tính vì `open()` bỏ qua `show` khi tab Claude đang mở do tự về (cờ `RT.auto` còn) |
+| Thuộc tính không còn ô AI, thanh nổi không còn ✦; "Hỏi Claude về mục này" → tab Claude, chip "Phụ đề «…»" | ✓ |
+| 3 biến thể từ tab (mô hình thật, 5,7 s) → phím 2 xem trên khung → `#rvbar` ngay dưới khung (khung 573, thanh 589–677, nút phát 677) → Nhận | ✓ áp đúng biến thể 2 |
+| Thêm nhạc & SFX (mô hình thật) → thẻ Đang xem → Nhận → Hoàn tác | ✗ → sửa: sau Nhận thẻ cao lên nhưng cột không cuộn, nút Hoàn tác nằm dưới ô hỏi dính đáy (bấm trúng chip "Bước Dựng"); sau sửa bấm trúng, SFX 7 → 20, thẻ "Đã hoàn tác" |
+| Thẻ báo "1 dòng phụ đề" cho việc chỉ đổi SFX / nhạc | ✗ → sửa: so bản cũ / mới theo chuỗi JSON nên đổi thứ tự khoá (job đọc lại timeline từ đĩa) bị tính là sửa |
+| Tải lại trang: luồng còn đủ lượt (`.studio/ask_log.json`) | ✓ |
+| Ghim cũ của dự án hiện thành "Chú thích để sau (2)" | ✓ |
+| Phím C → bấm phụ đề → ô hỏi nổi tại điểm bấm, chọn phụ đề → Để sau → ⌘S | ✓ `notes.md` có dòng `captions[2] … Phụ đề này nên ngắn hơn` |
+| Bấm chấm số → tab Claude, mục trong danh sách cuộn vào khung nhìn | ✓ |
+| Tắt chế độ: lớp chú thích không nhận chuột (chỉ các chấm) | ✓ |
+| Kéo vùng (9:16 "Vùng 284×316", 16:9 Cơ bản "Vùng 405×355") → Hỏi ngay, mô hình thật | ✓ trả lời đúng nội dung vùng (trần + đèn dải; túi hồng in hoa) |
+| "Dự án" (Cài đặt dự án) ở thanh trái bước Chuẩn bị | ✓ |
+| Rê chuột lên bước Kiểm tra → popover "Kiểm tra 56/100", 2 mục chưa đạt | ✓ |
+| Xuất khi Kiểm tra 56 → hộp "Bước Kiểm tra mới được 56/100", Sửa / Huỷ / Vẫn xuất (C17) | ✓ (Huỷ, không render) |
+
+Ghi chú: Studio lưu tay (⌘S) — tải lại trang sau Nhận mà chưa lưu thì mất bản Nhận (đúng thiết kế). Bấm element đã có ghi chú ở chế
+độ chú thích mở ô với chữ cũ và dời chú thích về điểm bấm (một ghi chú mỗi element). Esc khi ô hỏi nổi đang mở đóng ô và thoát chế
+độ chú thích cùng lúc.
+
