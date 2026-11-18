@@ -7,10 +7,11 @@
   const PRO = ['kf', 'mask', 'json'];
   // Mục luôn đứng đầu (và vì thế mở sẵn như mục đầu): Núm điều chỉnh (S21 M148, 71_knobs.js).
   const FIRST = ['knobs'];
+  const SECOND = ['ai'];
   const ICON = {
     basic: 'ti-forms', anim: 'ti-sparkles', pos: 'ti-arrows-move', json: 'ti-code', kf: 'ti-timeline-event', mask: 'ti-mask',
     shape: 'ti-shape', hf: 'ti-box', reframe: 'ti-focus-centered', alts: 'ti-arrows-shuffle', fade: 'ti-chart-line', fx: 'ti-wave-sine',
-    trk: 'ti-adjustments-alt', knobs: 'ti-adjustments-horizontal', speed: 'ti-brand-speedtest', color: 'ti-color-filter', audio: 'ti-volume', trans: 'ti-transition-right',
+    trk: 'ti-adjustments-alt', knobs: 'ti-adjustments-horizontal', ai: 'ti-message-chatbot', speed: 'ti-brand-speedtest', color: 'ti-color-filter', audio: 'ti-volume', trans: 'ti-transition-right',
   };
   const iconOf = k => ICON[String(k).replace(/-\d+$/, '')] || 'ti-point';
 
@@ -25,7 +26,11 @@
       out.push({ key, label: String(t[1] ?? base), html: t[2] == null ? '' : String(t[2]), icon: iconOf(key), pro: PRO.includes(base) });
     }
     const first = s => FIRST.includes(s.key);
-    return [...out.filter(first), ...out.filter(s => !first(s))];
+    const res = [...out.filter(first), ...out.filter(s => !first(s))];
+    // S21 M149: Hỏi Claude (72_elem_ai.js) luôn là mục thứ hai — sau Núm nếu có, không thì sau mục đầu của lõi; không tự mở sẵn
+    const ai = res.findIndex(s => SECOND.includes(s.key));
+    if (ai > 1) res.splice(1, 0, ...res.splice(ai, 1));
+    return res;
   }
   // Mục thấy được theo chế độ giao diện.
   const visible = (secs, basic) => (basic ? secs.filter(s => !s.pro) : secs);
@@ -50,7 +55,7 @@
     return k;
   }
 
-  const T = { PRO, FIRST, ICON, iconOf, normalize, visible, parse, isOpen, setOpen, active };
+  const T = { PRO, FIRST, SECOND, ICON, iconOf, normalize, visible, parse, isOpen, setOpen, active };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.SectCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);
