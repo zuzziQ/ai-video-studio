@@ -1,6 +1,6 @@
 // Test S23 M157 (tiếp): mọi lệnh xoá của scripts/ và studio/ qua rmSync của scripts/fs_rm.mjs — luồng thật với đường dẫn có dấu
 // (khoá file của hàng đợi / lịch đăng dưới thư mục người dùng có dấu, xoá b-roll khỏi thư viện), maxRetries khi file bị giữ,
-// lint scripts/check-rmsync.mjs chặn fs.rmSync mới, và check-roadmap-link nhận ID 3 chữ số (M157).
+// gỡ token YouTube, lint scripts/check-rmsync.mjs chặn fs.rmSync mới, và check-roadmap-link nhận ID 3 chữ số (M157).
 // Chạy: node --test scripts/tests/s23_rmsync.test.mjs
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-rmsync-'));
 const USER = path.join(TMP, 'Người dùng Đẹp');
 // Thư mục cấu hình và Kho theo thư mục người dùng: đặt vào thư mục tạm có dấu, không đụng ~/.ai-video-studio thật
 process.env.AVS_HOME = path.join(USER, '.ai-video-studio'); process.env.USERPROFILE = process.env.HOME = USER;
-after(() => fs.rmSync(TMP, { recursive: true, force: true }));
+after(() => rmSync(TMP, { recursive: true, force: true }));
 const W = (f, s = 'x') => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, s); return f; };
 
 test('withFileLock dưới thư mục có dấu: khoá của mình được gỡ, khoá mồ côi (pid đã chết) được dọn', async () => {
@@ -39,6 +39,23 @@ test('xoá b-roll khỏi thư viện dưới thư mục người dùng có dấu
   assert.deepEqual(lib.load(), []);
 });
 
+test('gỡ kết nối YouTube dưới thư mục người dùng có dấu: token và client trên đĩa đều mất', async () => {
+  const { ytDisconnect, HOME } = await import('../publish.mjs');
+  assert.ok(HOME().startsWith(USER), 'thư mục cấu hình của test nằm trong thư mục tạm');
+  const tok = W(path.join(HOME(), 'youtube_token.json'), JSON.stringify({ access_token: 'gia' })); // không có refresh_token: không gọi mạng
+  const cli = W(path.join(HOME(), 'youtube_client.json'), JSON.stringify({ client_id: 'gia' }));
+  assert.deepEqual(await ytDisconnect({ forgetClient: true }), { ok: true });
+  assert.ok(!fs.existsSync(tok), 'token đã xoá'); assert.ok(!fs.existsSync(cli), 'client đã xoá');
+});
+
+test('đường dẫn tương đối dưới thư mục hiện tại có dấu', () => {
+  const d = path.join(TMP, 'Thư mục làm việc'), cwd = process.cwd();
+  W(path.join(d, 'tam.txt')); W(path.join(d, 'con', 'a.txt'));
+  process.chdir(d);
+  try { rmSync('tam.txt'); rmSync('con', { recursive: true }); } finally { process.chdir(cwd); }
+  assert.deepEqual(fs.readdirSync(d), []);
+});
+
 test('maxRetries: file bị giữ (EBUSY) lúc đầu vẫn được xoá ở lần thử sau', t => {
   if (process.platform !== 'win32') return t.skip('nhánh riêng của Windows');
   const f = W(path.join(TMP, 'Đang mở.mp4')), real = fs.unlinkSync;
@@ -61,8 +78,13 @@ test('check-rmsync: bắt fs.rmSync và rmSync lấy thẳng từ node:fs; mã c
     "import { readFileSync, rmSync as rm } from 'fs';",
     "const { rmSync } = fs;",
     "const { rmSync } = require('node:fs');",
+    "nodeFs.rmSync(p);",
+    "x.rmSync.call(null, p);",
+    "fs['rmSync'](p);",
   ];
   for (const s of bad) assert.equal(findRmSync(s).length, 1, s);
+  const multi = ["import fs from 'node:fs';", 'import {', '  readFileSync,', '  rmSync,', "} from 'node:fs';", ''].join('\n');
+  assert.deepEqual(findRmSync(multi).map(h => h.line), [5], 'import nhiều dòng');
   const ok = [
     "import { rmSync } from './fs_rm.mjs';",
     "rmSync(p, { recursive: true, force: true });",
@@ -84,4 +106,5 @@ test('check-roadmap-link nhận ID 3 chữ số (M157) như ID 2 chữ số', as
   assert.deepEqual(checkRoadmapLink({ body: 'Roadmap: S23, M157, M05', files, roadmap }).ids, ['S23', 'M157', 'M05']);
   const r = checkRoadmapLink({ body: 'Roadmap: M158', files, roadmap });
   assert.equal(r.ok, false); assert.match(r.reason, /M158 is not an item/);
+  assert.deepEqual(checkRoadmapLink({ body: 'Roadmap: M157 (mã H264, A11y)', files, roadmap }).ids, ['M157'], 'chữ không phải tiền tố ID không tính');
 });

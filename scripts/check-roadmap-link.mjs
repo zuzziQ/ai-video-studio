@@ -58,7 +58,10 @@ export function checkRoadmapLink({ body, files, roadmap, title = '', author = ''
   const text = String(body ?? '');
   const outside = text.match(OUTSIDE_LINE)?.[1].trim();
   const named = text.match(ROADMAP_LINE)?.[1] ?? '';
-  const ids = [...new Set(named.match(ID) ?? [])];
+  const known = roadmapIds(roadmap);
+  // Only letters the roadmap uses as an ID prefix (S, M, C…): "H264" or "A11" on the line are words, not items.
+  const prefixes = new Set([...known].map((id) => id[0]));
+  const ids = [...new Set(named.match(ID) ?? [])].filter((id) => prefixes.has(id[0]));
   if (!ids.length && !outside) {
     return {
       ok: false,
@@ -67,7 +70,6 @@ export function checkRoadmapLink({ body, files, roadmap, title = '', author = ''
         '(e.g. "Roadmap: S01"), or "Phát sinh: <why>" for work outside the plan',
     };
   }
-  const known = roadmapIds(roadmap);
   const unknown = ids.filter((id) => !known.has(id));
   if (unknown.length) {
     return { ok: false, reason: `${unknown.join(', ')} is not an item of docs/ROADMAP.md (add it there, or fix the ID)` };
