@@ -284,6 +284,21 @@ Lập 2026-11-18, kế hoạch `docs/plans/S22-che-do-va-hoi-claude.md` (kiểm 
 
 `S22` xong 2026-11-18: `M151`–`M156` đều `[x]` (chế độ Cơ bản / Chuyên nghiệp, `Studio.review`, thanh Hỏi Claude có việc ở mọi bước, bớt chữ giải thích, gọn lần mở đầu).
 
+### **`S23`** Bố cục theo khổ video, timeline 3 mức, điểm trên thanh bước, dọn lỗi tồn đọng
+
+Lập 2026-11-18, kế hoạch `docs/plans/S23-bo-cuc-theo-kho-video.md` (đo Studio thật 1600×900, video 9:16: khung cao 395 px = 44 % màn hình, dưới khung 123 px, timeline 300 px; bảng lỗi tồn đọng và "Rủi ro" của #170–#194). Hướng: khung video ở giữa, "người làm" ở cạnh (Cơ bản: Claude; Chuyên nghiệp: Thuộc tính), timeline hiện theo việc, thanh bước kiêm bảng điểm.
+
+- [ ] **`M157`** (`area/infra`): test Windows — `kho_deliver` liên kết cứng, `kho_media` junction (`rmSync` EISDIR), `engines_route` nhái giọng chập chờn; sửa test hay mã theo nguyên nhân. Đợt 1.
+- [ ] **`M158`** (`area/qc`): mọi script mở Chrome (`broll`, `style_lab`, `autopilot`…) qua `scripts/chrome_profile.mjs`; tìm vì sao Chrome không lên khi `USERPROFILE` tạm (#191). Đợt 1.
+- [ ] **`M159`** (`area/llm`): còn sót của Hỏi Claude / xem lại — Bỏ hoàn trả `.studio/qc.json` và tóm tắt Tự động, khung chọn / thanh nổi theo bản đang xem, nghe SFX / nhạc khi xem trước, panel Pro mở từ thanh không hiện ở thanh trái Cơ bản (#189, #193, #194). Đợt 2, trước `M163`.
+- [ ] **`M160`** (`area/infra`): còn sót của sân khấu — mũi tên trên Núm, khung chọn xoay theo element, `size` khối HF khi kéo, thanh nổi trong khung hẹp, chấm ghim che element, cảnh "back" trong Lớp (#174–#185). Đợt 2, sau `M165`.
+- [ ] **`M161`** (`area/infra`): nền bố cục — lõi `76_layout.core.js` (khổ video × chế độ × bề rộng → vùng), API `Studio.layout`, timeline 3 mức (dải tua / gọn / đầy đủ; phím `` ` ``, kéo mép, nhớ theo chế độ), thay `body.expanded`, vùng riêng cho dải báo. Theo `C29`, `C31`. Đợt 1.
+- [ ] **`M162`** (`area/infra`): dải tua 40 px (ảnh nhỏ, playhead, vạch cắt / cảnh, kéo để tua) `features/77_scrub.js`. Sau `M161`.
+- [ ] **`M163`** (`area/llm`): Hỏi Claude cạnh khung khi video dọc (cột gộp gợi ý, kết quả, ô đề xuất của `Studio.review`; Cơ bản chọn element thì mục chính + Núm trong cột), video ngang giữ một dòng dưới khung. Theo `C30`; sau `M161`, `M159`.
+- [ ] **`M164`** (`area/qc`): điểm lên thanh bước — vòng điểm từng bước, rê chuột thấy mục chưa đạt + vì sao, bấm mục giao việc cho thanh Hỏi Claude hoặc mở chỗ sửa; tab Dự án bỏ chip + thanh. Theo `C32`. Đợt 1.
+- [ ] **`M165`** (`area/infra`): hai cột theo chế độ — Cơ bản thanh trái mở ngăn trượt tự đóng, Chuyên nghiệp gấp bằng `[` / `]`, nút phát dọc cạnh khung video dọc, dòng chữ panel hẹp. Sau `M161`, `M164`.
+- [ ] **`M166`** (`area/docs`): nghiệm thu — đo 1024 / 1440 / 1920 × 9:16 / 1:1 / 16:9 × 2 chế độ, các mục "chưa thử" (16:9, kéo thả chuột thật, chuyển cảnh, AI dựng / Tự lái thật với nhạc thương hiệu), cập nhật `references/studio.md`, `DESIGN.md`. Sau mọi mục.
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -314,6 +329,10 @@ Lập 2026-11-18, kế hoạch `docs/plans/S22-che-do-va-hoi-claude.md` (kiểm 
 - [x] **`C26`** (`area/infra`): **chữ giải thích (`S22`).** Đề xuất: dưới một ô tối đa một dòng; phần dài vào biểu tượng (i); test chặn đoạn dài. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C27`** (`area/llm`): **bấm biến thể thì áp hay xem trước (`S22`).** Đề xuất: xem trước trên khung, Nhận mới áp (đổi hành vi `M149`). Chốt 2026-11-18: theo đề xuất.
 - [x] **`C28`** (`area/docs`): **bỏ màn giới thiệu tác giả trong app.** Chủ repo chốt 2026-11-18: bỏ thẻ tác giả `studio/features/00_author.js` và nút Tác giả ở menu ⋯; giữ `LICENSE`, `NOTICE` (MIT bắt buộc) và dòng "Dựa trên AI Video Studio của Nguyễn Tất Kiểm" + link repo gốc ở README, log khởi động, cuối trình cài. Thay luật mục 2–5 cũ của `AGENTS.md`.
+- [x] **`C29`** (`area/infra`): **timeline mặc định (`S23`).** Đề xuất: Cơ bản = dải tua 40 px, Chuyên nghiệp = đầy đủ; nhớ lần đổi theo từng chế độ. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C30`** (`area/llm`): **Cơ bản có cột phải không (`S23`).** Đề xuất: video dọc = cột Claude cạnh khung (chọn element thì mục chính + Núm hiện trong cột); video ngang = không cột phải, Claude một dòng dưới khung. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C31`** (`area/infra`): **ngưỡng tự đổi bố cục (`S23`).** Đề xuất: tỉ lệ khung < 0,8 → Claude cạnh khung; ≥ 0,8 → dưới khung; cửa sổ < 1280 px → luôn dưới khung, timeline gọn; ghim được một kiểu ở ⋯ → Bố cục. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C32`** (`area/qc`): **điểm từng bước nằm đâu (`S23`).** Đề xuất: bỏ chip + thanh ở tab Dự án, chỉ còn vòng điểm trên thanh bước kèm rê chuột xem lý do; tab Dự án giữ danh sách việc của bước đang xem. Chốt 2026-11-18: theo đề xuất.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -334,6 +353,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S22-che-do-va-hoi-claude.md` (kiểm 
 15. **`S20`**: `M139` trước (lát đầu); `M140` → `M141` nối tiếp (cùng bảng lệnh); `M142`, `M143` sau `M141`; `M144` song song (engine + panel mới). Không đụng `studio/server.mjs`.
 16. **`S21`**: `M145` trước (nền); rồi song song `M146`, `M147`, `M150`; sau `M146` song song `M148`, `M149`. Chỉ `M145`, `M146` sửa `renderInspector` của `studio/studio.js`.
 17. **`S22`**: `C13`, `C24`–`C27` đã chốt 2026-11-18; song song `M151` ∥ `M152`; `M153` → `M154` sau `M152`; `M155`, `M156` sau `M151`. Không đụng `studio/server.mjs`.
+18. **`S23`**: `C29`–`C32` đã chốt 2026-11-18; đợt 1 song song `M157` ∥ `M158` ∥ `M161` ∥ `M164`; đợt 2 sau `M161`: `M162` ∥ `M159` → `M163` ∥ `M165` → `M160`; cuối `M166`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`.
 
 ## 6. Không làm
 
