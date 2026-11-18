@@ -37,11 +37,12 @@
     for (const t of SC.tiles(D, W, ratio())) {
       let url = '', fx = 'none';
       try { const k = clipAtT(t.t); if (k) { url = clipFrameUrl(k.c, srcAt(k, t.t)); fx = clipFilterCss(k.c); } } catch {}
-      h += `<i style="left:${t.x}px;width:${t.w}px;${url ? `background-image:url(&quot;${esc(url)}&quot;);` : ''}${fx !== 'none' ? `filter:${esc(fx)};` : ''}"></i>`;
+      // không thuộc tính style inline (check_studio_tokens): vị trí / ảnh / bộ lọc đi qua data-d*, studio.js applyDyn đặt lên el.style
+      h += `<i data-dl="${t.x}" data-dw="${t.w}"${url ? ` data-dbg="${esc(url)}"` : ''}${fx !== 'none' ? ` data-dfx="${esc(fx)}"` : ''}></i>`;
     }
     film.innerHTML = h;
     MARKS = SC.marks(L, scenes, D);
-    marksEl.innerHTML = D > 0 ? MARKS.map(m => `<b class="scr-${m.kind}" style="left:${(m.t / D * 100).toFixed(3)}%"></b>`).join('') : '';
+    marksEl.innerHTML = D > 0 ? MARKS.map(m => `<b class="scr-${m.kind}" data-dl="${(m.t / D * W).toFixed(1)}"></b>`).join('') : '';
     el.setAttribute('aria-valuemax', String(Math.round(D * 10) / 10));
   }
 
