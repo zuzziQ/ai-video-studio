@@ -1,6 +1,6 @@
 // S22 M151: lõi thuần của hai chế độ giao diện Cơ bản / Chuyên nghiệp (docs/plans/S22-che-do-va-hoi-claude.md mục 4, C13, C24).
 // Cơ bản = Claude lái, người dùng duyệt: mỗi bước vài mục trên thanh trái, cột phải không có tab Lớp, Thuộc tính chỉ hiện đầu +
-// mục chính + Núm + Hỏi Claude (mục khác thu sau "Thêm thuộc tính"). Chuyên nghiệp = đủ như S21. Không bỏ tính năng: mục ẩn ở
+// mục chính + Núm (mục khác thu sau "Thêm thuộc tính"). Chuyên nghiệp = đủ như S21. Không bỏ tính năng: mục ẩn ở
 // Cơ bản vẫn mở được bằng ⌘K ("Mở ở Chuyên nghiệp") hoặc nút "Thêm thuộc tính".
 // Không DOM: 01_workflow.js, 04_cmdk.js và studio.js gọi các hàm ở đây. Chạy trong trình duyệt (window.LevelCore) và Node
 // (scripts/tests/s22_level.test.mjs).
@@ -34,9 +34,9 @@
   const RIGHT_TABS = { basic: ['props', 'claude', 'project'], pro: ['props', 'layers', 'claude', 'project'] };
   const rightTabs = level => RIGHT_TABS[norm(level)];
 
-  // Thuộc tính (68_sections.core.js): ở Cơ bản hiện Núm, Hỏi Claude và mục chính (khoá 'basic' của lõi inspector; không có thì
-  // mục đầu không phải Núm / Hỏi Claude). Còn lại — kể cả Keyframe / Mặt nạ / Nâng cao — vào "Thêm thuộc tính".
-  const BASIC_SECS = ['knobs', 'ai'];
+  // Thuộc tính (68_sections.core.js): ở Cơ bản hiện Núm và mục chính (khoá 'basic' của lõi inspector; không có thì mục đầu không
+  // phải Núm). Còn lại — kể cả Keyframe / Mặt nạ / Nâng cao — vào "Thêm thuộc tính". S24 M172 (C36): bỏ mục Hỏi Claude ('ai').
+  const BASIC_SECS = ['knobs'];
   const MAIN = 'basic';
   function splitSections(secs, level) {
     const list = Array.isArray(secs) ? secs : [];

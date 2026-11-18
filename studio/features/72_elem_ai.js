@@ -1,11 +1,12 @@
-// S21 M149: mục "Hỏi Claude" trong Thuộc tính (đứng sau mục đầu) cho element đang chọn — ô nhập + gợi ý nhanh, bản vá có kiểm
+// S21 M149: Hỏi Claude cho element đang chọn — ô nhập + gợi ý nhanh, bản vá có kiểm
 // (route studio/routes/72_elem_ai.mjs, lõi scripts/elem_ai.mjs), khác biệt cũ → mới; Nhận = một bước ⌘Z, Bỏ = về như cũ.
 // "3 biến thể": một lượt mô hình trả 3 bản vá (kiểu chữ / hoạt ảnh / vị trí), ảnh dựng bằng engine headless (POST /api/elem/shots).
 // S22 M152: kết quả xem qua Studio.review (74_review.js): dời playhead tới element + phát lặp, trước / sau, chia đôi, phóng to;
 // bản xem trước vẽ ở khung riêng, không ghi vào timeline. C27: bấm biến thể (hoặc phím 1/2/3) chỉ xem trên khung, Nhận mới áp.
 // Chỉ gọi mô hình khi người dùng bấm (C23), Huỷ được.
 // S22 M153 (C25): một lối vào là thanh Hỏi Claude dưới khung (75_ask.js). Ô nhập + gợi ý nhanh nằm ở thanh; kết quả (khác biệt,
-// 3 biến thể, núm gợi ý) vẽ trong thanh qua Studio.elemAi.html(); mục "Hỏi Claude" của Thuộc tính chỉ còn nút mở thanh.
+// 3 biến thể, núm gợi ý) vẽ trong thanh qua Studio.elemAi.html(). S24 M170/M172: "thanh" nay là tab Claude của cột phải (#askbar
+// giữ id); việc elem_edit / elem_variants / elem_knobs của 75_ask.core.js gọi Studio.elemAi.go. Thuộc tính không còn mục Hỏi Claude.
 // "Gợi ý núm" (M148): element có trường núm (window.Knobs.allowed) → mô hình đề xuất 2–3 núm, server kiểm bằng KnobsCore.validateMap,
 // ở đây kiểm lại bằng Knobs.validateMap; "Thêm núm" lưu vào obj.knob_map (một bước ⌘Z), mục Núm vẽ thêm các núm đó.
 (() => {
@@ -113,7 +114,7 @@
     const c = S.sel; if (!c || ST.st === 'running') return;
     if (ask != null) ST.ask = String(ask).slice(0, 300);
     closeMine();
-    if (mode === 'edit' && !ST.ask.trim()) { ST.st = 'error'; ST.err = 'Gõ điều muốn sửa vào thanh Hỏi Claude, hoặc bấm một gợi ý nhanh.'; ST.errKind = 'input'; return paint(); }
+    if (mode === 'edit' && !ST.ask.trim()) { ST.st = 'error'; ST.err = 'Gõ điều muốn sửa vào ô hỏi của tab Claude, hoặc bấm một gợi ý nhanh.'; ST.errKind = 'input'; return paint(); }
     Object.assign(ST, { cid: c.obj.cid, st: 'running', step: 'Đang gửi…', res: null, err: null, errKind: '', shots: null, shotErr: '' });
     paint();
     const r = await S.api('/api/elem/ai', mode === 'knobs' ? knobPayload(c) : payload(c, mode)).catch(e => ({ error: e.message }));
@@ -195,14 +196,14 @@
   // Cho thanh Hỏi Claude: chạy một lượt (edit | variants | knobs) cho element đang chọn, vẽ kết quả, trạng thái
   S.elemAi = { go, html, cancel, knobsOk: c => !!(c && knobAllowed(c)), get st() { return ST.st; }, get cid() { return ST.cid; } };
 
+  // S24 M172 (C36): Thuộc tính không còn mục "Hỏi Claude" (chỉ chỉnh tay); lối vào là nút "Hỏi Claude về mục này" ở đầu Thuộc tính
+  // (studio.js askRow → Studio.ask.open). Hook này chỉ giữ luật cũ: chọn element khác thì bỏ kết quả của element trước (trừ khi
+  // đang chạy hoặc khung xem lại của elem_ai đang mở); không thêm mục nào.
   S.addInspectorTab(c => {
-    if (!KINDS.has(c.kind) || (c.kind === 'scene' && c.obj.type === 'hf' && !S.getPos(c))) return null;
-    if (c.obj.cid !== ST.cid && !mine() && ST.st !== 'running') { ST.cid = c.obj.cid; reset(); }
-    const note = ST.st === 'running' ? 'Claude đang làm…' : ST.st === 'edit' || ST.st === 'variants' || ST.st === 'knobs' ? 'Có kết quả ở thanh dưới khung' : '';
-    return ['ai', 'Hỏi Claude', S.sect('', `<div class="acts"><button data-askopen><i class="ti ti-sparkles"></i> Hỏi Claude về element này <kbd>/</kbd></button></div>${note ? `<div class="eai-note">${esc(note)}</div>` : ''}`)];
+    if (KINDS.has(c.kind) && c.obj.cid !== ST.cid && !mine() && ST.st !== 'running') { ST.cid = c.obj.cid; reset(); }
+    return null;
   });
 
-  document.getElementById('insp').addEventListener('click', e => { if (e.target.closest('[data-askopen]')) S.ask?.open(); });
   document.addEventListener('click', e => {
     if (!e.target.closest?.('#askbar [data-eai-box]')) return;
     const v = e.target.closest('[data-eaivar]');

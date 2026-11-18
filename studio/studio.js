@@ -528,6 +528,10 @@ function sectSpy() {
 }
 $('#right')?.addEventListener('scroll', sectSpy, { passive: true });
 for (const ev of ['wheel', 'touchmove', 'keydown']) $('#right')?.addEventListener(ev, () => { SECT.pin = 0; }, { passive: true });
+// S24 M172 (C36): Thuộc tính chỉ chỉnh tay. Một lối vào Claude cho element / clip đang chọn, ở đầu thân Thuộc tính (chỗ mục
+// "Hỏi Claude" cũ của 72_elem_ai.js): mở tab Claude, chip phạm vi lấy theo S.sel (75_ask.js selInfo). Âm thanh không có chip riêng.
+const askRow = c => (Studio.ask && (c.kind === 'clip' || window.AskCore?.ELEM_KINDS?.includes(c.kind))
+  ? `<button class="iask" data-act="ask" title="Mở tab Claude, phạm vi là ${c.kind === 'clip' ? 'clip' : 'element'} này (/)"><i class="ti ti-sparkles"></i><span>Hỏi Claude về mục này</span><kbd>/</kbd></button>` : '');
 function renderInspector() {
   const el = $('#insp'), tab = rightTab();
   rightTabsBar(tab); el.dataset.rtab = tab;
@@ -543,7 +547,7 @@ function renderInspector() {
   const tabs = inspTabs(c);
   for (const h of Studio._insp) { const t = h(c); if (t) tabs.push(...(Array.isArray(t[0]) ? t : [t])); }
   const SC = window.SectCore, kind = sectKind(c), st = sectState();
-  // S22 M151: Cơ bản chỉ hiện Núm + Hỏi Claude + mục chính; mục khác thu sau "Thêm thuộc tính" (bấm mở, nhớ trong phiên: SECT.more)
+  // S22 M151: Cơ bản chỉ hiện Núm + mục chính (S24 M172: bỏ Hỏi Claude); mục khác thu sau "Thêm thuộc tính" (bấm mở, nhớ trong phiên: SECT.more)
   const all = SC ? SC.normalize(tabs) : tabs.map(([key, label, html]) => ({ key, label, html, icon: 'ti-point' }));
   const sp = SC?.split ? SC.split(all, uiLevel() === 'basic') : { main: all, more: [] };
   if (SECT.go && sp.more.some(s => s.key === SECT.go)) SECT.more = true; // mở mục ẩn từ chỗ khác (chuyển cảnh, dải mục): mở luôn phần thêm
@@ -554,11 +558,10 @@ function renderInspector() {
   el.innerHTML = `<div class="itop"><div class="ihead"><span class="iic"><i class="ti ${KIND_IC[c.kind]}"></i></span><div class="it"><h3>${esc(c.kind === 'line' && c.scene.type === 'text' ? (o.text || 'Chữ thêm') : c.label)}</h3>
       <div class="sub"><span class="pill">${esc(tag)}</span><a class="time" data-act="seek"><i class="ti ti-clock-play"></i> ${fmt(c.t0)} – ${fmt(c.t1)}</a></div></div>
       <div class="ihbtn">${clip ? '' : ic('lock', !!o.locked, o.locked ? 'ti-lock' : 'ti-lock-open', o.locked ? 'Mở khoá (⌥⇧L)' : 'Khoá (⌥⇧L)') + ic('hide', !!o.hidden, o.hidden ? 'ti-eye-off' : 'ti-eye', o.hidden ? 'Hiện' : 'Ẩn')}
-      <button class="icon" data-act="ask" title="Hỏi Claude về element này (/)" aria-label="Hỏi Claude về element này"><i class="ti ti-sparkles"></i></button>
       <button class="icon" data-act="more" title="Lệnh khác" aria-label="Lệnh khác" aria-haspopup="menu"><i class="ti ti-dots"></i></button>
       <button class="icon" data-act="desel" title="Bỏ chọn (Esc)" aria-label="Bỏ chọn"><i class="ti ti-x"></i></button></div></div>
     ${secs.length > 1 ? `<nav class="isecbar" aria-label="Mục thuộc tính">${secs.map((s, i) => `<button data-secgo="${esc(s.key)}" class="${open[i] ? 'open' : ''}">${esc(s.label)}</button>`).join('')}</nav>` : ''}</div>
-    <div class="ibody">${multi.length && !clip ? alignBlock() : ''}${secs.map((s, i) => `<div class="isec ${open[i] ? 'open' : ''}" data-sec="${esc(s.key)}">
+    <div class="ibody">${askRow(c)}${multi.length && !clip ? alignBlock() : ''}${secs.map((s, i) => `<div class="isec ${open[i] ? 'open' : ''}" data-sec="${esc(s.key)}">
       <button class="isec-h" data-sect="${esc(s.key)}" aria-expanded="${open[i]}"><i class="ti ${s.icon}"></i><span>${esc(s.label)}</span><i class="ti ti-chevron-down car"></i></button>
       ${open[i] ? `<div class="isec-b">${s.html}</div>` : ''}</div>`).join('')}${moreBtn}${clip ? '' : actions(c) + noteBlock(o)}</div>`;
   requestAnimationFrame(sectAfter);
@@ -770,7 +773,7 @@ $('#insp').addEventListener('click', async e => {
   if (a === 'secmore') { SECT.more = !SECT.more; renderInspector(); return; } // S22 M151: "Thêm thuộc tính" ở Cơ bản
   if (a === 'lock') toggleLock();
   if (a === 'more') { const r = b.getBoundingClientRect(); Studio.cmdMenu?.(r.right - 200, r.bottom + 4); }
-  if (a === 'ask') Studio.ask?.open(); // S22 M153: thanh Hỏi Claude dưới khung, phạm vi = element đang chọn
+  if (a === 'ask') Studio.ask?.open(); // S24 M172: nút "Hỏi Claude về mục này" → tab Claude, phạm vi = element / clip đang chọn
   if (a === 'hide') { touch(o); o.hidden = !o.hidden || undefined; changed(true); }
   if (a === 'del') removeSel();
   if (a === 'dup') duplicateSel();
