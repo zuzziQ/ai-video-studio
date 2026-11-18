@@ -14,6 +14,7 @@
 // "f:<field>" (title, file_name, script, video, images, dur, brand.name|phone|website|handle|outro). Value = column name.
 // Progress lines on stdout: "@@ {json}" (status.json in out_dir has the full per-row state).
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -277,7 +278,7 @@ export async function buildRow(job, i, { preview = false, dirOverride, log = () 
   const src = loadSource(job.source);
   const name = slug(get('f:file_name') || get('f:title') || Object.values(row)[0]) || `dong-${i + 1}`;
   const dir = dirOverride || path.join(job.out, `${String(i + 1).padStart(2, '0')}_${name}`);
-  if (dirOverride) fs.rmSync(dir, { recursive: true, force: true });
+  if (dirOverride) rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, 'media'), { recursive: true });
   const dl = path.join(dir, src.kind === 'project' ? '.studio' : 'work'); fs.mkdirSync(dl, { recursive: true });
   const ctx = { sheetDir: path.dirname(job.sheet), projectDir: src.kind === 'project' ? src.dir : null };
@@ -350,7 +351,7 @@ export async function buildRow(job, i, { preview = false, dirOverride, log = () 
         let aiff;
         if (engine === 'say') { aiff = path.join(dir, 'work/voice.aiff'); log('đọc lời bằng giọng Linh (say)'); await sh('say', ['-v', job.tts_voice || 'Linh', '-r', String(job.tts_rate || 175), '-o', aiff, script]); }
         else aiff = await ttsFile(engine, job.tts_voice, script, path.join(dir, 'work/voice'), log);
-        await sh('ffmpeg', ['-v', 'error', '-y', '-i', aiff, '-af', 'apad=pad_dur=0.2', '-ar', '48000', '-ac', '2', wav]); fs.rmSync(aiff, { force: true });
+        await sh('ffmpeg', ['-v', 'error', '-y', '-i', aiff, '-af', 'apad=pad_dur=0.2', '-ar', '48000', '-ac', '2', wav]); rmSync(aiff, { force: true });
         const vd = probeDur(wav); caps = ttsCaptions(script, vd);
         dur = +Math.max(vd + 2.4, +get("f:dur") || +job.dur || 0).toFixed(2);
         tl = { ...base, duration: dur, clips: stills(dur, 'work/voice.wav') };
@@ -417,11 +418,11 @@ export async function runJob(jobFile, deps = {}) {
   const save = () => {
     st.updated = new Date().toISOString(); const tmp = `${stFile}.${process.pid}.tmp`;
     try { fs.writeFileSync(tmp, JSON.stringify(st, null, 1)); retryBusy(() => fs.renameSync(tmp, stFile)); }
-    catch (e) { console.error('[batch] không ghi được status.json:', e.message); try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ } }
+    catch (e) { console.error('[batch] không ghi được status.json:', e.message); try { rmSync(tmp, { force: true }); } catch { /* best effort */ } }
   };
   // Pause (M24/M68): <out>/.pause (written by 50_batch.mjs) → no new row starts; rows already rendering finish.
   const pauseFile = path.join(job.out, '.pause');
-  fs.rmSync(pauseFile, { force: true });
+  rmSync(pauseFile, { force: true });
   const emit = (r, extra = {}) => {
     const done = st.rows.filter(x => x.state === 'done').length;
     const frac = (done + st.rows.reduce((a, x) => a + (x.state === 'running' ? x.progress || 0 : 0), 0)) / Math.max(1, st.total);
@@ -483,7 +484,7 @@ export async function runJob(jobFile, deps = {}) {
       onError: (r, e) => { if (stopping) return; live.delete(r); Object.assign(r, { state: 'error', error: e.message }); console.error(`dòng ${r.i + 1}: ${e.message}`); emit(r); },
     }));
   } finally { hold?.release(); hold = null; }
-  fs.rmSync(pauseFile, { force: true });
+  rmSync(pauseFile, { force: true });
   await BROWSER?.close();
   const bad = st.rows.filter(r => r.state !== 'done');
   emit(null, { step: paused ? `Đã tạm dừng (${st.total - bad.length}/${st.total} xong)` : `Xong ${st.total - bad.length}/${st.total} video` });

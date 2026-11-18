@@ -15,6 +15,7 @@
 //                  --idle-wait seconds run anyway and mark the batch noisy.
 // Writes <out>/<tag>.jsonl (one line per batch) and prints a median table. Outputs are deleted after they are checked.
 import fs from 'node:fs';
+import { rmSync } from '../fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -109,7 +110,7 @@ const ssimCache = new Map();
 async function batch(cfg, rep) {
   const idle = await waitIdle();
   const dir = path.join(outDir, `${tag}_${cfg.name}_r${rep}`);
-  fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
+  rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
   let busyStop = false; const busyRuns = [];
   const busyLoop = busyTl ? (async () => { let i = 0; while (!busyStop) busyRuns.push(await render(busyTl, path.join(dir, `busy${i++}.mp4`), +opt('--busy-workers', 4))); })() : null;
   if (busyTl) await sleep(3000); // let the busy render get past Chrome start-up
@@ -127,7 +128,7 @@ async function batch(cfg, rep) {
     return { i: d.i, sec: +d.sec.toFixed(2), code: d.code, ...pr, md5: h, sameAsRef: h === refMd5, ssim: h === refMd5 ? 1 : ssimCache.get(h) ?? null,
       encFail: d.stderr.filter(l => ENC_FAIL.test(l)).slice(0, 5) };
   });
-  fs.rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
   const row = { tag, cfg: cfg.name, p: cfg.p, w: cfg.w, rep, at: new Date().toISOString(), idle, total: +total.toFixed(2), perVideo: +(total / N).toFixed(2), ...res,
     failed: outs.filter(o => !o.ok).length, encFail: outs.reduce((a, o) => a + o.encFail.length, 0), sameMd5: outs.filter(o => o.sameAsRef).length,
     ssimMin: Math.min(...outs.map(o => o.ssim ?? 0)), frames: [...new Set(outs.map(o => o.frames))], outs,

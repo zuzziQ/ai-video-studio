@@ -2,6 +2,7 @@
 // S12 (M97): brands.json đọc-sửa-ghi dưới khoá withFileLock(brands.json.lock), cùng khoá với setWorkspace (scripts/workspace.mjs), nên
 // khoá `workspace` (Kho của thương hiệu) không bị bản lưu khác ghi đè; mỗi thẻ trả thêm `ws` (Kho); logo gốc chép thêm vào <Kho>/Thuong hieu/.
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { brandFields } from '../../scripts/batch.mjs';
@@ -57,7 +58,7 @@ export default ctx => async (req, res, p, u) => {
       if (!load().some(x => x.id === id)) return J({ error: 'không thấy brand' }, 404);
       const ext = (path.extname(u.searchParams.get('name') || '.png').toLowerCase().match(/^\.(png|jpe?g|webp|svg|gif)$/) || ['.png'])[0];
       const d = path.join(DIR, id); fs.mkdirSync(d, { recursive: true });
-      for (const f of fs.readdirSync(d).filter(f => f.startsWith('logo.'))) fs.rmSync(path.join(d, f));
+      for (const f of fs.readdirSync(d).filter(f => f.startsWith('logo.'))) rmSync(path.join(d, f));
       await new Promise((ok, bad) => { const w = fs.createWriteStream(path.join(d, 'logo' + ext)); req.pipe(w); w.on('finish', ok); w.on('error', bad); });
       const b = mutate(list => { const x = list.find(y => y.id === id); if (!x) throw notFound(); x.logo = 'logo' + ext; x.updated = new Date().toISOString(); return x; });
       const warn = logoToKho(id, path.join(d, 'logo' + ext), u.searchParams.get('name'));
@@ -96,7 +97,7 @@ export default ctx => async (req, res, p, u) => {
       // Kho của thương hiệu là thư mục của người dùng: không xoá, chỉ bỏ thương hiệu khỏi brands.json
       const id = String(body.id ?? '');
       mutate(list => { const i = list.findIndex(x => x.id === id); if (i < 0) throw notFound(); list.splice(i, 1); });
-      fs.rmSync(path.join(DIR, id), { recursive: true, force: true });
+      rmSync(path.join(DIR, id), { recursive: true, force: true });
       try { deleteStyle(id); } catch (e) { console.error('style:', e.message); } // phong cách của thương hiệu (M133); lỗi không chặn việc xoá
       return J({ ok: true });
     }

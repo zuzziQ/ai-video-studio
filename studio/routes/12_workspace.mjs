@@ -8,6 +8,7 @@
 //   POST /api/kho/reveal {brand}          → { ok }  mở Kho trong Explorer / Finder
 // Mọi đường dẫn Kho tính qua scripts/workspace.mjs; brand rỗng = Kho "Chung", brand lạ → 404 (không lặng lẽ ghi vào Kho Chung).
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
@@ -119,8 +120,8 @@ export default ctx => async (req, res, p, u) => {
         try { w = fs.createWriteStream(f, { flags: 'wx' }); await new Promise((ok, bad) => { w.once('open', ok); w.once('error', bad); }); }
         catch (e) { if (e.code === 'EEXIST' && i < 20) continue; throw e; }
         try { await pipeline(req, w); }
-        catch (e) { fs.rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
-        if (req.aborted || req.readableAborted) { fs.rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
+        catch (e) { rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
+        if (req.aborted || req.readableAborted) { rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
         const r = W.relTo(ws, f);
         return J({ path: f, rel: r, name: path.basename(f), kind: W.kindOf(f), dir: r.split('/')[0], size: fs.statSync(f).size });
       }

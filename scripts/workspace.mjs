@@ -7,6 +7,7 @@
 // Một Kho thuộc đúng một thương hiệu (.kho.json): chọn thư mục đang là Kho của thương hiệu khác → 409.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
@@ -267,5 +268,5 @@ export async function saveUpload(stream, d, name) {
         fs.renameSync(part, dst); return dst;
       }
     }
-  } finally { fs.rmSync(part, { force: true }); }
+  } finally { rmSync(part, { force: true }); }
 }

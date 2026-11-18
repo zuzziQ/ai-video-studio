@@ -7,6 +7,7 @@
 //   POST /api/broll/suggest {model?}             -> job: claude -p per-sentence b-roll ideas, out = [...]
 //   POST /api/genimage {prompt, provider?}       -> job: AI image with the user's own key, out = {path}
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -23,7 +24,7 @@ export default ctx => {
       const f = ctx.under(ctx.project.dir, src); if (!f || !fs.existsSync(f)) throw new Error('Không thấy ảnh ' + src);
       const dst = f.replace(/\.\w+$/, '') + '_cut.png';
       // xoá trước khi ghi (inode mới): media/kho_*_cut.png có thể là liên kết cứng tới file trong Kho (S12 · M99), như upload()
-      fs.rmSync(dst, { force: true });
+      rmSync(dst, { force: true });
       job.step = 'Tách nền ảnh';
       await ctx.run(ctx.PY, ['-I', '-X', 'utf8', '-c', 'import sys;from PIL import Image;from rembg import new_session,remove;remove(Image.open(sys.argv[1]),session=new_session("u2net_human_seg"),post_process_mask=True).save(sys.argv[2])', f, dst]);
       job.out = { cutouts: relp(dst), still: true }; return;

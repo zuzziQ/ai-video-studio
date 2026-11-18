@@ -2,6 +2,7 @@
 // Pure helpers (no network) so tests can run offline: keywords, junk filter, orientation, scoring, choice, image size, content hash.
 // A photo only replaces a template sample when its title/tags really contain the keywords; otherwise the sample stays (missing).
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
@@ -145,6 +146,6 @@ export function mediaHashes(dir) {
 // drop a downloaded duplicate: the file and its line in media/credits.json
 export function dropMedia(dir, rel) {
   const f = path.join(dir, rel), cf = path.join(dir, 'media', 'credits.json');
-  fs.rmSync(f, { force: true });
+  rmSync(f, { force: true });
   try { const c = JSON.parse(fs.readFileSync(cf, 'utf8')); fs.writeFileSync(cf, JSON.stringify(c.filter(x => x.file !== path.basename(rel)), null, 1)); } catch {}
 }

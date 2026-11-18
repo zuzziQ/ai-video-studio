@@ -12,6 +12,7 @@
 // Writes <project>/.studio/qc.json {score, before, after, issues:[{t, kind, severity, msg, fixed}], …} and .studio/qc/sheet.jpg.
 // Progress: "@@ <0..1> <step>" on stdout. Errors: Vietnamese on stderr, exit ≠ 0.
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+import { rmSync } from './fs_rm.mjs';
 import { spawn, execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin } from './platform.mjs';
@@ -293,7 +294,7 @@ export async function domPass(E, tl, caps, times, stillDir, tag, onP) {
     for (const s of need) {
       const f = (faces[s.base] || []).sort((a, b) => b[3] - a[3])[0];
       if (f) s.face = grow({ x: (f[0] - f[2] / 2) * DW, y: (f[1] - f[3] / 2) * DH, w: f[2] * DW, h: f[3] * DH }, f[2] * DW * .08, f[3] * DH * .12);
-      fs.rmSync(s.base, { force: true }); delete s.base;
+      rmSync(s.base, { force: true }); delete s.base;
     }
   }
   return { samples, failed, DW, DH, burn: burnBand(E.dir, tl) };
@@ -450,7 +451,7 @@ async function audioPass(tl, dir, qcDir) {
   const tmp = path.join(dir, `.qc_mix_${process.pid}.json`), mix = path.join(qcDir, 'mix.wav');
   const t = deep(tl); t.audio.mix = path.relative(dir, mix);
   fs.writeFileSync(tmp, JSON.stringify(t));
-  try { await runP(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/mix_audio.py'), tmp, '--stems'], { cwd: dir }); } finally { fs.rmSync(tmp, { force: true }); }
+  try { await runP(PY, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/mix_audio.py'), tmp, '--stems'], { cwd: dir }); } finally { rmSync(tmp, { force: true }); }
   const issues = [], stats = {};
   const { err } = await runP('ffmpeg', ['-nostats', '-i', mix, '-af', 'ebur128=peak=true', '-f', 'null', '-']);
   const I = /I:\s+(-?[\d.]+) LUFS/.exec(err.split('Summary:').pop()), TP = /Peak:\s+(-?[\d.]+|-inf) dBFS/.exec(err.split('Summary:').pop());
@@ -480,7 +481,7 @@ async function audioPass(tl, dir, qcDir) {
   for (let i = 0; i < x.length;) {
     if (x[i] < -50) { let j = i; while (j < x.length && x[j] < -50) j++; const a = i * .1, b = j * .1; if (b - a > 1.2 && a > .3 && b < D - .3) issues.push({ t: r2(a), kind: 'silence', severity: 'low', target: null, msg: `Im lặng hoàn toàn ${(b - a).toFixed(1)}s (${a.toFixed(1)}–${b.toFixed(1)}s)` }); i = j; } else i++;
   }
-  for (const f of [sv, sm]) fs.rmSync(f, { force: true });
+  for (const f of [sv, sm]) rmSync(f, { force: true });
   return { issues, stats };
 }
 
@@ -858,7 +859,7 @@ async function sheet(files, out, vert) {
   const cols = vert ? Math.min(6, files.length) : Math.min(4, files.length), rows = Math.ceil(files.length / cols);
   try { await runP('ffmpeg', ['-v', 'error', '-y', '-i', path.join(d, '%04d.jpg'), '-vf', `scale=${vert ? 200 : 320}:-2,pad=iw+6:ih+6:3:3:color=0x111111,tile=${cols}x${rows}`, '-frames:v', '1', '-q:v', '4', out]); return out; }
   catch (e) { console.error('[qc] contact sheet:', e.message.slice(0, 200)); return null; }
-  finally { fs.rmSync(d, { recursive: true, force: true }); }
+  finally { rmSync(d, { recursive: true, force: true }); }
 }
 
 // ---------- main ----------
@@ -892,7 +893,7 @@ export async function placePlan(dir, tl, caps, plan, { onP, only, tag = { _ai: t
     }
   } finally {
     if (E) await E.browser.close().catch(() => {});
-    if (stillDir) fs.rmSync(stillDir, { recursive: true, force: true });
+    if (stillDir) rmSync(stillDir, { recursive: true, force: true });
   }
   onP && onP(1);
   // drop only what this call hid (a graphic replaced by a reflowed text), never scenes that were already hidden
@@ -904,7 +905,7 @@ export async function runQC(src, o = {}) {
   const proj = loadProject(src), { dir } = proj;
   let { tl, caps } = proj;
   const qcDir = path.join(dir, '.studio/qc'), stillDir = path.join(qcDir, 'stills');
-  fs.rmSync(stillDir, { recursive: true, force: true }); fs.mkdirSync(stillDir, { recursive: true });
+  rmSync(stillDir, { recursive: true, force: true }); fs.mkdirSync(stillDir, { recursive: true });
   const hash = qcHash(tl, caps);
   // accepted suggestions are ids from the last check: only valid on the same timeline
   if (Array.isArray(o.only)) {
@@ -941,7 +942,7 @@ export async function runQC(src, o = {}) {
       if (c0 && c0.hash === hash && !o.fresh) { claude = c0.claude; say(.75, 'Dùng lại nhận xét Claude của lần kiểm tra trước (timeline chưa đổi)'); }
       else {
         const pick = pickStills(P.samples, det), revDir = path.join(qcDir, 'review');
-        fs.rmSync(revDir, { recursive: true, force: true }); fs.mkdirSync(revDir, { recursive: true });
+        rmSync(revDir, { recursive: true, force: true }); fs.mkdirSync(revDir, { recursive: true });
         const stills = pick.map(s => { const f = path.join(revDir, `t${s.t.toFixed(2).padStart(6, '0')}.jpg`); fs.copyFileSync(s.file, f); return { t: s.t, file: f }; });
         const prompt = buildPrompt(tl, caps, P, det, stills, styles);
         fs.writeFileSync(path.join(qcDir, 'claude_prompt.txt'), prompt);

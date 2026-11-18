@@ -20,6 +20,7 @@
 //        whole video: alpha capture piped to ffmpeg, overlaid on the A-roll frame sequence (identity mapping: only valid
 //        for one clip starting at 0, speed 1 — the real mapping would have to come from engine layoutClips).
 import fs from 'node:fs';
+import { rmSync } from '../fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -116,7 +117,7 @@ function ssimDirs(dirA, extA, dirB, extB, { fmt = 'yuv420p' } = {}) {
     '-lavfi', `[0:v]format=${fmt}[a];[1:v]format=${fmt}[b];[a][b]ssim=stats_file='${stat.replace(/\\/g, '/').replace(':', '\\:')}'`, '-f', 'null', '-'], { encoding: 'utf8' });
   if (r.status) throw new Error(`ffmpeg ssim: ${r.stderr}`);
   const all = fs.readFileSync(stat, 'utf8').trim().split('\n').map(l => +/All:([\d.]+)/.exec(l)[1]);
-  fs.rmSync(stat, { force: true });
+  rmSync(stat, { force: true });
   return { mean: +(all.reduce((x, y) => x + y, 0) / all.length).toFixed(4), min: +Math.min(...all).toFixed(4), below98: all.filter(x => x < 0.98).length, n: all.length };
 }
 const writeFrame = (dir, i, e, buf) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, `${frameName(i)}.${e}`), buf); };
@@ -168,7 +169,7 @@ async function segmented(P, outPath, n, workers, worker) {
     await Promise.all(segs.map(s => worker(s.a, s.b, s.file)));
     fs.writeFileSync(path.join(tmp, 'list.txt'), segs.map(s => `file '${s.file.replace(/'/g, "'\\''")}'`).join('\n'));
     spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', path.join(tmp, 'list.txt'), '-c', 'copy', '-movflags', '+faststart', outPath]);
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
 const pipeFfmpeg = argv => {
   const ff = spawn('ffmpeg', ['-v', 'error', '-y', ...argv], { stdio: ['pipe', 'inherit', 'inherit'] });

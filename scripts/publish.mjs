@@ -17,6 +17,7 @@
 // Biến môi trường cho kiểm thử: AVS_NOW (giờ giả), AVS_DRY_OPEN=1 (ghi log thay vì mở trình duyệt / thông báo),
 // AVS_YT_API, AVS_YT_TOKEN_URI, AVS_YT_AUTH_URI, AVS_YT_REVOKE_URI (máy chủ giả), AVS_YT_CHUNK (byte), AVS_YT_BACKOFF_MS.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -51,7 +52,7 @@ function writePrivate(file, data) {
     fs.chmodSync(tmp, 0o600);
     // Windows: renaming over a file another process is reading fails for a moment (EPERM/EBUSY) → retry (file_lock.mjs)
     retryBusy(() => fs.renameSync(tmp, file));
-  } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  } catch (e) { rmSync(tmp, { force: true }); throw e; }
 }
 const readJSON = (file, d) => { try { return JSON.parse(retryBusy(() => fs.readFileSync(file, 'utf8'), 10)); } catch { return d; } };
 
@@ -228,12 +229,12 @@ export function acquireLock() {
       }
       // stale (dead pid / > 6 h / empty for too long): delete only if it is still the same file we judged
       const now2 = lockState(f);
-      if (now2 && !now2.busy && now2.raw === st.raw && now2.mtime === st.mtime) fs.rmSync(f, { force: true });
+      if (now2 && !now2.busy && now2.raw === st.raw && now2.mtime === st.mtime) rmSync(f, { force: true });
     }
   }
   return null;
 }
-const releaseLock = how => { if (how === 'own') { const l = readJSON(F('publish.lock'), {}); if (l.pid === process.pid) fs.rmSync(F('publish.lock'), { force: true }); } };
+const releaseLock = how => { if (how === 'own') { const l = readJSON(F('publish.lock'), {}); if (l.pid === process.pid) rmSync(F('publish.lock'), { force: true }); } };
 
 // ---------- run-due ----------
 export async function runDue({ log = console.log } = {}) {
@@ -401,8 +402,8 @@ export function ytStatus() {
 export async function ytDisconnect({ forgetClient = false } = {}) {
   const t = loadToken();
   if (t?.refresh_token) { try { await request('POST', REVOKE_URI(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form({ token: t.refresh_token }), timeout: 8000 }); } catch {} }
-  fs.rmSync(F('youtube_token.json'), { force: true });
-  if (forgetClient) fs.rmSync(F('youtube_client.json'), { force: true });
+  rmSync(F('youtube_token.json'), { force: true });
+  if (forgetClient) rmSync(F('youtube_client.json'), { force: true });
   return { ok: true };
 }
 function addQuota(n) { const f = F('youtube_quota.json'), d = pacificDay(Date.now()), q = readJSON(f, {}); writePrivate(f, { day: d, used: (q.day === d ? q.used : 0) + n }); }
@@ -479,7 +480,7 @@ export async function youtubeUpload(file, meta = {}, { schedule, thumb, onProgre
       catch (e) { await backoff(e.message); continue; }
       if (r.status === 308) { const m = /bytes=0-(\d+)/.exec(r.headers.range || ''); off = m ? +m[1] + 1 : 0; return; }
       if (r.status === 200 || r.status === 201) { result = r.json; return; }
-      if (r.status === 404 || r.status === 410) { if (restarted) throw new YtError('Phiên tải lên hết hạn hai lần liên tiếp', 'bad', false); restarted = true; fs.rmSync(sessFile, { force: true }); return init(); }
+      if (r.status === 404 || r.status === 410) { if (restarted) throw new YtError('Phiên tải lên hết hạn hai lần liên tiếp', 'bad', false); restarted = true; rmSync(sessFile, { force: true }); return init(); }
       if (r.status === 401) { await on401(); continue; }
       if (RETRY.has(r.status)) { await backoff('HTTP ' + r.status); continue; }
       throw apiError(r, 'kiểm tra phiên');
@@ -502,7 +503,7 @@ export async function youtubeUpload(file, meta = {}, { schedule, thumb, onProgre
     }
   } finally { fs.closeSync(fd); }
   if (!result?.id) throw new YtError('YouTube không trả về ID video', 'bad', false);
-  fs.rmSync(sessFile, { force: true });
+  rmSync(sessFile, { force: true });
   const warnings = [];
   if (result.status?.uploadStatus === 'rejected' || result.status?.uploadStatus === 'failed') warnings.push('YouTube báo ' + result.status.uploadStatus + ': ' + (result.status.rejectionReason || result.status.failureReason || ''));
   if (thumb || meta.thumbnail) {

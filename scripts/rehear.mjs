@@ -4,6 +4,7 @@
 // Kết quả chỉ là chữ + mốc thời gian từng từ; panel so với lời thoại (TranscriptCore.rehearDiff) và hiện đề xuất.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -102,7 +103,7 @@ export async function voiceSource({ dir, tl, skill, py, run, onLine, onProc }) {
       return { file: wav, cached: false };
     }
   } catch (e) { onLine?.(`(mix_audio: ${e.message})`); }
-  finally { fs.rmSync(tmp, { force: true }); fs.rmSync(path.join(st, 'rehear_mix.wav'), { force: true }); }
+  finally { rmSync(tmp, { force: true }); rmSync(path.join(st, 'rehear_mix.wav'), { force: true }); }
   const v = tl.audio?.voice && path.resolve(dir, tl.audio.voice);
   if (v && fs.existsSync(v)) return { file: v, cached: false };
   throw new Error('Video chưa có tiếng nói để nghe lại (không có clip nào có tiếng).');
@@ -137,7 +138,7 @@ export async function rehear(o, env = {}) {
     const words = cleanWords(r.words);
     return { model: r.model || model, device: r.device || '', from: span.from, to: span.to, s: span.s, e: span.e, prompt, words, text: words.map(w => w.w).join(' '),
       ms: Date.now() - t, load_ms: r.load_ms | 0, run_ms: r.run_ms | 0, stem_ms, cached: src.cached };
-  } finally { fs.rmSync(outF, { force: true }); }
+  } finally { rmSync(outF, { force: true }); }
 }
 
 /**
@@ -165,5 +166,5 @@ export async function rehearMany(o, env = {}) {
     const r = JSON.parse(fs.readFileSync(outF, 'utf8')), res = Array.isArray(r.results) ? r.results : [];
     const out = list.map((x, k) => { const words = cleanWords(res[k]?.words); return { s: x.s, e: x.e, from: x.from, to: x.to, prompt: x.prompt, words, text: words.map(w => w.w).join(' ') }; });
     return { model: r.model || model, device: r.device || '', spans: out, ms: Date.now() - t, load_ms: r.load_ms | 0, run_ms: r.run_ms | 0, stem_ms, cached: src.cached };
-  } finally { fs.rmSync(inF, { force: true }); fs.rmSync(outF, { force: true }); }
+  } finally { rmSync(inF, { force: true }); rmSync(outF, { force: true }); }
 }

@@ -3,6 +3,7 @@
 //   node scripts/face_track_project.mjs <project_dir | timeline.json> [--fps 5]
 // Dùng cho dự án đã có (new_project.mjs tự gọi attachFaceTrack khi tạo dự án). Ghi timeline.json (+ .bak).
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
@@ -58,7 +59,7 @@ export async function faceTrack(dir, seq, { fps = 5, srcFps = 30, py = pyBin(SKI
   try {
     const j = JSON.parse(fs.readFileSync(out, 'utf8'));
     return j.found > .3 && j.keys?.length ? { seq, keys: compactKeys(j.keys) } : null;
-  } finally { fs.rmSync(out, { force: true }); }
+  } finally { rmSync(out, { force: true }); }
 }
 
 export async function attachFaceTrack(tlFile, o = {}) {

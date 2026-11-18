@@ -14,6 +14,7 @@
 //   node scripts/hooks_lib.mjs pick <project_dir> [--angle x] [--seed 1] [--use <variant_dir>]
 // Kho mặc định: ~/.ai-video-studio/hooks/<khoá>.json, khoá = timeline.ads.product (hồ sơ Product Brain) hoặc tên dự án.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -139,7 +140,7 @@ export async function gateHooks(texts, ads = {}, { py = pyBin(SKILL), script = p
       v[i].ok = false; v[i].reasons.push(`${it.code}: ${String(it.msg || '').replace(/ \(chữ trên màn hình: .*$/, '')}`);
     }
     return v;
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
 
 // ---------- sinh hook (scale.generate_hooks) ----------

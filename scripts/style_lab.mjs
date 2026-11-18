@@ -14,6 +14,7 @@
 // Progress lines "@@ <0..1> <step>" on stdout; the run's result is <work>/result.json.
 import { shortErr } from './err_text.mjs';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+import { rmSync } from './fs_rm.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin, claudeBin } from './platform.mjs';
@@ -401,12 +402,12 @@ export function removeStyle(id) {
   if (!/^u_[a-z0-9_]+$/.test(id)) throw new Error('id không hợp lệ');
   const t = rd(path.join(UTPL, id + '.json'));
   const gone = [];
-  const rm = f => { if (fs.existsSync(f)) { fs.rmSync(f, { force: true }); gone.push(f); } };
+  const rm = f => { if (fs.existsSync(f)) { rmSync(f, { force: true }); gone.push(f); } };
   rm(path.join(UPACK, id + '.js')); rm(path.join(UTPL, id + '.json')); rm(path.join(UREF, id + '.md'));
   for (const e of ['mp4', 'jpg']) rm(path.join(TPL, 'previews', `${id}.${e}`));
   for (const e of ['js', 'json', 'md', 'mp4', 'jpg']) rm(path.join(STORE, `${id}.${e}`));
   const sk = t?.style_lab?.skill && path.join(SKILLS, t.style_lab.skill, 'SKILL.md');
-  if (sk && fs.existsSync(sk) && fs.readFileSync(sk, 'utf8').includes(`avs-style-id: ${id} `)) { fs.rmSync(path.dirname(sk), { recursive: true, force: true }); gone.push(path.dirname(sk)); }
+  if (sk && fs.existsSync(sk) && fs.readFileSync(sk, 'utf8').includes(`avs-style-id: ${id} `)) { rmSync(path.dirname(sk), { recursive: true, force: true }); gone.push(path.dirname(sk)); }
   rebuildAll();
   return gone;
 }
@@ -494,7 +495,7 @@ async function generate(kind) {
     for (let r = 0; ; r++) {
       say(.62 + r * .12, `Kiểm tra gói trong engine (vòng ${r + 1})`);
       fs.writeFileSync(path.join(work, `pack_${r + 1}.js`), code);
-      for (const f of fs.readdirSync(path.join(work, 'check'))) fs.rmSync(path.join(work, 'check', f));
+      for (const f of fs.readdirSync(path.join(work, 'check'))) rmSync(path.join(work, 'check', f));
       v = await validatePack(code, id, { outDir: path.join(work, 'check'), vertical });
       result.rounds[r] = { ...(result.rounds[r] || {}), problems: v.problems, warnings: v.warnings };
       fs.writeFileSync(path.join(work, 'validation.json'), JSON.stringify(v, null, 1));

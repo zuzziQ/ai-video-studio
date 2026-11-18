@@ -10,6 +10,7 @@
 // khoá queue.json.lock của scripts/queue.mjs, nên Tự lái không nhận đúng file đang bị chuyển. Xoá bản cũ không được (file đang mở)
 // → bỏ bản mới, báo lỗi, bản cũ còn nguyên.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -120,7 +121,7 @@ function dropSource(src, dst, linked) {
   try { retryBusy(() => fs.unlinkSync(src), 10); }
   catch (e) {
     if (e.code === 'ENOENT') return;
-    if (!linked || fs.existsSync(src)) fs.rmSync(dst, { force: true });
+    if (!linked || fs.existsSync(src)) rmSync(dst, { force: true });
     throw Object.assign(new Error('File cũ đang được mở ở chương trình khác: đóng nó rồi thử lại'), { status: 409 });
   }
 }
@@ -159,11 +160,11 @@ export async function moveFile(ws, src, d, { guard = () => {}, lock = null } = {
         try { fs.closeSync(fs.openSync(t, 'wx')); dst = t; } catch (e) { if (e.code !== 'EEXIST') throw e; }
       }
       if (!dst) throw new Error('Không tìm được tên trống trong Kho');
-      try { retryBusy(() => fs.renameSync(tmp, dst)); } catch (e) { fs.rmSync(dst, { force: true }); throw e; }
+      try { retryBusy(() => fs.renameSync(tmp, dst)); } catch (e) { rmSync(dst, { force: true }); throw e; }
       dropSource(src, dst, false);
       return dst;
     });
-  } finally { fs.rmSync(tmp, { force: true }); }
+  } finally { rmSync(tmp, { force: true }); }
 }
 
 // .kho.json: thêm dự án cũ vào `linked` (giữ các khoá khác), ghi qua file tạm trong khoá.

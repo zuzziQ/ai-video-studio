@@ -6,6 +6,7 @@
 //   node ai_broll.mjs keys                                                    -> which keys are configured (never prints them)
 // Keys: ~/.ai-video-studio/config.json (mode 600) {pexels, pixabay, openai, gemini} or env PEXELS_API_KEY, PIXABAY_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -132,7 +133,7 @@ export async function fetchMedia(u, dir, { kind = 'photo', name = 'broll', dur =
     run('ffmpeg', ['-v', 'error', '-y', '-i', tmp, '-vf', 'scale=w=1920:h=1920:force_original_aspect_ratio=decrease', '-q:v', '2', '-frames:v', '1', dst]);
     credit(md, { file: base + '.jpg', ...meta });
     return { name: base + '.jpg', path: `media/${base}.jpg`, kind: 'image', thumb: `media/${base}.jpg` };
-  } finally { fs.rmSync(tmp, { force: true }); }
+  } finally { rmSync(tmp, { force: true }); }
 }
 // media/credits.json: dùng chung với scripts/kho_media.mjs (cùng khoá credits.json.lock: route và job chạy ở hai tiến trình);
 // ghi file mới rồi đổi tên (M54: dự án biến thể có thể liên kết cứng file của dự án gốc).

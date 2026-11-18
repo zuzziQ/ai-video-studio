@@ -13,6 +13,12 @@
       "fix": "dùng token của studio/theme/tokens.css và lớp ui- thay cho màu viết cứng / style=\"\"; giảm mốc bằng --write"
     },
     {
+      "id": "rmsync",
+      "cmd": ["node", "scripts/check-rmsync.mjs"],
+      "when": ["scripts/**/*.mjs", "scripts/**/*.js", "studio/**/*.mjs", "studio/**/*.js"],
+      "fix": "thay fs.rmSync( bằng rmSync của scripts/fs_rm.mjs (Windows bỏ qua đường dẫn có dấu)"
+    },
+    {
       "id": "unittest",
       "cmd": ["python", "-m", "unittest", "discover", "-s", "scripts/tests"],
       "when": ["scripts/**/*.py"],

@@ -11,6 +11,7 @@
 //   GET  /api/stylelab/packs                     → [{ id, file, name, origin: 'repo'|'stylelab'|'other', trusted }] (M38, engine/packs/user)
 //   POST /api/stylelab/trust {id}                → người dùng tin gói 'other' này (nhớ theo sha256 nội dung)
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { execFile } from 'node:child_process';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
@@ -133,7 +134,7 @@ export default ctx => {
         if (imgs.length) argv.push('--images', imgs.join(','));
       }
       if (ctx.project && !process.env.AVS_FOOTAGE && !fs.existsSync(path.join(HOME, 'footage/clip-mau/timeline.json'))) argv.push('--footage', ctx.project.dir);
-      fs.rmSync(path.join(wdir(w), 'result.json'), { force: true });
+      rmSync(path.join(wdir(w), 'result.json'), { force: true });
       const ok = runLab(argv, w);
       return ctx.json(res, ok ? { ok, w } : { error: 'Đang có tác vụ khác chạy. Đợi xong rồi thử lại.' }, ok ? 200 : 409), true;
     }

@@ -5,6 +5,7 @@
 //   POST /api/brolllib/tags {id, tags} · /rm {id} · /tag {ids?, all?} (Claude looks at the pictures; job "brolltag")
 import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,7 +35,7 @@ export default ctx => {
         const tmp = path.join(os.tmpdir(), `avs_lib_${process.pid}_${Date.now()}_${name}`);
         await new Promise((ok, bad) => { const w = fs.createWriteStream(tmp); req.pipe(w); w.on('finish', ok); w.on('error', bad); });
         try { return ctx.json(res, lib.add(tmp, { title: name, tags: String(u.searchParams.get('tags') || '') })), true; }
-        finally { fs.rmSync(tmp, { force: true }); }
+        finally { rmSync(tmp, { force: true }); }
       }
       const b = await ctx.body(req);
       if (p === '/api/brolllib/tags') { const it = lib.setTags(String(b.id), b.tags); return ctx.json(res, it || { error: 'không thấy' }, it ? 200 : 404), true; }

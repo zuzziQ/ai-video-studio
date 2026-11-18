@@ -8,6 +8,7 @@
 // Quy tắc đi kèm: file được liên kết dùng chung inode với bản gốc, nên KHÔNG được ghi đè tại chỗ; muốn thay thì xoá
 // (hoặc ghi file tạm rồi rename) để tạo inode mới. Spec: references/qc-variants.md ("Dự án anh em và liên kết cứng").
 import fs from 'node:fs'; import path from 'node:path'; import { execFileSync } from 'node:child_process';
+import { rmSync } from './fs_rm.mjs';
 
 const VIDEO = /\.(mp4|mov|m4v|webm|mkv)$/i;
 // Lỗi coi như "FS/ổ này không liên kết được": tắt liên kết cho phần còn lại của lần nhân bản.
@@ -47,9 +48,9 @@ export function cloneProject(src, dst, o = {}) {
   if (clone && link) {
     try {
       execFileSync('cp', ['-cR', src, dst], { stdio: 'ignore' });
-      for (const s of skip) fs.rmSync(path.join(dst, s), { recursive: true, force: true });
+      for (const s of skip) rmSync(path.join(dst, s), { recursive: true, force: true });
       return { ...st, method: 'clone' };
-    } catch { fs.rmSync(dst, { recursive: true, force: true }); }
+    } catch { rmSync(dst, { recursive: true, force: true }); }
   }
   let canLink = link;
   const walk = rel => {

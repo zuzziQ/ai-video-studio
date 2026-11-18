@@ -8,6 +8,7 @@
 // để giao diện hiện Nhận / Bỏ từng trường (studio/features/05_assist.js). Không trợ lý nào ghi gì xuống đĩa.
 // Prompt không chứa đường dẫn tuyệt đối, tên máy hay token (assertCleanPrompt); website chỉ tải qua net_guard.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -962,7 +963,7 @@ export async function runAssist(name, input, env = {}) {
     out.fields.forEach((f, i) => { f.id = `${f.key}-${i}`; });
     return { name, ...out, provider, ms: Date.now() - t0 };
   } finally {
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    if (dir) rmSync(dir, { recursive: true, force: true });
   }
 }
 
