@@ -12,9 +12,6 @@
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc, C = window.ScoreCore;
   if (!C) return console.error('03_nextstep: thiếu 02_score.core.js');
   const ORDER = C.STEPS;
-  // S21 M150: hook khối thêm của tab Dự án cũ (fn() -> Element | null, 73_pins.js). M174 bỏ tab Dự án: giữ mảng để 73_pins đẩy vào
-  // không lỗi, không vẽ ở đâu cả; danh sách ghim chuyển sang tab Claude ở M173.
-  S._proj = S._proj || [];
   // dữ liệu ngoài timeline, đọc lại tối đa mỗi 8 s (focus cửa sổ, đổi bước, mở popover điểm)
   const D = { qc: null, quick: null, src: null, fill: null, dir: null, ready: false };
   let fetchedAt = 0, busy = null;

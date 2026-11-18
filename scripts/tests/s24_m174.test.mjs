@@ -67,13 +67,12 @@ test('01_workflow.js: panel wf-project ở bước Chuẩn bị, có ở Cơ b�
   assert.ok(L.railShown('wf-project', 'prep', 'basic'));
 });
 
-test('03_nextstep.js: gỡ danh sách việc + Sang bước, giữ state / fix / C17 / hook _proj', () => {
+test('03_nextstep.js: gỡ danh sách việc + Sang bước, giữ state / fix / C17; hook _proj gỡ ở M173', () => {
   const n = read('studio/features/03_nextstep.js');
   for (const x of ['data-ns-i', 'data-ns="go"', 'data-proj', "'project'", 'MutationObserver', 'function wrap(', 'const NEXT']) assert.ok(!n.includes(x), x);
   assert.match(n, /S\.nextStep = \{[^}]*\bstate\b[^}]*\bfix\b[^}]*_paint: onPaint[^}]*editBrand \}/);
   assert.match(n, /async function guardExport\(\)/);
-  assert.match(n, /S\._proj = S\._proj \|\| \[\];/);
-  assert.match(read('studio/features/73_pins.js'), /\(S\._proj = S\._proj \|\| \[\]\)\.push/, '73_pins vẫn đẩy hook không lỗi');
+  assert.ok(!n.includes('_proj') && !read('studio/features/73_pins.js').includes('S._proj'), 'S24 M173: danh sách chú thích ở tab Claude, gỡ hook S._proj');
 });
 
 test('CSS mới ở khối cuối studio.css có chú thích S24 M174', () => {

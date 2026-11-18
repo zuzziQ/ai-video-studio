@@ -50,9 +50,9 @@ test('chữ ký đổi khi nội dung / trạng thái đổi', () => {
   assert.equal(P.mmss(63.25), '1:03.3');
 });
 
-test('nối vào Studio: nút, hook tab Dự án, notes.md có ghim chung, Về thiết kế giữ note_at', () => {
+test('nối vào Studio: nút, danh sách ở tab Claude (S24 M173), notes.md có ghim chung, Về thiết kế giữ note_at', () => {
   assert.match(read('studio/index.html'), /id="pinbtn"/);
-  assert.match(read('studio/features/03_nextstep.js'), /S\._proj/);
+  assert.match(read('studio/features/73_pins.js'), /S\.ask\?\.notes/);
   assert.match(read('studio/server.mjs'), /tl\.pins/);
   assert.match(read('studio/studio.js'), /k !== 'note_at'/);
   assert.match(read('studio/features/66_canvas_cmds.js'), /k !== 'note_at'/);

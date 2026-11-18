@@ -17,6 +17,8 @@
 //   thẻ có nút Xem: mở lại Studio.review (thanh Nhận / Bỏ #rvbar vẫn dưới khung); thẻ nhớ Đã nhận / Đã bỏ; việc ghi đè cả timeline
 //   (AI dựng, Tự động, Sửa hết lỗi) không Xem lại được khi video đã đổi. Ô đề xuất (đang chạy, đề xuất element của 72_elem_ai)
 //   nằm ngay dưới luồng; ô hỏi + chip phạm vi + gợi ý nhanh dính đáy tab.
+// S24 M173 (C37): phạm vi vùng (AS.region, đặt bởi Hỏi ngay của chế độ chú thích 73_pins.js qua Studio.ask.askNow; một lượt rồi
+//   bỏ); server cắt ảnh vùng tại t. Danh sách chú thích (73_pins.js vẽ) nằm ở .ask-notes ngay dưới đầu tab.
 'use strict';
 (() => {
   const S = window.Studio, AC = window.AskCore;
@@ -66,6 +68,7 @@
 /* S24 M171: luồng hỏi đáp — cuộn cùng cột phải (#right), ô đề xuất dưới luồng, ô hỏi + chip + gợi ý nhanh dính đáy cột; câu hỏi bên phải */
 #insp[data-rtab="claude"] { display: flex; flex-direction: column; min-height: calc(100% - var(--rtabs-h)); }
 #insp[data-rtab="claude"] > #askbar { flex: 1; padding-bottom: 0; }
+#askbar .ask-notes:empty { display: none; }
 #askbar .ask-thread { flex: 1; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding: var(--space-1) 0; }
 #askbar .ask-empty { margin: auto 0; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); line-height: 1.45; color: rgb(var(--color-fg-muted)); }
 #askbar .ask-empty p { margin: 0; }
@@ -93,7 +96,7 @@
 
   // st: idle | running (đang hỏi bộ định tuyến) | working (đang chạy việc) | reply | error
   // acts: nút đi kèm câu trả lời [{ label, icon, run }] (vd. "Mở Lịch đăng", "Giao Claude sửa hết")
-  const AS = { st: 'idle', step: '', run: 0, range: null, sig: '' };
+  const AS = { st: 'idle', step: '', run: 0, range: null, region: null, sig: '' };
   // M171: luồng của dự án. items = các lượt đã xong (AskCore.logEntry); turn = lượt đang chạy (chưa lưu); live: id → { spec, base,
   //   dropped } của thẻ còn Xem được trong phiên này; acts: id → nút đi kèm câu trả lời (hàm, không lưu); viewing = thẻ đang mở xem
   const TH = { items: [], turn: null, live: new Map(), acts: new Map(), viewing: '', h: '', n: 0, saveErr: false };
@@ -107,15 +110,15 @@
     const text = c.obj.text || (Array.isArray(c.obj.words) ? c.obj.words.map(w => w.w).join(' ') : '');
     return { kind: c.kind, cid: c.obj.cid || '', label: String(c.label || ''), text, t0: c.t0, t1: c.t1, knobs: !!S.elemAi?.knobsOk(c) };
   }
-  const scope = () => AC.scopeOf({ step: step(), sel: selInfo(), range: AS.range, qc: !!S.qc?.last });
-  const info = () => ({ duration: S.TL?.duration || 0, clips: S.TL?.clips?.length || 0, scenes: S.TL?.scenes?.length || 0, captions: (S.CAP || []).length, pack: S.TL?.pack || '',
+  const scope = () => AC.scopeOf({ step: step(), sel: selInfo(), range: AS.range, region: AS.region, qc: !!S.qc?.last });
+  const info = () => ({ dw: S.DW || 720, dh: S.DH || 1280, duration: S.TL?.duration || 0, clips: S.TL?.clips?.length || 0, scenes: S.TL?.scenes?.length || 0, captions: (S.CAP || []).length, pack: S.TL?.pack || '',
     ...(step() === 'check' && S.qc?.brief ? { qc: S.qc.brief() } : {}) });
   const elemShown = sc => sc?.kind === 'elem' && S.elemAi && (S.elemAi.cid === sc.cid || S.review?.owner === 'elem_ai') && S.elemAi.st !== 'idle';
 
   // ---------- thanh ----------
   const bar = document.createElement('div');
   bar.id = 'askbar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Hỏi Claude');
-  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div>
+  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div><div class="ask-notes"></div>
     <div class="ask-thread" role="log" aria-label="Hỏi đáp với Claude"></div><div class="ask-out" aria-live="polite"></div>
     <div class="ask-comp"><div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-row"><span class="ask-chip" title="Phạm vi đang hỏi"></span>
     <input data-ask-in type="text" maxlength="300" placeholder="Hỏi Claude…  ( / )" aria-label="Hỏi Claude">
@@ -142,7 +145,7 @@
 
   const busy = () => AS.st === 'running' || AS.st === 'working' || S.elemAi?.st === 'running';
   function paintScope(sc) {
-    chipEl.innerHTML = sc ? `<i class="ti ${sc.icon}"></i><span>${esc(sc.chip)}</span>${sc.kind === 'range' ? '<button data-ask="unrange" title="Bỏ khoảng chọn (Esc)" aria-label="Bỏ khoảng chọn"><i class="ti ti-x"></i></button>' : ''}` : '';
+    chipEl.innerHTML = sc ? `<i class="ti ${sc.icon}"></i><span>${esc(sc.chip)}</span>${sc.kind === 'range' ? '<button data-ask="unrange" title="Bỏ khoảng chọn (Esc)" aria-label="Bỏ khoảng chọn"><i class="ti ti-x"></i></button>' : sc.kind === 'region' ? '<button data-ask="unregion" title="Bỏ vùng (Esc)" aria-label="Bỏ vùng"><i class="ti ti-x"></i></button>' : ''}` : '';
     const b = busy();
     quickEl.innerHTML = sc ? AC.quickOf(sc).map((q, i) => `<button data-askq="${i}" ${b ? 'disabled' : ''}><i class="ti ${q.icon}"></i> ${esc(q.label)}</button>`).join('') : '';
     inp.placeholder = sc ? `Hỏi Claude về ${sc.kind === 'video' ? 'cả video' : sc.kind === 'step' ? 'bước này' : sc.chip}…  ( / )` : 'Hỏi Claude…';
@@ -170,7 +173,7 @@
   // ---------- M171: luồng hỏi đáp ----------
   const hhmm = at => { const d = new Date(at), p = n => String(n).padStart(2, '0'), now = new Date();
     return `${d.toDateString() === now.toDateString() ? '' : `${p(d.getDate())}/${p(d.getMonth() + 1)} `}${p(d.getHours())}:${p(d.getMinutes())}`; };
-  const SCOPE_ICON = { video: 'ti-movie', range: 'ti-arrows-horizontal', elem: 'ti-pointer', clip: 'ti-movie', step: 'ti-route' };
+  const SCOPE_ICON = { region: 'ti-crop', video: 'ti-movie', range: 'ti-arrows-horizontal', elem: 'ti-pointer', clip: 'ti-movie', step: 'ti-route' };
   const CARD_LABEL = { open: 'Chưa nhận', accepted: 'Đã nhận', dropped: 'Đã bỏ', undone: 'Đã hoàn tác', stale: 'Video đã đổi' };
   const spanTxt = c => (c.t1 > c.t0 ? `${c.sub ? ' · ' : ''}${AC.stamp(c.t0)}–${AC.stamp(c.t1)}` : '');
   function qHtml(e) {
@@ -218,7 +221,7 @@
   const newId = () => `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const scopeRec = sc => {
     const o = { kind: sc?.kind || 'step', chip: sc?.chip || '' };
-    for (const k of ['cid', 'a', 'b', 't0', 't1']) if (sc?.[k] != null && sc[k] !== '') o[k] = sc[k];
+    for (const k of ['cid', 'a', 'b', 't0', 't1', 'x', 'y', 'w', 'h', 't']) if (sc?.[k] != null && sc[k] !== '') o[k] = sc[k];
     return o;
   };
   // bắt đầu một lượt: câu hỏi hiện ngay trong luồng (chưa lưu)
@@ -227,6 +230,7 @@
   function finish(kind, o = {}) {
     const t = TH.turn || { id: newId(), at: Date.now(), step: step(), scope: scopeRec(scope()), src: 'run', q: '' };
     TH.turn = null;
+    if (t.scope?.kind === 'region' && AS.region) AS.region = null; // M173: vùng chỉ cho một lượt
     const e = AC.logEntry({ ...t, kind, text: o.text || '', warnings: o.warnings, card: o.card });
     if (!e) return '';
     if (o.acts?.length) TH.acts.set(e.id, o.acts);
@@ -289,7 +293,7 @@
   // Vẽ lại khi phạm vi đổi (chọn element, đổi bước, khoảng chọn); rẻ: so một chuỗi
   function check() {
     place();
-    const sc = scope(), sig = JSON.stringify([sc?.kind, sc?.chip, sc?.cid, sc?.knobs, sc?.qc, step(), busy(), S.PPS, AS.range]);
+    const sc = scope(), sig = JSON.stringify([sc?.kind, sc?.chip, sc?.cid, sc?.knobs, sc?.qc, step(), busy(), S.PPS, AS.range, AS.region]);
     if (sig !== AS.sig) { AS.sig = sig; paint(); }
   }
   S._ov.push(check);
@@ -452,7 +456,7 @@
       return { sub: `${c.fixed || 0} lỗi đã sửa${c.new ? `, ${c.new} phát sinh` : ''}${c.high ? `, còn ${c.high} lỗi nặng` : ''}` };
     }, () => {
       const n = S.pins?.open?.() || 0;
-      if (n) setOut('reply', { reply: `Còn ${n} ghi chú ghim trên khung máy không tự sửa được.`, acts: [{ label: 'Giao Claude sửa hết', icon: 'ti-wand', run: () => S.pins.give() }] });
+      if (n) setOut('reply', { reply: `Còn ${n} chú thích Để sau trên khung máy không tự sửa được.`, acts: [{ label: 'Giao Claude sửa hết', icon: 'ti-wand', run: () => S.pins.give() }] });
     }, () => S.qc.revert?.());
   }
   async function postTime(p) {
@@ -517,14 +521,14 @@
 
   // Câu tự do → bộ định tuyến (server), kiểm lại ở đây bằng đúng phạm vi đang hiện
   // text: câu của gợi ý có `ask` (label = nhãn gợi ý hiện trong luồng); không có → chữ trong ô hỏi
-  async function send(text, label) {
+  async function send(text, label, src) {
     const ask = (text || inp.value).trim(), sc = scope();
     if (!sc || busy()) return;
     if (!ask) { inp.focus(); return; }
-    begin(sc, label ? 'quick' : 'ask', label || ask);
+    begin(sc, src || (label ? 'quick' : 'ask'), label || ask);
     if (!text) inp.value = '';
     setOut('running', { step: 'Đang gửi…' });
-    const r = await S.api('/api/ask', { ask, step: step(), sel: selInfo(), range: AS.range, info: info() }).catch(e => ({ error: e.message }));
+    const r = await S.api('/api/ask', { ask, step: step(), sel: selInfo(), range: AS.range, region: AS.region, info: info() }).catch(e => ({ error: e.message }));
     if (!r.ok) return setOut('error', { err: r.error || 'Không gửi được' });
     AS.run = r.run; poll(r.run, sc);
   }
@@ -568,10 +572,11 @@
     if (a === 'send') return send();
     if (a === 'cancel') return cancel();
     if (a === 'unrange') return clearRange();
+    if (a === 'unregion') { AS.region = null; return check(); }
   });
   inp.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); send(); }
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (AS.range) clearRange(); inp.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (AS.range) clearRange(); if (AS.region) { AS.region = null; check(); } inp.blur(); }
   });
   window.addEventListener('keydown', e => {
     if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -581,12 +586,23 @@
     e.preventDefault(); open();
   });
   // M170: / và ✦ — bỏ ⤢ / mở cột phải đang gấp, sang tab Claude, đặt con trỏ vào ô hỏi
-  function open() {
+  function open(focus = true) {
     check();
-    if (bar.hidden) return S.toast('Cài đặt không có Hỏi Claude');
+    if (bar.hidden) { S.toast('Cài đặt không có Hỏi Claude'); return false; }
     S.layout?.revealRight?.();
     if (S.right?.tab !== 'claude') S.right?.show?.('claude');
-    inp.focus(); inp.select();
+    if (focus) { inp.focus(); inp.select(); }
+    return true;
+  }
+  // M173: Hỏi ngay từ ô hỏi nổi trên khung. o.region { x, y, w, h, t } = hỏi về vùng; không có = phạm vi đang hiện (element vừa
+  //   chọn). Mở tab Claude rồi gửi như gõ (C23: người dùng đã bấm). false khi đang bận / không có Hỏi Claude ở bước này.
+  function askNow(text, o = {}) {
+    const q = String(text || '').trim();
+    if (!q || busy()) { if (busy()) S.toast('Claude đang trả lời câu trước'); return false; }
+    AS.region = o.region ? AC.regionOf(o.region, S.DW || 720, S.DH || 1280) : null;
+    if (!open(false)) { AS.region = null; return false; }
+    send(q, q, 'ask');
+    return true;
   }
   // S23 M164: giao một việc của bước từ nơi khác (popover điểm trên thanh bước, 03_stepscore.js), như bấm gợi ý nhanh.
   // Phạm vi là cả bước (không tính element đang chọn); việc không có trong phạm vi của bước, hoặc thanh đang chạy → false.
@@ -600,7 +616,8 @@
   }
   // M170: thân tab Claude. renderInspector gọi mỗi lần vẽ cột phải; chỉ gắn lại khi tab vừa mở (giữ chữ đang gõ và focus)
   S.right?.addTab?.('claude', el => { if (bar.parentNode !== el || none.parentNode !== el) el.replaceChildren(bar, none); paint(); });
-  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange, place, bar, input: inp, get log() { return TH.items; } };
+  S.ask = { open, run, askNow, refresh: () => paint(true), get range() { return AS.range; }, get region() { return AS.region; }, clearRange, place, bar, input: inp,
+    notes: bar.querySelector('.ask-notes'), get log() { return TH.items; } };
   requestAnimationFrame(() => paint(true));
   // M171: lịch sử của dự án đang mở (mỗi trang một dự án). Lượt vừa xong trước khi tải về đứng sau (cùng id: bản ở đây thắng)
   const loadLog = () => S.api('/api/ask/log').then(r => { TH.items = AC.logParse([...(r?.items || []), ...TH.items]); paintThread(true); }).catch(() => {});

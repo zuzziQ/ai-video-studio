@@ -1,6 +1,8 @@
 // S22 M153: lõi thuần của thanh Hỏi Claude (giao diện 75_ask.js, route studio/routes/75_ask.mjs + scripts/ask_route.mjs).
 // Không DOM: chạy trong trình duyệt (window.AskCore) và trong Node (scripts/tests/s22_ask.test.mjs, scripts/ask_route.mjs).
-//   scopeOf(ctx)           → phạm vi đang hỏi { kind: video|range|elem|clip|step, step, chip, … } hoặc null (Cài đặt: không có thanh)
+//   scopeOf(ctx)           → phạm vi đang hỏi { kind: video|range|region|elem|clip|step, step, chip, … } hoặc null (Cài đặt: không có thanh)
+//   regionOf(raw, DW, DH)  → S24 M173: vùng chú thích { x, y, w, h, t } (px thiết kế, kẹp trong khung) hoặc null
+//   frameAt(tl, t)         → khung hình gốc tại t: { at (giây trong nguồn), seq? (ảnh của dãy khung), video? } để server cắt vùng
 //   actionsOf(scope)       → danh sách việc mô hình được chọn (luôn có 'answer' = chỉ trả lời bằng chữ)
 //   quickOf(scope)         → 3–4 gợi ý nhanh: chạy thẳng một việc với tham số cố định, không qua bộ định tuyến; gợi ý có `ask`
 //                            (vd. "Giải thích lỗi") gửi đúng câu đó qua bộ định tuyến (vẫn chỉ gọi mô hình khi bấm, C23)
@@ -39,15 +41,20 @@
   const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
 
   // ---------- phạm vi ----------
-  // ctx: { step, sel?: { kind, cid, label, text, idx, t0, t1, knobs }, range?: { a, b } }
-  // Ưu tiên: khoảng chọn trên timeline (đặt có chủ đích, chỉ ở bước Dựng) → element / clip đang chọn → bước. Cài đặt: không có thanh.
+  // ctx: { step, sel?: { kind, cid, label, text, idx, t0, t1, knobs }, range?: { a, b }, region?: { x, y, w, h, t } }
+  // Ưu tiên: khoảng chọn trên timeline (đặt có chủ đích, chỉ ở bước Dựng) → vùng chú thích (M173: kéo trên khung rồi Hỏi ngay, chỉ
+  // một lượt) → element / clip đang chọn → bước. Cài đặt: không có thanh.
   function scopeOf(ctx = {}) {
     const step = STEPS[ctx.step] ? ctx.step : ctx.step === 'settings' ? 'settings' : 'build';
     if (step === 'settings') return null;
-    const r = ctx.range, sel = ctx.sel;
+    const r = ctx.range, sel = ctx.sel, g = ctx.region;
     if (step === 'build' && r && Number.isFinite(+r.a) && Number.isFinite(+r.b) && Math.abs(r.b - r.a) >= 0.2) {
       const a = Math.min(r.a, r.b), b = Math.max(r.a, r.b);
       return { kind: 'range', step, a: r2(a), b: r2(b), chip: `${stamp(a)}–${stamp(b)}`, icon: 'ti-arrows-horizontal' };
+    }
+    if (g && [g.x, g.y, g.w, g.h].every(v => Number.isFinite(+v)) && g.w > 0 && g.h > 0) {
+      const t = r2(Math.max(0, +g.t || 0));
+      return { kind: 'region', step, x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.w), h: Math.round(g.h), t, chip: `Vùng ${Math.round(g.w)}×${Math.round(g.h)} · ${stamp(t)}`, icon: 'ti-crop' };
     }
     if (sel && sel.kind === 'clip') return { kind: 'clip', step, idx: sel.idx | 0, cid: sel.cid || '', t0: +sel.t0 || 0, t1: +sel.t1 || 0, chip: `Clip ${(sel.idx | 0) + 1}`, icon: 'ti-movie' };
     if (sel && ELEM_KINDS.includes(sel.kind)) {
@@ -107,7 +114,7 @@
   };
   function actionsOf(scope) {
     if (!scope) return [];
-    const ids = scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions']
+    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions']
       : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
         : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'open_panel'] : ['open_panel'])
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
@@ -126,6 +133,9 @@
     switch (scope.kind) {
       case 'video': return [q('AI dựng cả video', 'ai_build', { density: 'vua' }), q('Thêm b-roll', 'autofill', { mode: 'broll' }, 'ti-photo-plus'),
         q('Thêm nhạc & SFX', 'autofill', { mode: 'sfx' }, 'ti-music'), q('Chuyển cảnh mờ dần', 'transitions', { type: 'fade', dur: 0.4 }, 'ti-transition-right')];
+      // M173: vùng chú thích — câu hỏi qua bộ định tuyến, mô hình xem ảnh vùng cắt từ khung tại t
+      case 'region': return [ask('Vùng này có gì?', 'Mô tả ngắn những gì có trong vùng này của khung hình và gợi ý chỉnh cho đẹp hơn.', 'ti-eye'),
+        ask('Vùng này có lỗi không?', 'Vùng này có lỗi gì không (chữ tràn, che mặt, mờ, lệch, khó đọc)? Nói ngắn và cách sửa.', 'ti-bug')];
       case 'range': return [q('Chuyển cảnh trong đoạn', 'transitions', { type: 'fade', dur: 0.4 }, 'ti-transition-right'),
         q('Lia nhanh trong đoạn', 'transitions', { type: 'whip', dur: 0.3 }, 'ti-wind'), q('Thêm b-roll', 'autofill', { mode: 'broll' }, 'ti-photo-plus')];
       case 'elem': return [q('Nổi hơn', 'elem_edit', { ask: 'nổi hơn' }), q('Hợp thương hiệu', 'elem_edit', { ask: 'hợp thương hiệu' }),
@@ -221,13 +231,48 @@
     return { t0: r2(Math.max(0, lo)), t1: r2(Math.max(lo, hi)) };
   }
 
+  // ---------- S24 M173: vùng chú thích ----------
+  const MIN_REGION = 8;
+  // raw { x, y, w, h, t } (w / h âm = kéo ngược) → kẹp trong khung DW×DH, làm tròn; nhỏ hơn MIN_REGION px → null
+  function regionOf(raw, DW = 1280, DH = 1280) {
+    const o = raw && typeof raw === 'object' ? raw : null;
+    if (!o || ![o.x, o.y, o.w, o.h].every(v => v !== null && v !== '' && Number.isFinite(+v))) return null;
+    let x0 = +o.x, y0 = +o.y, x1 = x0 + +o.w, y1 = y0 + +o.h;
+    if (x1 < x0) [x0, x1] = [x1, x0];
+    if (y1 < y0) [y0, y1] = [y1, y0];
+    const cx = v => Math.round(Math.max(0, Math.min(DW, v))), cy = v => Math.round(Math.max(0, Math.min(DH, v)));
+    x0 = cx(x0); x1 = cx(x1); y0 = cy(y0); y1 = cy(y1);
+    if (x1 - x0 < MIN_REGION || y1 - y0 < MIN_REGION) return null;
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, t: r2(Math.max(0, Math.min(36000, +o.t || 0))) };
+  }
+  // Khung hình gốc tại t (giây timeline): clip chứa t theo clipStarts, giây trong nguồn = in + (t − đầu clip) × tốc độ.
+  // seq: tệp ảnh của dãy khung (work/frames/%05d.jpg, đánh số từ 1); video: tệp video nguồn (src chuỗi, hoặc audio của clip).
+  function frameAt(tl, t) {
+    const clips = (tl && tl.clips) || [];
+    if (!clips.length) return null;
+    const st = clipStarts(tl);
+    let i = clips.length - 1;
+    while (i > 0 && st[i] > t) i--;
+    const c = clips[i] || {}, a = +c.in || 0, b = Number.isFinite(+c.out) ? +c.out : Infinity;
+    const at = r2(Math.max(a, Math.min(b, a + Math.max(0, (+t || 0) - st[i]) * (+c.speed || 1))));
+    const out = { at };
+    const src = c.src && typeof c.src === 'object' ? c.src : null;
+    if (src && typeof src.seq === 'string' && /%0\d+d/.test(src.seq)) {
+      const fps = +src.fps > 0 ? +src.fps : 30, n = Math.max(1, Math.min(+src.count > 0 ? +src.count : Infinity, Math.floor(at * fps) + 1));
+      out.seq = src.seq.replace(/%0(\d+)d/, (m, d) => String(n).padStart(+d, '0'));
+    }
+    const vid = typeof c.src === 'string' ? c.src : typeof c.audio === 'string' ? c.audio : '';
+    if (vid) out.video = vid;
+    return out.seq || out.video ? out : null;
+  }
+
   // ---------- S24 M171: luồng hỏi đáp của dự án (.studio/ask_log.json) ----------
   // Mỗi lượt: { id, at, step, scope: { kind, chip, cid?, a?, b?, t0?, t1? }, src: ask|quick|run, q, kind: reply|error|card|info, text,
   //   warnings?, card?: { title, sub, what?: [≤ 6 dòng "đã đổi gì"], t0, t1, state: open|accepted|dropped|undone|stale } }. Chỉ chữ và số: trường lạ bị bỏ, chuỗi có ảnh
   //   (data:…;base64) bị xoá — không lưu ảnh. logPush giữ LOG_MAX lượt gần nhất, cùng id thì thay (đổi trạng thái thẻ).
   const LOG_MAX = 200;
   const LOG_KINDS = ['reply', 'error', 'card', 'info'], LOG_SRC = ['ask', 'quick', 'run'], CARD_ST = ['open', 'accepted', 'dropped', 'undone', 'stale'];
-  const SCOPE_KINDS = ['video', 'range', 'elem', 'clip', 'step'];
+  const SCOPE_KINDS = ['video', 'range', 'region', 'elem', 'clip', 'step'];
   const noImg = s => (/data:[\w/+.-]+;base64,/i.test(s) ? '' : s);
   const ls = (v, n) => noImg(str(v, n));
   const fin = v => (v !== null && v !== '' && Number.isFinite(+v) ? r2(Math.max(0, Math.min(36000, +v))) : undefined);
@@ -239,7 +284,7 @@
     const s = o.scope && typeof o.scope === 'object' ? o.scope : {};
     const scope = { kind: SCOPE_KINDS.includes(s.kind) ? s.kind : 'step', chip: ls(s.chip, 60) };
     if (s.cid) scope.cid = String(s.cid).replace(/[^\w.:-]/g, '').slice(0, 40);
-    for (const k of ['a', 'b', 't0', 't1']) { const v = fin(s[k]); if (v !== undefined) scope[k] = v; }
+    for (const k of ['a', 'b', 't0', 't1', 'x', 'y', 'w', 'h', 't']) { const v = fin(s[k]); if (v !== undefined) scope[k] = v; }
     const e = { id, at: Math.max(0, Math.round(+o.at || 0)), step: STEPS[o.step] ? o.step : 'build', scope, src: LOG_SRC.includes(o.src) ? o.src : 'ask',
       q: ls(o.q, 300), kind, text: ls(o.text, 1200) };
     const w = (Array.isArray(o.warnings) ? o.warnings : []).map(x => ls(x, 120)).filter(Boolean).slice(0, 3);
@@ -306,7 +351,7 @@
   }
 
   const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts,
-    logEntry, logPush, logParse, changeSummary }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
+    logEntry, logPush, logParse, changeSummary, regionOf, frameAt }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
