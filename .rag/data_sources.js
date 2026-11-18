@@ -21,6 +21,6 @@ export const GUARDRAIL_SOURCES = {
   ],
   workflow: [
     [{ file: AG, section: "Luật làm việc của bản này (`zuzziQ/ai-video-studio`)" }],
-    [{ file: AG, section: "Ngân sách phút CI (xem `D:/ai/docs/CI-BUDGET.md`)" }],
+    [{ file: AG, section: "CI (`D:/ai/docs/CI-BUDGET.md`)" }],
   ],
 };

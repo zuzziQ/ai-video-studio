@@ -35,35 +35,41 @@ Bản này là repo riêng tư dựa trên repo gốc ở trên, nằm trong hub
 
 | Loại việc | Bắt đầu bằng | Chú ý |
 |---|---|---|
-| Tính năng Studio (UI) | `references/studio.md` → `studio/features/NN_x.js` qua `get_code_snippet` | Giao diện tối có sẵn; sửa xong mở Studio (`./studio.sh` hoặc `studio.cmd`) và thử trong trình duyệt |
+| Tính năng Studio (UI) | `references/studio.md` → `studio/features/NN_x.js` qua `get_code_snippet` | Sửa xong mở Studio (`studio.cmd`) thử luồng vừa sửa |
 | Route / API của Studio | `references/studio.md` mục API → `studio/routes/NN_x.mjs`, `trace_path` từ `studio/server.mjs` | `server.mjs` là tệp nóng: chỉ một phiên sửa một lúc |
 | Script xử lý (`scripts/*.mjs`, `*.py`) | `SKILL.md` → `references/<tính năng>.md` | Python chỉ dùng thư viện chuẩn khi có thể; test ở `scripts/tests/` |
 | Cổng quảng cáo / QC | `references/ad-gates.md`, `scripts/ad_gates.py`, `scripts/ai_qc.mjs` | `python -m unittest discover -s scripts/tests` |
 | Gói style / template | `references/packs.md`, `references/templates.md` | Gói người dùng ở `engine/packs/user/` chạy không cách ly (`M38`) |
 | Lỗi | `devmem_search` → `deep-debug` nếu chưa rõ nguyên nhân | Ghi cách tái hiện vào PR |
 
-## Ngân sách phút CI (xem `D:/ai/docs/CI-BUDGET.md`)
+## Ngân sách token (`D:/ai/docs/TOKEN-BUDGET.md`)
 
-- Repo riêng tư trên tài khoản `zuzziQ`; đo phút: `python3 D:/ai/scripts/actions-usage.py .`
-- Workflow `CI` (`.github/workflows/ci.yml`) theo `D:/ai/templates/ci-gate.workflow.yml`: chạy khi PR, chạy tay và lịch tuần; không chạy sau mỗi push vào `main`. Chạy tay: `gh workflow run CI --ref main`.
-- Một job duy nhất `gate` (W1, check bắt buộc): nhãn PR, dòng Roadmap và các lệnh của bảng verify bên dưới, cộng `node --test scripts/tests/*.test.mjs`. Không cài dependency, không render.
-- Sửa workflow xong chạy `python3 D:/ai/scripts/ci-audit.py .`
+Đọc cache 11-12 đến 11-18: đọc code bằng shell 31%, trình duyệt ~24%, git 11%, phiên điều phối 30%.
+
+- File trên 30K ký tự (`studio/studio.js`, `scripts/ai_qc.mjs`, `scripts/assist.mjs`, `studio/features/21_transcript.js`): không `cat` hay `sed -n` từng khúc. Tra đồ thị code hoặc một lệnh `rg -n` hẹp, rồi đọc đúng hàm.
+- Ship chỉ bằng `pr-ship.py`, không chạy git từng bước. Không `Read` lại kết quả tool đã lưu ra đĩa.
+- Kiểm UI bằng số đo (`javascript_tool`, `read_page`); ảnh chỉ ở mốc cuối, `scale` ≤ 0.5. Hơn 5 bước trình duyệt thì giao `hub-qa`, nhận tóm tắt ≤ 5 dòng.
+- Phiên điều phối cắt ở ~200K hoặc ~150 lượt (`context-handover`); phiên worktree quá 250K thì chốt rồi tách.
+
+## CI (`D:/ai/docs/CI-BUDGET.md`)
+
+Workflow `CI` có một job `gate` (check bắt buộc): kiểm nhãn PR, dòng Roadmap, các lệnh verify bên dưới và `node --test scripts/tests/*.test.mjs`. Chạy khi có PR, khi chạy tay (`gh workflow run CI --ref main`) và theo lịch tuần; không cài dependency, không render. Sửa workflow xong chạy `python3 D:/ai/scripts/ci-audit.py .`
 
 ## Issue, PR và nhiều worktree (xem `D:/ai/docs/ISSUE-PR-STANDARD.md`)
 
 - Gom PR theo lát cắt nghiệp vụ (300–800 dòng): một mục hoặc một nhóm mục cùng đợt của `docs/ROADMAP.md` = một PR; sửa dòng của mục trong `ROADMAP.md` ngay trong PR đó. Thân PR có dòng `Roadmap: <mã>` (CI kiểm).
-- Area (cũng là scope commit, nhãn `area/`): `infra, qc, ads, llm, voice, export, security, docs`. Nhãn `type/`, `area/`, `size/` do bước gán nhãn trong job `gate` làm.
+- Nhãn `type/`, `area/`, `size/` do job `gate` gán; area trùng scope commit ở trên.
 - PR chờ duyệt đồng thời: tối đa 4 (duyệt tay). Tệp nóng chỉ một phiên sửa một lúc: `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`, `docs/ROADMAP.md` (mỗi PR chỉ sửa dòng mục của mình).
 - Phiên, worktree và subagent theo `D:/ai/docs/SESSIONS-WORKTREES.md`: 1 Phase = 1 worktree = 1 PR. Ship bằng `python3 D:/ai/scripts/pr-ship.py --branch auto` (hoặc `--no-auto` khi chủ repo muốn tự merge) rồi dừng lượt, không poll CI.
 - Worktree thiếu thư viện: hook `SessionStart` tự chạy `node scripts/worktree-setup.mjs` (`npm ci` khi thiếu `scripts/node_modules`); Python tự dùng `scripts/.venv` của thư mục chính. **Cấm** `mklink /J`/symlink `node_modules` hay `.venv` sang thư mục chính: `git worktree remove --force` xoá luôn thư mục đích.
 
 ## Repo gốc
 
-Chốt 2026-11-16: repo này dùng và phát triển riêng, **không kéo bản mới từ repo gốc** (`https://github.com/nguyentatkiem/ai-video-studio`) và không đóng góp ngược (`C05`). Không gộp `upstream/main`, không đẩy lên repo gốc. Remote `upstream` (nếu còn trên máy) chỉ để tham khảo, push đã tắt. Ghi công tác giả ở khối đầu file vẫn bắt buộc như cũ.
+Chốt 2026-11-16 (`C05`): **không kéo bản mới từ repo gốc, không đóng góp ngược**. Không gộp `upstream/main`, không push lên đó. Ghi công ở khối đầu file vẫn bắt buộc.
 
 ## Lệnh verify (2 cấp) và bàn giao
 
-- **Bước con:** chỉ chạy test của đúng phần vừa sửa: `python -m unittest scripts.tests.test_ad_gates` (cổng quảng cáo), `node --check <file>` cho file JS/MJS vừa sửa.
+- **Bước con:** chỉ test phần vừa sửa (`node --check <file>`, test đơn lẻ trong `scripts/tests/`).
 - **Chốt Phase trước khi mở PR** (cũng là những gì CI chạy; `pr-ship.py` chạy phần nhẹ qua `.agents/ship-checks.json`):
 
 | Vùng đổi | Lệnh |
