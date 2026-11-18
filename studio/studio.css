@@ -737,3 +737,40 @@ body.lydrag, body.lydrag * { cursor: grabbing !important; user-select: none; }
 .keyhelp dd { margin: 0; color: rgb(var(--color-fg-muted)); min-width: 0; }
 .keyhelp kbd { font-family: inherit; font-size: var(--text-2xs); padding: 1px var(--space-1); border: 1px solid rgb(var(--color-line-strong)); border-bottom-width: 2px; border-radius: var(--radius-xs); background: rgb(var(--color-surface)); }
 .keyhelp .kh-or { margin: 0 var(--space-050); color: rgb(var(--color-fg-subtle)); }
+
+/* S23 M164 (C32): vòng điểm trên thanh bước + popover mục chưa đạt (studio/features/03_stepscore.js). Vòng nằm trong số bước
+   (viền tròn ::after), không làm thanh rộng thêm; ≤ 1180 px chỉ còn vòng + số. */
+#wf-steps button b.sp-ring { position: relative; --sp-c: var(--acc); }
+#wf-steps button b.sp-ring::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(var(--sp-c) calc(var(--sp, 0) * 1%), var(--line2) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), var(--bg0) calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), var(--bg0) calc(100% - 2px)); }
+#wf-steps button b.sp-ring.is-low { --sp-c: var(--warn); }
+#wf-steps button b.sp-ring.is-full { --sp-c: var(--ok); }
+#wf-steps button b.sp-ring.is-wait::after { background: var(--line2); }
+#wf-steps button { overflow: visible; }
+@media (max-width: 1180px) { #wf-steps button span { display: none; } #wf-steps button, #wf-steps button.on { padding: 0 6px; } }
+#wf-sp { position: fixed; z-index: 61; width: min(320px, calc(100vw - 16px)); max-height: min(420px, 70vh); overflow-y: auto; padding: var(--space-2);
+  background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r); box-shadow: var(--shadow-raised);
+  display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); color: var(--tx2); }
+#wf-sp[hidden] { display: none; }
+#wf-sp .sp-h { display: flex; align-items: baseline; gap: var(--space-2); padding: 0 var(--space-1); min-width: 0; }
+#wf-sp .sp-h b { color: var(--tx); font-size: 13px; font-variant-numeric: tabular-nums; }
+#wf-sp .sp-h span { margin-left: auto; color: var(--tx3); font-size: var(--text-2xs); white-space: nowrap; }
+#wf-sp.is-low .sp-h b { color: var(--warn); }
+#wf-sp ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+#wf-sp .sp-fail { margin-top: var(--space-2); }
+#wf-sp .sp-fail button { width: 100%; height: auto; min-height: 32px; padding: var(--space-1) var(--space-2); gap: var(--space-2); align-items: flex-start; justify-content: flex-start;
+  text-align: left; white-space: normal; background: transparent; border-color: var(--line); color: var(--tx); font-size: var(--text-xs); font-weight: 400; }
+#wf-sp .sp-fail button:hover, #wf-sp .sp-fail button:focus-visible { background: var(--bg3); border-color: var(--acc-line); }
+#wf-sp .sp-fail button > .ti { flex: none; font-size: 16px; color: var(--tx3); margin-top: 1px; }
+#wf-sp .sp-fail button > .ti-sparkles { color: var(--acc); }
+#wf-sp .sp-fail button > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+#wf-sp .sp-fail small { color: var(--tx2); font-size: var(--text-2xs); line-height: 1.4; }
+#wf-sp .sp-fail small.sp-act { color: var(--acc); }
+#wf-sp .sp-fail em { flex: none; font-style: normal; color: var(--warn); font-variant-numeric: tabular-nums; }
+#wf-sp .sp-pass { border-top: 1px solid var(--line); padding-top: var(--space-1); }
+#wf-sp .sp-pass summary { cursor: pointer; padding: var(--space-1); color: var(--tx2); font-size: var(--text-2xs); }
+#wf-sp .sp-pass summary:hover, #wf-sp .sp-pass summary:focus-visible { color: var(--tx); }
+#wf-sp .sp-pass li { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-1); }
+#wf-sp .sp-pass li .ti { color: var(--ok); }
