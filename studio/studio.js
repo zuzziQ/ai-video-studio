@@ -741,7 +741,7 @@ $('#insp').addEventListener('click', async e => {
   if (a === 'hide') { touch(o); o.hidden = !o.hidden || undefined; changed(true); }
   if (a === 'del') removeSel();
   if (a === 'dup') duplicateSel();
-  if (a === 'reset') { pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note') delete o[k]; Object.assign(o, orig); changed(true); }
+  if (a === 'reset') { pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note' && k !== 'note_at') delete o[k]; Object.assign(o, orig); changed(true); }
   if (a === 'audition') new Audio(sfxUrl(o.name)).play();
   if (a === 'json') {
     try {
@@ -751,7 +751,7 @@ $('#insp').addEventListener('click', async e => {
       for (const k of ['t0', 't1', 't']) if (k in o && k in v && !Number.isFinite(v[k])) throw new Error(`${k} phải là số`);
       if (o.type != null && v.type == null) throw new Error('thiếu "type"');
       touch(o);
-      for (const k of Object.keys(o)) if (!['cid', '_orig', 'lines', 'nodes', 'note'].includes(k)) delete o[k];
+      for (const k of Object.keys(o)) if (!['cid', '_orig', 'lines', 'nodes', 'note', 'note_at'].includes(k)) delete o[k];
       Object.assign(o, v); changed(true); toast('Đã áp dụng');
     } catch (err) { toast('JSON lỗi: ' + err.message); }
   }

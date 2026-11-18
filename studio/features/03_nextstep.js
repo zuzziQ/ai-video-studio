@@ -16,6 +16,7 @@
     set(k, v) { try { localStorage.setItem('avs.' + k, v); } catch {} },
   };
   const ORDER = C.STEPS;
+  S._proj = S._proj || []; // S21 M150: fn() -> Element | null, chèn giữa khối điểm và "Cài đặt dự án" mỗi lần tab Dự án vẽ lại
   const NAME = { prep: 'Chuẩn bị', source: 'Nguồn', build: 'Dựng', check: 'Kiểm tra', ship: 'Xuất và đăng' };
   const SHORT = { ...NAME, ship: 'Xuất' }; // nhãn ô điểm (5 ô một hàng)
   // dữ liệu ngoài timeline, đọc lại tối đa mỗi 8 s (focus cửa sổ, đổi bước, inspector vẽ lại)
@@ -249,6 +250,7 @@
     det.append(...insp.childNodes);
     det.addEventListener('toggle', () => store.set('nsMore', det.open ? '1' : ''));
     insp.appendChild(box); bars(box);
+    for (const f of S._proj) { try { const el = f(); if (el) det.before(el); } catch (e) { console.error(e); } } // S21 M150: khối thêm của tab Dự án (73_pins.js)
     refresh();
   }
 
