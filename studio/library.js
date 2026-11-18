@@ -152,8 +152,8 @@ function openTplDetail(id, list) {
       ${t.desc ? `<p class="tddesc">${esc(t.desc)}</p>` : ''}
       ${t.needs?.length ? `<div class="tdneeds"><b><i class="ti ti-checklist"></i> Bạn cần chuẩn bị</b><ul>${t.needs.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
       ${t.tags?.length ? `<div class="tdkw">${t.tags.map(x => `<span>#${esc(x)}</span>`).join('')}</div>` : ''}
-      ${h !== (DW > DH) ? `<div class="help warn"><i class="ti ti-alert-triangle"></i> Mẫu này làm cho khổ ${h ? 'ngang 16:9' : 'dọc 9:16'}, dự án đang là ${DW > DH ? 'ngang 16:9' : 'dọc 9:16'}. Vẫn dùng được, bố cục tự đổi theo khổ dự án.</div>` : ''}
-      <div class="help">Mẫu chỉ thay graphic, phụ đề, nhạc, hiệu ứng; video và lời nói của bạn giữ nguyên. Bấm Hoàn tác (⌘Z) nếu không ưng.</div>
+      ${h !== (DW > DH) ? `<div class="help warn"><i class="ti ti-alert-triangle"></i> Mẫu này làm cho khổ ${h ? 'ngang 16:9' : 'dọc 9:16'}, dự án đang là ${DW > DH ? 'ngang 16:9' : 'dọc 9:16'}. ${tip('Vẫn dùng được: bố cục tự đổi theo khổ dự án.')}</div>` : ''}
+      <div class="help">Giữ nguyên video và lời nói; hoàn tác bằng ⌘Z. ${tip('Mẫu chỉ thay graphic, phụ đề, nhạc, hiệu ứng; video và lời nói của bạn giữ nguyên. Bấm Hoàn tác (⌘Z) nếu không ưng.')}</div>
       <div class="tdact"><button class="primary big" data-tpuse="${esc(t.id)}"><i class="ti ti-wand"></i> Dùng mẫu này</button></div>
     </div></div>`, false);
 }
@@ -301,7 +301,7 @@ const khoList = () => {
 function panelMedia() {
   const seg = `<div class="seg">${[['kho', 'Kho'], ['here', 'Dự án này'], ['broll', 'B-roll động']].map(([k, l]) => `<button data-mtab="${k}" class="${mediaTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (mediaTab === 'broll') {
-    $('#libbody').innerHTML = seg + `<div class="help">Gõ chủ đề vào ô tìm rồi Enter (VD: “tiền”, “AI”, “nhà đẹp”). 9.080 b-roll động — bấm để chèn tại playhead.</div>
+    $('#libbody').innerHTML = seg + `<div class="help">Gõ chủ đề rồi Enter; bấm để chèn tại playhead. ${tip('Ví dụ: “tiền”, “AI”, “nhà đẹp”. Thư viện có 9.080 b-roll động.')}</div>
       <div class="bres">${BRES.map((b, i) => `<div data-b="${i}"><i class="ti ti-movie"></i><div><b>${esc(b.text || b.id)}</b><small>${esc(b.template)} · ${esc(b.id)}</small></div><i class="ti ti-plus add"></i></div>`).join('')}</div>`;
     return;
   }
@@ -315,7 +315,7 @@ function panelMedia() {
     $('#libbody').innerHTML = seg + `<div class="khohead" title="${esc(k.root || '')}"><i class="ti ti-building-warehouse"></i><span>Kho <b>${esc(k.title || 'Chung')}</b></span><small>${all.length} file</small></div>
       ${k.warning ? `<div class="help">${esc(k.warning)}</div>` : ''}
       <div class="chips">${KHO_GROUPS.map(([g, l]) => `<button class="chip ${khoGroup === g ? 'on' : ''}" data-kg="${g}">${l} <span>${n(g)}</span></button>`).join('')}</div>
-      ${list.length ? `<div class="mgrid">${list.map(it => khoCell(it, all.indexOf(it))).join('')}</div><div class="help">Bấm hoặc kéo vào timeline: file được liên kết vào <b>media/</b> của dự án (không tốn thêm dung lượng).</div>`
+      ${list.length ? `<div class="mgrid">${list.map(it => khoCell(it, all.indexOf(it))).join('')}</div><div class="help">Bấm hoặc kéo vào timeline để dùng. ${tip('File được liên kết vào media/ của dự án, không chép thêm nên không tốn dung lượng.')}</div>`
         : all.length ? empty('ti-filter-off', 'Không có file phù hợp', 'Chọn nhóm khác hoặc xoá ô tìm.')
           : empty('ti-building-warehouse', 'Kho chưa có file', 'Thêm ảnh, b-roll, nhạc vào Kho ở bước 1 Chuẩn bị (hoặc chép thẳng vào thư mục Kho) rồi bấm làm mới.')}`;
     return;
@@ -484,7 +484,7 @@ function myMusicBlock() {
   if (!MYMUS) { loadMyMusic(); return head() + '<div class="help">Đang đọc Kho…</div>'; }
   const k = MYMUS.kho, where = k ? `Kho ${k.brand ? k.title : 'Chung'} › Nhac` : 'Kho';
   const up = k?.exists ? `<label class="upl"><i class="ti ti-cloud-upload"></i><span><b>Tải nhạc lên</b><small>Lưu vào ${esc(where)}, dùng lại cho mọi video của thương hiệu</small></span><input type="file" id="mymus-up" accept="audio/*,.mp3,.m4a,.wav,.aac,.flac,.ogg" multiple hidden></label>`
-    : `<div class="help">${esc(MYMUS.error || 'Dự án chưa có Kho')}: tạo Kho ở bước ① Chuẩn bị (mục Kho) để lưu nhạc riêng.</div>`;
+    : `<div class="help">${esc(MYMUS.error || 'Dự án chưa có Kho')}. ${tip('Tạo Kho ở bước ① Chuẩn bị (mục Kho) để lưu nhạc riêng.')}</div>`;
   const rows = MYMUS.items.map(it => `<div class="arow"><button class="pl" data-aud="kho:${esc(it.rel)}" title="Nghe thử"><i class="ti ti-player-play-filled"></i></button><span class="mi"><i class="ti ti-music"></i></span>
     <div class="mid"><b>${esc(it.name.replace(/\.[^.]+$/, ''))}</b><small>${esc(it.rel)}</small></div>
     <button class="add" data-mymus="replace" data-rel="${esc(it.rel)}" title="Dùng làm nhạc nền cả video (thay nhạc nền đang có)" ${myMusBusy ? 'disabled' : ''}><i class="ti ti-replace"></i></button>
@@ -518,7 +518,7 @@ function panelAudio() {
   const seg = `<div class="seg">${[['music', 'Nhạc nền'], ['sfx', 'Hiệu ứng âm thanh']].map(([k, l]) => `<button data-atab="${k}" class="${audioTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (audioTab === 'music') {
     const rows = LIB.music.map(f => f.replace('.mp3', '')).filter(m => !q || (m + ' ' + (MOOD_VI[m.replace(/_\d+$/, '')] || '')).toLowerCase().includes(q));
-    $('#libbody').innerHTML = seg + `<div class="help">${(TL.audio?.music || []).length ? `Đang có ${(TL.audio.music).length} đoạn nhạc trên timeline.` : 'Chưa có nhạc nền.'} Bấm + để thêm từ playhead tới hết video.</div>
+    $('#libbody').innerHTML = seg + `<div class="help">${(TL.audio?.music || []).length ? `Đang có ${(TL.audio.music).length} đoạn nhạc trên timeline.` : 'Chưa có nhạc nền.'} ${tip('Bấm + để thêm từ playhead tới hết video.')}</div>
       ${myMusicBlock()}
       <div class="alist">${rows.map(m => { const b = m.replace(/_\d+$/, ''), n = m.match(/_(\d+)$/)?.[1]; return `<div class="arow" data-mus="${m}" tabindex="0">
         <button class="pl" data-aud="music:${m}"><i class="ti ti-player-play-filled"></i></button><span class="mi"><i class="ti ${MOOD_IC[b] || 'ti-music'}"></i></span>
@@ -559,7 +559,7 @@ function fluentUrl(ch) {
   return p ? '/cdn/gh/microsoft/fluentui-emoji@main/assets/' + encodeURI(p) : ''; // server disk cache (net_cache.mjs)
 }
 function panelSticker() {
-  $('#libbody').innerHTML = `<div class="help">Emoji 3D bật lên tại playhead. Kéo vào khung để đặt đúng chỗ, hoặc vào timeline để chọn lúc hiện.</div>
+  $('#libbody').innerHTML = `<div class="help">Emoji 3D bật lên tại playhead. ${tip('Kéo vào khung để đặt đúng chỗ, hoặc vào timeline để chọn lúc hiện.')}</div>
     <div class="stgrid">${STICKERS.map(ch => { const u = fluentUrl(ch); return `<button data-st="${ch}" title="${ch}" draggable="true">${u ? `<img loading="lazy" src="${u}" alt="${ch}" draggable="false">` : `<span>${ch}</span>`}</button>`; }).join('')}</div>`;
 }
 function addSticker(ch, o = {}) {
@@ -603,7 +603,7 @@ async function addPackItem(i, j, o = {}) {
 // ---------- Chuyển cảnh ----------
 function panelTrans() {
   const c = sel?.kind === 'clip' ? sel : null, cur = c?.obj.transition?.type || '';
-  $('#libbody').innerHTML = `<div class="help">${c ? (c.idx === 0 ? 'Clip đầu tiên không có chuyển cảnh vào — chọn clip phía sau.' : `Áp dụng cho chuyển cảnh <b>vào clip ${c.idx + 1}</b>.`) : 'Chọn một clip trên track chính, hoặc kéo hiệu ứng thả vào chỗ nối giữa hai clip.'}</div>
+  $('#libbody').innerHTML = `<div class="help">${c ? (c.idx === 0 ? 'Clip đầu tiên không có chuyển cảnh vào — chọn clip phía sau.' : `Áp dụng cho chuyển cảnh <b>vào clip ${c.idx + 1}</b>.`) : `Chọn một clip trên track chính. ${tip('Hoặc kéo hiệu ứng thả vào chỗ nối giữa hai clip.')}`}</div>
     <div class="slrow"><span>Thời lượng</span><input type="range" min=".1" max="1.5" step=".05" value="${c?.obj.transition?.dur ?? transDur}" data-transdur><b id="tdv">${(c?.obj.transition?.dur ?? transDur).toFixed(2)}s</b></div>
     <div class="trgrid"><button class="tr ${cur ? '' : 'on'}" data-tr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
     ${TRANS_TYPES.map(([k, l, ic]) => `<button class="tr ${cur === k ? 'on' : ''}" data-tr="${k}" draggable="true"><span class="demo t-${k}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>

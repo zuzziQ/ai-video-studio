@@ -53,7 +53,7 @@
         <span class="lbl">Bản tin sáng (đề xuất + tóm tắt) lúc</span><input id="ag-digest" type="time" value="${esc(t.digest || '')}">
         <label class="ag-tog"><input type="checkbox" id="ag-auto" ${t.autoImprove ? 'checked' : ''}><span>Tự cải tiến sau mỗi 3 phản hồi<small class="muted">Chỉnh phong cách dựng của thương hiệu theo điểm và góp ý, báo lại qua Telegram</small></span></label>
         <div class="acts ag-mt"><button data-ag="opts"><i class="ti ti-device-floppy"></i> Lưu</button></div>
-        <div class="help">Trong Telegram: gửi video (≤ 20 MB) để tự dựng · <code>/chude</code> · <code>/trangthai</code> · <code>/dexuat</code> · <code>/caitien</code> · <code>/hoso</code> · hoặc nhắn tự nhiên. Bot chỉ chạy khi Studio đang mở, hoặc chạy riêng bằng <code>node scripts/telegram.mjs run</code>.</div></div>`;
+        <div class="help">Gửi video (≤ 20 MB) vào Telegram để tự dựng. ${Studio.tip('Lệnh: /chude · /trangthai · /dexuat · /caitien · /hoso, hoặc nhắn tự nhiên. Bot chỉ chạy khi Studio đang mở, hoặc chạy riêng bằng node scripts/telegram.mjs run.')}</div></div>`;
     }
     return h;
   }
@@ -63,7 +63,7 @@
     h += st.videos.length ? st.videos.map(v => { const r = S.rate[v.file] || {}; return `<div class="ag-row ag-row--one"><div><span class="nm">${esc(v.name)}</span>${v.rated && !r.n ? '<small>đã chấm</small>' : ''}</div>
       ${stars(v.file, r.n)}${r.n ? `<div class="ag-chips" data-tk="${esc(v.file)}">${Object.entries(st.tags).map(([k, l]) => `<span data-tag="${k}" class="ui-chip ${r.tags?.includes(k) ? 'is-active' : ''}">${esc(l)}</span>`).join('')}</div>
       <textarea rows="2" data-cm="${esc(v.file)}" placeholder="Góp ý thêm (không bắt buộc)">${esc(r.comment || '')}</textarea><div class="acts"><button class="primary" data-send="${esc(v.file)}"><i class="ti ti-check"></i> Gửi phản hồi</button></div>` : ''}</div>`; }).join('')
-      : '<div class="help ag-m0">Xuất video (nút Xuất) rồi chấm ở đây. Video gửi qua Telegram được chấm ngay trong chat.</div>';
+      : `<div class="help ag-m0">Xuất video (nút Xuất) rồi chấm ở đây. ${Studio.tip('Video gửi qua Telegram được chấm ngay trong chat.')}</div>`;
     h += '</div>';
     const fb = st.feedback.slice(0, 15);
     h += `<div class="ag-card"><h4><i class="ti ti-message-star"></i> Phản hồi gần đây <span class="r">${st.feedback.length}</span></h4>${fb.map(e => `<div class="ag-row ag-row--one"><div><span class="nm">${e.rating ? '⭐'.repeat(e.rating) : '—'} ${esc(e.video ? e.video.split(/[\\/]/).pop() : e.project ? e.project.split(/[\\/]/).pop() : '')}</span>
@@ -73,7 +73,7 @@
   function sugTab() {
     const st = S.st, imp = st.improve;
     let h = `<div class="ag-card"><h4><i class="ti ti-brain"></i> Tự cải tiến <span class="r">${imp ? 'lần cuối ' + new Date(imp.at).toLocaleString('vi-VN') : 'chưa chạy'}</span></h4>
-      <div class="help ag-mt0">Đọc điểm, thẻ góp ý và lỗi AI kiểm tra → chỉnh mật độ hiệu ứng, âm lượng nhạc, kiểu phụ đề, hướng dẫn cho AI dựng giúp của từng hồ sơ kênh.</div>
+      <div class="help ag-mt0">Học từ điểm và góp ý để chỉnh hồ sơ kênh. ${Studio.tip('Đọc điểm, thẻ góp ý và lỗi AI kiểm tra, rồi chỉnh mật độ hiệu ứng, âm lượng nhạc, kiểu phụ đề, hướng dẫn cho AI dựng giúp của từng hồ sơ kênh.')}</div>
       <div class="acts"><button class="primary" data-ag="improve"><i class="ti ti-sparkles"></i> Tự cải tiến ngay</button></div>`;
     for (const p of st.profiles.filter(p => p.fb)) h += `<div class="ag-prof"><b>${esc(p.name)}</b> <span class="muted">${p.fb.n} phản hồi${p.fb.avg ? ` · TB ${p.fb.avg}★` : ''}</span><ul class="ag-notes">${(p.fb.notes || []).map(n => `<li>${esc(n)}</li>`).join('') || '<li>chưa cần chỉnh</li>'}</ul></div>`;
     if (imp?.ai?.summary) h += `<div class="help">🤖 ${esc(imp.ai.summary)}</div>`; else if (imp?.ai?.error) h += `<div class="help">AI: ${esc(imp.ai.error)}</div>`;
@@ -83,7 +83,7 @@
       <div class="acts"><button data-ag="suggest"><i class="ti ti-refresh"></i> Tìm đề xuất mới</button></div>
       ${items.map(s => `<div class="ag-sug"><b>${esc(s.title)}</b><p>${esc(s.detail || '')}</p><div class="acts">${s.action?.type && s.action.type !== 'none' ? `<button class="primary" data-act="apply" data-sid="${s.id}"><i class="ti ti-check"></i> Áp dụng</button>` : ''}<button data-act="dismiss" data-sid="${s.id}">Bỏ qua</button></div></div>`).join('')}
       ${old.map(s => `<div class="ag-sug done"><b>${esc(s.title)}</b><span class="res">${s.state === 'applied' ? '✅' : '🗑'} ${esc(s.result || '')}</span></div>`).join('')}
-      ${!items.length && !old.length ? '<div class="help">Chưa có đề xuất. Bấm "Tìm đề xuất mới" — app xem phản hồi, hàng đợi, lịch đăng và lời thoại gần đây để gợi ý việc nên làm tiếp.</div>' : ''}</div>`;
+      ${!items.length && !old.length ? `<div class="help">Chưa có đề xuất. Bấm "Tìm đề xuất mới". ${Studio.tip('App xem phản hồi, hàng đợi, lịch đăng và lời thoại gần đây để gợi ý việc nên làm tiếp.')}</div>` : ''}</div>`;
     return h;
   }
   function render() {

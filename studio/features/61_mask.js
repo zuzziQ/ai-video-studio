@@ -37,13 +37,13 @@
       h += sect('Tách nền (thay phông)', `${has ? `<div class="ok"><i class="ti ti-circle-check"></i> Đã tách nền (${esc(String(o.cutouts).split('/').slice(-2, -1)[0] || 'ảnh')})</div>` : ''}
         <div class="acts"><button data-mka="segment" class="${has ? '' : 'primary'}"><i class="ti ti-user-scan"></i> ${has ? 'Tách lại' : 'Tách nền clip này'}</button>
         <button data-mka="sticker"><i class="ti ti-sticker"></i> Tạo sticker người</button></div>
-        <div class="help">Chạy rembg (u2net_human_seg) trên máy cho đúng đoạn nguồn ${(+o.in || 0).toFixed(2)}–${(+(o.out ?? 3)).toFixed(2)}s của clip — khoảng 0,2–0,5 s/khung. Sticker lấy khung tại playhead.</div>
+        <div class="help">Tách nền trên máy cho đoạn ${(+o.in || 0).toFixed(2)}–${(+(o.out ?? 3)).toFixed(2)}s của clip. ${Studio.tip('Chạy rembg (u2net_human_seg) trên máy, khoảng 0,2–0,5 s mỗi khung. Sticker lấy khung tại playhead.')}</div>
         ${has ? `<span class="lbl">Nền phía sau người</span><div class="seg5">${BG.map(([k, l, ic]) => `<button data-mbg="${k}" class="${(b.type || '') === k ? 'on' : ''}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div>
           ${b.type === 'blur' ? rng('bgblur', b.blur ?? 26, 4, 60, 1, 'Độ mờ', 'px') : ''}
           ${b.type === 'color' ? `<span class="lbl">Màu nền</span><input type="color" data-mbgc value="${b.color || CUT_BG0}">` : ''}
           ${b.type === 'image' ? `<span class="lbl">Ảnh nền (từ Media)</span><select data-mbgi><option value="">— chọn ảnh —</option>${images().map(i => `<option value="${esc(i.path)}" ${b.src === i.path ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>
             ${images().length ? '' : '<div class="help">Chưa có ảnh trong Media — tải ảnh lên ở thư viện Media trước.</div>'}` : ''}
-          ${b.type === 'none' ? '<div class="help">Phần nền trong suốt: thấy màu nền của khung (đen) hoặc thứ nằm dưới track chính.</div>' : ''}` : ''}`, 'ti-user-scan');
+          ${b.type === 'none' ? `<div class="help">Phần nền trong suốt. ${Studio.tip('Thấy màu nền của khung (đen) hoặc thứ nằm dưới track chính.')}</div>` : ''}` : ''}`, 'ti-user-scan');
     }
     return ['mask', 'Mặt nạ', `<div id="mkpanel">${h}</div>`];
   }

@@ -76,42 +76,45 @@
     O.src.includes('aiimg') && `<b>Ảnh AI</b>: tối đa 2 ảnh / video bằng key OpenAI hoặc Gemini của bạn${META && !META.keys.aiimg ? ' — <span class="af-warn">chưa có key</span>' : ''}.`,
     O.src.includes('claude') && '<b>Claude chọn</b>: Claude xem các phương án của từng câu, chọn cái hợp nhất và viết chữ, chậm hơn 20–90 s.',
   ].filter(Boolean).join(' ');
+  // S22 M155: một dòng (thiếu key thì báo ngay), giải thích từng nguồn vào (i)
+  const srcLine = () => {
+    const h = srcHelp(), warn = [...h.matchAll(/<b>([^<]*)<\/b>[^<]*— <span class="af-warn">([^<]*)<\/span>/g)].map(m => `${m[1]}: ${m[2]}`);
+    return `${warn.length ? `<span class="af-warn">${esc(warn.join(' · '))}</span>` : 'Bấm chip để bật / tắt nguồn b-roll.'} ${h ? S.tip(h.replace(/<[^>]+>/g, '')) : ''}`;
+  };
   function render() {
     if (!META) loadMeta();
     if (!LIB) loadLib();
     const c = counts();
     $('#libbody').innerHTML = `<div class="af">${(S.CAP || []).length ? '' : S.ctaTranscribe('B-roll tự động')}
-      <section><div class="sh"><i class="ti ti-bolt"></i>Tự thêm b-roll + âm thanh</div>
-        <div class="help">Đọc lời thoại rồi chèn b-roll động, chữ nổi, emoji, ảnh của bạn đúng lúc nói; đặt SFX theo từng cảnh và chọn nhạc theo đoạn. Không che mặt người nói, bỏ qua 1,5 s đầu và thẻ kết. Chạy lại chỉ thay phần tự động — phần bạn tự thêm hoặc đã sửa được giữ.</div>
+      <section><div class="sh"><i class="ti ti-bolt"></i>Tự thêm b-roll + âm thanh${S.tip('Đọc lời thoại rồi chèn b-roll động, chữ nổi, emoji, ảnh của bạn đúng lúc nói; đặt SFX theo từng cảnh và chọn nhạc theo đoạn. Không che mặt người nói, bỏ qua 1,5 s đầu và thẻ kết.')}</div>
+        <div class="help">Chạy lại chỉ thay phần tự động; phần bạn đã sửa được giữ.</div>
         <button class="primary big" data-af="all" ${busy ? 'disabled' : ''}><i class="ti ${busy ? 'ti-loader-2 spin' : 'ti-bolt'}"></i> Tự thêm B-roll + âm thanh</button>
         <div class="row3"><button data-af="broll" ${busy ? 'disabled' : ''}><i class="ti ti-movie"></i> Chỉ B-roll</button><button data-af="sfx" ${busy ? 'disabled' : ''}><i class="ti ti-volume"></i> Chỉ âm thanh</button>
           <button data-af="clear" ${busy || !(c.scenes + c.sfx + c.music) ? 'disabled' : ''}><i class="ti ti-eraser"></i> Xoá tự động</button></div>
         <div class="stat"><span>${c.scenes} cảnh tự động${c.edited ? ` (${c.edited} đã sửa, giữ)` : ''}</span><span>${c.sfx} SFX</span><span>${c.music ? c.music + ' đoạn nhạc' : 'nhạc giữ nguyên'}</span></div>
         ${last ? `<div class="last">${last}</div>` : ''}
       </section>
-      <section><div class="sh"><i class="ti ti-target"></i>Mục tiêu video<span class="badge">${esc(goalName())}</span></div>
+      <section><div class="sh"><i class="ti ti-target"></i>Mục tiêu video${S.tip('Mục tiêu quyết định loại b-roll cho từng câu: bán hàng thiên về giá, đánh giá sao, thông báo đơn; kể chuyện thiên về cảnh thật và trích dẫn; khoá học thiên về các bước, logo công cụ…')}<span class="badge">${esc(goalName())}</span></div>
         <div class="goals">${(META?.goals || [{ id: 'auto', name: 'Tự nhận', icon: '✨' }]).map(g => `<button data-afg="${g.id}" class="${O.goal === g.id ? 'on' : ''}" title="${esc(g.desc || '')}">${g.icon} ${esc(g.name)}</button>`).join('')}</div>
-        <div class="help">Mục tiêu quyết định loại b-roll cho từng câu: bán hàng thiên về giá, đánh giá sao, thông báo đơn; kể chuyện thiên về cảnh thật và trích dẫn; khoá học thiên về các bước, logo công cụ…</div>
       </section>
       <section><div class="sh"><i class="ti ti-movie"></i>B-roll<span class="badge">mật độ</span></div>
         <div class="seg">${DENS.map(([k, l, s]) => `<button data-afd="${k}" class="${O.density === k ? 'on' : ''}">${l}<small>${s}</small></button>`).join('')}</div>
         <div class="vr"><span>Đều tay</span><input type="range" min="0" max="1" step=".1" value="${O.variety}" data-afv><span>Đa dạng</span></div>
         <div class="chips">${SRCS.map(([k, l, ic]) => `<button class="chip ${O.src.includes(k) ? 'on' : ''}" data-afs="${k}" title="${esc(META?.sources?.[k] || l)}"><i class="ti ${ic}"></i> ${l}${need(k)}</button>`).join('')}</div>
-        <div class="help">${srcHelp()}</div>
+        <div class="help">${srcLine()}</div>
       </section>
-      <section><div class="sh"><i class="ti ti-folder-heart"></i>Thư viện b-roll của tôi<span class="badge">${LIB ? LIB.length : '…'} mục</span></div>
-        <div class="help">Ảnh/clip của bạn (sản phẩm, cửa hàng, văn phòng, hậu trường…) lưu một lần, dùng cho mọi dự án. Gắn thẻ đúng nội dung; b-roll tự động chọn mục có thẻ khớp với câu đang nói.</div>
+      <section><div class="sh"><i class="ti ti-folder-heart"></i>Thư viện b-roll của tôi${S.tip('Ảnh/clip của bạn (sản phẩm, cửa hàng, văn phòng, hậu trường…) lưu một lần, dùng cho mọi dự án. B-roll tự động chọn mục có thẻ khớp với câu đang nói.')}<span class="badge">${LIB ? LIB.length : '…'} mục</span></div>
+        <div class="help">Gắn thẻ đúng nội dung để b-roll tự động chọn trúng.</div>
         <div class="row3"><button data-afu><i class="ti ti-upload"></i> Thêm ảnh/clip</button><button data-aft ${LIB?.length ? '' : 'disabled'} title="Claude xem từng ảnh và viết thẻ"><i class="ti ti-sparkles"></i> Claude gắn thẻ</button><button data-afr title="Tải lại"><i class="ti ti-refresh"></i></button></div>
         <input type="file" id="afup" accept="image/*,video/*" multiple hidden>
         ${LIB?.length ? `<div class="lib">${LIB.slice(-60).reverse().map(it => `<div class="it" title="${esc(it.tags.join(', '))}"><img src="${avsUrl(`/api/brolllib/file?f=${encodeURIComponent(it.thumb)}`)}" loading="lazy">${it.kind === 'video' ? '<span class="k">clip</span>' : ''}
           <button class="x" data-afx="${esc(it.id)}" title="Xoá khỏi thư viện">✕</button><input data-aftag="${esc(it.id)}" value="${esc(it.tags.join(', '))}" placeholder="thẻ, cách nhau dấu phẩy"></div>`).join('')}</div>` : ''}
       </section>
-      <section><div class="sh"><i class="ti ti-volume"></i>Âm thanh<span class="badge">309 SFX · 30 nhạc</span></div>
+      <section><div class="sh"><i class="ti ti-volume"></i>Âm thanh${S.tip('Giới hạn số tiếng mỗi giây, tự giảm âm lượng SFX khi đang có giọng nói. Không có nhạc riêng của bạn thì nhạc cũ được thay bằng nhạc theo đoạn.')}<span class="badge">309 SFX · 30 nhạc</span></div>
         <div class="seg">${LEVELS.map(([k, l, s]) => `<button data-afl="${k}" class="${O.level === k ? 'on' : ''}">${l}<small>${s}</small></button>`).join('')}</div>
         <label class="sw"><input type="checkbox" data-afm ${O.music ? 'checked' : ''}> Tự chọn nhạc nền theo nội dung từng đoạn (crossfade, tự hạ khi nói)</label>
         <label class="sw"><input type="checkbox" data-afai="ai_broll" ${O.ai_broll ? 'checked' : ''}> Thêm b-roll sau “AI dựng”</label>
         <label class="sw"><input type="checkbox" data-afai="ai_sfx" ${O.ai_sfx ? 'checked' : ''}> Thêm âm thanh sau “AI dựng”</label>
-        <div class="help">Giới hạn số tiếng mỗi giây, tự giảm âm lượng SFX khi đang có giọng nói. Không có nhạc riêng của bạn thì nhạc cũ được thay bằng nhạc theo đoạn.</div>
       </section></div>`;
   }
   function opts(extra = {}) {

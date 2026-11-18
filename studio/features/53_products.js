@@ -100,7 +100,7 @@
     $('#pb-new').onclick = () => { EDIT = { claims: [{ status: 'approved' }] }; render(); };
     if (!LIST) { $('#libbody').innerHTML = '<div class="help">Đang tải…</div>'; return; }
     const legacy = !cur() && (S.TL.ads?.claims?.length || S.TL.ads?.blocked?.length);
-    $('#libbody').innerHTML = `<div class="help pb-intro">Hồ sơ sản phẩm dùng chung cho mọi dự án: claim kèm bằng chứng và trạng thái duyệt, cụm từ cấm, FAQ. Dự án trỏ tới một hồ sơ thì “Kiểm tra quảng cáo” đối chiếu theo hồ sơ, không cần nhập claim lại. Lưu ở <code>~/.ai-video-studio/products/</code>.</div>
+    $('#libbody').innerHTML = `<div class="help pb-intro">Claim, bằng chứng, từ cấm dùng chung cho mọi dự án. ${S.tip('Hồ sơ gồm claim kèm bằng chứng và trạng thái duyệt, cụm từ cấm, FAQ. Dự án trỏ tới một hồ sơ thì “Kiểm tra quảng cáo” đối chiếu theo hồ sơ, không cần nhập claim lại. Lưu trên máy ở ~/.ai-video-studio/products/.')}</div>
       ${EDIT ? form() : ''}
       ${LIST.map(card).join('') || (EDIT ? '' : '<div class="help">Chưa có hồ sơ nào.</div>')}
       <div class="pb-act"><button id="pb-new2"><i class="ti ti-plus"></i> Hồ sơ mới</button>${S.assistPanel ? '<button id="pb-ainew" title="Tạo hồ sơ mới từ ảnh hoặc link sản phẩm"><i class="ti ti-sparkles"></i> Điền bằng AI</button>' : ''}${legacy ? '<button id="pb-fromproj" title="Lấy claim và cụm từ cấm đang nhập tay trong dự án này"><i class="ti ti-download"></i> Tạo từ claim của dự án</button>' : ''}</div>`;

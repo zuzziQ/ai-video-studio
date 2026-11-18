@@ -83,7 +83,7 @@
           ${field('hashtags', 'Hashtag', (d.hashtags || []).join(' '), { copyAs: 'hashtag' })}
           ${field('first_comment', 'Bình luận đầu tiên (ghim)', d.first_comment, { area: 2, copyAs: 'bình luận' })}
           <div class="acts pub-acts-xs"><button id="pub-all"><i class="ti ti-clipboard-text"></i> Chép tất cả (caption + hashtag)</button><button id="pub-save"><i class="ti ti-device-floppy"></i> Lưu chỉnh sửa</button></div>
-          <div class="help">Lưu tại <code>publish/${S.tab}.txt</code> trong thư mục dự án${S.videos.find(v => v.path === S.video && (v.src === 'kho' || v.delivered)) ? ', và bản ghép mọi nền tảng cạnh video trong Thành phẩm (<code>… - nội dung đăng.txt</code>)' : ''}.</div>`
+          <div class="help">Lưu tại <code>publish/${S.tab}.txt</code> trong thư mục dự án.${S.videos.find(v => v.path === S.video && (v.src === 'kho' || v.delivered)) ? ' ' + Studio.tip('Thêm bản ghép mọi nền tảng cạnh video trong Thành phẩm (… - nội dung đăng.txt).') : ''}</div>`
         : `<div class="ui-state ui-state--empty"><i class="ti ti-sparkles ui-state__icon"></i><div>${S.video ? 'Bấm <b>Viết nội dung bằng AI</b>: Claude đọc lời thoại và viết tiêu đề, caption, hashtag, bình luận đầu và gợi ý ảnh bìa cho từng nền tảng.' : 'Chưa có video đã xuất trong <code>out/</code> hay Thành phẩm của Kho.'}</div></div>`}
       </div><div class="pub-side">
         <div class="lbl pub-mt0">Kiểm tra cho ${esc(P[S.tab]?.name || '')}</div>

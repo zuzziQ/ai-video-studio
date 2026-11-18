@@ -130,7 +130,7 @@
       ${run.busy ? `<div class="help"><i class="ti ti-loader-2 spin"></i> ${esc(run.step || 'Đang chạy lịch…')}</div>` : ''}
       <div class="sect"><i class="ti ti-calendar-event"></i> Sắp đăng <span class="muted">${up.length}</span></div>
       ${up.length ? Object.entries(byDay).map(([d, list]) => `<div class="sc-day ${d === today ? 'today' : ''}">${d === today ? 'Hôm nay · ' : d === addDays(today, 1) ? 'Ngày mai · ' : ''}${dayLabel(d)}${d < today ? ' · quá hạn' : ''}</div>${list.map(itemRow).join('')}`).join('')
-        : '<div class="help">Chưa có lịch. Bấm <b>Xếp lịch tự động</b> để rải các video đã xuất vào khung giờ đăng, hoặc <b>Lên lịch</b> trong hộp thoại <b>Đăng</b>.</div>'}
+        : `<div class="help">Chưa có lịch. Bấm <b>Xếp lịch tự động</b>. ${Studio.tip('Xếp lịch tự động rải các video đã xuất vào khung giờ đăng. Hoặc bấm Lên lịch trong hộp thoại Đăng cho từng video.')}</div>`}
       ${old.length ? `<div class="sect sc-click" id="sc-oldt"><i class="ti ti-chevron-${S.showOld ? 'down' : 'right'}"></i> Đã xong 7 ngày qua <span class="muted">${old.length}</span></div>${S.showOld ? old.map((it, i) => `${i && vnDate(old[i - 1].when) === vnDate(it.when) ? '' : `<div class="sc-day">${dayLabel(vnDate(it.when))}</div>`}${itemRow(it)}`).join('') : ''}` : ''}
       <div class="sect"><i class="ti ti-settings"></i> Cài đặt lịch</div>
       <div class="sc-form"><label>Khung giờ đăng mặc định (giờ VN, cách nhau dấu phẩy)</label><input id="sc-slots" value="${esc(v.settings.slots.join(', '))}">
@@ -138,7 +138,7 @@
         <div class="sc-g2"><div><label>YouTube mặc định</label><select id="sc-priv">${[['public', 'Công khai'], ['unlisted', 'Không công khai'], ['private', 'Riêng tư']].map(([k, l]) => `<option value="${k}" ${v.settings.privacy === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
           <div><label>Video cho trẻ em</label><select id="sc-kids"><option value="0" ${v.settings.madeForKids ? '' : 'selected'}>Không (mặc định)</option><option value="1" ${v.settings.madeForKids ? 'selected' : ''}>Có</option></select></div></div>
         <div class="sc-acts"><button class="ui-btn ui-btn--sm" id="sc-sset"><i class="ti ti-device-floppy"></i> Lưu cài đặt</button><button class="ui-btn ui-btn--sm" id="sc-run" ${run.busy ? 'disabled' : ''} title="Bình thường Studio tự chạy mỗi phút"><i class="ti ti-player-play"></i> Chạy mục đến hạn</button></div>
-        <div class="help">Studio kiểm tra lịch mỗi phút khi đang mở (và hàng đợi Tự lái nếu có). YouTube: tải lên trước giờ đăng, YouTube tự công khai đúng giờ. Nền tảng khác: 10 phút trước có thông báo; đến giờ Studio mở trang đăng, hiện file và <b>chép sẵn caption</b> — bạn chỉ cần kéo file vào và dán.</div>
+        <div class="help">Studio kiểm tra lịch mỗi phút khi đang mở. ${Studio.tip('Kiểm tra cả hàng đợi Tự lái nếu có. YouTube: tải lên trước giờ đăng, YouTube tự công khai đúng giờ. Nền tảng khác: 10 phút trước có thông báo; đến giờ Studio mở trang đăng, hiện file và chép sẵn caption, bạn chỉ cần kéo file vào và dán.')}</div>
         ${run.last?.at ? `<div class="help">Lần chạy gần nhất ${vnTime(run.last.at)}: ${run.last.error ? `<span class="sc-err">${esc(run.last.error)}</span>` : run.last.skipped ? 'bỏ qua (tiến trình khác đang chạy)' : `nhắc ${run.last.reminded?.length || 0}, tải YouTube ${run.last.uploaded?.length || 0}, lỗi ${run.last.errors?.length || 0}`}</div>` : ''}</div>`;
     applyVars(B); bindPanel();
   }
@@ -228,7 +228,7 @@
       <label>Hashtag</label><input id="sc-ha" value="${esc((P.hashtags || []).join(' '))}" placeholder="#edit #ai">
       <div class="sc-g2"><div><label>Quyền riêng tư YouTube</label><select id="sc-pr">${[['public', 'Công khai đúng giờ'], ['unlisted', 'Không công khai'], ['private', 'Riêng tư']].map(([k, l]) => `<option value="${k}" ${(P.privacy || v.settings.privacy) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="sc-end"><button id="sc-cap" title="Lấy tiêu đề/caption/hashtag do AI viết trong hộp thoại Đăng"><i class="ti ti-sparkles"></i> Lấy caption AI</button></div></div>
-      <div class="help">${!v.youtube.connected ? '<b>YouTube chưa kết nối</b> → mục YouTube cũng chỉ được nhắc đăng tay. ' : ''}Nền tảng khác: đến giờ Studio thông báo, mở trang đăng, hiện file và chép caption vào clipboard.</div>
+      <div class="help">${!v.youtube.connected ? '<b>YouTube chưa kết nối</b>: chỉ nhắc đăng tay. ' : 'Đến giờ Studio nhắc đăng. '}${Studio.tip('Nền tảng khác YouTube: đến giờ Studio thông báo, mở trang đăng, hiện file và chép caption vào clipboard.')}</div>
       <div class="actions">${it ? `<button class="danger" id="sc-del"><i class="ti ti-trash"></i> Xoá</button><button id="sc-rv"><i class="ti ti-folder"></i></button><button id="sc-cp" title="Chép caption + hashtag"><i class="ti ti-copy"></i></button>` : ''}<span class="grow"></span>
         ${it && it.state !== 'planned' && it.state !== 'uploading' ? `<button id="sc-re"><i class="ti ti-rotate"></i> ${it.state === 'error' ? 'Thử lại' : 'Lên lịch lại'}</button>` : ''}
         <button id="sc-x">${back === 'publish' ? 'Quay lại' : 'Huỷ'}</button><button class="primary" id="sc-ok"><i class="ti ti-check"></i> ${isNew ? 'Lên lịch' : 'Lưu'}</button></div></div>`);
@@ -275,7 +275,7 @@
     S.videos = await Studio.api('/api/schedule/videos');
     const v = S.v, vids = Array.isArray(S.videos) ? S.videos : [];
     Studio.modal(`<div class="sc-form"><h3><i class="ti ti-wand"></i> Xếp lịch tự động</h3>
-      <div class="help sc-h0">Chọn các video đã xong và nền tảng — Studio rải mỗi video vào khung giờ trống kế tiếp (${esc(v.settings.slots.join(', '))} mỗi ngày), dùng caption AI của từng dự án nếu đã viết trong hộp thoại <b>Đăng</b>.</div>
+      <div class="help sc-h0">Chọn video đã xong và nền tảng để rải vào khung giờ trống. ${Studio.tip(`Mỗi video vào khung giờ trống kế tiếp (${v.settings.slots.join(', ')} mỗi ngày), dùng caption AI của từng dự án nếu đã viết trong hộp thoại Đăng.`)}</div>
       <label>Video (${vids.length})</label>
       <div class="sc-vl">${vids.map((x, i) => `<label class="sc-v"><input type="checkbox" data-scv="${i}" ${!x.scheduled.length && i < 6 ? 'checked' : ''}><img loading="lazy" src="${avsUrl(`/api/schedule/poster?file=${encodeURIComponent(x.file)}`)}">
         <div class="sc-min"><div class="nm">${esc(x.name)}</div><small>${esc(x.src || '')}${x.info ? ` · ${x.info.dur}s · ${x.info.w}×${x.info.h}` : ''}${x.hasCaptions ? ' · <i class="ti ti-sparkles"></i> có caption AI' : ' · chưa có caption AI'}${x.scheduled.length ? ' · đã lên lịch: ' + esc(x.scheduled.join(', ')) : ''}</small></div></label>`).join('') || '<div class="help sc-pad">Chưa có video nào trong <code>out/</code> hay Thành phẩm của Kho. Xuất video trước.</div>'}</div>

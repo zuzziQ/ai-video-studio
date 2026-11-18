@@ -20,7 +20,7 @@
     const cur = `<div class="help balt-cur">Đang dùng: <b>${esc(SRC[o._src] || o._src || 'b-roll')}</b> — ${esc(what(o))}${o._role ? `<br>Câu này: ${esc(ROLE[o._role] || o._role)}` : ''}</div>`;
     const list = o._alts.map((a, i) => `<button class="balt" data-balt="${i}"><i class="ti ti-switch-horizontal"></i>
       <span><b>${esc(a.label)}</b><br><small class="muted">${esc(what(a.scene))}</small></span></button>`).join('');
-    return ['alts', 'Phương án khác', S.sect('Đổi b-roll này', cur + list + '<div class="help">Bấm để thay; phương án đang dùng chuyển xuống danh sách để đổi lại được. ⌘Z để hoàn tác.</div>', 'ti-arrows-shuffle')];
+    return ['alts', 'Phương án khác', S.sect('Đổi b-roll này', cur + list + `<div class="help">Bấm để thay, ⌘Z để hoàn tác. ${Studio.tip('Phương án đang dùng chuyển xuống danh sách để đổi lại được.')}</div>`, 'ti-arrows-shuffle')];
   });
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-balt]'); if (!b) return;

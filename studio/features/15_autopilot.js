@@ -92,7 +92,7 @@
     if (!S.st) { $('#libbody').innerHTML = '<div class="help">Đang tải…</div>'; return; }
     const st = S.st;
     $('#libbody').innerHTML = `
-    <div class="help ap-t1">Thả video thô → Studio tự làm hết: phụ đề, cắt lỗi nói, AI dựng, b-roll, SFX + nhạc, xuất MP4, ảnh bìa, nội dung đăng. Chạy nền, bạn vẫn sửa video khác được.</div>
+    <div class="help ap-t1">Thả video thô, Studio tự làm tới MP4 và nội dung đăng. ${Studio.tip('Tự làm hết: phụ đề, cắt lỗi nói, AI dựng, b-roll, SFX + nhạc, xuất MP4, ảnh bìa, nội dung đăng. Chạy nền, bạn vẫn sửa video khác được.')}</div>
     <div class="ap-drop" id="ap-drop"><i class="ti ti-rocket big"></i><b>Thả video vào đây để tự dựng</b><small>mp4 · mov · m4v · mkv — có thể thả nhiều file</small>
       <input type="file" id="ap-file" accept="video/*,.mov,.mkv,.m4v" multiple hidden></div>
     <div id="ap-upl"></div>
@@ -138,9 +138,8 @@
       <select id="ap-brand">${opt('__none', 'Không thương hiệu · Kho Chung', S.brand)}${PREP.brands.map(b => opt(b.id, name(b), S.brand)).join('')}</select>
       <label class="ap-lbl">Sản phẩm (không bắt buộc)</label>
       <select id="ap-product">${opt('', '— Không gắn sản phẩm —', S.product)}${PREP.products.map(p => opt(p.id, p.name || p.id, S.product)).join('')}</select>
-      <div class="help ap-mt">${kit ? `Logo, màu, CTA của <b>${esc(name(kit))}</b>; dự án và thành phẩm vào Kho của thương hiệu này.`
-        : '<i class="ti ti-info-circle ap-warn"></i> Đang chạy không thương hiệu: video không có logo, màu, lời kết riêng; dự án và thành phẩm vào Kho Chung.'}
-        ${S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''}
+      <div class="help ap-mt">${kit ? `Logo, màu, CTA của <b>${esc(name(kit))}</b>. ${Studio.tip('Dự án và thành phẩm vào Kho của thương hiệu này.' + (S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''))}`
+        : `<i class="ti ti-info-circle ap-warn"></i> Không thương hiệu: không logo, màu, lời kết riêng. ${Studio.tip('Dự án và thành phẩm vào Kho Chung.' + (S.product ? ' Gắn sản phẩm bật kiểm tra quảng cáo (claim, chính sách) ở bước QC.' : ''))}`}
         ${PREP.brands.length ? '' : ' Chưa có thương hiệu: tạo ở bước <b>Chuẩn bị</b>.'}</div>${offKho(kit, name)}
       ${sty ? `<div class="help ap-mt"><i class="ti ti-adjustments"></i> Phong cách dựng ${kit ? `của <b>${esc(name(kit))}</b>` : '<b>Chung</b>'}${sty.saved || !kit ? '' : ' (đang theo Chung)'}:
         ${esc(Studio.brandStyle?.summary ? Studio.brandStyle.summary(sty) : ['b-roll ' + sty.broll_density, 'âm thanh ' + sty.sound].join(' · '))}${(sty.habits || []).some(h => !h.off) ? ` · áp ${(sty.habits || []).filter(h => !h.off).length} thói quen đã học` : sty.learn ? ` · đang học từ ${sty.learnedN || 0} video` : ''}.

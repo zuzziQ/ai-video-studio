@@ -111,8 +111,7 @@
     $('#libact').innerHTML = `<button class="icon" id="bk-new" title="Thương hiệu mới"><i class="ti ti-plus"></i></button>`;
     $('#bk-new').onclick = () => { EDIT = { ...DEF }; render(); };
     if (!LIST) { $('#libbody').innerHTML = '<div class="help">Đang tải…</div>'; return; }
-    $('#libbody').innerHTML = `<div class="help bk-intro">Lưu nhiều bộ nhận diện (màu, font, logo, liên hệ) dùng lại cho mọi dự án và cho <b>Làm hàng loạt</b>. Lưu ở <code>~/.ai-video-studio/brands.json</code>.
-        Mỗi thương hiệu có một <b>Phong cách dựng</b> (Tự lái, AI dựng dùng) và <b>Điều đã học</b> từ những lần bạn sửa video.</div>
+    $('#libbody').innerHTML = `<div class="help bk-intro">Màu, font, logo, liên hệ dùng lại cho mọi dự án. ${Studio.tip('Lưu nhiều bộ nhận diện, dùng cho mọi dự án và cho Làm hàng loạt. Mỗi thương hiệu có một Phong cách dựng (Tự lái, AI dựng dùng) và Điều đã học từ những lần bạn sửa video. Lưu trên máy ở ~/.ai-video-studio/brands.json.')}</div>
       ${EDIT ? form() : ''}${migNote()}${chungCard()}
       ${LIST.map(card).join('') || (EDIT ? '' : '<div class="help">Chưa có thương hiệu nào.</div>')}
       <div class="acts"><button id="bk-new2"><i class="ti ti-plus"></i> Thương hiệu mới</button><button id="bk-fromproj" title="Lấy màu, tên, liên hệ đang đặt trong dự án này"><i class="ti ti-download"></i> Lưu từ dự án này</button></div>`;
@@ -244,8 +243,8 @@
       ['kho', songs.length ? `Nhạc của thương hiệu: mỗi video một bài trong Kho › Nhac (${songs.length} bài)` : 'Nhạc của thương hiệu (Kho › Nhac chưa có bài)'],
       ...songs.map(it => ['kho:' + it.rel, '♪ ' + it.name]), ...MUS.slice(2).map(m => [m, 'Mẫu: ' + m])];
     if (d.music && !musOpts.some(o => o[0] === d.music)) musOpts.push([d.music, String(d.music).startsWith('kho:') ? '♪ ' + d.music.slice(4) + ' (không còn trong Kho)' : d.music]);
-    Studio.modal(`<h3><i class="ti ti-adjustments"></i> Phong cách dựng · ${esc(d.name)}</h3>
-      <div class="help">Tự lái, AI dựng và Telegram dùng các cài đặt này cho video ${id === 'chung' ? 'không gắn thương hiệu' : `của ${esc(d.name)}`}.${d.saved || id === 'chung' ? '' : ' Chưa lưu riêng: đang theo Chung.'}</div>
+    Studio.modal(`<h3><i class="ti ti-adjustments"></i> Phong cách dựng · ${esc(d.name)}${Studio.tip(`Tự lái, AI dựng và Telegram dùng các cài đặt này cho video ${id === 'chung' ? 'không gắn thương hiệu' : `của ${d.name}`}.`)}</h3>
+      ${d.saved || id === 'chung' ? '' : '<div class="help">Chưa lưu riêng: đang theo Chung.</div>'}
       <div class="bk-sform">
       <div><label>Gói style</label>${sel('pf-pack', [['auto', 'AI chọn'], ...pk.map(x => [x.id, (x.icon || '') + ' ' + x.name]), ...(pk.some(x => x.id === d.pack) || d.pack === 'auto' ? [] : [[d.pack, d.pack]])], d.pack)}</div>
       <div><label>Mẫu (thay cho AI dựng)</label>${sel('pf-tpl', [['', '— AI dựng giúp —'], ...(Array.isArray(TPLS) ? TPLS : []).map(t => [t.id, t.name || t.id])], d.template)}</div>

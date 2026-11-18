@@ -32,7 +32,7 @@
       ${S.sect('Chạy', `<div class="row"><div><span class="lbl">Tốc độ</span>${num('speed', o.speed, .05, '1')}</div><div><span class="lbl">Bắt đầu từ giây</span>${num('offset', o.offset, .1, '0')}</div></div>
         <div class="row"><div><span class="lbl">Mờ vào/ra (s)</span>${num('fade', o.fade, .05, '0.2')}</div><div><span class="lbl">Lặp lại</span><select data-hk="loop"><option value="">Không</option><option value="1" ${o.loop ? 'selected' : ''}>Có</option></select></div></div>
         ${b.layer === 'full' ? `<span class="lbl">Khung</span><select data-hk="fit"><option value="contain" ${o.fit !== 'cover' ? 'selected' : ''}>Vừa khung (giữ trọn khối)</option><option value="cover" ${o.fit === 'cover' ? 'selected' : ''}>Lấp đầy (cắt mép)</option></select>` : ''}
-        <div class="help">Khối dài ${b.dur}s, ${b.w}×${b.h}, ${b.layer === 'full' ? 'phủ kín khung' : 'nền trong suốt'}. Kéo trên khung hình để dời, tab Vị trí để đổi cỡ.</div>
+        <div class="help">Khối dài ${b.dur}s, ${b.w}×${b.h}, ${b.layer === 'full' ? 'phủ kín khung' : 'nền trong suốt'}. ${S.tip('Kéo trên khung hình để dời, tab Vị trí để đổi cỡ.')}</div>
         <div class="acts"><button data-hact="reset"><i class="ti ti-restore"></i> Về mặc định</button></div>`, 'ti-player-play')}
       <div class="help">Nguồn: HyperFrames của HeyGen (Apache-2.0) · ${esc(b.title)}</div></div>`;
     return ['hf', 'Khối', html];
