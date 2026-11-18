@@ -11,6 +11,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { KHO_DIRS, kindOf, inWorkspace, listWorkspace, workspaceOfProject } from './workspace.mjs';
 import { retryBusy, withFileLock } from './file_lock.mjs';
+import { rmSync } from './fs_rm.mjs';
 import { credit as writeCredit } from './ai_broll.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -111,18 +112,18 @@ const ff = (args, run) => (run ? run('ffmpeg', args) : new Promise((ok, no) => e
 // Tách vào thư mục tạm rồi đổi tên: ffmpeg bị ngắt giữa chừng không để lại <tên>_frames dở (bị coi là đủ mãi).
 export async function expandVideo(src, fr, { run } = {}) {
   const work = `${fr}.${process.pid}.tmp`;
-  fs.rmSync(work, { recursive: true, force: true }); fs.mkdirSync(work, { recursive: true });
+  rmSync(work, { recursive: true, force: true }); fs.mkdirSync(work, { recursive: true });
   try {
     await ff(['-v', 'error', '-y', '-i', src, '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease', '-q:v', '3', path.join(work, '%05d.jpg')], run);
     const tmp = path.join(work, '.audio.tmp.m4a');
     try { await ff(['-v', 'error', '-y', '-i', src, '-map', '0:a:0?', '-vn', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', tmp], run); } catch {}
-    if (fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, path.join(work, 'audio.m4a')); else fs.rmSync(tmp, { force: true });
+    if (fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, path.join(work, 'audio.m4a')); else rmSync(tmp, { force: true });
     // tiến trình khác (route / job auto_broll) tách xong trước: giữ bản của nó, bỏ bản này
     const done = () => { try { return fs.readdirSync(fr).some(f => f.endsWith('.jpg')); } catch { return false; } };
     // đổi tên trước; chỉ xoá <tên>_frames khi nó không có khung nào (không bao giờ xoá bản đầy đủ của tiến trình khác)
-    const put = () => { try { fs.renameSync(work, fr); return true; } catch (e) { if (done()) return false; if (!fs.existsSync(fr)) throw e; fs.rmSync(fr, { recursive: true, force: true }); retryBusy(() => fs.renameSync(work, fr)); return true; } };
-    if (done() || !put()) fs.rmSync(work, { recursive: true, force: true });
-  } catch (e) { fs.rmSync(work, { recursive: true, force: true }); throw e; }
+    const put = () => { try { fs.renameSync(work, fr); return true; } catch (e) { if (done()) return false; if (!fs.existsSync(fr)) throw e; rmSync(fr, { recursive: true, force: true }); retryBusy(() => fs.renameSync(work, fr)); return true; } };
+    if (done() || !put()) rmSync(work, { recursive: true, force: true });
+  } catch (e) { rmSync(work, { recursive: true, force: true }); throw e; }
 }
 
 const addCredit = (dir, rec) => writeCredit(path.join(dir, 'media'), rec); // một bản ghi cho mỗi file kho_* (có khoá, ghi file mới)
@@ -163,7 +164,7 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
     const tmps = typeof old === 'string' ? fs.readdirSync(md).filter(f => f.startsWith(old + '.') && f.endsWith('.tmp')) : [];
     const live = tmps.filter(f => { const pid = +f.slice(old.length + 1, -4); return Number.isInteger(pid) && pid > 0 && alive(pid); });
     if (live.length) throw bad('File này đang được đưa vào dự án, thử lại sau ít giây', 409);
-    for (const f of tmps) fs.rmSync(path.join(md, f), { force: true });
+    for (const f of tmps) rmSync(path.join(md, f), { force: true });
     delete map[relN];
     name = mediaName(md, src, new Set(Object.values(map)));
     try { if (copy) throw Object.assign(new Error('copy'), { code: 'EXDEV' }); fs.linkSync(src, path.join(md, name)); linked = 'link'; }
@@ -185,14 +186,14 @@ async function useOnce(dir, ws, rel, { run, credit = 'Kho', maxDur = 0, why = 'b
   // Lỗi ở tiến trình này: chỉ dọn khi chưa tiến trình nào tách xong khung (bản đầy đủ của tiến trình khác thì giữ, kể cả dst + sổ)
   const undo = () => {
     if (framesDone()) return false;
-    fs.rmSync(fr, { recursive: true, force: true }); fs.rmSync(dst, { force: true });
+    rmSync(fr, { recursive: true, force: true }); rmSync(dst, { force: true });
     withFileLock(lock, () => { const m = readMap(dir); if (m[relN] === name) { delete m[relN]; writeJson(mapFile(dir), { version: 1, items: m }); } });
     return true;
   };
   if (linked === 'copy') {
     const tmp = `${dst}.${process.pid}.tmp`;
     try { await fs.promises.copyFile(src, tmp); retryBusy(() => fs.renameSync(tmp, dst)); } // tmp là chỗ giữ của chính tiến trình này
-    catch (e) { fs.rmSync(tmp, { force: true }); undo(); throw bad('Không chép được file từ Kho: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
+    catch (e) { rmSync(tmp, { force: true }); undo(); throw bad('Không chép được file từ Kho: ' + String(e.message || e).split('\n')[0].slice(0, 200), 500); }
   }
   try {
     if (kindOf(name) === 'video') { await expandVideo(dst, fr, { run }); if (!mediaItem(dir, name).seq?.count) throw Object.assign(new Error('Video không có hình để chèn'), { status: 400 }); }

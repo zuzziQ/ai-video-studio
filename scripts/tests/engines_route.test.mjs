@@ -13,12 +13,16 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '../..');
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-engines-'));
 process.env.AVS_HOME = HOME;
+// thư mục tạm riêng: route nhái giọng ghi avs-clone-* vào os.tmpdir(); test khác chạy song song (project_clone, qa_inputs)
+// cũng tạo avs-clone-* ở thư mục tạm chung, nên kiểm "không để lại file tạm" phải nhìn thư mục của riêng test này
+const TMPD = path.join(HOME, 'tmp'); fs.mkdirSync(TMPD); for (const k of ['TMPDIR', 'TEMP', 'TMP']) process.env[k] = TMPD;
 process.env.CLAUDE_BIN = path.join(HERE, 'fixtures/fake_claude.mjs');
 for (const k of ['AVS_LLM_TEXT', 'AVS_LLM_FALLBACK', 'OLLAMA_HOST', 'AVS_OLLAMA_MODEL', 'AVS_VIENEU_URL']) delete process.env[k];
 const CONF = path.join(HOME, 'config.json');
 const SECRET = 'sk-THIS-IS-A-SECRET-KEY-1234', VPY = path.join(HOME, 'vieneu', 'python-secret-path.exe');
 const setConf = c => fs.writeFileSync(CONF, JSON.stringify(c));
 const conf = () => JSON.parse(fs.readFileSync(CONF, 'utf8'));
+const clonesLeft = () => fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('avs-clone-'));
 
 // fake Ollama + fake VieNeu on one loopback server
 const VOICES = [{ name: 'Hải Đăng', gender: 'nam', region: 'Bắc', kind: 'preset' }, { name: 'Trúc Ly', gender: 'nữ', region: 'Nam', kind: 'preset' }];
@@ -188,7 +192,7 @@ test('nhái giọng: chặn khi thiếu xác nhận, tên lạ, định dạng l
   r = await upload({ name: 'A', consent: '1', ext: 'wav' }, w);
   assert.equal(r.status, 409); assert.match(r.j.error, /chưa chạy/);
   assert.equal(CLONE_BODIES.length, n);
-  assert.deepEqual(fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('avs-clone-')), [], 'không để lại file tạm');
+  assert.deepEqual(clonesLeft(), [], 'không để lại file tạm');
 });
 
 test('nhái giọng: Content-Length > 50 MB → 413 ngay; huỷ giữa chừng → nhả khoá, xoá file tạm', async () => {
@@ -203,8 +207,9 @@ test('nhái giọng: Content-Length > 50 MB → 413 ngay; huỷ giữa chừng �
   });
   assert.equal((await raw(51 * 1024 * 1024, Buffer.alloc(0))).status, 413);
   assert.equal((await raw(10 * 1024 * 1024, Buffer.alloc(64 * 1024), true)).status, 'aborted'); // gửi 64 KB rồi huỷ
-  await new Promise(r => setTimeout(r, 200));
-  assert.deepEqual(fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('avs-clone-')), [], 'file tạm của bản huỷ đã xoá');
+  // server nhả khoá + xoá file tạm khi nó thấy request bị huỷ (sau phía client): chờ điều kiện đó, không ngủ cố định
+  for (const t0 = Date.now(); clonesLeft().length && Date.now() - t0 < 5000;) await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(clonesLeft(), [], 'file tạm của bản huỷ đã xoá');
   setConf({ tts: { vieneu: { url: DEAD } } });
   const r = await upload({ name: 'A', consent: '1', ext: 'wav' }, wavBuf(4));
   assert.equal(r.status, 409); assert.match(r.j.error, /chưa chạy/, 'khoá busy đã nhả (không còn "Đang tạo một giọng nhái khác")');

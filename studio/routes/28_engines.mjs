@@ -17,6 +17,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 
 const MODEL_RE = /^[\w.:/-]{1,100}$/;
 const VOICE_NAME_RE = /^[\p{L}\p{N}_][\p{L}\p{N}_ .-]{0,39}$/u; // khớp NAME_RE của vieneu_server.py
@@ -163,7 +164,7 @@ export default ctx => {
         res.end(wav);
       } finally {
         busy.preview = false;
-        for (const f of [out, out.replace(/\.wav$/, '') + '.wav']) fs.rmSync(f, { force: true });
+        for (const f of [out, out.replace(/\.wav$/, '') + '.wav']) rmSync(f, { force: true });
       }
       return true;
     }
@@ -195,7 +196,7 @@ export default ctx => {
         // tts.py: mã 12 = mẫu không dùng được (không phải âm thanh, không có tiếng nói…), 13 = trùng tên; khác (kể cả 2 của argparse) = lỗi
         if (r.code || !info) throw bad(lastLine(r.err) || 'Không tạo được giọng nhái', r.code === 12 ? 400 : r.code === 13 ? 409 : 502);
         ctx.json(res, { ok: true, ...info, vieneu: await vieneuStatus() });
-      } finally { busy.clone = false; fs.rmSync(tmp, { force: true }); }
+      } finally { busy.clone = false; rmSync(tmp, { force: true }); }
       return true;
     }
     if (p === '/api/engines/voice/rm') {

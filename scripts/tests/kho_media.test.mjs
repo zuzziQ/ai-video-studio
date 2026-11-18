@@ -117,12 +117,12 @@ test('junction/symlink trong Kho trỏ ra ngoài: không lấy được file qua
   try { fs.symlinkSync(OUT, j, process.platform === 'win32' ? 'junction' : 'dir'); } catch { return t.skip('không tạo được junction'); }
   await assert.rejects(K.useFromKho(PROJ, ws, 'BRoll/ngoai/bi-mat.jpg'), e => e.status === 400);
   assert.ok(!K.khoItems(PROJ, ws).some(x => x.rel.includes('bi-mat')));
-  fs.rmSync(j, { recursive: false, force: true });
+  fs.unlinkSync(j); // chỉ gỡ liên kết (junction: fs.rmSync báo EISDIR trên Windows)
   // junction trong Kho trỏ vào Du an/ (vẫn trong Kho) cũng bị chặn theo đường dẫn thật
   const j2 = path.join(KHO, 'Anh', 'vao-du-an');
   fs.symlinkSync(path.join(KHO, 'Du an'), j2, process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(K.useFromKho(PROJ, ws, 'Anh/vao-du-an/clip 1/media/x.jpg'), e => e.status === 400);
-  fs.rmSync(j2, { recursive: false, force: true });
+  fs.unlinkSync(j2);
   // "~" ở thư mục cấp dưới là tên hợp lệ
   put('Anh/ca~phe.jpg', 'ok');
   assert.equal((await K.useFromKho(PROJ, ws, 'Anh/ca~phe.jpg')).kind, 'image');

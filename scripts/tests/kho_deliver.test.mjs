@@ -21,6 +21,7 @@ const K = await import('../kho_deliver.mjs');
 const { runJob } = await import('../batch.mjs');
 const { deliverVariants } = await import('../variants.mjs');
 const A = await import('../ads_pack.mjs');
+const { rmSync } = await import('../fs_rm.mjs');
 
 const DATE = new Date(2026, 10, 16), MONTH = '2026-11';
 const W = (f, s = 'x') => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, typeof s === 'string' ? s : JSON.stringify(s)); return f; };
@@ -43,7 +44,7 @@ test('Xuất tại máy: bản gốc + khổ phụ vào Thanh pham/<tháng>/ tê
   assert.equal(K.deliveredOf(d, 'out/Nhà Đẹp_20261116-1010.mp4'), r.items[0].dst);
   assert.equal(K.deliveredOf(d, 'out/khong-co.mp4'), null);
   // render lại cùng tên: xoá rồi ghi file mới → bản đã giao giữ nội dung cũ
-  fs.rmSync(main); W(main, 'moi');
+  rmSync(main); W(main, 'moi'); // fs.rmSync không xoá đường dẫn có dấu trên Windows (Node 24), xem scripts/fs_rm.mjs
   assert.equal(fs.readFileSync(r.items[0].dst, 'utf8'), 'v916');
 });
 
