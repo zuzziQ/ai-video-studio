@@ -241,7 +241,7 @@
   // inspector "không chọn gì" (projectPanel của studio.js) vừa vẽ lại: thêm khối bước, gom phần cũ vào mục thu gọn
   function wrap() {
     const insp = $('#insp');
-    if (!insp || S.sel || !S.TL || insp.querySelector(':scope > .ns') || !insp.querySelector(':scope > .ihead[data-proj]')) return;
+    if (!insp || (S.right?.tab ? S.right.tab !== 'project' : S.sel) || !S.TL || insp.querySelector(':scope > .ns') || !insp.querySelector(':scope > .ihead[data-proj]')) return;
     const box = document.createElement('div'); box.className = 'ns';
     box.innerHTML = `<div data-ns="top" class="ns-step">${html()}</div>
       <details class="ns-more"${store.get('nsMore', '') === '1' ? ' open' : ''}><summary><i class="ti ti-settings"></i>Cài đặt dự án<i class="ti ti-chevron-right"></i></summary></details>`;
@@ -298,7 +298,7 @@
 
   // đổi bước bên trái (01_workflow.js lọc thanh trái trước hook này) → vẽ lại cột phải theo bước mới
   let lastStep = null;
-  (S._rail || []).push(() => { const st = S.workflow?.step; if (st !== lastStep) { lastStep = st; view = null; if (S.TL && !S.sel && S.renderInspector) S.renderInspector(); else paint(); refresh(); } }); // vẽ lại cả Cài đặt dự án (thương hiệu vừa áp ở bước ①)
+  (S._rail || []).push(() => { const st = S.workflow?.step; if (st !== lastStep) { lastStep = st; view = null; if (S.TL && (S.right?.tab ? S.right.tab === 'project' : !S.sel) && S.renderInspector) S.renderInspector(); else paint(); refresh(); } }); // vẽ lại cả Cài đặt dự án (thương hiệu vừa áp ở bước ①)
   window.addEventListener('focus', () => refresh());
   S.onReady(() => { wrap(); refresh(true); });
   S.nextStep = { refresh: () => refresh(true), state, scores, paint, steps: ORDER, guardExport, editBrand };
