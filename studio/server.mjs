@@ -124,6 +124,8 @@ function writeNotes(tl, captions) {
   });
   captions.forEach((c, k) => c.note && out.push(`- captions[${k}] "${c.words.map(w => w.w).join(' ')}" ${fmt(c.t0)}: ${c.note}`));
   (tl.audio?.sfx || []).forEach((x, k) => x.note && out.push(`- audio.sfx[${k}] ${x.name} @${fmt(x.t)}: ${x.note}`));
+  // S21 M150: ghim chung trên khung (không gắn element): toạ độ px thiết kế
+  (Array.isArray(tl.pins) ? tl.pins : []).forEach((p, k) => p?.text && out.push(`- pins[${k}] cả video @${fmt(p.t)} (x ${Math.round(p.x)}, y ${Math.round(p.y)})${p.done ? ' [đã làm]' : ''}: ${p.text}`));
   const f = P('.studio/notes.md');
   if (out.length) fs.writeFileSync(f, `# Ghi chú cho Claude (từ AI Video Studio)\nDự án: ${cur().dir}\nCập nhật: ${new Date().toLocaleString('vi-VN')}\n\n${out.join('\n')}\n`);
   else if (fs.existsSync(f)) fs.unlinkSync(f);

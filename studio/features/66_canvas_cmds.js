@@ -79,7 +79,7 @@
       case 'split': return S.splitAtPlayhead();
       case 'edit': return S.startInlineEdit(c);
       case 'hide': S.touch(o); o.hidden = !o.hidden || undefined; return S.changed(true);
-      case 'reset': { if (!o._orig) return; S.pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note' && k !== 'locked') delete o[k]; Object.assign(o, orig); return S.changed(true); }
+      case 'reset': { if (!o._orig) return; S.pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note' && k !== 'note_at' && k !== 'locked') delete o[k]; Object.assign(o, orig); return S.changed(true); }
       case 'note': return focusNote();
       case 'seek': return S.setTime(c.t0);
       case 'more': { const r = el.getBoundingClientRect(); return openMenu(r.left, r.bottom + 4); }
