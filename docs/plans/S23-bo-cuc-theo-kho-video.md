@@ -41,7 +41,7 @@ trúc riêng, mỗi vùng một vai:
 |---|---|---|
 | Thanh trái | Thanh icon; bấm thì Media / Mẫu… mở thành ngăn trượt đè lên, tự đóng khi thả / chèn | Thanh icon + panel, gấp bằng `[` |
 | Cột phải | Cột Claude (video dọc) / ẩn (video ngang, Claude dưới khung) | Thuộc tính · Lớp · Dự án, gấp bằng `]` |
-| Nút phát | Dòng mảnh dưới khung | Video dọc: cột dọc cạnh khung; ngang: như nay |
+| Nút phát | Dòng mảnh dưới khung | Dòng dưới khung (chủ repo chốt 2026-11-18: không xếp dọc cạnh khung, khó hiểu với người dựng) |
 | Hỏi Claude | Video dọc: cột cạnh khung; ngang: dòng dưới khung | Một dòng, mở rộng khi gõ / có kết quả |
 | Timeline | Dải tua (mặc định) | Đầy đủ (mặc định), gọn khi cần |
 | Điểm | Vòng điểm trên thanh bước + hover | Như Cơ bản |
@@ -93,7 +93,7 @@ Ngoài đợt (cần chủ repo hoặc máy khác): `M14` video quảng cáo th�
 | `M162` | Dải tua 40 px: ảnh nhỏ theo thời gian, playhead, vạch cắt / cảnh, kéo để tua, bấm đúp mở mức gọn | mới `studio/features/77_scrub.js`, khối CSS riêng | `#tl` đầy đủ |
 | `M163` | Hỏi Claude cạnh khung khi video dọc: `75_ask.js` hai dạng (cột / dòng) theo `Studio.layout`; cột gộp gợi ý, kết quả, ô đề xuất của `Studio.review`; Cơ bản chọn element thì mục chính + Núm trong cột | `75_ask.js`, `74_review.js`, khối CSS riêng | `75_ask.core.js` (giữ hợp đồng việc) |
 | `M164` | Điểm lên thanh bước: vòng điểm từng bước, hover popover mục chưa đạt + vì sao + điểm mất, bấm mục → `Studio.ask` / chỗ sửa; tab Dự án bỏ chip + thanh, giữ danh sách việc | `01_workflow.js` (`renderTabs`), `03_nextstep.js`, `02_score.core.js` (chỉ thêm hàm đọc) | `studio/studio.js` |
-| `M165` | Hai cột theo chế độ: Cơ bản thanh trái mở ngăn trượt tự đóng; Chuyên nghiệp `[` / `]` gấp hai cột; nút phát dọc cạnh khung video dọc; dòng chữ panel hẹp | `01_workflow.js` (phần thanh trái), `library.js`, `studio.css` khối cột | `renderTabs` (của `M164`) |
+| `M165` | Hai cột theo chế độ: Cơ bản thanh trái mở ngăn trượt tự đóng; Chuyên nghiệp `[` / `]` gấp hai cột; ~~nút phát dọc cạnh khung video dọc~~ (bỏ, chốt 2026-11-18); dòng chữ panel hẹp | `01_workflow.js` (phần thanh trái), `library.js`, `studio.css` khối cột | `renderTabs` (của `M164`) |
 | `M166` | Nghiệm thu: đo `responsive-layout` 1024 / 1440 / 1920 × 9:16 / 1:1 / 16:9 × 2 chế độ, các mục "chưa thử" ở bảng mục 3, cập nhật `references/studio.md` + `DESIGN.md` | test `s23_layout_matrix`, tài liệu | mã tính năng (chỉ sửa lỗi tìm thấy) |
 
 Mỗi mục một PR, test riêng `scripts/tests/s23_<mục>.test.mjs` cho lõi thuần. Không mục nào sửa `studio/server.mjs`,

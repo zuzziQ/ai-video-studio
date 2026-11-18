@@ -1,7 +1,7 @@
 // S23 M161: lõi thuần của bố cục Studio (docs/plans/S23-bo-cuc-theo-kho-video.md mục 2, 4; C29, C31).
 // Vào: tỉ lệ khung (rộng / cao của video), chế độ basic|pro, bề rộng cửa sổ, kiểu ghim (auto|side|bottom), mức timeline đã nhớ.
 // Ra: vùng của từng phần — askPos side|bottom (Hỏi Claude cạnh / dưới khung), tl strip|compact|full, lib panel|flyout|none,
-// right panel|claude|none, controls row|column. 76_layout.js gắn kết quả lên body (data-ask, data-tl, …) và đặt --tlh;
+// right panel|claude|none, controls row (luôn dòng dưới khung từ M165). 76_layout.js gắn kết quả lên body (data-ask, data-tl, …) và đặt --tlh;
 // M162 (dải tua), M163 (Claude cạnh khung), M165 (hai cột) đọc qua Studio.layout. Không DOM: chạy trong trình duyệt
 // (window.LayoutCore) và Node (scripts/tests/s23_layout.test.mjs).
 'use strict';
@@ -34,17 +34,26 @@
     return Number.isFinite(r) && r > 0 && r < SIDE_RATIO ? 'side' : 'bottom';
   }
 
-  // o: { ratio, mode, width, pin, tl (mức đã nhớ của tlKey), focus (nút ⤢: ẩn hai cột) }
+  // o: { ratio, mode, width, pin, tl (mức đã nhớ của tlKey), focus (nút ⤢: ẩn hai cột),
+  //      foldLib / foldRight (M165: Chuyên nghiệp gấp thư viện bằng phím [, cột phải bằng ]; Cơ bản bỏ qua) }
   function compute(o = {}) {
     const mode = normMode(o.mode), narrow = isNarrow(o.width), pin = normPin(o.pin), focus = !!o.focus;
+    const foldLib = mode === 'pro' && !!o.foldLib, foldRight = mode === 'pro' && !!o.foldRight;
     const ask = askPos(o.ratio, o.width, pin);
     const tl = normTl(o.tl) || defaultTl(mode, narrow);
-    let lib = mode === 'basic' ? 'flyout' : 'panel';
-    let right = mode === 'pro' ? 'panel' : ask === 'side' ? 'claude' : 'none';
+    let lib = mode === 'basic' ? 'flyout' : foldLib ? 'none' : 'panel';
+    let right = mode === 'pro' ? (foldRight ? 'none' : 'panel') : ask === 'side' ? 'claude' : 'none';
     if (focus) { lib = 'none'; if (right === 'panel') right = 'none'; }
-    const controls = mode === 'pro' && ask === 'side' ? 'column' : 'row';
-    return { mode, narrow, pin, focus, askPos: ask, tl, lib, right, controls };
+    const controls = 'row'; // M165: chủ repo chốt 2026-11-18 nút phát luôn một dòng dưới khung (cột dọc khó hiểu với người dựng)
+    return { mode, narrow, pin, focus, foldLib, foldRight, askPos: ask, tl, lib, right, controls };
   }
+
+  // M165, phím [ / ]: đảo trạng thái gấp của một cột. st = { foldLib, foldRight }; which 'lib' | 'right'.
+  const toggleFold = (st, which) => (which === 'lib' ? { ...st, foldLib: !st?.foldLib } : which === 'right' ? { ...st, foldRight: !st?.foldRight } : { ...st });
+  // Phím trần [ / ] (không ⌘ / Ctrl / ⌥: mod+[ ] là đưa lớp xuống / lên, 67_keys.core.js) → cột cần gấp. k = { code, key, mod, alt }.
+  const foldKey = k => (k.mod || k.alt ? null : k.code === 'BracketLeft' || k.key === '[' ? 'lib' : k.code === 'BracketRight' || k.key === ']' ? 'right' : null);
+  // Ngăn trượt thư viện ở Cơ bản: bấm một nút thanh trái → mở (đang đóng, hoặc đổi panel) / đóng (bấm lại đúng panel đang mở).
+  const flyoutClick = (open, wasCur) => !(open && wasCur);
 
   const maxFull = innerH => Math.max(FULL.min, (+innerH || 900) - FULL.keep);
   const clampFull = (h, innerH) => Math.round(Math.min(maxFull(innerH), Math.max(FULL.min, +h || FULL.def)));
@@ -64,7 +73,7 @@
   const cycle = (tl, back = false) => TLS[(TLS.indexOf(normTl(tl) || 'full') + (back ? TLS.length - 1 : 1)) % TLS.length];
 
   const T = { SIDE_RATIO, NARROW, TLS, PINS, MODES, TL_H, FULL, PIN_LABEL, TL_LABEL, normMode, normPin, normTl, isNarrow,
-    defaultTl, tlKey, askPos, compute, tlHeight, clampFull, maxFull, snap, cycle };
+    defaultTl, tlKey, askPos, compute, toggleFold, foldKey, flyoutClick, tlHeight, clampFull, maxFull, snap, cycle };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.LayoutCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);
