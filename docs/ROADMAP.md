@@ -304,6 +304,17 @@ Lập 2026-11-18, kế hoạch `docs/plans/S23-bo-cuc-theo-kho-video.md` (đo St
 
 `S23` gần xong 2026-11-18: `M157`–`M165` `[x]`, `M166` `[~]` (nghiệm thu bố cục đạt; còn AI dựng / Tự lái thật với nhạc thương hiệu cần chủ repo chạy). Lỗi tìm thấy khi nghiệm thu thành `M167`–`M169`.
 
+### **`S24`** Tab Claude ở cột phải, chế độ chú thích trên khung, tách AI khỏi chỉnh tay
+
+Lập 2026-11-18, kế hoạch `docs/plans/S24-tab-claude-va-chu-thich.md` (chủ repo: tab Dự án trùng popover điểm thanh bước; Hỏi Claude cần chỗ cho câu trả lời dài; Thuộc tính đang lẫn ba lối vào Claude; ghim chỉ ghi chú để sau, không hỏi ngay, không chú thích vùng). Hướng: AI ở một chỗ (tab Claude cột phải + chú thích trên khung), chỉnh tay ở một chỗ (Thuộc tính). `C34`–`C37` đã chốt 2026-11-18.
+
+- [ ] **`M170`** (`area/infra`): nền — lõi bố cục ra cột phải có tab Claude ở mọi khổ × chế độ thay `askPos`; Cơ bản có cột phải giống Chuyên nghiệp (cùng tab, gấp `]`, luật cửa sổ hẹp `M168`), chỉ ít mục chỉnh tay hơn; `75_ask.js` một dạng tab, bỏ dạng dòng dưới khung và cột cạnh khung; `/` và ✦ ở thanh nút phát; đo lại `s23_layout_matrix`. Theo `C34`, `C35`. Đợt 1.
+- [ ] **`M171`** (`area/llm`): nội dung tab Claude — luồng hỏi đáp của dự án có lưu (`.studio/ask_log.json`, 200 lượt), chip phạm vi, gợi ý nhanh, thẻ kết quả có nút Xem → `Studio.review`, ô đề xuất. Sau `M170`.
+- [ ] **`M172`** (`area/llm`): Thuộc tính chỉ chỉnh tay — bỏ mục Hỏi Claude của element (`72_elem_ai.js`) và ✦ trên thanh nổi, thêm nút "Hỏi Claude về mục này" (chuyển tab + chip element); luồng bản vá / 3 biến thể `M149` gọi từ tab Claude. Theo `C36`. Sau `M170`.
+- [ ] **`M173`** (`area/llm`): chế độ chú thích thay chế độ ghim — phím C, bấm element hoặc kéo vùng, ô hỏi nổi Hỏi ngay / Để sau, danh sách trong tab Claude, phạm vi `region` (toạ độ + t, cắt ảnh khung) ở route `75_ask`; ghim cũ đọc như chú thích "Để sau", giữ `notes.md`. Theo `C37`. Sau `M171`.
+- [ ] **`M174`** (`area/infra`): bỏ tab Dự án — tiêu chí bước chỉ ở popover thanh bước, "Cài đặt dự án" sang bước Chuẩn bị, cột phải không chọn gì → Claude. Theo `C37`. Sau `M170`.
+- [ ] **`M175`** (`area/docs`): nghiệm thu — đo 1024 / 1440 / 1920 × 9:16 / 16:9 × 2 chế độ, hỏi bằng chú thích vùng với mô hình thật, cập nhật `references/studio.md`, `DESIGN.md`. Sau `M170`–`M174`.
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -339,6 +350,10 @@ Lập 2026-11-18, kế hoạch `docs/plans/S23-bo-cuc-theo-kho-video.md` (đo St
 - [x] **`C31`** (`area/infra`): **ngưỡng tự đổi bố cục (`S23`).** Đề xuất: tỉ lệ khung < 0,8 → Claude cạnh khung; ≥ 0,8 → dưới khung; cửa sổ < 1280 px → luôn dưới khung, timeline gọn; ghim được một kiểu ở ⋯ → Bố cục. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C32`** (`area/qc`): **điểm từng bước nằm đâu (`S23`).** Đề xuất: bỏ chip + thanh ở tab Dự án, chỉ còn vòng điểm trên thanh bước kèm rê chuột xem lý do; tab Dự án giữ danh sách việc của bước đang xem. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C33`** (`area/infra`): **khổ vuông 1:1 (`M167`).** Đề xuất: làm khổ soạn vuông (khung, vùng an toàn, bám mặt) hoặc chặn tạo dự án 1:1, vuông chỉ là bản xuất thêm. Chốt 2026-11-18: chặn tạo dự án 1:1, khổ vuông chỉ là bản xuất thêm (Xuất thêm khổ); dự án 1:1 cũ vẫn mở, soạn theo 9:16 kèm dải báo trên khung.
+- [x] **`C34`** (`area/llm`): **Hỏi Claude nằm đâu (`S24`).** Đề xuất: một tab Claude ở cột phải, mọi khổ × chế độ (Chuyên nghiệp: Thuộc tính · Lớp · Claude); bỏ thanh dưới khung (`C25`) và cột cạnh khung (`C30`); thanh Nhận / Bỏ của `Studio.review` vẫn dưới khung. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C35`** (`area/infra`): **Cột phải của Cơ bản (`S24`).** Đề xuất: Cơ bản + video ngang có cột phải Claude; cửa sổ < 1280 px thì Claude thành ngăn trượt. Chốt 2026-11-18 (khác đề xuất): Cơ bản có cột phải giống hệt Chuyên nghiệp (cùng vị trí, cùng tab, cùng gấp `]`, cùng luật cửa sổ hẹp của `M168`) ở mọi khổ, chỉ ít mục chỉnh tay hơn (bảng mức của `01_level.core.js`); không ngăn trượt riêng. Thay `C31` và phần cột của `C30`.
+- [x] **`C36`** (`area/llm`): **AI trong Thuộc tính (`S24`).** Đề xuất: Thuộc tính chỉ chỉnh tay; mục Hỏi Claude của element và ✦ thanh nổi thành một nút "Hỏi Claude về mục này" mở tab Claude. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C37`** (`area/llm`): **ghim và tab Dự án (`S24`).** Đề xuất: chế độ chú thích thay chế độ ghim (bấm element hoặc kéo vùng; Hỏi ngay gọi mô hình, Để sau lưu như ghim — giữ `C23`); danh sách chú thích trong tab Claude; bỏ tab Dự án, "Cài đặt dự án" sang bước Chuẩn bị. Chốt 2026-11-18: theo đề xuất.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -360,6 +375,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S23-bo-cuc-theo-kho-video.md` (đo St
 16. **`S21`**: `M145` trước (nền); rồi song song `M146`, `M147`, `M150`; sau `M146` song song `M148`, `M149`. Chỉ `M145`, `M146` sửa `renderInspector` của `studio/studio.js`.
 17. **`S22`**: `C13`, `C24`–`C27` đã chốt 2026-11-18; song song `M151` ∥ `M152`; `M153` → `M154` sau `M152`; `M155`, `M156` sau `M151`. Không đụng `studio/server.mjs`.
 18. **`S23`**: `C29`–`C32` đã chốt 2026-11-18; đợt 1 song song `M157` ∥ `M158` ∥ `M161` ∥ `M164`; đợt 2 sau `M161`: `M162` ∥ `M159` → `M163` ∥ `M165` → `M160`; cuối `M166`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`. `M166` nghiệm thu `[~]`; `M167`–`M169` (1:1, Chuyên nghiệp cửa sổ hẹp, Lớp cảnh nền cũ) làm ở đợt sau.
+19. **`S24`**: `C34`–`C37` đã chốt 2026-11-18; đợt 1 `M170` một mình (nền bố cục + vỏ tab Claude); đợt 2 song song `M171` → `M173` (một session, hai PR) ∥ `M172` ∥ `M174`; cuối `M175`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`.
 
 ## 6. Không làm
 
