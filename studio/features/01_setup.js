@@ -1,7 +1,10 @@
 // Kiểm tra máy (ROADMAP S15 M115, references/studio.md): Studio cần những thư viện nào, máy này có chưa, cài bằng lệnh gì.
 // - Dữ liệu: GET /api/setup/check (studio/routes/01_setup.mjs, danh sách lấy từ install.ps1 / scripts/setup.sh), có cache 5 phút.
-// - Tự hiện khi chưa xem lần nào, hoặc khi có mục bắt buộc mới thiếu so với lần bấm "Để sau";
-//   02_onboarding.js chờ Studio.setupGate (đóng màn này) rồi mới mở hướng dẫn người mới.
+// - S22 M156 (K2): lần mở đầu không bật hộp thoại nữa. Thiếu mục bắt buộc (mới so với lần bấm "Để sau") thì hiện dải báo
+//   Studio.notice ở đầu khung (bấm "Kiểm tra máy" mới mở màn đầy đủ); đủ cả thì chỉ ghi đã xem. Studio.setupGate xong ngay
+//   để 02_onboarding.js mở màn chào luôn — lần đầu chỉ còn một màn.
+// - Studio.notice(id, {tone, icon, text, acts}) / Studio.notice.clear(id): dải báo dùng chung (63_frames.js dùng khi tự tạo lại
+//   khung hình). Nằm trên khung giữa, dưới #modal; nhiều dải xếp chồng.
 // - Thiếu mục bắt buộc: chấm đỏ trên nút ⋯ + mục "Kiểm tra máy… (thiếu N)" tô đỏ trong menu (mở lại màn từ đó).
 // - Bấm một tính năng (POST tới API của nó) khi thư viện nó cần đang thiếu, hoặc lỗi trả về nhắc tới thư viện thiếu
 //   (No module named …, spawn ffmpeg ENOENT, puppeteer-core…): hiện thẻ #setup-need nêu đúng thư viện + lệnh cài.
@@ -73,8 +76,39 @@
   #setup-need .sn-t { margin: 0; padding-right: var(--space-6); font-weight: 600; }
   #setup-need .sn-f { margin: 0; color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); }
   #setup-need .sn-x { position: absolute; top: var(--space-2); right: var(--space-2); }
-  #setup-need .sn-act { display: flex; gap: var(--space-2); justify-content: flex-end; }`;
+  #setup-need .sn-act { display: flex; gap: var(--space-2); justify-content: flex-end; }
+  #avs-notices { position: fixed; top: calc(50px + var(--space-2)); left: 50%; transform: translateX(-50%); z-index: 45; /* dưới #modal (50) */
+    width: min(clamp(360px, calc(100vw - 640px), 600px), calc(100vw - 2 * var(--space-4))); display: flex; flex-direction: column; gap: var(--space-2); pointer-events: none; }
+  #avs-notices:empty { display: none; }
+  body:has(#avs-notices > .nt) .toast { top: auto; bottom: var(--space-6); } /* toast cũng ở đỉnh giữa: có dải báo thì toast xuống đáy */
+  #avs-notices .nt { pointer-events: auto; border-radius: var(--radius-card); background: rgb(var(--color-surface-raised)); box-shadow: var(--shadow-raised); }
+  #avs-notices .ui-banner { align-items: center; flex-wrap: wrap; font-size: var(--text-sm); }
+  #avs-notices .nt-t { flex: 1 1 240px; min-width: 0; margin: 0; overflow-wrap: anywhere; color: rgb(var(--color-fg)); }
+  #avs-notices .nt-t > .ti { margin-right: var(--space-1); }
+  #avs-notices .ui-banner--warn .nt-t > .ti { color: rgb(var(--color-warning-text)); }
+  #avs-notices .ui-banner--err .nt-t > .ti { color: rgb(var(--color-danger-text)); }
+  #avs-notices .ui-banner--ok .nt-t > .ti { color: rgb(var(--color-success-text)); }
+  #avs-notices .nt-act { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }`;
   document.head.appendChild(css);
+
+  // ---------- dải báo dùng chung (M156) ----------
+  // acts: [{ label, icon, primary, on }] — on() trả false thì giữ dải, còn lại bấm xong dải tự đóng. Gọi lại cùng id = thay nội dung.
+  function notice(id, o = {}) {
+    let box = document.getElementById('avs-notices');
+    if (!box) { box = document.createElement('div'); box.id = 'avs-notices'; document.body.appendChild(box); }
+    let el = box.querySelector(`[data-nt="${CSS.escape(id)}"]`);
+    if (!el) { el = document.createElement('div'); el.className = 'nt'; el.dataset.nt = id; box.appendChild(el); }
+    const acts = o.acts || [], tone = ['warn', 'err', 'ok'].includes(o.tone) ? ' ui-banner--' + o.tone : '';
+    el.innerHTML = `<div class="ui-banner${tone}" role="${o.tone === 'err' ? 'alert' : 'status'}"><p class="nt-t">${o.icon ? `<i class="ti ${esc(o.icon)}" aria-hidden="true"></i>` : ''}${o.text || ''}</p>
+      ${acts.length ? `<div class="nt-act">${acts.map((a, i) => `<button class="ui-btn ui-btn--${a.primary ? 'primary' : 'secondary'} ui-btn--sm" data-nti="${i}">${a.icon ? `<i class="ti ${esc(a.icon)}"></i> ` : ''}${esc(a.label)}</button>`).join('')}</div>` : ''}</div>`;
+    el.onclick = async e => {
+      const b = e.target.closest('[data-nti]'); if (!b) return;
+      const r = await acts[+b.dataset.nti]?.on?.(); if (r !== false) el.remove();
+    };
+    return el;
+  }
+  notice.clear = id => document.querySelector(`#avs-notices [data-nt="${CSS.escape(id)}"]`)?.remove();
+  Studio.notice = notice;
 
   const bad = i => i.status === 'missing' || i.status === 'old';
   const missingReq = r => (r?.items || []).filter(i => i.need === 'required' && bad(i));
@@ -288,7 +322,13 @@
   Studio.onReady(() => { if (R) syncChip(); }); // nút ⋯ và nhãn menu do 01_workflow.js tạo sau file này
   load(false).then(r => {
     const m = missingReq(r).map(i => i.id);
-    const auto = !r.seen || m.some(id => !(r.later || []).includes(id));
-    if (auto) open(); else gateDone();
+    const fresh = m.filter(id => !(r.later || []).includes(id));
+    gateDone(); // M156: không chặn màn chào bằng hộp thoại
+    if (!fresh.length) { if (!r.seen) api('/api/setup/seen', { missing: m }).catch(() => {}); return; }
+    const names = missingReq(r).map(i => i.label);
+    notice('setup', { tone: 'err', icon: 'ti-stethoscope',
+      text: `Máy còn thiếu ${names.length} thư viện Studio cần: <b>${esc(names.join(', '))}</b>`,
+      acts: [{ label: 'Kiểm tra máy', icon: 'ti-tool', primary: true, on: () => open({ fresh: true }) },
+        { label: 'Để sau', on: () => api('/api/setup/seen', { missing: m }).catch(() => {}) }] });
   }).catch(e => { console.error('setup', e); gateDone(); });
 })();

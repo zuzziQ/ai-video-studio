@@ -1,29 +1,46 @@
-// Missing video frames (M63): when the project's frame folder is empty (copied without work/frames), offer to rebuild it
-// from the project's video instead of previewing black. Route: studio/routes/63_frames.mjs.
+// Missing video frames (M63): when the project's frame folder is empty (copied without work/frames), rebuild it from the
+// project's video instead of previewing black. Route: studio/routes/63_frames.mjs.
+// S22 M156 (K2): no dialog any more. Frames that can be rebuilt are rebuilt right away, with a notice strip (Studio.notice,
+// 01_setup.js) showing progress; when done the page reloads (frame <img> URLs that 404'd are cached) unless a dialog or the
+// welcome screen is open, then the strip offers "Tải lại". Frames whose source video is gone: a strip saying so.
+// Polls /api/job itself (not Studio.pollJob, which is a single shared timer another flow may take over).
 (() => {
-  const S = window.Studio;
-  const css = document.createElement('style');
-  css.textContent = '.fr-list { font-size: var(--text-xs); margin: var(--space-2) 0 0 var(--space-5); }';
-  document.head.appendChild(css);
+  const S = window.Studio, esc = S.esc;
+  const note = o => (S.notice ? S.notice('frames', o) : S.toast(o.text.replace(/<[^>]+>/g, '')));
+  const busy = () => document.getElementById('modal')?.hidden === false || !!document.getElementById('onb-home') || !!document.getElementById('onb-wiz');
+  const names = list => list.map(m => `<code>${esc(m.seq)}</code>`).join(', ');
+  const retry = () => ({ label: 'Thử lại', icon: 'ti-refresh', primary: true, on: () => { start(); return false; } });
+
+  async function follow() {
+    for (;;) {
+      await new Promise(ok => setTimeout(ok, 800));
+      let j; try { j = await S.api('/api/job'); } catch { continue; }
+      if (!j || j.state === 'running') {
+        if (j) note({ tone: 'warn', icon: 'ti-loader-2', text: `Đang tạo lại khung hình video… ${Math.round((j.progress || 0) * 100)}%` });
+        continue;
+      }
+      if (j.state === 'done') {
+        if (!busy()) return location.reload();
+        return note({ tone: 'ok', icon: 'ti-check', text: 'Đã tạo lại khung hình. Tải lại trang để preview hết đen.',
+          acts: [{ label: 'Tải lại', icon: 'ti-refresh', primary: true, on: () => location.reload() }, { label: 'Để sau' }] });
+      }
+      return note({ tone: 'err', icon: 'ti-alert-triangle', text: `Chưa tạo lại được khung hình: ${esc(j.step || j.state)}`, acts: [retry(), { label: 'Đóng' }] });
+    }
+  }
+  async function start() {
+    let r; try { r = await S.api('/api/frames/rebuild', {}); } catch (e) { r = { error: e.message }; }
+    if (!r?.ok) {
+      return note({ tone: 'warn', icon: 'ti-photo-off', text: `Dự án thiếu khung hình video, chưa tạo lại được: ${esc(r?.error || 'đang có tác vụ khác chạy')}`,
+        acts: [retry(), { label: 'Để sau' }] });
+    }
+    note({ tone: 'warn', icon: 'ti-loader-2', text: 'Dự án thiếu khung hình video: đang tạo lại từ video gốc…' });
+    follow();
+  }
+
   S.onReady(async () => {
     let list; try { list = await S.api('/api/frames/check'); } catch { return; }
     if (!Array.isArray(list) || !list.length) return;
-    const can = list.filter(m => m.src), esc = S.esc;
-    const rows = list.map(m => `<li><code>${esc(m.seq)}</code> ${m.src ? `← <code>${esc(m.src)}</code>` : '<span class="muted">(không còn video nguồn)</span>'}</li>`).join('');
-    S.modal(`<h3><i class="ti ti-photo-off"></i> Dự án thiếu khung hình video</h3>
-      <p>Thư mục khung hình đang trống nên preview và bản xuất sẽ bị đen. Thường do dự án được chép thiếu thư mục <code>work/frames</code>.</p>
-      <ul class="fr-list">${rows}</ul>
-      ${can.length ? '<p class="muted">Tạo lại bằng ffmpeg từ video trong dự án, mất khoảng vài giây cho mỗi phút video.</p>' : '<p class="muted">Không còn video nguồn: hãy tạo dự án mới bằng “Video mới”.</p>'}
-      <div class="actions"><button onclick="closeModal()">Để sau</button>${can.length ? '<button class="primary" id="frgo"><i class="ti ti-refresh"></i> Tạo lại khung hình</button>' : ''}</div>`);
-    const go = S.$('#frgo'); if (!go) return;
-    go.onclick = async () => {
-      const r = await S.api('/api/frames/rebuild', {});
-      if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
-      S.modal('<h3>Đang tạo lại khung hình…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>');
-      S.pollJob(j => {
-        if (j.state === 'done') return location.reload(); // frame <img> URLs that 404'd are cached: a full reload is the simple way
-        S.modal(`<h3>Chưa tạo lại được</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      });
-    };
+    if (list.some(m => m.src)) return start();
+    note({ tone: 'err', icon: 'ti-photo-off', text: `Thiếu khung hình video và không còn video nguồn (${names(list)}): tạo dự án mới bằng “Video mới”.`, acts: [{ label: 'Đóng' }] });
   });
 })();

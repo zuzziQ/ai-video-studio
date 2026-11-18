@@ -43,6 +43,8 @@
   .onb-f textarea { min-height: 64px; resize: vertical; }
   .onb-f input:focus, .onb-f textarea:focus { outline: none; border-color: var(--acc-line); }
   .onb-hint { margin: 4px 0 0; font-size: 11px; color: var(--tx3); line-height: 1.4; } .onb-lead { margin: 0 0 8px; }
+  .onb-tip { display: inline-flex; vertical-align: -2px; margin-left: 4px; color: var(--tx3); cursor: help; border-radius: 50%; } .onb-tip:hover, .onb-tip:focus-visible { color: var(--tx); outline: none; }
+  .onb-tip .ti { font-size: 14px; }
   .onb-err { margin: 12px 0 0; font-size: 12px; color: var(--bad); display: flex; gap: 4px; align-items: center; } .onb-err:empty { display: none; }
   .onb-g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; } .onb-g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
   .onb-drop { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--line3); border-radius: var(--r); background: var(--bg1); cursor: pointer; color: var(--tx2); font-size: 13px; }
@@ -190,20 +192,22 @@
     [wireBrand, wireAssets, wirePurpose][s](box);
   }
   const err = m => { const e = document.getElementById('onb-err'); if (e) e.innerHTML = m ? `<i class="ti ti-alert-circle"></i> ${esc(m)}` : ''; };
-  const field = (id, label, hint, input) => `<div class="onb-f"><label for="${id}">${label}</label>${input}<p class="onb-hint">${hint}</p></div>`;
+  // S22 M156 (C26): ô của hướng dẫn chỉ còn nhãn + placeholder; lời giải thích vào (i) cạnh nhãn (Studio.tip của M155 nếu đã có).
+  const tip = h => (!h ? '' : Studio.tip ? Studio.tip(h) : `<span class="onb-tip" tabindex="0" role="img" title="${esc(h)}" aria-label="${esc(h)}"><i class="ti ti-info-circle" aria-hidden="true"></i></span>`);
+  const field = (id, label, hint, input) => `<div class="onb-f"><label for="${id}">${label}${tip(hint)}</label>${input}</div>`;
   const text = (id, val, ph, type = 'text') => `<input id="${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}">`;
 
-  const stepBrand = () => field('onb-name', 'Tên thương hiệu', 'Tên hiện trên video, ví dụ phần giới thiệu và lời kêu gọi cuối video.', text('onb-name', W.name, 'Ví dụ: Nhà Đẹp Sài Gòn')) +
-    `<div class="onb-f"><label>Logo</label><div class="onb-drop" id="onb-logo-drop" role="button" tabindex="0"><div class="onb-logo">${W.logoUrl ? `<img src="${esc(W.logoUrl)}" alt="Logo">` : '<i class="ti ti-photo"></i>'}</div>
+  const stepBrand = () => field('onb-name', 'Tên thương hiệu', 'Tên hiện trên video: phần giới thiệu và lời kêu gọi cuối video.', text('onb-name', W.name, 'Ví dụ: Nhà Đẹp Sài Gòn')) +
+    `<div class="onb-f"><label>Logo${tip('Logo nền trong suốt (PNG) hiện đẹp nhất trên video.')}</label><div class="onb-drop" id="onb-logo-drop" role="button" tabindex="0"><div class="onb-logo">${W.logoUrl ? `<img src="${esc(W.logoUrl)}" alt="Logo">` : '<i class="ti ti-photo"></i>'}</div>
       <div><b>${W.logoUrl ? 'Đổi logo' : 'Kéo thả logo vào đây'}</b><span>hoặc bấm để chọn ảnh PNG, JPG, WebP, SVG</span></div><input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden></div>
-      <p class="onb-hint">Logo nền trong suốt (PNG) hiện đẹp nhất trên video.</p></div>` +
-    `<div class="onb-f"><label>Màu chủ đạo</label><div class="onb-sw">${W.colors[0] ? `<input type="color" id="onb-c1" value="${esc(W.colors[0])}" aria-label="Màu chính">
+      </div>` +
+    `<div class="onb-f"><label>Màu chủ đạo${tip(W.colors[0] ? 'Lấy từ logo. Bấm vào ô màu để đổi.' : 'Tự lấy sau khi có logo.')}</label><div class="onb-sw">${W.colors[0] ? `<input type="color" id="onb-c1" value="${esc(W.colors[0])}" aria-label="Màu chính">
       <input type="color" id="onb-c2" value="${esc(W.colors[1] || W.colors[0])}" aria-label="Màu nhấn">` : '<span class="onb-nosw"></span><span class="onb-nosw"></span>'}</div>
-      <p class="onb-hint">${W.colors[0] ? 'Lấy từ logo. Bấm vào ô màu để đổi.' : 'Tự lấy sau khi có logo.'}</p></div>` +
+      </div>` +
     (Studio.assistPanel ? '<div id="onb-ai-brand"></div>' : '') +
     `<div class="onb-g3">${field('onb-phone', 'Số điện thoại <em>(không bắt buộc)</em>', 'Hiện ở lời kêu gọi cuối video.', text('onb-phone', W.phone, '0901 234 567', 'tel'))}
-      ${field('onb-web', 'Website <em>(không bắt buộc)</em>', 'Ví dụ: nhadep.vn', text('onb-web', W.website, 'nhadep.vn'))}
-      ${field('onb-handle', 'Tên kênh <em>(không bắt buộc)</em>', 'Ví dụ: @nhadep', text('onb-handle', W.handle, '@nhadep'))}</div>`;
+      ${field('onb-web', 'Website <em>(không bắt buộc)</em>', '', text('onb-web', W.website, 'nhadep.vn'))}
+      ${field('onb-handle', 'Tên kênh <em>(không bắt buộc)</em>', '', text('onb-handle', W.handle, '@nhadep'))}</div>`;
   function wireBrand(box) {
     // box (.onb-card) sống qua mọi bước, listener cộng dồn: chỉ đọc ô khi đang ở bước này
     const sync = () => { if (W?.step !== 0 || !box.querySelector('#onb-name')) return; W.name = box.querySelector('#onb-name').value; W.phone = box.querySelector('#onb-phone').value; W.website = box.querySelector('#onb-web').value; W.handle = box.querySelector('#onb-handle').value;
@@ -276,29 +280,27 @@
     if (!K) return '<div class="onb-f"><label>Kho</label><p class="onb-hint"><i class="ti ti-loader-2 spin"></i> Đang mở Kho…</p></div>';
     if (K.error) return `<div class="onb-f"><label>Kho</label><p class="onb-err"><i class="ti ti-alert-circle"></i> ${esc(K.error)}</p></div>`;
     const ws = K.ws, st = { up: '<i class="ti ti-loader-2 spin"></i>', ok: '<i class="ti ti-circle-check ok"></i>', bad: '<i class="ti ti-alert-circle bad"></i>' };
-    const pick = `<div class="onb-f"><label for="onb-kdir">Thư mục có sẵn</label><div class="onb-sw"><input id="onb-kdir" value="${esc(K.dir ?? (ws.custom ? ws.root : ''))}" placeholder="Ví dụ D:\\Videos\\Nha Dep" spellcheck="false">
-        <button type="button" id="onb-kpick"><i class="ti ti-folder-search"></i> Chọn…</button><button type="button" class="primary" id="onb-kset" ${K.busy ? 'disabled' : ''}>Dùng</button></div>
-        <p class="onb-hint">Studio chỉ đọc và phân nhóm file theo đuôi, không chép, không đòi đúng cấu trúc thư mục con.</p></div>`;
+    const pick = `<div class="onb-f"><label for="onb-kdir">Thư mục có sẵn${tip('Studio chỉ đọc và phân nhóm file theo đuôi, không chép, không đòi đúng cấu trúc thư mục con.')}</label><div class="onb-sw"><input id="onb-kdir" value="${esc(K.dir ?? (ws.custom ? ws.root : ''))}" placeholder="Ví dụ D:\\Videos\\Nha Dep" spellcheck="false">
+        <button type="button" id="onb-kpick"><i class="ti ti-folder-search"></i> Chọn…</button><button type="button" class="primary" id="onb-kset" ${K.busy ? 'disabled' : ''}>Dùng</button></div></div>`;
     return `<div class="onb-f"><label>Thư mục Kho${ws.exists ? '' : ' <em>(chưa tạo)</em>'}</label><div class="onb-drop onb-kho" title="${esc(ws.root)}"><i class="ti ti-folder"></i><div class="onb-kp"><b>${esc(ws.root)}</b>
         <span>${ws.exists ? (ws.custom ? 'Thư mục bạn chọn' : 'Thư mục mặc định') : 'Sẽ tạo sẵn Nguon, Anh, BRoll, Nhac, Thuong hieu'}</span></div></div>
         ${K.warning ? `<p class="onb-hint">${esc(K.warning)}</p>` : ''}
         <div class="onb-chips onb-kacts">${ws.exists ? '' : `<button type="button" class="primary" id="onb-kcreate" ${K.busy ? 'disabled' : ''}><i class="ti ti-folder-plus"></i> Tạo Kho mặc định</button>`}
         <button type="button" id="onb-kedit"><i class="ti ti-folder-cog"></i> ${ws.exists ? 'Đổi thư mục' : 'Chọn thư mục có sẵn'}</button></div></div>
       ${K.editing ? pick : ''}
-      <div class="onb-f"><label>Tải file vào Kho</label><div class="onb-drop" id="onb-kup" role="button" tabindex="0"><i class="ti ti-cloud-upload"></i>
-        <div><b>Kéo thả video, ảnh, nhạc vào đây</b><span>hoặc bấm để chọn nhiều file. Video vào Nguon, ảnh vào Anh, nhạc vào Nhac.</span></div><input type="file" accept="video/*,image/*,audio/*" multiple hidden></div>
-      <p class="onb-hint">Chỉ dùng nhạc bạn có quyền dùng.${ws.exists ? '' : ' Chưa có Kho thì Studio tạo thư mục mặc định ở trên khi bạn thả file.'}</p></div>
+      <div class="onb-f"><label>Tải file vào Kho${tip('Chỉ dùng nhạc bạn có quyền dùng.' + (ws.exists ? '' : ' Chưa có Kho thì Studio tạo thư mục mặc định ở trên khi bạn thả file.'))}</label><div class="onb-drop" id="onb-kup" role="button" tabindex="0"><i class="ti ti-cloud-upload"></i>
+        <div><b>Kéo thả video, ảnh, nhạc vào đây</b><span>hoặc bấm để chọn nhiều file. Video vào Nguon, ảnh vào Anh, nhạc vào Nhac.</span></div><input type="file" accept="video/*,image/*,audio/*" multiple hidden></div></div>
       ${W.files.length ? `<ul class="onb-files">${W.files.map(f => `<li>${st[f.st]}<span class="nm">${esc(f.name)}</span>${f.msg ? `<small class="bad">${esc(f.msg)}</small>` : f.rel ? `<small>${esc(f.rel.split('/')[0])}</small>` : ''}</li>`).join('')}</ul>` : ''}`;
   };
   const stepAssets = () => `${stepKho()}
-      <div class="onb-f"><label>Một sản phẩm <em>(không bắt buộc)</em></label><p class="onb-hint onb-lead">AI dùng hồ sơ này khi viết lời và soát quảng cáo. Thêm sản phẩm khác ở mục Sản phẩm.</p></div>
-      <div class="onb-g2">${field('onb-pname', 'Tên sản phẩm', 'Ví dụ: Căn hộ 2 phòng ngủ Quận 7', text('onb-pname', W.product.name, 'Tên sản phẩm'))}
-      ${field('onb-price', 'Giá', 'Ghi như bạn muốn hiện, ví dụ 2,9 tỷ', text('onb-price', W.product.price, '2,9 tỷ'))}</div>
+      <div class="onb-f"><label>Một sản phẩm <em>(không bắt buộc)</em>${tip('AI dùng hồ sơ này khi viết lời và soát quảng cáo. Thêm sản phẩm khác ở mục Sản phẩm.')}</label></div>
+      <div class="onb-g2">${field('onb-pname', 'Tên sản phẩm', '', text('onb-pname', W.product.name, 'Ví dụ: Căn hộ 2 phòng ngủ Quận 7'))}
+      ${field('onb-price', 'Giá', 'Ghi như bạn muốn hiện trên video.', text('onb-price', W.product.price, '2,9 tỷ'))}</div>
       ${field('onb-strong', 'Điểm mạnh', 'Mỗi dòng một ý. Studio lưu ở trạng thái chờ duyệt, chưa dùng trong quảng cáo cho tới khi bạn duyệt.', `<textarea id="onb-strong" placeholder="View sông&#10;Sổ hồng riêng">${esc(W.product.strengths)}</textarea>`)}
       ${W.product.faq.length ? `<p class="onb-hint">Kèm ${W.product.faq.length} câu hỏi thường gặp do AI đề xuất (lưu cùng sản phẩm).</p>` : ''}
       ${Studio.assistPanel ? `<div class="onb-g2">${field('onb-purl', 'Link sản phẩm <em>(không bắt buộc)</em>', 'Trang bán hàng công khai: AI đọc tên, giá, điểm mạnh.', text('onb-purl', W.pUrl, 'https://…'))}
-        <div class="onb-f"><label>Ảnh sản phẩm <em>(cho AI)</em></label><button id="onb-pimg-btn" type="button"><i class="ti ti-photo"></i> ${W.pImage ? 'Đổi ảnh' : 'Chọn ảnh'}</button><input type="file" id="onb-pimg" accept="image/*" hidden>
-        <p class="onb-hint">${W.pImage ? esc(W.pImage.name) : 'Ảnh chụp sản phẩm hoặc bao bì.'}</p></div></div><div id="onb-ai-prod"></div>` : ''}`;
+        <div class="onb-f"><label>Ảnh sản phẩm <em>(cho AI)</em>${tip('Ảnh chụp sản phẩm hoặc bao bì.')}</label><button id="onb-pimg-btn" type="button"><i class="ti ti-photo"></i> ${W.pImage ? 'Đổi ảnh' : 'Chọn ảnh'}</button><input type="file" id="onb-pimg" accept="image/*" hidden>
+        ${W.pImage ? `<p class="onb-hint">${esc(W.pImage.name)}</p>` : ''}</div></div><div id="onb-ai-prod"></div>` : ''}`;
   function wireAssets(box) {
     const psync = () => { if (W?.step !== 1 || !box.querySelector('#onb-pname')) return; W.product = { ...W.product, name: box.querySelector('#onb-pname').value, price: box.querySelector('#onb-price').value, strengths: box.querySelector('#onb-strong').value }; const u = box.querySelector('#onb-purl'); if (u) W.pUrl = u.value; };
     box.addEventListener('input', psync);
@@ -395,10 +397,8 @@
 
   const stepPurpose = () => `<div class="onb-f"><label>Lĩnh vực</label><div class="onb-pick">${PURPOSES.map(([id, ic, name]) => `<button data-pp="${id}" class="${W.purpose === id ? 'on' : ''}" aria-pressed="${W.purpose === id}"><i class="ti ${ic}"></i>${name}</button>`).join('')}</div>
       <p class="onb-hint" id="onb-sug">${W.purpose ? 'Đang tìm mẫu hợp…' : 'Chọn một lĩnh vực để xem gợi ý.'}</p></div>
-    <div class="onb-f"><label>Khổ hình hay dùng</label><div class="onb-seg">${ASPECTS.map(([id, name, sub]) => `<button data-as="${id}" class="${W.aspect === id ? 'on' : ''}" aria-pressed="${W.aspect === id}">${name}<small>${sub}</small></button>`).join('')}</div>
-      <p class="onb-hint">Đổi được cho từng video khi xuất.</p></div>
-    <div class="onb-f"><label>Nền tảng đăng</label><div class="onb-chips">${PLATFORMS.map(([id, ic, name]) => `<button data-pf="${id}" class="${W.platforms.includes(id) ? 'on' : ''}" aria-pressed="${W.platforms.includes(id)}"><i class="ti ${ic}"></i>${name}</button>`).join('')}</div>
-      <p class="onb-hint">Chọn nhiều nơi được. Studio gợi ý khổ và độ dài theo nơi đăng.</p></div>
+    <div class="onb-f"><label>Khổ hình hay dùng${tip('Đổi được cho từng video khi xuất.')}</label><div class="onb-seg">${ASPECTS.map(([id, name, sub]) => `<button data-as="${id}" class="${W.aspect === id ? 'on' : ''}" aria-pressed="${W.aspect === id}">${name}<small>${sub}</small></button>`).join('')}</div></div>
+    <div class="onb-f"><label>Nền tảng đăng${tip('Chọn nhiều nơi được. Studio gợi ý khổ và độ dài theo nơi đăng.')}</label><div class="onb-chips">${PLATFORMS.map(([id, ic, name]) => `<button data-pf="${id}" class="${W.platforms.includes(id) ? 'on' : ''}" aria-pressed="${W.platforms.includes(id)}"><i class="ti ${ic}"></i>${name}</button>`).join('')}</div></div>
     <div class="onb-note"><i class="ti ti-settings"></i><div>Kết nối YouTube, Telegram và chọn AI (Claude hoặc Ollama chạy trên máy): làm sau trong Cài đặt, ở nút <b>Mô hình &amp; giọng</b> và <b>Lịch đăng</b>.</div></div>`;
   function wirePurpose(box) {
     box.querySelectorAll('[data-pp]').forEach(b => (b.onclick = () => { W.purpose = b.dataset.pp; render(); }));
