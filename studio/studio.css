@@ -365,7 +365,7 @@ body.expanded #lib, body.expanded #right { display: none; }
 
 /* ---------- inspector ---------- */
 #right { --rtabs-h: 0px; background: rgb(var(--color-surface)); border-left: 1px solid rgb(var(--color-line)); overflow-y: auto; min-width: 0; }
-/* S21 M145: nhóm tab Thuộc tính · Lớp · Dự án (dải dính trên cùng; .ihead / .itabs dính ngay dưới) */
+/* S21 M145: nhóm tab Thuộc tính · Lớp · Dự án (dải dính trên cùng; .ihead / .itop dính ngay dưới) */
 #right:has(#rtabs:not([hidden])) { --rtabs-h: 37px; }
 #rtabs { position: sticky; top: 0; z-index: 4; display: flex; height: var(--rtabs-h); padding: 0 var(--space-2); background: rgb(var(--color-surface)); border-bottom: 1px solid rgb(var(--color-line-strong)); }
 #rtabs[hidden] { display: none; }
@@ -386,16 +386,32 @@ body.expanded #lib, body.expanded #right { display: none; }
 .iic .ti { font-size: 18px; }
 .ihead .it { flex: 1; min-width: 0; }
 .ihead h3 { margin: 0; font-size: var(--text-sm); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ihead .sub { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-050); }
+.ihead .sub { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-050); min-width: 0; white-space: nowrap; }
+.ihead .sub .pill { flex: none; }
+.ihead .sub a.time { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pill { background: rgb(var(--color-surface-muted)); color: rgb(var(--color-fg-muted)); border-radius: var(--radius-xs); padding: 0 6px; font-size: var(--text-2xs); font-weight: 600; }
 .ihead a.time { color: rgb(var(--color-fg-subtle)); cursor: pointer; font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
 .ihead a.time:hover { color: rgb(var(--color-accent-text)); }
 .ihead a.time .ti { font-size: 12px; vertical-align: -2px; }
-.itabs { display: flex; gap: 0; padding: 0 var(--space-2); border-bottom: 1px solid rgb(var(--color-line)); position: sticky; top: calc(56px + var(--rtabs-h)); background: rgb(var(--color-surface)); z-index: 2; overflow-x: auto; flex-wrap: wrap; }
-.itabs button { flex: 1 1 auto; justify-content: center; background: transparent; border: 0; border-radius: 0; padding: var(--space-2) var(--space-1) var(--space-3); color: rgb(var(--color-fg-subtle)); font-weight: 600; position: relative; font-size: var(--text-xs); }
-.itabs button:hover { color: rgb(var(--color-fg)); background: transparent; }
-.itabs button.on { color: rgb(var(--color-fg)); }
-.itabs button.on::after { content: ""; position: absolute; left: var(--space-2); right: var(--space-2); bottom: -1px; height: 2px; background: rgb(var(--color-accent-text)); border-radius: var(--radius-pill); }
+/* S21 M146: đầu Thuộc tính + dải mục dính chung một khối; thân là các mục xếp chồng thu gọn được */
+.itop { position: sticky; top: var(--rtabs-h); z-index: 2; background: rgb(var(--color-surface)); border-bottom: 1px solid rgb(var(--color-line)); }
+.itop .ihead { position: static; padding-right: var(--space-2); }
+.ihbtn { display: flex; gap: 0; flex: none; }
+.ihbtn button.icon { width: var(--h-sm); height: var(--h-sm); }
+.isecbar { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: 0 var(--space-3) var(--space-2); }
+.isecbar button { flex: none; height: 24px; padding: 0 var(--space-2); border-radius: var(--radius-pill); background: transparent; border: 1px solid rgb(var(--color-line)); color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); font-weight: 600; white-space: nowrap; }
+.isecbar button:hover { color: rgb(var(--color-fg)); background: rgb(var(--color-surface-muted)); }
+.isecbar button.on { color: rgb(var(--color-accent-text-strong)); background: rgb(var(--color-accent-soft) / .24); border-color: rgb(var(--color-accent-text) / .5); }
+.isec { border-bottom: 1px solid rgb(var(--color-line)); }
+.isec-h { width: 100%; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) 0; background: transparent; border: 0; border-radius: 0; color: rgb(var(--color-fg)); font-size: var(--text-xs); font-weight: 700; text-align: left; }
+.isec-h:hover { background: transparent; color: rgb(var(--color-accent-text)); }
+.isec-h:focus-visible { outline: 2px solid rgb(var(--color-accent-text)); outline-offset: -2px; }
+.isec-h > .ti:first-child { font-size: 15px; color: rgb(var(--color-fg-subtle)); }
+.isec-h span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isec-h .car { font-size: 14px; color: rgb(var(--color-fg-subtle)); transform: rotate(-90deg); transition: transform .12s; }
+.isec.open > .isec-h .car { transform: none; }
+.isec-b { padding-bottom: var(--space-2); }
+#insp .isec-b > section:first-child { padding-top: 0; }
 .ibody { padding: var(--space-1) var(--space-4) var(--space-6); }
 #insp section { padding: var(--space-3) 0; border-bottom: 1px solid rgb(var(--color-line)); }
 #insp section:last-child { border-bottom: 0; }

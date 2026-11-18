@@ -92,7 +92,7 @@
   // Keep the tab's values in step with the playhead (seek, arrows, playback).
   let lastT = -1;
   setInterval(() => {
-    const ae = document.activeElement; if (!document.querySelector('#kfpanel') || Studio.T === lastT || (/INPUT|SELECT/.test(ae?.tagName) && ae.closest('#kfpanel'))) return;
+    const ae = document.activeElement; if (!document.querySelector('#kfpanel') || Studio.T === lastT || (/INPUT|SELECT|TEXTAREA/.test(ae?.tagName) && ae.closest('#insp'))) return; // S21 M146: mục khác cùng mở, đang gõ thì không vẽ lại
     lastT = Studio.T; Studio.renderInspector();
   }, 250);
 
