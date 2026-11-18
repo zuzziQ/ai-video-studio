@@ -55,6 +55,7 @@ Bản này là repo riêng tư dựa trên repo gốc ở trên, nằm trong hub
 - Area (cũng là scope commit, nhãn `area/`): `infra, qc, ads, llm, voice, export, security, docs`. Nhãn `type/`, `area/`, `size/` do bước gán nhãn trong job `gate` làm.
 - PR chờ duyệt đồng thời: tối đa 4 (duyệt tay). Tệp nóng chỉ một phiên sửa một lúc: `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`, `docs/ROADMAP.md` (mỗi PR chỉ sửa dòng mục của mình).
 - Phiên, worktree và subagent theo `D:/ai/docs/SESSIONS-WORKTREES.md`: 1 Phase = 1 worktree = 1 PR. Ship bằng `python3 D:/ai/scripts/pr-ship.py --branch auto` (hoặc `--no-auto` khi chủ repo muốn tự merge) rồi dừng lượt, không poll CI.
+- Worktree thiếu thư viện: hook `SessionStart` tự chạy `node scripts/worktree-setup.mjs` (`npm ci` khi thiếu `scripts/node_modules`); Python tự dùng `scripts/.venv` của thư mục chính. **Cấm** `mklink /J`/symlink `node_modules` hay `.venv` sang thư mục chính: `git worktree remove --force` xoá luôn thư mục đích.
 
 ## Repo gốc
 
