@@ -1,5 +1,6 @@
 // Lõi thuần chỉnh tay trên sân khấu (S17 M124): loại cảnh nào đổi được riêng rộng / cao, kéo tay nắm cạnh, đường gióng,
 // căn nhiều element, kiểm nhanh vùng an toàn / che mặt trên vị trí mới, kéo / zoom khung cắt video chính (a-roll).
+// S20 M139: góc của tay nắm xoay, loại element sửa chữ tại chỗ được, kiểu chữ của ô gõ, cuộn timeline tới khối đang chọn.
 // Không DOM, không gọi server: studio.js đo hộp phần tử (rectOf) rồi gọi các hàm ở đây. Chạy trong trình duyệt
 // (window.StageCore) và trong Node (module.exports) cho scripts/tests/m124_stage.test.mjs. Mọi toạ độ là px thiết kế
 // (720×1280 dọc, 1280×720 ngang); rect = {x, y, w, h} với x, y là góc trên trái.
@@ -143,7 +144,47 @@
   // Xoay: chữ graphic, node sơ đồ, cảnh (engine applyRot); phụ đề và huy hiệu thì không.
   const canRotate = kind => kind === 'line' || kind === 'node' || kind === 'scene';
 
-  const T = { GEO, CARD_DEF, WH_DEF, NATIVE_ROT, ALIGN, geoOf, canResize, cardOf, boxOf, setBox, resizeEdge, guideLines, snapMove, snapEdge, union, alignDeltas, coverFrac, faceBox, quickCheck, panCrop, zoomCrop, rotNorm, canRotate };
+  // S20 M139: tay nắm xoay — góc mới khi kéo từ p0 tới p quanh tâm c (px bất kỳ, cùng hệ). step > 0 (Shift) bắt theo bội step;
+  // không có step thì hít 0 / 90 / 180 / -90 khi lệch ≤ snap độ.
+  function rotFromDrag(c, p0, p, rot0 = 0, { step = 0, snap = 3 } = {}) {
+    const a = q => Math.atan2(q.y - c.y, q.x - c.x) * 180 / Math.PI;
+    let d = rotNorm((+rot0 || 0) + a(p) - a(p0));
+    if (step > 0) d = rotNorm(Math.round(d / step) * step);
+    else for (const k of [-180, -90, 0, 90, 180]) if (Math.abs(d - k) <= snap) { d = rotNorm(k); break; }
+    return d;
+  }
+  // Sửa chữ tại chỗ: loại element có ô `text` chính (chữ thêm, chữ graphic, node sơ đồ, chữ LED / neon).
+  // Phụ đề không: từng từ có mốc giờ riêng (sửa ở tab Lời thoại / inspector).
+  const TEXT_SCENES = new Set(['led_text', 'neon_text']);
+  const canEditText = (kind, obj) => !!obj && typeof obj.text === 'string' && (kind === 'line' || kind === 'node' || (kind === 'scene' && TEXT_SCENES.has(obj.type)));
+  // Kiểu chữ của ô gõ tại chỗ, chép từ getComputedStyle của phần tử engine; cỡ chữ / giãn chữ / bóng nhân K (tỉ lệ preview).
+  // Màu trong suốt (chữ gradient kiểu background-clip) thì dùng trắng để vẫn thấy chữ đang gõ.
+  function editStyle(cs, K = 1) {
+    const px = v => { const n = parseFloat(v); return Number.isFinite(n) ? `${r1(n * K)}px` : null; };
+    const shadow = s => (!s || s === 'none' ? null : s.replace(/(-?\d*\.?\d+)px/g, (_, n) => `${r1(+n * K)}px`));
+    const clear = c => !c || c === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(c);
+    const out = {
+      fontFamily: cs.fontFamily || null, fontWeight: cs.fontWeight || null, fontStyle: cs.fontStyle || null,
+      fontSize: px(cs.fontSize), letterSpacing: cs.letterSpacing && cs.letterSpacing !== 'normal' ? px(cs.letterSpacing) : null,
+      lineHeight: cs.lineHeight && cs.lineHeight !== 'normal' ? px(cs.lineHeight) : null,
+      textTransform: cs.textTransform && cs.textTransform !== 'none' ? cs.textTransform : null,
+      textShadow: shadow(cs.textShadow), color: clear(cs.color) ? '#fff' : cs.color, // design-token-ok: chữ của video, không phải UI
+    };
+    return Object.fromEntries(Object.entries(out).filter(([, v]) => v != null));
+  }
+  // Cuộn timeline để thấy khối: view / box = {l, r, t, b} (px màn hình). Trả {dx, dy} cần cộng vào scrollLeft / scrollTop.
+  function revealDelta(view, box, pad = 24) {
+    const ax = (lo, hi, a, b) => {
+      if (b - a > hi - lo - 2 * pad) return a < lo + pad || a > hi - pad ? a - (lo + pad) : 0; // khối dài hơn tầm nhìn: chỉ cần thấy đầu khối
+      if (a < lo + pad) return a - (lo + pad);
+      if (b > hi - pad) return b - (hi - pad);
+      return 0;
+    };
+    return { dx: Math.round(ax(view.l, view.r, box.l, box.r)), dy: Math.round(ax(view.t, view.b, box.t, box.b)) };
+  }
+
+  const T = { GEO, CARD_DEF, WH_DEF, NATIVE_ROT, ALIGN, TEXT_SCENES, geoOf, canResize, cardOf, boxOf, setBox, resizeEdge, guideLines, snapMove, snapEdge, union, alignDeltas, coverFrac, faceBox, quickCheck, panCrop, zoomCrop, rotNorm, canRotate,
+    rotFromDrag, canEditText, editStyle, revealDelta };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.StageCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

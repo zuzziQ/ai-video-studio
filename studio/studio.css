@@ -334,6 +334,14 @@ body.expanded #lib, body.expanded #right { display: none; }
 #overlay .selbox i.n, #overlay .selbox i.s { left: calc(50% - 6px); width: 12px; height: 6px; border-radius: var(--radius-xs); cursor: ns-resize; }
 #overlay .selbox i.e, #overlay .selbox i.w { top: calc(50% - 6px); width: 6px; height: 12px; border-radius: var(--radius-xs); cursor: ew-resize; }
 #overlay .selbox i.n { top: -4px; } #overlay .selbox i.s { bottom: -4px; } #overlay .selbox i.e { right: -4px; } #overlay .selbox i.w { left: -4px; }
+/* S20 M139: tay nắm xoay, nhãn góc, viền rê chuột, ô gõ chữ tại chỗ */
+#overlay .selbox i.rot { left: calc(50% - 6px); top: -28px; width: 12px; height: 12px; cursor: grab; }
+#overlay .selbox b.rotstem { position: absolute; left: calc(50% - .75px); top: -18px; width: 1.5px; height: 15px; background: rgb(var(--color-accent-text)); pointer-events: none; }
+#overlay .selbox .rottip { position: absolute; left: 50%; top: -52px; transform: translateX(-50%); font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-white)); background: rgb(var(--color-black) / .75); padding: 0 var(--space-1); border-radius: var(--radius-xs); pointer-events: none; white-space: nowrap; }
+#overlay .hoverbox { position: absolute; border: 1px solid rgb(var(--color-accent-text) / .7); border-radius: 2px; pointer-events: none; }
+#inedit { position: absolute; z-index: 5; margin: 0; padding: 0 2px; border: 1.5px solid rgb(var(--color-accent-text)); border-radius: 2px; background: rgb(var(--color-black) / .18); outline: none; resize: none; overflow: hidden; white-space: pre; caret-color: rgb(var(--color-accent-text)); box-sizing: border-box; transform-origin: center; }
+@keyframes blk-flash { 0%, 100% { box-shadow: 0 0 0 1px rgb(var(--color-white)), 0 0 0 4px rgb(var(--color-accent-text) / .35); } 40% { box-shadow: 0 0 0 1px rgb(var(--color-white)), 0 0 0 8px rgb(var(--color-accent-text) / .6); } }
+#tlinner .blk.flash, #tlinner .clip.flash { animation: blk-flash calc(var(--duration-slow) * 2) var(--ease-standard) 1; }
 #overlay .selbox.multi { border-style: dashed; background: rgb(var(--color-accent-text) / .04); }
 #overlay .selbox.crop { background: none; border-style: dashed; border-color: rgb(var(--track-1)); }
 #overlay .selbox.crop span { position: absolute; left: var(--space-2); bottom: var(--space-2); font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-white)); background: rgb(var(--color-black) / .6); padding: 0 var(--space-1); border-radius: var(--radius-xs); pointer-events: none; }
