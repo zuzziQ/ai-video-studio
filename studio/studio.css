@@ -652,3 +652,25 @@ body.libdrag #stagebox, body.libdrag #tlinner { outline: 1px dashed rgb(var(--co
 .cmenu button.danger:not([disabled]) { color: rgb(var(--color-danger)); }
 .cmenu kbd { font-family: inherit; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
 .cmenu hr { margin: var(--space-1) 0; border: 0; border-top: 1px solid rgb(var(--color-line)); }
+
+/* S20 M142: bảng Lớp tại playhead (features/67_layers.js) + hộp quét chọn trên khung */
+#overlay .marq { position: absolute; border: 1px dashed rgb(var(--color-accent-text)); background: rgb(var(--color-accent-text) / .08); pointer-events: none; }
+#lyr .lyhint { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin-bottom: var(--space-2); line-height: 1.5; }
+#lyr .lyr { display: flex; gap: var(--space-2); align-items: center; padding: 4px var(--space-2); border-radius: var(--radius-control); cursor: pointer; border: 1px solid transparent; position: relative; }
+#lyr .lyr:hover { background: rgb(var(--color-surface-raised)); }
+#lyr .lyr.sel { background: rgb(var(--color-accent-soft) / .24); border-color: rgb(var(--color-accent-text) / .5); }
+#lyr .lyr.off .mid, #lyr .lyr.off .ic { opacity: .45; }
+#lyr .lyr .grip { color: rgb(var(--color-fg-subtle)); cursor: grab; flex: none; width: 14px; }
+#lyr .lyr .grip.no { visibility: hidden; }
+#lyr .lyr .ic { color: rgb(var(--color-fg-muted)); flex: none; }
+#lyr .lyr .mid { min-width: 0; flex: 1; }
+#lyr .lyr .t1 { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lyr .lyr .t2 { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
+#lyr .lyr button { flex: none; width: 24px; height: 24px; padding: 0; justify-content: center; background: transparent; border: 0; color: rgb(var(--color-fg-subtle)); }
+#lyr .lyr button:hover { color: rgb(var(--color-fg)); background: rgb(var(--color-surface-hover)); }
+#lyr .lyr button.on { color: rgb(var(--color-accent-text)); }
+#lyr .lyr.dragging { opacity: .4; }
+#lyr .lyr.drop-above { box-shadow: inset 0 2px 0 rgb(var(--color-accent-text)); }
+#lyr .lyr.drop-below { box-shadow: inset 0 -2px 0 rgb(var(--color-accent-text)); }
+#lyr .lysep { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); padding: var(--space-1) var(--space-2) 0; }
+body.lydrag, body.lydrag * { cursor: grabbing !important; user-select: none; }

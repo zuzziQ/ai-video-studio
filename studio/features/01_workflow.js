@@ -8,7 +8,7 @@
 (() => {
   const S = Studio, $ = s => document.querySelector(s), esc = S.esc;
   const DEFAULT_LEVEL = 'pro'; // C13 chưa chốt: đổi thành 'basic' khi chủ repo quyết người mới vào chế độ Cơ bản
-  const MAX_RAIL = 7;
+  const MAX_RAIL = 8; // S20 M142: 8 mục để bước Dựng có Lớp mà Hiệu ứng không bị đẩy vào Thêm…
   const STEPS = [['prep', 'Chuẩn bị', 'ti-briefcase'], ['source', 'Nguồn', 'ti-video'], ['build', 'Dựng', 'ti-layers-subtract'],
     ['check', 'Kiểm tra', 'ti-shield-check'], ['ship', 'Xuất và đăng', 'ti-send']];
   const SETTINGS = ['settings', 'Cài đặt', 'ti-settings'];
@@ -21,9 +21,10 @@
     'wf-new': ['source', 1], words: ['source', 2], ai: ['source', 3], longform: ['source', 4],
     // S13 (M108): bước Dựng mở đầu bằng một nút "AI dựng" (wf-aihelp, kèm tuỳ chọn Thêm b-roll / Thêm âm thanh = Tự động chạy
     // nối sau); tab Tự động (tuỳ chỉnh b-roll + âm thanh) sang mục B-roll. C15: Tự lái không thuộc bước nào, mở từ nút trên thanh đầu.
-    autopilot: ['queue', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 6], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
+    autopilot: ['queue', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 6], comp: ['build', 2.5], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
     aibroll: ['build', 6], 'wf-broll': ['build', 6], fx: ['build', 7], sticker: ['build', 8], shapes: ['build', 8.5], trans: ['build', 9], filter: ['build', 10], dub: ['build', 11],
-    'wf-qc': ['check', 1], comp: ['check', 2, 'pro'],
+    // S20 M142: Thành phần (tab Lớp) là công cụ dựng như bảng Layers của CapCut / Canva — ở bước Dựng, mọi mức, ngay sau Media
+    'wf-qc': ['check', 1],
     'wf-export': ['ship', 1], 'wf-publish': ['ship', 2], schedule: ['ship', 3], batch: ['ship', 4],
     'wf-mode': ['settings', 1], 'wf-engines': ['settings', 2], perf: ['settings', 3, 'pro'], agent: ['settings', 4, 'pro'], stylelab: ['settings', 5, 'pro'],
   };
