@@ -837,3 +837,31 @@ body[data-tl="strip"] #tlstrip { display: block; }
 #tlstrip .scr-tip { position: absolute; bottom: calc(100% + 6px); padding: 2px var(--space-1); border-radius: var(--radius-xs); background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); color: rgb(var(--color-fg)); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; z-index: 7; box-shadow: var(--shadow-card); }
 #tlstrip .scr-tip[hidden] { display: none; }
 #tlstrip.scr-seeking { cursor: grabbing; }
+
+/* S23 M163: Hỏi Claude hai dạng theo Studio.layout (features/75_ask.js, AskCore.formOf; C30, C31).
+   Cột (data-form=col): Cơ bản + video dọc (data-right=claude) — cột Claude thay cột phải (#right ẩn, #insp dời vào cột khi chọn
+   element), gợi ý xếp dọc, kết quả không giới hạn cao, thanh xem lại (#rvbar) nằm trong cột.
+   Dòng (data-form=row): video ngang, Chuyên nghiệp, cửa sổ hẹp — một dòng dưới khung; gợi ý nhanh hiện khi đang gõ. */
+/* #center lấy luôn ô của cột phải (đúng cả khi #lib là cột lưới lẫn ngăn trượt của M165); ⤢ đã tự ẩn #right */
+body.wf-basic[data-right="claude"]:not([data-focus]) main:has(#askbar:not([hidden])) > #center { grid-column: span 2; }
+body.wf-basic[data-right="claude"] main:has(#askbar:not([hidden])) > #right { display: none; }
+body[data-right="claude"] #center:has(> #askbar:not([hidden])) { grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 380px); }
+/* Chuyên nghiệp video dọc: Thuộc tính ở cột phải, Claude là dòng dưới khung (khối M161 xếp cột cho mọi chế độ) */
+body[data-ask="side"]:not([data-right="claude"]) #center:has(> #askbar:not([hidden])) { display: flex; }
+body[data-ask="side"]:not([data-right="claude"]) #center:has(> #askbar:not([hidden])) > #askbar { border-left: 0; border-top: 1px solid rgb(var(--color-line)); overflow: visible; }
+#askbar .ask-head { display: none; }
+#askbar .ask-slot:empty { display: none; }
+#askbar[data-form="row"]:not(:focus-within) .ask-quick { display: none; }
+#askbar[data-form="col"] { --rtabs-h: 0px; gap: var(--space-2); padding: var(--space-3); background: rgb(var(--color-surface)); }
+#askbar[data-form="col"] .ask-head { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-sm); }
+#askbar[data-form="col"] .ask-head .ti { color: rgb(var(--color-accent-text)); align-self: center; }
+#askbar[data-form="col"] .ask-head span { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
+#askbar[data-form="col"] .ask-row { flex-wrap: wrap; }
+#askbar[data-form="col"] .ask-row .ask-ic { display: none; }
+#askbar[data-form="col"] .ask-chip { order: -1; max-width: 100%; }
+#askbar[data-form="col"] .ask-quick { flex-direction: column; flex-wrap: nowrap; }
+#askbar[data-form="col"] .ask-quick button { width: 100%; height: 30px; justify-content: flex-start; border-radius: var(--radius-control); font-size: var(--text-xs); }
+#askbar[data-form="col"] .ask-out { max-height: none; overflow: visible; }
+#askbar[data-form="col"] .eai-vars { flex-direction: column; }
+#askbar[data-form="col"] .ask-rv #rvbar { padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); }
+#askbar[data-form="col"] .ask-insp { margin: var(--space-1) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); border-top: 1px solid rgb(var(--color-line)); }
