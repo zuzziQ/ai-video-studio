@@ -18,6 +18,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { AVS_HOME } from '../security.mjs';
+import { findVenvPython, venvRel } from '../../scripts/platform.mjs';
 
 const TTL = 5 * 60 * 1000, STEP_MS = 2500;
 const IS_WIN = process.platform === 'win32';
@@ -57,7 +58,9 @@ export function pipFromInstallers(skill, platform = process.platform) {
 }
 
 // ---------- helpers ----------
-const venvPy = skill => path.join(skill, 'scripts', IS_WIN ? '.venv/Scripts/python.exe' : '.venv/bin/python');
+// Python của .venv dùng được: của skill, hoặc (worktree) của thư mục chính; chưa có ở đâu thì scripts/.venv của skill
+// (để báo thiếu và để lệnh cài tạo venv ở đó).
+export const venvPy = (skill, platform = process.platform) => findVenvPython(skill, { platform }) || path.join(skill, 'scripts', venvRel(platform));
 // Tìm lệnh trên PATH mà không chạy shell (nhanh, không spawn).
 export function which(cmd, env = process.env) {
   const exts = IS_WIN ? (env.PATHEXT || '.EXE;.CMD;.BAT').split(';').filter(Boolean) : [''];
@@ -84,7 +87,7 @@ const q = s => (/[\s()&]/.test(s) ? `"${s}"` : s);
 // Lệnh cài theo hệ điều hành. Lệnh chung là chạy lại trình cài (cài đủ mọi thứ, mục có rồi thì bỏ qua).
 function commands(skill, platform) {
   const win = platform === 'win32', mac = platform === 'darwin';
-  const vpy = q(path.join(skill, 'scripts', win ? '.venv\\Scripts\\python.exe' : '.venv/bin/python'));
+  const vpy = q(venvPy(skill, platform));
   const pip = spec => `${vpy} -m pip install ${/[[<>]/.test(spec) ? `"${spec}"` : spec}`;
   const pick = (w, m, l) => (win ? w : mac ? m : l);
   return {
@@ -156,7 +159,7 @@ export function fixPlan(id, o) {
   if (id === 'all') return win
     ? [{ cmd: POWERSHELL, argv: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(o.skill, 'install.ps1'), '-Yes'], label: 'Chạy trình cài (install.ps1)' }]
     : [{ cmd: '/bin/bash', argv: [path.join(o.skill, 'install.sh')], label: 'Chạy trình cài (install.sh)' }];
-  const vpy = path.join(o.skill, 'scripts', win ? '.venv/Scripts/python.exe' : '.venv/bin/python');
+  const vpy = venvPy(o.skill, o.platform);
   // mô hình: tải bằng prefetch_models.py trong .venv (cần thư viện của nó: faster-whisper / rembg)
   if (isModelId(id)) {
     const m = loadModels(o.skill).find(x => modelId(x) === id);
@@ -297,6 +300,7 @@ export async function checkAll({ skill, env = process.env, platform = process.pl
     venv.version = py.py;
     venv.status = py.broken ? 'missing' : verGe(py.py, [3, 10]) ? 'ok' : 'old';
     if (py.broken) venv.note = '.venv hỏng, không chạy được: xoá scripts/.venv rồi chạy lại trình cài';
+    else if (!vpy.startsWith(path.join(skill, 'scripts'))) venv.note = `Dùng .venv của thư mục chính: ${path.dirname(path.dirname(vpy))}`;
   }
 
   // pip: một mục cho mỗi id (cuBLAS + cuDNN chung một mục)

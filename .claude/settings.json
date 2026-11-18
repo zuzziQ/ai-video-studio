@@ -1,0 +1,141 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${AI_HUB:-D:/ai}/scripts/hooks/sdlc-core.py\"; [ -f \"$f\" ] || exit 0; for p in python3 python py; do command -v $p >/dev/null 2>&1 && { $p \"$f\"; exit 0; }; done; exit 0"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${DEVMEM_HOME:-${AI_HUB:-D:/ai}/tools/dev-memory}/hooks/devmem-recall.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\"; exit 0",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CODE_RAG_MCP:-${AI_HUB:-D:/ai}/tools/code-rag-mcp}/hooks/recall.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\"; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${AI_HUB:-D:/ai}/scripts/hooks/sdlc-core.py\"; [ -f \"$f\" ] || exit 0; for p in python3 python py; do command -v $p >/dev/null 2>&1 && { $p \"$f\"; exit 0; }; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${AI_HUB:-D:/ai}/scripts/hooks/sdlc-core.py\"; [ -f \"$f\" ] || exit 0; for p in python3 python py; do command -v $p >/dev/null 2>&1 && { $p \"$f\"; exit 0; }; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${AI_HUB:-D:/ai}/scripts/hooks/sdlc-core.py\"; [ -f \"$f\" ] || exit 0; for p in python3 python py; do command -v $p >/dev/null 2>&1 && { $p \"$f\"; exit 0; }; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${AI_HUB:-D:/ai}/scripts/hooks/wip-core.py\"; [ -f \"$f\" ] || exit 0; for p in python3 python py; do command -v $p >/dev/null 2>&1 && { $p \"$f\"; exit 0; }; done; exit 0",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CODE_RAG_MCP:-${AI_HUB:-D:/ai}/tools/code-rag-mcp}/hooks/pre_commit.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\"; exit 0",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${DEVMEM_HOME:-${AI_HUB:-D:/ai}/tools/dev-memory}/hooks/devmem-recall.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\"; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "r=$(git rev-parse --show-toplevel 2>/dev/null) || r=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$r/scripts/worktree-setup.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\"; exit 0",
+            "timeout": 300
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CODE_RAG_MCP:-${AI_HUB:-D:/ai}/tools/code-rag-mcp}/hooks/sync.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\" pull; exit 0",
+            "timeout": 25
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CODE_RAG_MCP:-${AI_HUB:-D:/ai}/tools/code-rag-mcp}/hooks/capture.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\"; exit 0",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CODE_RAG_MCP:-${AI_HUB:-D:/ai}/tools/code-rag-mcp}/hooks/sync.mjs\"; [ -f \"$f\" ] || exit 0; command -v node >/dev/null 2>&1 && node \"$f\" push; exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "code-rag-mcp",
+    "codebase-memory-mcp",
+    "dev-memory"
+  ]
+}

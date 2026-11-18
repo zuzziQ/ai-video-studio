@@ -18,10 +18,36 @@ export function findChrome() {
 }
 export const CHROME = findChrome();
 
-// Python of scripts/.venv (setup) — `dir` may be the skill root or scripts/.
+// Python of scripts/.venv (setup). A git worktree (.claude/worktrees/<name>/) has no venv of its own, so when `root`
+// has none the main checkout's (parent of `git --git-common-dir`) is used. Never link .venv/node_modules across:
+// `git worktree remove --force` on Windows follows a junction and empties its target.
+export const venvRel = (platform = process.platform) => (platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
+const MAIN = new Map();
+export function mainCheckout(dir) {
+  if (!MAIN.has(dir)) {
+    let main = null;
+    try {
+      const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, windowsHide: true }).trim();
+      if (common) main = path.dirname(path.resolve(common));
+    } catch { /* not a git checkout, or no git */ }
+    MAIN.set(dir, main);
+  }
+  return MAIN.get(dir);
+}
+// usable = the interpreter and the venv's pyvenv.cfg both exist (a half-deleted .venv is skipped)
+const venvOk = py => fs.existsSync(py) && fs.existsSync(path.join(path.dirname(path.dirname(py)), 'pyvenv.cfg'));
+/** Python of the first usable venv: `root/.venv`, `root/scripts/.venv`, then the main checkout's scripts/.venv; null if none.
+ *  `root` may be the skill root or scripts/. o.main overrides the main checkout (tests), o.platform the OS layout. */
+export function findVenvPython(root, o = {}) {
+  const rel = venvRel(o.platform);
+  const main = 'main' in o ? o.main : mainCheckout(path.resolve(root));
+  const c = [path.join(root, rel), path.join(root, 'scripts', rel)];
+  if (main) c.push(path.join(main, 'scripts', rel));
+  return c.find(venvOk) || null;
+}
+// Venv Python for running scripts, or the system Python when there is no venv anywhere.
 export function pyBin(dir) {
-  const rel = IS_WIN ? '.venv/Scripts/python.exe' : '.venv/bin/python';
-  return [path.join(dir, rel), path.join(dir, 'scripts', rel)].find(f => fs.existsSync(f)) || (IS_WIN ? 'python' : 'python3');
+  return findVenvPython(dir) || (IS_WIN ? 'python' : 'python3');
 }
 
 // Claude Code CLI. On Windows an npm install is a claude.cmd shim, which spawn() cannot run without a shell (and a shell
