@@ -79,7 +79,7 @@ test('mục → việc Hỏi Claude hoặc mở chỗ sửa', () => {
   assert.equal(v.fail.find(f => f.id === 'video').ask, null);
 });
 
-test('giao diện nối đúng: thanh bước có popover aria-describedby + Esc; tab Dự án bỏ chip + thanh, giữ danh sách + C17', () => {
+test('giao diện nối đúng: thanh bước có popover aria-describedby + Esc; tab Dự án bỏ hẳn (S24 M174), giữ C17', () => {
   const UI = read('studio/features/03_stepscore.js'), NS = read('studio/features/03_nextstep.js'), ASK = read('studio/features/75_ask.js'), CSS = read('studio/studio.css');
   assert.match(UI, /setAttribute\('aria-describedby', 'wf-sp-sum'\)/);
   assert.match(UI, /e\.key === 'Escape'/);
@@ -88,8 +88,8 @@ test('giao diện nối đúng: thanh bước có popover aria-describedby + Esc
   assert.match(UI, /#wf-steps button\[data-step\]/);
   assert.ok(!NS.includes('data-ns-step'), 'không còn dải chip 5 bước');
   assert.ok(!NS.includes('ns-bar'), 'không còn thanh tiến độ');
-  assert.match(NS, /\$\{list\(st, 'data-ns-i'\)\}/, 'giữ danh sách việc của bước');
-  assert.match(NS, /data-ns="go"/, 'giữ nút Sang bước …');
+  assert.ok(!NS.includes("data-ns-i") && !NS.includes('data-ns="go"'), 'M174: không còn danh sách việc + nút Sang bước ở cột phải');
+  assert.match(NS, /list\(st, 'data-nsx-i', true\)/, 'hộp cảnh báo Xuất vẫn liệt kê chỗ thiếu');
   assert.match(NS, /async function guardExport\(\)/, 'giữ cảnh báo Xuất C17');
   assert.match(NS, /S\.nextStep = \{[^}]*\bfix\b[^}]*_paint: onPaint/);
   assert.match(ASK, /S\.ask = \{ open, run,/);

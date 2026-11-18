@@ -13,7 +13,7 @@
   // Thanh trái ở Cơ bản: id panel theo bước (bảng mục 4 của kế hoạch). Mục của nhóm có tab (01_workflow GROUPS) ghi đủ các tab:
   // Âm thanh = Nhạc & SFX + Giọng & trộn. Bước không có ở đây (vd. 'queue' — hàng đợi Tự lái) hiện đủ ở mọi chế độ.
   const BASIC_RAIL = {
-    prep: ['brands'],
+    prep: ['brands', 'wf-project'], // S24 M174: Cài đặt dự án (01_workflow.js) — cũ ở tab Dự án của cột phải
     source: ['wf-new'],
     build: ['wf-aihelp', 'tpl', 'text', 'audio', 'audioplus'],
     check: ['wf-qc'],
@@ -30,8 +30,8 @@
   }
   const railShown = (id, step, level, optLevel) => norm(level) === 'pro' || railLevel(id, step, optLevel) === 'basic';
 
-  // Cột phải (68_right.core.js): Cơ bản không có tab Lớp; tab Claude ở cả hai chế độ (S24 M170, C34, C35).
-  const RIGHT_TABS = { basic: ['props', 'claude', 'project'], pro: ['props', 'layers', 'claude', 'project'] };
+  // Cột phải (68_right.core.js): Cơ bản không có tab Lớp; tab Claude ở cả hai chế độ (S24 M170, C34, C35); bỏ tab Dự án (M174, C37).
+  const RIGHT_TABS = { basic: ['props', 'claude'], pro: ['props', 'layers', 'claude'] };
   const rightTabs = level => RIGHT_TABS[norm(level)];
 
   // Thuộc tính (68_sections.core.js): ở Cơ bản hiện Núm và mục chính (khoá 'basic' của lõi inspector; không có thì mục đầu không

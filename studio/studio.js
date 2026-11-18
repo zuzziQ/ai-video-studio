@@ -457,18 +457,19 @@ function inspTabs(c) {
       <div class="acts"><button data-act="json" class="primary"><i class="ti ti-check"></i> Áp dụng JSON</button></div>`, 'ti-code')]];
 }
 const KIND_IC = { clip: 'ti-movie', line: 'ti-letter-t', cap: 'ti-badge-cc', node: 'ti-hierarchy', badge: 'ti-badge', sfx: 'ti-bell', music: 'ti-music', scene: 'ti-sparkles' };
-// S21 M145: cột phải = nhóm tab Thuộc tính · Lớp · Claude (S24 M170) · Dự án (lõi features/68_right.core.js). #insp vẫn là thân của tab đang mở, nên
-// mọi selector cũ (#insp [data-f=…], 03_nextstep, workflow.focus) chạy như trước. Chưa nạp lõi thì giữ hành vi cũ (không có dải tab).
-const RT = { tab: null, had: false, detail: null, ext: {} };
+// S21 M145: cột phải = nhóm tab Thuộc tính · Lớp · Claude (S24 M170; tab Dự án bỏ ở M174) (lõi features/68_right.core.js). #insp vẫn là thân của
+// tab đang mở, nên mọi selector cũ (#insp [data-f=…], workflow.focus) chạy như trước. Chưa nạp lõi thì giữ hành vi cũ (không có dải tab).
+// auto (M174): tab đang mở do Studio tự đổi tới (không chọn gì → Claude); người dùng bấm tab / Studio.right.show thì tiêu cờ.
+const RT = { tab: null, had: false, auto: false, detail: null, ext: {} };
 const rtStore = { get() { try { return localStorage.getItem('avs.rtab'); } catch { return null; } }, set(v) { try { localStorage.setItem('avs.rtab', v); } catch { /* chế độ riêng tư */ } } };
 // S22 M151: chế độ Cơ bản / Chuyên nghiệp (01_workflow.js đặt body.wf-basic; lõi features/01_level.core.js): Cơ bản không có tab Lớp.
 const uiLevel = () => (document.body.classList.contains('wf-basic') ? 'basic' : 'pro');
 const rtKeys = () => (window.LevelCore ? LevelCore.rightTabs(uiLevel()) : window.RightCore?.KEYS || []);
 function rightTab() {
-  const C = window.RightCore; if (!C) return sel ? 'props' : 'project';
+  const C = window.RightCore; if (!C) return sel ? 'props' : 'claude';
   const has = !!sel, keys = rtKeys();
-  if (RT.tab == null) RT.tab = C.initialTab(rtStore.get(), has, keys, !!RT.detail);
-  else RT.tab = C.nextTab({ tab: RT.tab, had: RT.had, has, detail: !!RT.detail, keys });
+  if (RT.tab == null) { const saved = rtStore.get(); RT.tab = C.initialTab(saved, has, keys, !!RT.detail); RT.auto = RT.tab !== saved; }
+  else { const t = C.nextTab({ tab: RT.tab, had: RT.had, has, detail: !!RT.detail, keys, auto: RT.auto }); if (t !== RT.tab) RT.auto = true; RT.tab = t; }
   RT.had = has;
   return RT.tab;
 }
@@ -485,7 +486,7 @@ function showRightTab(k) {
   // C24: tab chỉ có ở Chuyên nghiệp (Lớp) mở từ nút / lệnh khi đang Cơ bản → đổi sang Chuyên nghiệp rồi mở, không mất tính năng
   if (!RightCore.valid(k, rtKeys())) { if (Studio.workflow?.setLevel) Studio.workflow.setLevel('pro'); else return; }
   if (k === 'props' && RightCore.propsUsable && !RightCore.propsUsable(!!sel, !!RT.detail)) return; // M156: không có gì để xem
-  RT.tab = k; RT.had = !!sel; rtStore.set(k); renderInspector();
+  RT.tab = k; RT.had = !!sel; RT.auto = false; rtStore.set(k); renderInspector();
 }
 $('#insp').addEventListener('click', e => { const b = e.target.closest('[data-rtgo]'); if (b) showRightTab(b.dataset.rtgo); });
 $('#rtabs')?.addEventListener('click', e => { const b = e.target.closest('[data-rtab]'); if (b) showRightTab(b.dataset.rtab); });
@@ -508,7 +509,7 @@ function setSect(key, on) {
   SECT.state = SectCore.setOpen(sectState(), sectKind(sel), key, on);
   try { localStorage.setItem('avs.isec', JSON.stringify(SECT.state)); } catch { /* chế độ riêng tư */ }
 }
-// mở + cuộn tới (dải mục, chỗ nối chuyển cảnh). Mục nằm ở tab Thuộc tính: đang ở Lớp / Dự án thì sang Thuộc tính (S23 M166:
+// mở + cuộn tới (dải mục, chỗ nối chuyển cảnh). Mục nằm ở tab Thuộc tính: đang ở Lớp / Claude thì sang Thuộc tính (S23 M166:
 // bấm chỗ nối trên timeline khi cột phải ở Lớp không thấy gì đổi, vì nextTab giữ Lớp)
 function openSect(key) { setSect(key, true); SECT.go = key; if (RT.tab !== 'props' && sel) showRightTab('props'); else renderInspector(); }
 const sectLine = () => $('#insp .itop')?.getBoundingClientRect().bottom ?? 0;
@@ -535,12 +536,11 @@ const askRow = c => (Studio.ask && (c.kind === 'clip' || window.AskCore?.ELEM_KI
 function renderInspector() {
   const el = $('#insp'), tab = rightTab();
   rightTabsBar(tab); el.dataset.rtab = tab;
-  if (tab === 'project') { el.innerHTML = projectPanel(); return; }
   if (tab === 'layers') { if (RT.ext.layers) RT.ext.layers(el); else el.innerHTML = '<div class="rempty">Chưa có bảng Lớp.</div>'; return; }
   if (tab === 'claude') { if (RT.ext.claude) RT.ext.claude(el); else el.innerHTML = '<div class="rempty">Chưa có Hỏi Claude.</div>'; return; } // S24 M170: 75_ask.js
   if (!sel) {
     if (RT.detail) { el.innerHTML = RT.detail.html; RT.detail.mount?.(el); return; } // M147: chi tiết mục thư viện
-    RT.tab = 'project'; rightTabsBar('project'); el.dataset.rtab = 'project'; el.innerHTML = projectPanel(); return; // M156: không còn ô "Chưa chọn element"
+    RT.tab = window.RightCore?.IDLE || 'claude'; RT.auto = true; return renderInspector(); // M156 / M174: không còn ô "Chưa chọn element", về tab Claude
   }
   const c = sel, o = c.obj;
   const tag = { clip: 'Video', line: c.scene?.type === 'text' ? 'Chữ thêm' : 'Chữ graphic', cap: 'Phụ đề', node: 'Sơ đồ', badge: 'Huy hiệu', sfx: 'Âm thanh', music: 'Nhạc nền', scene: sceneName(o) }[c.kind] || c.tag || c.kind;
@@ -566,7 +566,9 @@ function renderInspector() {
       ${open[i] ? `<div class="isec-b">${s.html}</div>` : ''}</div>`).join('')}${moreBtn}${clip ? '' : actions(c) + noteBlock(o)}</div>`;
   requestAnimationFrame(sectAfter);
 }
-// Cài đặt dự án (cột phải khi không chọn gì; 03_nextstep.js gom vào mục thu gọn dưới khối bước). Chủ repo báo 2026-11-17: phần này
+// Cài đặt dự án: panel wf-project ở bước Chuẩn bị của thanh trái (S24 M174, 01_workflow.js; trước ở tab Dự án của cột phải).
+// Studio.project = { html, mount(el) }: mount gắn sự kiện lên chính khối .pp-panel (không lên #libbody: data-pf của 29_perf, 52_publish
+// cũng ở đó). Chủ repo báo 2026-11-17: phần này
 // trùng nhiều chỗ khác. Mỗi thứ chỉ một nơi sửa: bộ thương hiệu dùng chung ở bước ① (ở đây chỉ thẻ tóm tắt + chỉnh riêng cho video
 // này, thu gọn), kiểu phụ đề ở panel Chữ, SFX tự động ở panel Âm thanh (ở đây là đường tắt). Còn lại là việc chỉ có ở đây: gói style
 // + dựng tự động theo gói, hiện từng từ, ghi chú cho Claude; vị trí mặt vào "Nâng cao".
@@ -595,9 +597,35 @@ function projectPanel() {
       <div class="help">Bấm chữ / khung trên preview hoặc khối timeline để chỉnh. ${tip('Kéo để di chuyển, kéo góc để đổi cỡ.')}</div>`, 'ti-message-2');
   const adv = `<details class="pp-more pp-adv"><summary><i class="ti ti-settings-2"></i>Nâng cao</summary>${sect('Vị trí mặt (bubble / PIP / vùng mặt)', `<div class="row"><div><span class="lbl">X</span><input type="number" data-pf="facex" value="${TL.face?.x ?? 360}"></div><div><span class="lbl">Y</span><input type="number" data-pf="facey" value="${TL.face?.y ?? 520}"></div></div>`, 'ti-face-id')}</details>`;
   const meta = `<div class="meta"><span><i class="ti ti-movie"></i> ${(TL.clips || []).length} clip</span><span><i class="ti ti-photo"></i> ${META.frames} khung</span><span><i class="ti ti-clock"></i> ${fmt(TL.duration)}</span><span><i class="ti ti-aspect-ratio"></i> ${DW > DH ? '16:9' : '9:16'}</span></div>`;
-  return `<div class="ihead" data-proj><span class="iic"><i class="ti ti-settings"></i></span><div class="it"><h3>${esc(META.name || 'Dự án')}</h3><div class="sub"><span class="pill">Cài đặt dự án</span></div></div></div>
-    <div class="ibody">${brand}${style}${caps}${sfx}${note}${adv}${meta}</div>`;
+  return `<div class="pp-panel" data-proj><div class="pp-head"><i class="ti ti-movie"></i><b>${esc(META.name || 'Dự án')}</b></div>${meta}
+    ${brand}${style}${caps}${sfx}${note}${adv}</div>`;
 }
+// sự kiện của Cài đặt dự án (trước nằm trong các listener của #insp)
+function mountProject(root) {
+  const box = root?.querySelector?.('.pp-panel') || root; if (!box || box._pp) return; box._pp = 1;
+  box.addEventListener('input', e => {
+    const t = e.target, pf = t.dataset.pf, bk = t.dataset.brand;
+    if (bk) { pushUndo('brand' + bk); TL.brand = { ...(TL.brand || {}), [bk]: t.value || undefined }; return changed(); }
+    if (pf && t.tagName !== 'SELECT' && t.type !== 'checkbox') return projectField(pf, t);
+  });
+  box.addEventListener('change', e => { const t = e.target, pf = t.dataset.pf; if (pf && (t.tagName === 'SELECT' || t.type === 'checkbox')) projectField(pf, t); });
+  box.addEventListener('click', e => {
+    const pa = e.target.closest('[data-pact]')?.dataset.pact; if (!pa) return;
+    if (pa === 'recipe') {
+      if (!TL.pack) return toast('Chọn gói style trước');
+      // recipes place their graphics on keywords of the speech — without captions they would only add intro/CTA
+      if (!CAP.length && Studio.needCaptions) return Studio.needCaptions(() => { pushUndo(); applyRecipe(TL.pack); }, 'Dựng tự động theo gói');
+      pushUndo(); return applyRecipe(TL.pack);
+    }
+    if (pa === 'autosfx') return autoSfx();
+    // đường tắt của Cài đặt dự án sang nơi sửa duy nhất (S19 M137)
+    if (pa === 'brandkit') return TL.brand?.kit && Studio.nextStep?.editBrand ? Studio.nextStep.editBrand('name') : Studio.workflow?.focus('brands', ['.bk-card.cur', '.bk-card', '#bk-new2']);
+    if (pa === 'open-text') return Studio.workflow?.focus('text', ['.cslist .on', '.cslist']);
+    if (pa === 'open-audio') return Studio.workflow?.focus('audio');
+  });
+}
+// gói vừa đổi: vẽ lại panel Cài đặt dự án nếu đang mở (mô tả gói)
+const redrawProject = () => { const b = $('#libbody'); if (b?.querySelector('.pp-panel')) { b.innerHTML = projectPanel(); mountProject(b); } };
 // Starter edit from a pack recipe (also used once for projects made by "Video mới").
 function applyRecipe(packId, title, replace = false) {
   const p = packs().find(x => x.id === packId);
@@ -694,26 +722,23 @@ function clipField(f, v, el) {
   changed();
 }
 $('#insp').addEventListener('input', e => {
-  const t = e.target, f = t.dataset.f, pf = t.dataset.pf, bk = t.dataset.brand, cf = t.dataset.cf;
+  const t = e.target, f = t.dataset.f, cf = t.dataset.cf;
   if (cf) { if (t.type === 'range') clipField(cf, t.value, t); return; }
-  if (bk) { pushUndo('brand' + bk); TL.brand = { ...(TL.brand || {}), [bk]: t.value || undefined }; return changed(); }
-  if (pf) return projectField(pf, t);
   if (!f || f === 'json' || f === 'captext') return;
   if (t.tagName === 'SELECT' || t.type === 'checkbox') return;
   if (t.type === 'range' && f === 'pct') { const b = t.parentNode.querySelector('b'); if (b) b.textContent = t.value + '%'; }
   applyField(f, t.value, t);
 });
 $('#insp').addEventListener('change', e => {
-  const t = e.target, f = t.dataset.f, pf = t.dataset.pf, cf = t.dataset.cf;
+  const t = e.target, f = t.dataset.f, cf = t.dataset.cf;
   if (cf && t.type === 'number') return clipField(cf, t.value, t);
   if (cf && t.type === 'range') return renderInspector();
-  if (pf) return projectField(pf, t);
   if (f === 'captext' || t.tagName === 'SELECT' || t.type === 'checkbox') applyField(f, t.value, t);
 });
 function projectField(pf, el) {
   pushUndo('proj' + pf);
   if (pf === 'caption_style') TL.caption_style = el.value || undefined;
-  if (pf === 'pack') { TL.pack = el.value || undefined; renderInspector(); }
+  if (pf === 'pack') { TL.pack = el.value || undefined; redrawProject(); }
   if (pf === 'caption_reveal') TL.caption_reveal = el.checked ? undefined : false;
   if (pf === 'facex' || pf === 'facey') TL.face = { ...(TL.face || { x: 360, y: 520 }), [pf === 'facex' ? 'x' : 'y']: +el.value };
   if (pf === 'note') TL.note = el.value || undefined;
@@ -733,18 +758,6 @@ $('#insp').addEventListener('click', async e => {
   if (sh) { setSect(sh.dataset.sect, sh.getAttribute('aria-expanded') !== 'true'); SECT.pin = 0; return renderInspector(); }
   const al = t.closest('[data-align]')?.dataset.align;
   if (al) return alignSel(al);
-  const pa = t.closest('[data-pact]')?.dataset.pact;
-  if (pa === 'recipe') {
-    if (!TL.pack) return toast('Chọn gói style trước');
-    // recipes place their graphics on keywords of the speech — without captions they would only add intro/CTA
-    if (!CAP.length && Studio.needCaptions) return Studio.needCaptions(() => { pushUndo(); applyRecipe(TL.pack); }, 'Dựng tự động theo gói');
-    pushUndo(); return applyRecipe(TL.pack);
-  }
-  if (pa === 'autosfx') return autoSfx();
-  // đường tắt của Cài đặt dự án sang nơi sửa duy nhất (S19 M137)
-  if (pa === 'brandkit') return TL.brand?.kit && Studio.nextStep?.editBrand ? Studio.nextStep.editBrand('name') : Studio.workflow?.focus('brands', ['.bk-card.cur', '.bk-card', '#bk-new2']);
-  if (pa === 'open-text') return Studio.workflow?.focus('text', ['.cslist .on', '.cslist']);
-  if (pa === 'open-audio') return Studio.workflow?.focus('audio');
   if (!sel) return;
   const c = sel, o = c.obj;
   // clip controls
@@ -1800,6 +1813,7 @@ const Studio = window.Studio = {
   FONTS, SWATCH, ANIM_LIST, fontOpt, setTimes: (c, t0, t1) => setTimes(c, t0, t1, false), rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
   removeSel, duplicateSel, splitAtPlayhead,
   // S21 M145: cột phải. addTab(key, render(el)): vẽ thân tab (layers: 67_layers.js). setDetail({html, mount?} | null): chi tiết mục thư viện (M147).
+  project: { html: () => projectPanel(), mount: mountProject }, // S24 M174: Cài đặt dự án ở bước Chuẩn bị (01_workflow.js)
   right: { get tab() { return RT.tab; }, show: showRightTab, addTab(key, render) { RT.ext[key] = render; if (RT.tab === key) renderInspector(); }, refresh: () => renderInspector(),
     setDetail(d) { RT.detail = d || null; if (d) showRightTab(window.RightCore?.tabForDetail() || 'props'); else if (RT.tab === 'props' && !sel) renderInspector(); }, get detail() { return RT.detail; } }, copySel, pasteClip, toggleLock, layerSel, selectAll, get canPaste() { return !!CLIPB; }, // S20 M141
   startInlineEdit: c => startInlineEdit(c), compByCid: cid => compByCid(cid), _ov: [],
