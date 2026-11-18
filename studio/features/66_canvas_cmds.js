@@ -29,7 +29,7 @@
     const o = c.obj, k = C.barKind(c), size = Math.round(S.getPos(c)?.size || 0);
     const color = `<button data-cb="color" class="sw" title="Màu" aria-label="Màu"><b data-dfill="${esc(o.color || '#ffffff')}"></b></button>`; // design-token-ok: màu chữ của video
     const sizeCtl = size ? `${btn('sz-', 'ti-minus', 'Nhỏ hơn')}<span class="num" title="Cỡ chữ">${size}</span>${btn('sz+', 'ti-plus', 'To hơn')}` : '';
-    const font = `<select data-cb="font" title="Font" aria-label="Font">${opt(S.FONTS, o.font)}</select>`;
+    const font = `<select data-cb="font" title="Font" aria-label="Font">${S.fontOpt ? S.fontOpt(o.font) : opt(S.FONTS, o.font)}</select>`; // S21 M148: font thương hiệu đứng đầu
     if (k === 'text') return font + sizeCtl + color +
       btn('bold', 'ti-bold', 'Đậm', `class="${(o.weight ?? 900) >= 700 ? 'on' : ''}" aria-pressed="${(o.weight ?? 900) >= 700}"`) +
       `<select data-cb="anim" title="Hoạt ảnh vào" aria-label="Hoạt ảnh vào">${opt(S.ANIM_LIST, o.anim || 'pop')}</select>` + layerBtns(c) + btn('more', 'ti-dots', 'Thêm');
@@ -94,7 +94,9 @@
     if (pop) return closePop();
     const cur = sel()?.obj.color || '';
     pop = document.createElement('div'); pop.className = 'cbar-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Chọn màu');
-    pop.innerHTML = `<button data-col="" class="orig ${cur ? '' : 'on'}">Gốc</button>` +
+    const bc = window.KnobsCore?.brandColors(S.TL?.brand) || [], up = String(cur).toUpperCase(); // S21 M148: hàng Thương hiệu đứng đầu
+    pop.innerHTML = (bc.length ? `<div class="cbar-brand" role="group" aria-label="Màu thương hiệu"><small>Thương hiệu</small>${bc.map(x => `<button data-col="${x.v}" data-dfill="${x.v}" class="${up === x.v ? 'on' : ''}" title="${esc(x.label)} ${x.v}" aria-label="${esc(x.label)} ${x.v}"></button>`).join('')}</div>` : '') +
+      `<button data-col="" class="orig ${cur ? '' : 'on'}">Gốc</button>` +
       S.SWATCH.map(x => `<button data-col="${x}" data-dfill="${x}" class="${cur === x ? 'on' : ''}" title="${x}" aria-label="${x}"></button>`).join('') +
       `<input type="color" value="${esc(cur || '#ffffff')}" aria-label="Màu khác">`; // design-token-ok: màu chữ của video
     document.body.appendChild(pop);

@@ -5,10 +5,12 @@
 (function (root) {
   // Mục ẩn ở chế độ Cơ bản (01_workflow.js, avs.uiLevel): Keyframe, Mặt nạ, Nâng cao (JSON) — như ẩn tab trước M146.
   const PRO = ['kf', 'mask', 'json'];
+  // Mục luôn đứng đầu (và vì thế mở sẵn như mục đầu): Núm điều chỉnh (S21 M148, 71_knobs.js).
+  const FIRST = ['knobs'];
   const ICON = {
     basic: 'ti-forms', anim: 'ti-sparkles', pos: 'ti-arrows-move', json: 'ti-code', kf: 'ti-timeline-event', mask: 'ti-mask',
     shape: 'ti-shape', hf: 'ti-box', reframe: 'ti-focus-centered', alts: 'ti-arrows-shuffle', fade: 'ti-chart-line', fx: 'ti-wave-sine',
-    trk: 'ti-adjustments-alt', speed: 'ti-brand-speedtest', color: 'ti-color-filter', audio: 'ti-volume', trans: 'ti-transition-right',
+    trk: 'ti-adjustments-alt', knobs: 'ti-adjustments-horizontal', speed: 'ti-brand-speedtest', color: 'ti-color-filter', audio: 'ti-volume', trans: 'ti-transition-right',
   };
   const iconOf = k => ICON[String(k).replace(/-\d+$/, '')] || 'ti-point';
 
@@ -22,7 +24,8 @@
       const key = seen[base] > 1 ? `${base}-${seen[base]}` : base;
       out.push({ key, label: String(t[1] ?? base), html: t[2] == null ? '' : String(t[2]), icon: iconOf(key), pro: PRO.includes(base) });
     }
-    return out;
+    const first = s => FIRST.includes(s.key);
+    return [...out.filter(first), ...out.filter(s => !first(s))];
   }
   // Mục thấy được theo chế độ giao diện.
   const visible = (secs, basic) => (basic ? secs.filter(s => !s.pro) : secs);
@@ -47,7 +50,7 @@
     return k;
   }
 
-  const T = { PRO, ICON, iconOf, normalize, visible, parse, isOpen, setOpen, active };
+  const T = { PRO, FIRST, ICON, iconOf, normalize, visible, parse, isOpen, setOpen, active };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.SectCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);
