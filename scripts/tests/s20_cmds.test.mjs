@@ -43,14 +43,14 @@ test('lớp: cảnh đổi trong TL.scenes, chữ thêm theo cảnh của nó, c
 test('menu chuột phải: chữ có Sửa chữ, lớp tắt ở mép, Về thiết kế khi có _orig; clip có Tách', () => {
   const a = { type: 'emoji_pop' }, b = { type: 'sticker' }, scenes = [a, b];
   const m = C.menuItems({ kind: 'scene', obj: b }, { scenes, hasOrig: true });
-  assert.deepEqual(ids(m), ['dup', 'hide', 'up', 'top', 'down', 'bottom', 'reset', 'note', 'seek', 'del']);
+  assert.deepEqual(ids(m), ['dup', 'hide', 'cut', 'copy', 'paste', 'up', 'top', 'down', 'bottom', 'lock', 'reset', 'note', 'seek', 'del']);
   assert.equal(m.find(x => x.id === 'up').off, true);
   assert.equal(m.find(x => x.id === 'down').off, false);
   const t = C.menuItems({ kind: 'line', obj: { text: 'x' }, scene: { type: 'text', lines: [{}] } }, { scenes, canEditText: true, hidden: true });
   assert.equal(ids(t)[0], 'edit');
   assert.equal(t.find(x => x.id === 'hide').label, 'Hiện');
   assert.ok(!ids(t).includes('reset'));
-  assert.deepEqual(ids(C.menuItems({ kind: 'clip', obj: {} }, { canSplit: true })), ['split', 'dup', 'del']);
+  assert.deepEqual(ids(C.menuItems({ kind: 'clip', obj: {} }, { canSplit: true })), ['split', 'dup', 'copy', 'paste', 'del']);
   assert.ok(!ids(C.menuItems({ kind: 'cap', obj: {} }, {})).includes('up'));
   assert.deepEqual(C.menuItems(null), []);
 });

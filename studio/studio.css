@@ -674,3 +674,17 @@ body.libdrag #stagebox, body.libdrag #tlinner { outline: 1px dashed rgb(var(--co
 #lyr .lyr.drop-below { box-shadow: inset 0 -2px 0 rgb(var(--color-accent-text)); }
 #lyr .lysep { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); padding: var(--space-1) var(--space-2) 0; }
 body.lydrag, body.lydrag * { cursor: grabbing !important; user-select: none; }
+
+/* S20 M141: element khoá (khung chọn không tay nắm + dấu khoá; khối timeline có dấu khoá) và bảng phím tắt */
+#overlay .selbox.locked { cursor: default; border-style: dashed; background: none; }
+#overlay .selbox .lockmark { position: absolute; right: -10px; top: -10px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: rgb(var(--color-white)); background: rgb(var(--color-accent-text)); border-radius: 50%; box-shadow: var(--shadow-card); pointer-events: none; }
+.blk.lockd { cursor: default; background-image: repeating-linear-gradient(135deg, rgb(var(--color-black) / .18) 0 4px, transparent 4px 8px); }
+.blk .ti.lk { opacity: 1; }
+#modal .box:has(.keyhelp) { width: 720px; }
+.keyhelp { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-3) var(--space-5); }
+.keyhelp h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-subtle)); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.keyhelp dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3); align-items: baseline; font-size: var(--text-xs); }
+.keyhelp dt { white-space: nowrap; }
+.keyhelp dd { margin: 0; color: rgb(var(--color-fg-muted)); min-width: 0; }
+.keyhelp kbd { font-family: inherit; font-size: var(--text-2xs); padding: 1px var(--space-1); border: 1px solid rgb(var(--color-line-strong)); border-bottom-width: 2px; border-radius: var(--radius-xs); background: rgb(var(--color-surface)); }
+.keyhelp .kh-or { margin: 0 var(--space-050); color: rgb(var(--color-fg-subtle)); }

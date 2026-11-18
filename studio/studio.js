@@ -11,6 +11,7 @@ let T = 0, playing = false, sel = null, comps = [], dirty = false, undoStack = [
 const PB = () => META?.base || '/project/';
 let multi = [], guides = null; // S17 M124: element chọn thêm bằng Shift (sel là element chính); đường gióng khi kéo
 let drag = null, hoverC = null, inEdit = null; // kéo trên preview (M124); S20 M139: element dưới chuột, ô gõ chữ tại chỗ đang mở
+let kzone = null, CLIPB = null; // S20 M141: vùng vừa bấm (mũi tên dời hay tua, C19); clipboard trong trang
 let query = '', K = .5, win = null, needInit = true, busy = false, pending = false, SNAP = true;
 const ITAB = {};
 
@@ -185,16 +186,17 @@ function drawOverlay() {
   const corners = '<i class="nw" data-h="nw"></i><i class="ne" data-h="ne"></i><i class="sw" data-h="sw"></i><i class="se" data-h="se"></i>';
   // S20 M139: viền mảnh quanh element dưới chuột (chưa chọn)
   if (hoverC && hoverC !== sel && !multi.includes(hoverC) && !drag && !inEdit) { const r = rectOf(hoverC.obj); if (r) h += `<div class="hoverbox" ${box(r.x * K - 2, r.y * K - 2, r.w * K + 4, r.h * K + 4)}></div>`; }
-  for (const m of multi) { const r = rectOf(m.obj); if (r) h += `<div class="selbox multi" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}></div>`; }
+  const lockMark = '<span class="lockmark ti ti-lock" title="Đã khoá · ⌥⇧L để mở"></span>'; // S20 M141
+  for (const m of multi) { const r = rectOf(m.obj); if (r) h += `<div class="selbox multi${m.obj.locked ? ' locked' : ''}" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${m.obj.locked ? lockMark : ''}</div>`; }
   if (sel && sel.kind === 'clip' && !TRK.video.lock) {
     // S17 M124: khung cắt video chính — kéo để dời, tay nắm góc để zoom (đè bám mặt ở clip này)
     h += `<div class="selbox crop ${sel.obj.crop_manual ? 'on' : ''}" ${box(0, 0, DW * K, DH * K)}>${corners}<span>${sel.obj.crop_manual ? 'Khung cắt chỉnh tay' : 'Kéo để dời khung cắt · góc để zoom'}</span></div>`;
   } else if (sel && inEdit?.c !== sel) {
-    const r = rectOf(sel.obj);
-    const edges = !multi.length && window.StageCore?.canResize(sel.kind, sel.obj.type) ? '<i class="n" data-h="n"></i><i class="s" data-h="s"></i><i class="e" data-h="e"></i><i class="w" data-h="w"></i>' : '';
-    const rot = !multi.length && window.StageCore?.canRotate(sel.kind) ? '<b class="rotstem"></b><i class="rot" data-h="rot" title="Kéo để xoay · Shift: bắt 15°"></i>' : ''; // S20 M139
+    const r = rectOf(sel.obj), lk = !!sel.obj.locked; // S20 M141: element khoá không có tay nắm
+    const edges = !lk && !multi.length && window.StageCore?.canResize(sel.kind, sel.obj.type) ? '<i class="n" data-h="n"></i><i class="s" data-h="s"></i><i class="e" data-h="e"></i><i class="w" data-h="w"></i>' : '';
+    const rot = !lk && !multi.length && window.StageCore?.canRotate(sel.kind) ? '<b class="rotstem"></b><i class="rot" data-h="rot" title="Kéo để xoay · Shift: bắt 15°"></i>' : ''; // S20 M139
     const tip = drag?.rot && drag.moved ? `<span class="rottip">${sel.obj.rot || 0}°</span>` : '';
-    if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length ? '' : corners + edges + rot}${tip}</div>`;
+    if (r) h += `<div class="selbox${lk ? ' locked' : ''}" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length || lk ? '' : corners + edges + rot}${lk ? lockMark : ''}${tip}</div>`;
   }
   if (marq?.box) h += `<div class="marq" ${box(marq.box.x * K, marq.box.y * K, marq.box.w * K, marq.box.h * K)}></div>`; // S20 M142: hộp quét chọn
   if (guides) {
@@ -208,7 +210,7 @@ function pick(px, py) {
   if (!win) return null;
   for (const el of win.document.elementsFromPoint(px, py)) {
     const c = el.closest('[data-cid]');
-    if (c) { const cp = compByCid(c.getAttribute('data-cid')); if (cp && !TRK[cp.track]?.lock) return cp; }
+    if (c) { const cp = compByCid(c.getAttribute('data-cid')); if (cp && !TRK[cp.track]?.lock && !cp.obj.locked) return cp; } // S20 M141: element khoá bấm xuyên qua
   }
   return null;
 }
@@ -680,17 +682,9 @@ $('#insp').addEventListener('click', async e => {
     changed(true); toast('Đã áp dụng cho ' + CAP.length + ' phụ đề');
   }
 });
-function removeSel() {
-  if (!sel) return;
-  const c = sel, o = c.obj;
-  if (c.kind === 'clip') {
-    if (TRK.video.lock) return toast('Track video đang khoá');
-    pushUndo();
-    if (!deleteClip(c.idx)) { undoStack.pop(); return toast('Không thể xoá clip duy nhất'); }
-    sel = null; changed(true); return toast('Đã xoá clip · phần sau tự dồn lại');
-  }
-  pushUndo();
-  const drop = (arr, x) => { const i = arr.indexOf(x); if (i >= 0) arr.splice(i, 1); };
+const LOCK_MSG = 'Element đang khoá · ⌥⇧L để mở khoá';
+function dropComp(c) {
+  const o = c.obj, drop = (arr, x) => { const i = arr.indexOf(x); if (i >= 0) arr.splice(i, 1); };
   if (c.kind === 'scene') drop(TL.scenes, o);
   else if (c.kind === 'line') { drop(c.scene.lines, o); if (c.scene.type === 'text' && !c.scene.lines.length) drop(TL.scenes, c.scene); }
   else if (c.kind === 'node') { drop(c.scene.nodes, o); c.scene.edges = (c.scene.edges || []).filter(e => e.from !== o.id && e.to !== o.id); }
@@ -699,7 +693,21 @@ function removeSel() {
   else if (c.kind === 'sfx') drop(TL.audio.sfx, o);
   else if (c.kind === 'music') drop(TL.audio.music, o);
   else if (c.remove) c.remove();
-  sel = null; changed(true);
+}
+function removeSel() {
+  if (!sel) return;
+  const c = sel;
+  if (c.kind === 'clip') {
+    if (TRK.video.lock) return toast('Track video đang khoá');
+    pushUndo();
+    if (!deleteClip(c.idx)) { undoStack.pop(); return toast('Không thể xoá clip duy nhất'); }
+    sel = null; changed(true); return toast('Đã xoá clip · phần sau tự dồn lại');
+  }
+  const list = [sel, ...multi]; // S20 M141: xoá cả nhóm đang chọn
+  if (list.some(x => x.obj.locked)) return toast(LOCK_MSG);
+  pushUndo();
+  for (const x of list) dropComp(x);
+  sel = null; multi = []; changed(true);
 }
 function duplicateSel() {
   if (!sel) return; pushUndo();
@@ -725,6 +733,131 @@ function splitAtPlayhead() {
   if (!b) { undoStack.pop(); return toast('Đặt playhead vào giữa một clip để tách'); }
   changed(); select(compOf(b)); toast('Đã tách clip');
 }
+
+// ---------- S20 M141: clipboard trong trang, khoá, thứ tự lớp, chọn tất cả ----------
+// Chép giữ bản độc lập (không trỏ vào timeline); dán tại playhead giữ vị trí, dán lặp lệch 24 px (KeysCore.pasteStep).
+// Clip chính: chép rồi dán = nhân bản ngay sau clip (ripple), không cắt. Chữ graphic / node dán lại vào graphic gốc.
+const cloneObj = o => JSON.parse(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' || k === 'locked' ? undefined : v)));
+function clipItems(list) {
+  return list.filter(c => KeysCore.COPYABLE.has(c.kind)).map(c => {
+    const solo = c.kind === 'line' && c.scene?.type === 'text' && c.scene.lines.length === 1, par = c.kind === 'line' || c.kind === 'node' ? c.scene : null;
+    return { kind: c.kind, solo, t0: c.t0, t1: c.t1, obj: cloneObj(solo ? c.scene : c.obj), parent: solo ? null : par, pcid: par?.cid, ptype: par?.type };
+  });
+}
+// Thêm bản sao vào timeline, dời thời gian dt (giây) và lệch off (px thiết kế). Trả các obj mới (đã build).
+function insertItems(items, dt, off) {
+  const added = [];
+  for (const it of items) {
+    const cp = JSON.parse(JSON.stringify(it.obj)); let obj = cp;
+    if (it.solo || it.kind === 'scene') { TL.scenes.push(cp); if (it.solo) obj = cp.lines[0]; }
+    else if (it.kind === 'line' || it.kind === 'node') {
+      const par = TL.scenes.includes(it.parent) ? it.parent : TL.scenes.find(x => x.cid === it.pcid && x.type === it.ptype);
+      if (!par) continue; // graphic gốc đã bị xoá
+      if (it.kind === 'node') { let id = cp.id || 'n'; while ((par.nodes || []).some(n => n.id === id)) id += '_2'; cp.id = id; (par.nodes ||= []).push(cp); }
+      else (par.lines ||= []).push(cp);
+    } else if (it.kind === 'cap') { const t = it.t0 + dt, i = CAP.findIndex(x => x.t0 > t); CAP.splice(i < 0 ? CAP.length : i, 0, cp); }
+    else if (it.kind === 'sfx' || it.kind === 'music') { TL.audio ||= {}; (TL.audio[it.kind] ||= []).push(cp); }
+    else continue;
+    added.push({ obj, it });
+  }
+  build();
+  for (const { obj, it } of added) {
+    if (dt) { const c = compOf(obj); if (c) { setTimes(c, it.t0 + dt, it.t1 + dt, true); build(); } }
+    const c = off && compOf(obj), p = c && getPos(c);
+    if (p) setPos(c, KeysCore.clampPos({ ...p, x: p.x + off, y: p.y + off }, DW, DH));
+  }
+  build();
+  return added.map(a => a.obj);
+}
+function selectGroup(objs) {
+  const cs = objs.map(compOf).filter(Boolean);
+  sel = cs[0] || null; multi = sel && sel.kind !== 'clip' ? cs.slice(1) : [];
+  renderList(); renderTimeline(); renderInspector(); drawOverlay();
+  return cs.length;
+}
+function copySel(cut) {
+  if (!sel) return toast('Chọn element để chép');
+  if (sel.kind === 'clip') {
+    if (cut) return toast('Clip chính không cắt được · ⌘C rồi ⌘V để nhân bản, Delete để xoá');
+    CLIPB = { clip: sel.obj, cj: JSON.stringify(sel.obj, strip) };
+    return toast('Đã chép clip · ⌘V nhân bản ngay sau clip');
+  }
+  const list = [sel, ...multi], items = clipItems(list);
+  if (!items.length) return toast('Chưa chép được loại này · dùng ⌘D để nhân bản');
+  if (cut && list.some(c => c.obj.locked)) return toast(LOCK_MSG);
+  const t0 = Math.min(...items.map(i => i.t0));
+  CLIPB = { items, t0, st: { srcT0: t0, cut: !!cut, lastT: null, n: 0 } };
+  const skip = list.length - items.length, n = items.length > 1 ? `${items.length} element` : 'element';
+  if (!cut) return toast(`Đã chép ${n}${skip ? ` (bỏ qua ${skip} không chép được)` : ''} · ⌘V dán tại playhead`);
+  pushUndo(); for (const c of list.filter(c => KeysCore.COPYABLE.has(c.kind))) dropComp(c);
+  sel = null; multi = []; changed(true); toast(`Đã cắt ${n} · ⌘V dán tại playhead`);
+}
+function pasteClip() {
+  if (!CLIPB) return toast('Chưa chép gì · chọn element rồi ⌘C');
+  if (CLIPB.clip) {
+    if (TRK.video.lock) return toast('Track video đang khoá');
+    let i = TL.clips.indexOf(CLIPB.clip); if (i < 0) i = TL.clips.findIndex(c => JSON.stringify(c, strip) === CLIPB.cj);
+    if (i < 0) return toast('Clip đã chép không còn trên timeline');
+    pushUndo(); const cp = duplicateClip(i); CLIPB.clip = cp; changed(); select(compOf(cp)); return toast('Đã dán clip ngay sau clip gốc');
+  }
+  pushUndo();
+  const st = KeysCore.pasteStep(CLIPB.st, T), objs = insertItems(CLIPB.items, r2(T - CLIPB.t0), st.off);
+  if (!objs.length) { undoStack.pop(); return toast('Graphic chứa chữ đã chép không còn trên timeline'); }
+  CLIPB.st = st; changed(); kzone = 'stage';
+  const n = selectGroup(objs); toast(n > 1 ? `Đã dán ${n} element` : 'Đã dán');
+}
+function toggleLock() {
+  if (!sel) return toast('Chọn element để khoá');
+  if (sel.kind === 'clip') return toast('Clip chính: khoá cả track video ở nhãn track');
+  const list = [sel, ...multi], on = !sel.obj.locked;
+  pushUndo(); for (const c of list) { if (on) c.obj.locked = true; else delete c.obj.locked; }
+  changed(true); toast(on ? `Đã khoá${list.length > 1 ? ` ${list.length} element` : ''} · bấm khối trên timeline rồi ⌥⇧L để mở` : 'Đã mở khoá');
+}
+function layerSel(how) {
+  if (!sel) return;
+  if (sel.obj.locked) return toast(LOCK_MSG);
+  const L = CanvasCmds.layerOf(sel, TL.scenes || []);
+  if (!L) return toast('Element này không có thứ tự lớp');
+  if (CanvasCmds.layerTarget(L.arr, L.item, how) < 0) return toast(how === 'up' || how === 'top' ? 'Đã ở lớp trên cùng' : 'Đã ở lớp dưới cùng');
+  pushUndo(); CanvasCmds.moveLayer(L.arr, L.item, how); changed(true);
+}
+function selectAll() {
+  const idx = KeysCore.selectAllAt(comps.map(c => ({ kind: c.kind, t0: c.t0, t1: c.t1, hidden: !!c.obj.hidden, locked: !!c.obj.locked,
+    trackOff: !!(TRK[c.track]?.lock || TRK[c.track]?.hide), hasPos: !!getPos(c) })), T);
+  if (!idx.length) return toast('Không có element nào đang hiện ở thời điểm này');
+  kzone = 'stage'; selectGroup(idx.map(i => comps[i].obj)); toast(`Đã chọn ${idx.length} element`);
+}
+// ⌥ + kéo: nhân bản tại chỗ rồi kéo bản sao (một bước hoàn tác; bấm không kéo = bỏ bản sao). Trả cid nhóm cũ để chọn lại.
+function dupInPlace(list) {
+  const items = window.KeysCore ? clipItems(list) : []; if (!items.length) return null;
+  const prev = [sel, ...multi].map(c => c.obj.cid);
+  pushUndo(); const objs = insertItems(items, 0, 0);
+  if (!objs.length) { undoStack.pop(); return null; }
+  selectGroup(objs); return prev;
+}
+// Phím mới của M141 (KeysCore.actionOf). Trả true khi đã xử lý.
+function runKey(act, e) {
+  if (act === 'help') { if (!Studio.showKeys) return false; e.preventDefault(); Studio.showKeys(); return true; }
+  if ((act === 'copy' || act === 'cut') && String(window.getSelection?.() || '')) return false; // đang bôi đen chữ trong trang: để trình duyệt chép
+  e.preventDefault();
+  if (act === 'copy' || act === 'cut') copySel(act === 'cut');
+  else if (act === 'paste') pasteClip();
+  else if (act === 'all') selectAll();
+  else if (act === 'lock') toggleLock();
+  else layerSel(act);
+  return true;
+}
+function nudge(list, dx, dy) {
+  pushUndo('nudge' + list.map(c => c.obj.cid).join()); for (const c of list) if (!c.obj._orig) c.obj._orig = JSON.parse(JSON.stringify(c.obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
+  for (const c of list) { const p = getPos(c); if (p) setPos(c, { ...p, x: p.x + dx, y: p.y + dy }); }
+  changed(); syncPosInputs(); setTimeout(refreshQc, 150);
+}
+// Vùng vừa bấm (C19): khung → dời, timeline / chỗ khác → tua; inspector, thanh nổi, menu giữ vùng cũ
+document.addEventListener('mousedown', e => {
+  const t = e.target.closest ? e.target : e.target.parentElement;
+  const region = t?.closest('#overlay') ? 'stage' : t?.closest('#tl, #tlhead') ? 'timeline' : t?.closest('#insp, .cbar, .cbar-pop, .cmenu, #modal') ? 'keep' : 'other';
+  kzone = window.KeysCore ? KeysCore.zoneAfter(kzone, region) : region;
+}, true);
 
 // ---------- add text / graphics ----------
 // Graphic library = every pack registered in the engine (engine/packs/*.js); see library.js (Hiệu ứng).
@@ -760,8 +893,8 @@ $('#overlay').addEventListener('mousedown', e => {
   const box = $('#stagebox').getBoundingClientRect();
   const px = (e.clientX - box.left) / K, py = (e.clientY - box.top) / K;
   const handle = e.target.closest('.selbox i')?.dataset.h || null, onCrop = e.target.closest('.selbox.crop');
-  let cyc = e.detail < 2 && !handle && !onCrop && !e.shiftKey && !multi.length && !!sel && sel.kind !== 'clip' && !!e.target.closest('.selbox'); // S20 M142: bấm lại element đang chọn
-  if (!handle && (!e.target.closest('.selbox') || onCrop || e.shiftKey)) {
+  let cyc = e.detail < 2 && !handle && !onCrop && !e.shiftKey && !multi.length && !!sel && sel.kind !== 'clip' && !sel.obj.locked && !!e.target.closest('.selbox'); // S20 M142: bấm lại element đang chọn
+  if (!handle && (!e.target.closest('.selbox') || onCrop || e.shiftKey || sel?.obj.locked)) { // S20 M141: element khoá bấm xuyên qua
     const c = pick(px, py);
     if (e.shiftKey && c && sel && sel.kind !== 'clip' && c.kind !== 'clip') { toggleMulti(c); e.preventDefault(); return; }
     if (c) { if (c === sel && !multi.length && e.detail < 2) cyc = true; else if (c !== sel && !multi.includes(c)) { select(c); revealOnTimeline(c); } }
@@ -772,7 +905,7 @@ $('#overlay').addEventListener('mousedown', e => {
       e.preventDefault(); return;
     } else if (!onCrop) { if (sel) select(null); }
   }
-  if (!sel) return;
+  if (!sel || sel.obj.locked) return; // S20 M141: element khoá chỉ chọn, không kéo / đổi cỡ / xoay
   if (sel.kind === 'clip') {
     if (TRK.video.lock || (!onCrop && !handle)) return;
     const o = sel.obj;
@@ -784,12 +917,14 @@ $('#overlay').addEventListener('mousedown', e => {
     drag = { rot: true, sx: e.clientX, sy: e.clientY, c: { x: r.x + r.w / 2, y: r.y + r.h / 2 }, p0: { x: px, y: py }, rot0: sel.obj.rot || 0, moved: false };
     e.preventDefault(); return;
   }
-  const group = [sel, ...multi].map(c => ({ c, p0: getPos(c) })).filter(g => g.p0);
+  let dup = null;
+  if (e.altKey && !handle) { dup = dupInPlace([sel, ...multi].filter(c => !c.obj.locked)); if (dup) revealOnTimeline(sel); } // S20 M141: ⌥ + kéo = nhân bản
+  const group = [sel, ...multi].filter(c => !c.obj.locked).map(c => ({ c, p0: getPos(c) })).filter(g => g.p0);
   if (!group.length) return;
   const r = rectOf(sel.obj), edge = handle && /^[nsew]$/.test(handle) ? handle : null;
   drag = { sx: e.clientX, sy: e.clientY, group, handle: edge ? null : handle, edge, b0: edge ? StageCore.boxOf(sel.obj, DW > DH) : null,
     r0: StageCore.union(group.map(g => rectOf(g.c.obj))), lines: stageLines(group.map(g => g.c)),
-    cx: r ? r.x + r.w / 2 : group[0].p0.x, cy: r ? r.y + r.h / 2 : group[0].p0.y, moved: false, cyc: cyc && !handle ? { px, py } : null };
+    cx: r ? r.x + r.w / 2 : group[0].p0.x, cy: r ? r.y + r.h / 2 : group[0].p0.y, moved: false, cyc: cyc && !handle && !dup ? { px, py } : null, dup };
   e.preventDefault();
 });
 function cropMove(e, dx, dy) {
@@ -819,8 +954,8 @@ window.addEventListener('mousemove', e => {
   if (drag.marq) { drag.moved = true; const box = $('#stagebox').getBoundingClientRect(); marqUpdate((e.clientX - box.left) / K, (e.clientY - box.top) / K); return drawOverlay(); }
   if (drag.crop) return cropMove(e, dx, dy);
   if (drag.rot) return rotMove(e);
-  if (!drag.moved) { touchAll(drag.group.map(g => g.c)); drag.moved = true; }
-  const thr = 6 / K, snap = !e.altKey;
+  if (!drag.moved) { if (!drag.dup) touchAll(drag.group.map(g => g.c)); drag.moved = true; }
+  const thr = 6 / K, snap = drag.dup ? true : !e.altKey; // ⌥ đang giữ để nhân bản: vẫn gióng
   guides = null;
   if (drag.edge) {
     let b = StageCore.resizeEdge(drag.b0, drag.edge, dx, dy, { sym: StageCore.geoOf(sel.obj.type) === 'wh' });
@@ -840,6 +975,7 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', () => {
   const d = drag; drag = null; guides = null;
+  if (d?.dup && !d.moved) { restore(undoStack.pop()); sel = compByCid(d.dup[0]) || null; multi = d.dup.slice(1).map(compByCid).filter(Boolean); renderList(); renderTimeline(); renderInspector(); drawOverlay(); return; } // ⌥ bấm không kéo: bỏ bản sao
   if (d?.marq) { marq = null; renderList(); renderTimeline(); renderInspector(); drawOverlay(); return; }
   if (d && !d.moved && d.cyc) { // S20 M142: bấm (không kéo) lại đúng element đang chọn → lớp kế tiếp bên dưới tại điểm đó
     const nx = Layers.nextBelow(pickAll(d.cyc.px, d.cyc.py), sel);
@@ -889,7 +1025,7 @@ function revealOnTimeline(c) {
 // Esc = huỷ; một bước hoàn tác. Phụ đề và element khác: đưa con trỏ vào ô chữ của inspector như trước.
 $('#overlay').addEventListener('dblclick', e => {
   const box = $('#stagebox').getBoundingClientRect(), c = pick((e.clientX - box.left) / K, (e.clientY - box.top) / K) || sel;
-  if (c && StageCore.canEditText(c.kind, c.obj) && !TRK[c.track]?.lock) { if (c !== sel) select(c); return startInlineEdit(c); }
+  if (c && StageCore.canEditText(c.kind, c.obj) && !TRK[c.track]?.lock && !c.obj.locked) { if (c !== sel) select(c); return startInlineEdit(c); }
   const i = $('#insp [data-f="text"], #insp [data-f="captext"]'); if (i) { i.focus(); i.select?.(); }
 });
 async function startInlineEdit(c) {
@@ -979,9 +1115,9 @@ function renderTimeline() {
     const list = comps.filter(c => c.track === key).sort((a, b) => a.t0 - b.t0);
     if (!list.length && !['cap', 'audio'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
     const n = lanes(list), h = Math.max(28, n * 24 + 5);
-    th += `<div class="track${lk}${hd}" data-track="${key}" data-dh="${h}">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
+    th += `<div class="track${lk}${hd}" data-track="${key}" data-dh="${h}">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} ${c.obj.locked ? 'lockd' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
       data-dl="${c.t0 * PPS}" data-dw="${Math.max(8, (c.t1 - c.t0) * PPS - 2)}" data-dt="${3 + c.lane * 24}" data-dbc="${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}">
-      <span class="h l"></span>${c.obj.note ? '<span class="note"></span>' : ''}${c.kind === 'sfx' ? '<i class="ti ti-bell"></i>' : c.kind === 'music' ? '<i class="ti ti-music"></i>' : c.icon ? `<i class="ti ${c.icon}"></i>` : ''}${esc(c.label)}${Studio._blk.map(f => f(c, PPS)).join('')}<span class="h r"></span></div>`).join('') + '</div>';
+      <span class="h l"></span>${c.obj.locked ? '<i class="ti ti-lock lk" title="Đã khoá"></i>' : ''}${c.obj.note ? '<span class="note"></span>' : ''}${c.kind === 'sfx' ? '<i class="ti ti-bell"></i>' : c.kind === 'music' ? '<i class="ti ti-music"></i>' : c.icon ? `<i class="ti ${c.icon}"></i>` : ''}${esc(c.label)}${Studio._blk.map(f => f(c, PPS)).join('')}<span class="h r"></span></div>`).join('') + '</div>';
     lh += label(key, name, ic, h);
   }
   $('#tracks').innerHTML = th; $('#tllabels').innerHTML = `<div class="lhead" data-dh="${RULER_H}"></div><div class="lrows" id="lrows">${lh}</div>`;
@@ -1058,6 +1194,7 @@ $('#tlinner').addEventListener('mousedown', e => {
   if (!b || b.closest('.locked')) { seekFromX(e.clientX); tdrag = { scrub: true }; return; }
   const c = compByCid(b.dataset.cid); if (!c) return;
   if (sel?.obj !== c.obj) select(c);
+  if (c.obj.locked) { e.preventDefault(); return; } // S20 M141: khối khoá chỉ chọn (để mở khoá), không dời / kéo mép
   const mode = e.target.classList.contains('l') ? 'l' : e.target.classList.contains('r') ? 'r' : 'move';
   tdrag = { c, mode, sx: e.clientX, t0: c.t0, t1: c.t1, moved: false };
   e.preventDefault();
@@ -1244,23 +1381,19 @@ window.addEventListener('keydown', e => {
   if (!mod && (e.key === '=' || e.key === '+')) return setZoom(PPS * 1.25);
   if (!mod && e.key === '-') return setZoom(PPS / 1.25);
   if (!mod && e.shiftKey && e.key.toLowerCase() === 'z') { fit(); return zoomFit(); }
+  const act = window.KeysCore?.actionOf(e); // S20 M141: chép / dán, thứ tự lớp, khoá, chọn tất cả, bảng phím tắt
+  if (act && runKey(act, e)) return;
   if (e.key === ' ') { e.preventDefault(); return play(); }
   if (e.key === 'Escape') { if (document.body.classList.contains('expanded')) return toggleExpand(); return select(null); }
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return removeSel(); }
-  if (e.key.startsWith('Arrow')) {
+  if (e.key.startsWith('Arrow') && !mod && window.KeysCore) { // S20 M141 (C19): dời khi vừa chọn trên khung, tua khi vừa bấm timeline; ⌥ luôn dời
     e.preventDefault();
-    if (e.altKey && sel && getPos(sel)) {
-      const n = e.shiftKey ? 10 : 1, list = [sel, ...multi]; // S17 M124: dời cả nhóm
-      pushUndo('nudge' + list.map(c => c.obj.cid).join()); for (const c of list) if (!c.obj._orig) c.obj._orig = JSON.parse(JSON.stringify(c.obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
-      for (const c of list) {
-        const p = getPos(c); if (!p) continue;
-        if (e.key === 'ArrowLeft') p.x -= n; if (e.key === 'ArrowRight') p.x += n; if (e.key === 'ArrowUp') p.y -= n; if (e.key === 'ArrowDown') p.y += n;
-        setPos(c, p);
-      }
-      changed(); syncPosInputs(); setTimeout(refreshQc, 150); return;
-    }
-    if (e.key === 'ArrowLeft') setTime(T - (e.shiftKey ? 1 : 1 / FPS));
-    if (e.key === 'ArrowRight') setTime(T + (e.shiftKey ? 1 : 1 / FPS));
+    const list = [sel, ...multi].filter(c => c && c.kind !== 'clip' && getPos(c)), free = list.filter(c => !c.obj.locked);
+    const a = KeysCore.arrowAction({ key: e.key, alt: e.altKey, shift: e.shiftKey, zone: kzone, movable: free.length > 0, locked: list.length > 0 && !free.length, fps: FPS });
+    if (!a) return;
+    if (a.type === 'locked') return toast(LOCK_MSG);
+    if (a.type === 'seek') return setTime(T + a.dt);
+    return nudge(free, a.dx, a.dy); // S17 M124: dời cả nhóm
   }
 });
 
@@ -1517,7 +1650,8 @@ const Studio = window.Studio = {
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
   FONTS, SWATCH, ANIM_LIST, rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
-  removeSel, duplicateSel, splitAtPlayhead, startInlineEdit: c => startInlineEdit(c), compByCid: cid => compByCid(cid), _ov: [],
+  removeSel, duplicateSel, splitAtPlayhead, copySel, pasteClip, toggleLock, layerSel, selectAll, get canPaste() { return !!CLIPB; }, // S20 M141
+  startInlineEdit: c => startInlineEdit(c), compByCid: cid => compByCid(cid), _ov: [],
   // S20 M142: bảng Lớp (67_layers.js): tab thêm của panel Thành phần, danh sách element, track khoá, cuộn timeline tới khối
   get comps() { return comps; }, trackLocked: c => !!TRK[c?.track]?.lock, revealOnTimeline: c => revealOnTimeline(c), pickAll: (x, y) => pickAll(x, y),
   addCompTab(key, label, fn, title, first) { if (!COMP_EXT[key]) { COMP_TABS[first ? 'unshift' : 'push']([key, label, title]); if (first) tab = key; } COMP_EXT[key] = fn; if (panel === 'comp') renderComps(); },
