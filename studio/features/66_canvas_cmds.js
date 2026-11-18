@@ -58,9 +58,9 @@
   // ---- lệnh ----
   const setField = (f, v) => { const o = sel().obj; S.touch(o, f); if (v === '' || v == null) delete o[f]; else o[f] = v; S.changed(true); };
   function focusNote() {
-    const find = () => $('#insp [data-f="note"]');
-    if (!find()) for (const t of document.querySelectorAll('#insp [data-itab]')) { t.click(); if (find()) break; }
-    const n = find(); if (n) { n.scrollIntoView({ block: 'center', behavior: 'smooth' }); n.focus({ preventScroll: true }); }
+    if (S.right?.tab && S.right.tab !== 'props') S.right.show('props');
+    const n = $('#insp [data-f="note"]'); // S21 M146: Ghi chú cho Claude luôn ở cuối Thuộc tính
+    if (n) { n.scrollIntoView({ block: 'center', behavior: 'smooth' }); n.focus({ preventScroll: true }); }
   }
   function run(id, el) {
     const c = sel(); if (!c) return;
@@ -118,6 +118,7 @@
     menu.style.left = p.x + 'px'; menu.style.top = p.y + 'px';
     menu.querySelector('button:not([disabled])')?.focus();
   }
+  S.cmdMenu = openMenu; // S21 M146: nút ⋯ ở đầu Thuộc tính mở đúng menu này (studio.js data-act="more")
   function closeMenu() { if (!menu.hidden) { menu.hidden = true; menu.innerHTML = ''; } }
   menu.addEventListener('click', e => { const b = e.target.closest('[data-mi]'); if (!b || b.disabled) return; closeMenu(); run(b.dataset.mi, b); });
   // Esc / mũi tên khi menu mở: bắt trước phím tắt của studio.js (Esc ở đó là bỏ chọn)

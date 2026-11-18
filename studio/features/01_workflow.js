@@ -30,7 +30,7 @@
   };
   // nút header (id) -> 'park' (giấu, panel của bước làm thay) | 'menu' (vào ⋯) | 'bar' (giữ trên thanh đầu, cạnh ⋯). Nút không có ở đây và không có opts.step -> 'menu'.
   const TOPS = { 'ap-topbtn': 'bar', aibtn: 'park', 'pub-btn': 'park', newproj: 'park', aspect: 'park', 'eng-btn': 'menu', 'app-reveal': 'menu', 'bk-sw': 'menu', fitall: 'menu' };
-  const PRO_TABS = ['kf', 'mask', 'json']; // tab inspector ẩn ở Cơ bản: Keyframe, Mặt nạ, Nâng cao (JSON)
+  const PRO_TABS = ['kf', 'mask', 'json']; // mục Thuộc tính ẩn ở Cơ bản: Keyframe, Mặt nạ, Nâng cao (JSON) — trùng SectCore.PRO (68_sections.core.js)
   // M84: việc trùng gộp thành một mục trên thanh trái + dải tab trên panel. Panel thành viên vẫn mở được bằng id
   // (#rail [data-p=x] còn trong DOM, chỉ ẩn); mục trên thanh trái mở lại tab dùng gần nhất.
   const GROUPS = [
@@ -115,7 +115,7 @@
   #wf-tabs button.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
   #libbody .seg [data-mtab="broll"] { display: none; } /* B-roll động đã có tab riêng trong mục B-roll */
   .wf-bq { display: flex; gap: 8px; margin-bottom: 8px; } .wf-bq input { flex: 1; min-width: 0; height: 32px; } .wf-bq button { height: 32px; }
-  body.wf-basic .itabs ${PRO_TABS.map(k => `[data-itab="${k}"]`).join(', body.wf-basic .itabs ')} { display: none; }
+  ${PRO_TABS.map(k => `body.wf-basic #insp .isec[data-sec="${k}"], body.wf-basic #insp .isecbar [data-secgo="${k}"]`).join(', ')} { display: none; }
   @media (max-width: 1180px) { #wf-steps button:not(.on) span { display: none; } #wf-steps button:not(.on) { padding: 0 6px; } #wf-steps .ln { width: 8px; } }
   `;
   document.head.appendChild(css);
@@ -168,7 +168,7 @@
   function setLevel(v) {
     level = v === 'basic' ? 'basic' : 'pro'; store.set('uiLevel', level);
     document.body.classList.toggle('wf-basic', level === 'basic');
-    renderLv(); renderRail(); fixInspTab();
+    renderLv(); renderRail(); S.renderInspector?.();
     if (panel === 'wf-mode') renderPanel();
     S.toast(level === 'basic' ? 'Chế độ Cơ bản: ẩn công cụ nâng cao' : 'Chế độ Chuyên nghiệp: hiện đủ công cụ');
   }
@@ -392,13 +392,7 @@
       ${opt('pro', 'ti-user-star', 'Chuyên nghiệp', 'Hiện đủ mọi công cụ.')}</div>`;
   });
 
-  // ---------- inspector: ở Cơ bản, tab đang mở bị ẩn thì chuyển về tab đầu ----------
-  function fixInspTab() {
-    if (level !== 'basic') return;
-    const on = $('#insp .itabs button.on');
-    if (on && PRO_TABS.includes(on.dataset.itab)) [...document.querySelectorAll('#insp .itabs button')].find(b => !PRO_TABS.includes(b.dataset.itab))?.click();
-  }
-  const insp = $('#insp'); if (insp) new MutationObserver(fixInspTab).observe(insp, { childList: true });
+  // ---------- inspector (S21 M146): renderInspector bỏ mục Keyframe / Mặt nạ / Nâng cao khi body.wf-basic; đổi chế độ thì vẽ lại ----------
 
   // ---------- M113: mở đúng panel rồi tô sáng chỗ cần làm (cột phải 03_nextstep; nút sửa của M114) ----------
   // focus(id, sel): id panel (tra bước qua PANELS/meta, nhóm có tab thì mở đúng tab); sel = selector hoặc mảng selector thử

@@ -13,7 +13,6 @@ let multi = [], guides = null; // S17 M124: element chọn thêm bằng Shift (s
 let drag = null, hoverC = null, inEdit = null; // kéo trên preview (M124); S20 M139: element dưới chuột, ô gõ chữ tại chỗ đang mở
 let kzone = null, CLIPB = null; // S20 M141: vùng vừa bấm (mũi tên dời hay tua, C19); clipboard trong trang
 let query = '', K = .5, win = null, needInit = true, busy = false, pending = false, SNAP = true;
-const ITAB = {};
 
 // ---------- dynamic geometry (M85) ----------
 // Markup carries no inline style attribute: values that come from data (position and size on the timeline / preview, a clip's
@@ -470,6 +469,38 @@ $('#rtabs')?.addEventListener('keydown', e => { // ← → giữa các tab (role
   const K = window.RightCore?.KEYS || [], i = K.indexOf(RT.tab), n = K[(i + (e.key === 'ArrowRight' ? 1 : K.length - 1)) % K.length];
   e.preventDefault(); e.stopPropagation(); showRightTab(n); $(`#rtabs [data-rtab="${n}"]`)?.focus();
 });
+// S21 M146: Thuộc tính dạng mục xếp chồng (lõi features/68_sections.core.js). Mỗi tab cũ ([key, label, html] của inspTabs và
+// Studio.addInspectorTab) thành một mục thu gọn được; mở / đóng nhớ theo loại element (avs.isec). Mục đóng không vẽ thân (tính năng
+// như 60_keyframes chỉ chạy khi thân mục có trong DOM). Dải mục .isecbar dính dưới đầu: bấm = mở + cuộn tới, tô mục đang thấy.
+const SECT = { state: null, go: null, pin: 0 };
+const sectKind = c => (c.kind === 'scene' ? 'scene:' + (c.obj.type || '') : c.kind);
+function sectState() {
+  if (!SECT.state) { let v = null; try { v = localStorage.getItem('avs.isec'); } catch { /* chế độ riêng tư */ } SECT.state = window.SectCore ? SectCore.parse(v) : {}; }
+  return SECT.state;
+}
+function setSect(key, on) {
+  if (!sel || !window.SectCore) return;
+  SECT.state = SectCore.setOpen(sectState(), sectKind(sel), key, on);
+  try { localStorage.setItem('avs.isec', JSON.stringify(SECT.state)); } catch { /* chế độ riêng tư */ }
+}
+function openSect(key) { setSect(key, true); SECT.go = key; renderInspector(); } // mở + cuộn tới (dải mục, chỗ nối chuyển cảnh)
+const sectLine = () => $('#insp .itop')?.getBoundingClientRect().bottom ?? 0;
+function sectAfter() {
+  const go = SECT.go && $(`#insp .isec[data-sec="${CSS.escape(SECT.go)}"]`), sc = $('#right');
+  if (SECT.obj !== sel?.obj) { SECT.obj = sel?.obj; SECT.pin = 0; if (sc && !go) sc.scrollTop = 0; } // element khác: về đầu
+  if (go && sc) { sc.scrollTop += go.getBoundingClientRect().top - sectLine(); SECT.pin = SECT.go; }
+  SECT.go = null; sectSpy();
+}
+function sectSpy() {
+  const bar = $('#insp .isecbar'), sc = $('#right'); if (!bar || !sc || !window.SectCore) return;
+  const tops = [...document.querySelectorAll('#insp .isec')].map(x => [x.dataset.sec, x.getBoundingClientRect().top]);
+  const k = SECT.pin || SectCore.active(tops, sectLine(), sc.scrollTop > 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2);
+  for (const b of bar.children) {
+    const on = b.dataset.secgo === k; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'true' : 'false');
+  }
+}
+$('#right')?.addEventListener('scroll', sectSpy, { passive: true });
+for (const ev of ['wheel', 'touchmove', 'keydown']) $('#right')?.addEventListener(ev, () => { SECT.pin = 0; }, { passive: true });
 function renderInspector() {
   const el = $('#insp'), tab = rightTab();
   rightTabsBar(tab); el.dataset.rtab = tab;
@@ -483,15 +514,22 @@ function renderInspector() {
   }
   const c = sel, o = c.obj;
   const tag = { clip: 'Video', line: c.scene?.type === 'text' ? 'Chữ thêm' : 'Chữ graphic', cap: 'Phụ đề', node: 'Sơ đồ', badge: 'Huy hiệu', sfx: 'Âm thanh', music: 'Nhạc nền', scene: sceneName(o) }[c.kind] || c.tag || c.kind;
-  const tabs = inspTabs(c), key = c.kind;
+  const tabs = inspTabs(c);
   for (const h of Studio._insp) { const t = h(c); if (t) tabs.push(...(Array.isArray(t[0]) ? t : [t])); }
-  if (!tabs.some(t => t[0] === ITAB[key])) ITAB[key] = tabs[0][0];
-  const cur = tabs.find(t => t[0] === ITAB[key]);
-  el.innerHTML = `<div class="ihead"><span class="iic"><i class="ti ${KIND_IC[c.kind]}"></i></span><div class="it"><h3>${esc(c.kind === 'line' && c.scene.type === 'text' ? (o.text || 'Chữ thêm') : c.label)}</h3>
+  const SC = window.SectCore, kind = sectKind(c), st = sectState();
+  const secs = SC ? SC.visible(SC.normalize(tabs), document.body.classList.contains('wf-basic')) : tabs.map(([key, label, html]) => ({ key, label, html, icon: 'ti-point' }));
+  const open = secs.map((s, i) => (SC ? SC.isOpen(st, kind, s.key, i === 0) : true));
+  const clip = c.kind === 'clip', ic = (act, on, icn, tip) => `<button class="icon ${on ? 'on' : ''}" data-act="${act}" aria-pressed="${on}" title="${tip}" aria-label="${tip}"><i class="ti ${icn}"></i></button>`;
+  el.innerHTML = `<div class="itop"><div class="ihead"><span class="iic"><i class="ti ${KIND_IC[c.kind]}"></i></span><div class="it"><h3>${esc(c.kind === 'line' && c.scene.type === 'text' ? (o.text || 'Chữ thêm') : c.label)}</h3>
       <div class="sub"><span class="pill">${esc(tag)}</span><a class="time" data-act="seek"><i class="ti ti-clock-play"></i> ${fmt(c.t0)} – ${fmt(c.t1)}</a></div></div>
-      <button class="icon" data-act="desel" title="Bỏ chọn (Esc)"><i class="ti ti-x"></i></button></div>
-    ${tabs.length > 1 ? `<div class="itabs">${tabs.map(([k, l]) => `<button data-itab="${k}" class="${k === cur[0] ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
-    <div class="ibody">${multi.length && c.kind !== 'clip' ? alignBlock() : ''}${cur[2]}${c.kind === 'clip' ? '' : actions(c) + noteBlock(o)}</div>`;
+      <div class="ihbtn">${clip ? '' : ic('lock', !!o.locked, o.locked ? 'ti-lock' : 'ti-lock-open', o.locked ? 'Mở khoá (⌥⇧L)' : 'Khoá (⌥⇧L)') + ic('hide', !!o.hidden, o.hidden ? 'ti-eye-off' : 'ti-eye', o.hidden ? 'Hiện' : 'Ẩn')}
+      <button class="icon" data-act="more" title="Lệnh khác" aria-label="Lệnh khác" aria-haspopup="menu"><i class="ti ti-dots"></i></button>
+      <button class="icon" data-act="desel" title="Bỏ chọn (Esc)" aria-label="Bỏ chọn"><i class="ti ti-x"></i></button></div></div>
+    ${secs.length > 1 ? `<nav class="isecbar" aria-label="Mục thuộc tính">${secs.map((s, i) => `<button data-secgo="${esc(s.key)}" class="${open[i] ? 'open' : ''}">${esc(s.label)}</button>`).join('')}</nav>` : ''}</div>
+    <div class="ibody">${multi.length && !clip ? alignBlock() : ''}${secs.map((s, i) => `<div class="isec ${open[i] ? 'open' : ''}" data-sec="${esc(s.key)}">
+      <button class="isec-h" data-sect="${esc(s.key)}" aria-expanded="${open[i]}"><i class="ti ${s.icon}"></i><span>${esc(s.label)}</span><i class="ti ti-chevron-down car"></i></button>
+      ${open[i] ? `<div class="isec-b">${s.html}</div>` : ''}</div>`).join('')}${clip ? '' : actions(c) + noteBlock(o)}</div>`;
+  requestAnimationFrame(sectAfter);
 }
 // Cài đặt dự án (cột phải khi không chọn gì; 03_nextstep.js gom vào mục thu gọn dưới khối bước). Chủ repo báo 2026-11-17: phần này
 // trùng nhiều chỗ khác. Mỗi thứ chỉ một nơi sửa: bộ thương hiệu dùng chung ở bước ① (ở đây chỉ thẻ tóm tắt + chỉnh riêng cho video
@@ -655,8 +693,10 @@ async function autoSfx() {
 }
 $('#insp').addEventListener('click', async e => {
   const t = e.target;
-  const it = t.closest('[data-itab]');
-  if (it) { ITAB[sel ? sel.kind : 'project'] = it.dataset.itab; return renderInspector(); }
+  const sg = t.closest('[data-secgo]');
+  if (sg) return openSect(sg.dataset.secgo);
+  const sh = t.closest('[data-sect]');
+  if (sh) { setSect(sh.dataset.sect, sh.getAttribute('aria-expanded') !== 'true'); SECT.pin = 0; return renderInspector(); }
   const al = t.closest('[data-align]')?.dataset.align;
   if (al) return alignSel(al);
   const pa = t.closest('[data-pact]')?.dataset.pact;
@@ -696,6 +736,8 @@ $('#insp').addEventListener('click', async e => {
   const a = b.dataset.act;
   if (a === 'seek') setTime(c.t0);
   if (a === 'desel') select(null);
+  if (a === 'lock') toggleLock();
+  if (a === 'more') { const r = b.getBoundingClientRect(); Studio.cmdMenu?.(r.right - 200, r.bottom + 4); }
   if (a === 'hide') { touch(o); o.hidden = !o.hidden || undefined; changed(true); }
   if (a === 'del') removeSel();
   if (a === 'dup') duplicateSel();
@@ -1289,7 +1331,7 @@ window.addEventListener('mouseup', () => {
 $('#tlinner').addEventListener('dblclick', e => { const b = e.target.closest('.blk,.clip'); if (b) { const c = b.dataset.ci != null ? compOf(TL.clips[+b.dataset.ci]) : compByCid(b.dataset.cid); if (c) setTime(c.t0); } });
 $('#tlinner').addEventListener('click', e => {
   const tb = e.target.closest('.tb'); if (!tb) return;
-  const i = +tb.dataset.tbi; select(compOf(TL.clips[i])); ITAB.clip = 'trans'; renderInspector();
+  const i = +tb.dataset.tbi; select(compOf(TL.clips[i])); openSect('trans');
 });
 // Transitions dragged from the library onto a clip boundary.
 function nearestBoundary(clientX) {
