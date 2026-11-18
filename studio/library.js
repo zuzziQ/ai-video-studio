@@ -349,36 +349,62 @@ function insertMediaClip(m) {
   changed(); select(compOf(clip)); setTime(at + .01);
   toast('Đã thêm vào track chính');
 }
-function insertMedia(m) {
+// o (S20 M143, kéo thả): { t: giây chèn (mặc định playhead), x, y: tâm px thiết kế khi thả lên khung }. Ảnh phủ toàn màn không có vị trí.
+function insertMedia(m, o = {}) {
   pushUndo();
-  if (m.kind === 'audio') { TL.audio = TL.audio || {}; TL.audio.music = TL.audio.music || []; const x = { t0: r2(T), t1: TL.duration, file: m.path, gain: -18 }; TL.audio.music.push(x); changed(); return select(compOf(x)); }
-  const src = m.kind === 'video' ? { ...m.seq, t0: r2(T) } : m.path;
-  const dur = m.kind === 'video' ? Math.min(m.dur || 3, TL.duration - T) : 3;
-  const s = { type: 'photo', t0: r2(T), t1: r2(Math.min(TL.duration, T + dur)), mode: 'full', media: src };
-  TL.scenes.push(s); changed(); select(compOf(s));
+  const t = o.t ?? T;
+  if (m.kind === 'audio') { TL.audio = TL.audio || {}; TL.audio.music = TL.audio.music || []; const x = { t0: r2(t), t1: TL.duration, file: m.path, gain: -18 }; TL.audio.music.push(x); changed(); return libSelect(x, o); }
+  const src = m.kind === 'video' ? { ...m.seq, t0: r2(t) } : m.path;
+  const dur = m.kind === 'video' ? Math.min(m.dur || 3, TL.duration - t) : 3;
+  const s = { type: 'photo', t0: r2(t), t1: r2(Math.min(TL.duration, t + dur)), mode: 'full', media: src };
+  TL.scenes.push(s); changed(); libSelect(s, o);
+}
+// Chọn element vừa thêm; thả lên khung thì dời tâm về điểm thả (cùng bước hoàn tác với lần chèn). Thả lên timeline xa playhead thì
+// tua tới element để thấy khung chọn.
+const NO_POS = s => LAYOUT.has(s.type) || (BROLL.has(s.type) && window.StageCore?.geoOf(s.type) !== 'card') || s.fit === 'contain';
+function libSelect(obj, o = {}) {
+  const c = compOf(obj); if (!c) return;
+  if (o.x != null && !(c.kind === 'scene' && NO_POS(c.obj))) {
+    // chỉ dời tâm, không ghi cỡ: getPos trả cỡ mặc định (60) mà khối HF hiểu size là % (mặc định 100). Cảnh card cần size = rộng.
+    const p = window.DropCore?.centerAt(getPos(c), o.x, o.y);
+    if (p) { setPos(c, p.card ? p : { x: p.x, y: p.y }); changed(); }
+  }
+  select(compOf(obj), o.t != null && Math.abs(o.t - T) > .05);
 }
 async function uploadFiles(files) {
   for (const f of files) { toast('Đang tải ' + f.name + '…'); MEDIA = await (await fetch('/api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f })).json(); }
   mediaTab = 'here'; openPanel('media'); toast('Đã thêm ' + files.length + ' file');
 }
-// Kéo một ô của tab Kho / Dự án này thả lên timeline: chèn tại chỗ thả (ảnh/video vào track chính, nhạc vào nhạc nền)
-(() => {
-  const T_MED = 'text/x-avs-media';
-  $('#libbody').addEventListener('dragstart', e => {
-    const b = e.target.closest?.('.mcell[data-k],.mcell[data-m]'); if (!b) return;
-    e.dataTransfer.setData(T_MED, JSON.stringify(b.dataset.k != null ? { k: +b.dataset.k } : { m: +b.dataset.m })); e.dataTransfer.effectAllowed = 'copy';
-  });
-  $('#tlinner').addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes(T_MED)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
-  $('#tlinner').addEventListener('drop', e => {
-    if (![...e.dataTransfer.types].includes(T_MED)) return;
-    e.preventDefault(); e.stopPropagation();
-    let d; try { d = JSON.parse(e.dataTransfer.getData(T_MED)); } catch { return; }
-    const at = clamp((e.clientX - $('#tlinner').getBoundingClientRect().left) / PPS, 0, TL.duration);
-    if (d.k != null) return useKho(KHOM?.items?.[d.k], 'clip', at);
-    const m = MEDIA[d.m]; if (!m) return;
-    setTime(at); insertMediaClip(m);
-  });
-})();
+// S20 M143: mọi mục kéo được của thư viện (chữ, sticker, hiệu ứng / khối HyperFrames, media) mang { kind, id } theo DropCore.MIME;
+// đích thả ở features/65_drop.js gọi libInsert. Ô Kho / Dự án này thả lên timeline vẫn như cũ (ảnh/video → track chính, nhạc → nhạc nền).
+function libDragItem(el) {
+  let b;
+  if (el.closest('#addtext')) return ['text', -1];
+  if ((b = el.closest('[data-tp]'))) return ['text', b.dataset.tp];
+  if ((b = el.closest('[data-st]'))) return ['sticker', b.dataset.st];
+  if ((b = el.closest('[data-fx]'))) return ['fx', b.dataset.fx];
+  if ((b = el.closest('.mcell[data-m]'))) return ['media', b.dataset.m];
+  if ((b = el.closest('.mcell[data-k]'))) return ['kho', b.dataset.k];
+  return null;
+}
+$('#libbody').addEventListener('dragstart', e => {
+  const it = e.target.closest && libDragItem(e.target); if (!it || !window.DropCore) return;
+  e.dataTransfer.setData(DropCore.MIME, DropCore.encode(...it)); e.dataTransfer.effectAllowed = 'copy';
+  document.body.classList.add('libdrag');
+});
+$('#libbody').addEventListener('dragend', () => document.body.classList.remove('libdrag'));
+// where: 'stage' (o.x, o.y = tâm, chèn tại playhead) | 'timeline' (o.t = giây thả, o.track = data-track của track đích)
+function libInsert(d, where, o = {}) {
+  const at = where === 'timeline' ? { t: o.t } : { x: o.x, y: o.y };
+  if (d.kind === 'text') return addText(+d.id >= 0 ? TEXT_PRESETS[+d.id] : undefined, at);
+  if (d.kind === 'sticker') return STICKERS.includes(d.id) && addSticker(d.id, at);
+  if (d.kind === 'fx') { const [i, j] = d.id.split(':').map(Number); return packs()[i]?.items[j] && addPackItem(i, j, at); }
+  const how = where === 'stage' ? 'overlay' : DropCore.mediaHow(o.track);
+  if (d.kind === 'kho') { const it = KHOM?.items?.[+d.id]; return it && useKho(it, how, where === 'timeline' ? o.t : undefined); }
+  const m = MEDIA[+d.id]; if (!m) return;
+  if (how === 'clip' && m.kind !== 'audio') { setTime(o.t); return insertMediaClip(m); }
+  return insertMedia(m, at);
+}
 (() => {
   let dz = null;
   window.addEventListener('dragover', e => { if (![...e.dataTransfer.types].includes('Files')) return; e.preventDefault(); if (!dz) { dz = document.createElement('div'); dz.id = 'drop'; dz.innerHTML = '<i class="ti ti-cloud-upload"></i>Thả để thêm vào Media'; document.body.appendChild(dz); } });
@@ -469,16 +495,16 @@ function addMusic(mood) { pushUndo(); TL.audio = TL.audio || {}; TL.audio.music 
 function panelText() {
   const capStyles = [...new Set(['slate', 'tiktok', ...Object.keys((win && win.CAPTION_STYLES) || {})])];
   const owner = cs => packs().find(p => p.caption === cs || p.id === cs);
-  $('#libbody').innerHTML = `<button class="wide primary" id="addtext"><i class="ti ti-plus"></i> Thêm chữ</button>
-    <div class="sect">Mẫu chữ</div><div class="txgrid">${TEXT_PRESETS.map((p, i) => `<button class="tx" data-tp="${i}"><span data-dcss="${esc(p.css)}">${esc(p.text)}</span><small>${esc(p.name)}</small></button>`).join('')}</div>
+  $('#libbody').innerHTML = `<button class="wide primary" id="addtext" draggable="true" title="Bấm để thêm tại playhead, hoặc kéo vào khung / timeline"><i class="ti ti-plus"></i> Thêm chữ</button>
+    <div class="sect">Mẫu chữ</div><div class="txgrid">${TEXT_PRESETS.map((p, i) => `<button class="tx" data-tp="${i}" draggable="true"><span data-dcss="${esc(p.css)}">${esc(p.text)}</span><small>${esc(p.name)}</small></button>`).join('')}</div>
     <div class="sect">Kiểu phụ đề <span class="muted">· cả video</span></div>
     <div class="cslist">${[...capStyles.map(c => [c, (owner(c)?.icon || '💬') + ' ' + ((win && win.CAPTION_LABELS || {})[c] || c)]), ['', '✦ Karaoke cơ bản'], ['none', '⊘ Tắt phụ đề']].map(([v, l]) => `<button class="${(TL.caption_style ?? '') === v ? 'on' : ''}" data-cs="${esc(v)}">${esc(l)}</button>`).join('')}</div>`;
 }
-function addText(preset) {
+function addText(preset, o = {}) {
   pushUndo();
-  const p = preset ? preset.p : { style: 'yellow', size: 56, anim: 'pop' };
-  const s = { type: 'text', t0: r2(T), t1: r2(Math.min(TL.duration, T + 2)), added: true, lines: [{ text: preset ? preset.text : 'Chữ mới', t: r2(T), y: DH > DW ? 640 : 360, ...(DH > DW ? {} : { x: 640 }), ...p }] };
-  TL.scenes.push(s); changed(); select(compOf(s.lines[0]));
+  const p = preset ? preset.p : { style: 'yellow', size: 56, anim: 'pop' }, t = o.t ?? T;
+  const s = { type: 'text', t0: r2(t), t1: r2(Math.min(TL.duration, t + 2)), added: true, lines: [{ text: preset ? preset.text : 'Chữ mới', t: r2(t), y: DH > DW ? 640 : 360, ...(DH > DW ? {} : { x: 640 }), ...p }] };
+  TL.scenes.push(s); changed(); libSelect(s.lines[0], o);
 }
 
 // ---------- Sticker ----------
@@ -489,13 +515,14 @@ function fluentUrl(ch) {
   return p ? '/cdn/gh/microsoft/fluentui-emoji@main/assets/' + encodeURI(p) : ''; // server disk cache (net_cache.mjs)
 }
 function panelSticker() {
-  $('#libbody').innerHTML = `<div class="help">Emoji 3D bật lên tại playhead. Kéo trên preview để đặt vị trí.</div>
-    <div class="stgrid">${STICKERS.map(ch => { const u = fluentUrl(ch); return `<button data-st="${ch}" title="${ch}">${u ? `<img loading="lazy" src="${u}" alt="${ch}">` : `<span>${ch}</span>`}</button>`; }).join('')}</div>`;
+  $('#libbody').innerHTML = `<div class="help">Emoji 3D bật lên tại playhead. Kéo vào khung để đặt đúng chỗ, hoặc vào timeline để chọn lúc hiện.</div>
+    <div class="stgrid">${STICKERS.map(ch => { const u = fluentUrl(ch); return `<button data-st="${ch}" title="${ch}" draggable="true">${u ? `<img loading="lazy" src="${u}" alt="${ch}" draggable="false">` : `<span>${ch}</span>`}</button>`; }).join('')}</div>`;
 }
-function addSticker(ch) {
+function addSticker(ch, o = {}) {
   pushUndo();
-  const s = { type: 'emoji_pop', t0: r2(T), t1: r2(Math.min(TL.duration, T + 1.6)), src: ch, x: DW / 2, y: DH > DW ? 900 : 420, size: 160 };
-  TL.scenes.push(s); changed(); select(compOf(s));
+  const t = o.t ?? T;
+  const s = { type: 'emoji_pop', t0: r2(t), t1: r2(Math.min(TL.duration, t + 1.6)), src: ch, x: DW / 2, y: DH > DW ? 900 : 420, size: 160 };
+  TL.scenes.push(s); changed(); libSelect(s, o);
 }
 
 // ---------- Hiệu ứng (every pack item) ----------
@@ -508,7 +535,7 @@ function panelFx() {
     if (!items.length) return '';
     return `<div class="fxg"><div class="sect">${esc(p.icon || '')} ${esc(p.name)} <span class="muted">${items.length}</span></div><div class="fxgrid">${items.map(({ it, j }) => {
       const k = `${p.id}__${j}`;
-      return `<button class="fx" data-fx="${i}:${j}" title="${esc(it.label)} · ${esc(it.type)}"><span class="fth ${DW > DH ? 'h' : ''}">${has(k) ? `<img loading="lazy" src="/studio/thumbs/${k}.jpg" onerror="this.remove()">` : ''}<em>${esc(p.icon || '✦')}</em></span><small>${esc(it.label)}</small></button>`;
+      return `<button class="fx" data-fx="${i}:${j}" draggable="true" title="${esc(it.label)} · ${esc(it.type)}"><span class="fth ${DW > DH ? 'h' : ''}">${has(k) ? `<img loading="lazy" src="/studio/thumbs/${k}.jpg" onerror="this.remove()" draggable="false">` : ''}<em>${esc(p.icon || '✦')}</em></span><small>${esc(it.label)}</small></button>`;
     }).join('')}</div></div>`;
   }).join('');
   $('#libbody').innerHTML = (packs().length ? '' : '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang nạp engine…</div>') + (groups || (packs().length ? empty('ti-search-off', 'Không tìm thấy hiệu ứng', '') : ''));
@@ -523,10 +550,10 @@ async function fillDemoMedia(s) {
   let k = 0;
   return JSON.parse(JSON.stringify(s), (key, v) => (typeof v === 'string' && DEMO_MEDIA.test(v) ? imgs[k++ % imgs.length] : v));
 }
-async function addPackItem(i, j) {
+async function addPackItem(i, j, o = {}) {
   pushUndo();
-  const s = await fillDemoMedia(JSON.parse(JSON.stringify(packs()[i].items[j].make(r2(T)))));
-  s.t1 = r2(Math.min(TL.duration, s.t1)); TL.scenes.push(s); changed(); select(compOf(s) || compOf(s.lines?.[0]));
+  const s = await fillDemoMedia(JSON.parse(JSON.stringify(packs()[i].items[j].make(r2(o.t ?? T)))));
+  s.t1 = r2(Math.min(TL.duration, s.t1)); TL.scenes.push(s); changed(); libSelect(compOf(s) ? s : s.lines?.[0] || s, o);
 }
 
 // ---------- Chuyển cảnh ----------
