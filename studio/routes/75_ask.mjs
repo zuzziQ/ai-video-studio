@@ -4,8 +4,11 @@
 //   GET  /api/ask         → {state: idle|running|done|error|cancelled, run, step, …kết quả: action, params, reply, warnings, scope,
 //                            provider, ms | error, kind (theo LlmError)}
 //   POST /api/ask/cancel  → {ok, cancelled}
-// Route không ghi gì xuống đĩa và không sửa timeline: chỉ trả việc đã chọn; giao diện chạy việc bằng hàm sẵn có rồi đưa qua
+//   S24 M171: luồng hỏi đáp của dự án đang mở (.studio/ask_log.json, AskCore.logPush: 200 lượt gần nhất, không lưu ảnh)
+//   GET  /api/ask/log     → {items} · POST /api/ask/log {entry} → {ok, n} (cùng id thì thay: trạng thái thẻ) · 400 lượt sai · 404 chưa mở dự án
+// /api/ask không ghi gì xuống đĩa và không sửa timeline: chỉ trả việc đã chọn; giao diện chạy việc bằng hàm sẵn có rồi đưa qua
 // Studio.review (Nhận = một bước ⌘Z). Ô job riêng (không dùng ctx.startJob): hỏi được khi đang xuất.
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,10 +37,31 @@ export default ctx => {
     return { ...out, scope: input.scope, provider, ms: Date.now() - t0 };
   }
 
+  // ghi qua tệp tạm rồi đổi tên: đang ghi mà tắt máy không làm hỏng lịch sử cũ
+  function logFile() { return ctx.project ? ctx.P('.studio/ask_log.json') : null; }
+  function readLog(f) { try { return R.AskCore.logParse(fs.readFileSync(f, 'utf8')); } catch { return []; } }
+  function writeLog(f, items) {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const tmp = `${f}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ v: 1, items }));
+    fs.renameSync(tmp, f);
+  }
+
   return async (req, res, p) => {
-    if (p !== '/api/ask' && p !== '/api/ask/cancel') return false;
+    if (p !== '/api/ask' && p !== '/api/ask/cancel' && p !== '/api/ask/log') return false;
     const J = (o, c) => (ctx.json(res, o, c), true);
     await load();
+    if (p === '/api/ask/log') {
+      const f = logFile();
+      if (req.method === 'GET') return J({ items: f ? readLog(f) : [] });
+      if (req.method !== 'POST') return false;
+      if (!f) return J({ error: 'Chưa mở dự án' }, 404);
+      const b = await ctx.body(req).catch(() => null), e = R.AskCore.logEntry(b?.entry);
+      if (!e) return J({ error: 'Lượt hỏi đáp không hợp lệ' }, 400);
+      const items = R.AskCore.logPush(readLog(f), e);
+      try { writeLog(f, items); } catch (err) { return J({ error: `Không lưu được lịch sử: ${err.message}` }, 500); }
+      return J({ ok: true, n: items.length });
+    }
     if (p === '/api/ask/cancel') {
       if (req.method !== 'POST') return false;
       if (!cur) return J({ ok: true, cancelled: false });
