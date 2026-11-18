@@ -110,7 +110,20 @@
   ];
   const keyLabel = (k, mac) => k.replace(/\bmod\b ?/g, mac ? '⌘' : 'Ctrl ').replace(/⌥/g, mac ? '⌥' : 'Alt ').replace(/⇧/g, mac ? '⇧' : 'Shift ').replace(/ {2,}/g, ' ').trim();
 
-  const T = { keyName, chord, actionOf, ACTIONS, zoneAfter, arrowAction, pasteStep, clampPos, STEP, COPYABLE, selectAllAt, KEYMAP, keyLabel };
+  // S23 M160 (PR 185): phím mà ô đang focus tự xử lý, phím tắt chung không được chiếm. Ô gõ (input chữ / số, textarea, select):
+  // mọi phím. Thanh trượt (range, như Núm): mũi tên, Home / End, PageUp / PageDown. Checkbox, nút: không giữ phím nào.
+  const RANGE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
+  function fieldOwnsKey(el, key) {
+    const tag = el?.tagName || '';
+    if (el?.isContentEditable) return true;
+    if (!/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return false;
+    const type = String(el.type || '').toLowerCase();
+    if (type === 'checkbox' || type === 'radio' || type === 'button' || type === 'submit') return false;
+    if (type === 'range') return RANGE_KEYS.has(key);
+    return true;
+  }
+
+  const T = { keyName, chord, actionOf, ACTIONS, zoneAfter, arrowAction, pasteStep, clampPos, STEP, COPYABLE, selectAllAt, KEYMAP, keyLabel, fieldOwnsKey, RANGE_KEYS };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.KeysCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

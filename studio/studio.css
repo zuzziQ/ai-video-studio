@@ -865,3 +865,14 @@ body[data-ask="side"]:not([data-right="claude"]) #center:has(> #askbar:not([hidd
 #askbar[data-form="col"] .eai-vars { flex-direction: column; }
 #askbar[data-form="col"] .ask-rv #rvbar { padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); }
 #askbar[data-form="col"] .ask-insp { margin: var(--space-1) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); border-top: 1px solid rgb(var(--color-line)); }
+
+/* S23 M160 (PR 182): chấm ghim lúc nghỉ thu còn 12 px, không số, để không che góc element bên dưới; rê chuột, đang mở, đang ở chế độ
+   ghim hoặc focus bàn phím thì về cỡ đầy (24 px, có số). Góc nhọn dưới-trái vẫn đúng điểm ghim (translateY(-100%) của 73_pins.js). */
+.pinlayer:not(.on) .pin:not(.open):not(.draft):not(:hover):not(:focus-visible) { min-width: 12px; width: 12px; height: 12px; padding: 0; border-width: 1.5px; border-radius: 6px 6px 6px 1px; }
+.pinlayer:not(.on) .pin:not(.open):not(.draft):not(:hover):not(:focus-visible) span { display: none; }
+
+/* S23 M160 (PR 177): thanh nổi dọc cạnh khung chọn khi element cao gần cả khung (66_canvas_cmds.js thêm .v khi thanh ngang phải đè element) */
+.cbar.v { flex-direction: column; align-items: stretch; }
+.cbar.v .sep { width: auto; height: 1px; margin: var(--space-050) 0; }
+.cbar.v select { max-width: 76px; }
+.cbar.v .num { min-width: 0; }

@@ -184,8 +184,29 @@
     return { dx: Math.round(ax(view.l, view.r, box.l, box.r)), dy: Math.round(ax(view.t, view.b, box.t, box.b)) };
   }
 
+  // S23 M160 (PR 175): vị trí mới của cảnh không có thẻ (x, y, size). Chỉ ghi size khi người dùng đổi cỡ thật (khác cỡ đang thấy):
+  // dời bằng chuột / phím mang theo size mặc định của getPos, ghi nó vào cảnh chưa có size làm khối HF (size = % cỡ vừa khung,
+  // mặc định 100) co lại. def = cỡ mặc định của loại cảnh (0 = loại không có cỡ). Trả patch {x, y, size?}.
+  function posPatch(o, p, def) {
+    const out = { x: Math.round(p.x), y: Math.round(p.y) };
+    const cur = o.size ?? def;
+    if (p.size && def !== 0 && !(Math.abs(p.size - cur) < 1e-3)) out.size = Math.round(p.size * 10) / 10;
+    return out;
+  }
+  // S23 M160 (PR 174): khung chọn xoay theo element. r = hộp chưa xoay (px thiết kế), rot (độ), K (px màn / px thiết kế), pad (px màn).
+  // Trả {l, t, w, h, rot} (px màn, rot = 0 khi không xoay) để vẽ div rồi CSS rotate quanh tâm (tâm hộp không đổi khi xoay).
+  function selFrame(r, rot, K, pad = 3) {
+    const d = rotNorm(rot);
+    return { l: r.x * K - pad, t: r.y * K - pad, w: r.w * K + pad * 2, h: r.h * K + pad * 2, rot: d };
+  }
+  // Kéo cạnh của element đã xoay: đổi độ dời trên màn (dx, dy) sang hệ trục của element (xoay ngược rot độ).
+  function unrotate(dx, dy, rot) {
+    const a = -(rotNorm(rot) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+    return { dx: dx * c - dy * s, dy: dx * s + dy * c };
+  }
+
   const T = { GEO, CARD_DEF, WH_DEF, NATIVE_ROT, ALIGN, TEXT_SCENES, geoOf, canResize, cardOf, boxOf, setBox, resizeEdge, guideLines, snapMove, snapEdge, union, alignDeltas, coverFrac, faceBox, quickCheck, panCrop, zoomCrop, rotNorm, canRotate,
-    rotFromDrag, canEditText, editStyle, revealDelta };
+    rotFromDrag, canEditText, editStyle, revealDelta, posPatch, selFrame, unrotate };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.StageCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

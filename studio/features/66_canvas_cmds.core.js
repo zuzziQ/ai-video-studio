@@ -76,7 +76,14 @@
     const cx = (sel.l + sel.r) / 2;
     let below = sel.t - gap - bar.h < view.t;
     let y = below ? sel.b + gap : sel.t - gap - bar.h;
-    if (below && y + bar.h > view.b) { below = false; y = Math.max(view.t, sel.t + gap); } // element cao gần cả khung: đè mép trên trong khung
+    if (below && y + bar.h > view.b) {
+      // S23 M160 (PR 177): element cao gần cả khung (khung 9:16 hẹp trong cột rộng): đặt cạnh khung chọn (phải, rồi trái) nếu đủ chỗ,
+      // dóng mép trên với element; hết chỗ cả hai bên mới đè mép trên trong khung.
+      const ty = Math.round(Math.min(Math.max(view.t, sel.t), Math.max(view.t, view.b - bar.h)));
+      if (view.r - sel.r - gap >= bar.w) return { x: Math.round(sel.r + gap), y: ty, below: false, side: 'right' };
+      if (sel.l - gap - view.l >= bar.w) return { x: Math.round(sel.l - gap - bar.w), y: ty, below: false, side: 'left' };
+      below = false; y = Math.max(view.t, sel.t + gap);
+    }
     const x = Math.min(Math.max(view.l, cx - bar.w / 2), Math.max(view.l, view.r - bar.w));
     return { x: Math.round(x), y: Math.round(y), below };
   }
