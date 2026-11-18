@@ -30,8 +30,8 @@
   }
   const railShown = (id, step, level, optLevel) => norm(level) === 'pro' || railLevel(id, step, optLevel) === 'basic';
 
-  // Cột phải (68_right.core.js): Cơ bản không có tab Lớp.
-  const RIGHT_TABS = { basic: ['props', 'project'], pro: ['props', 'layers', 'project'] };
+  // Cột phải (68_right.core.js): Cơ bản không có tab Lớp; tab Claude ở cả hai chế độ (S24 M170, C34, C35).
+  const RIGHT_TABS = { basic: ['props', 'claude', 'project'], pro: ['props', 'layers', 'claude', 'project'] };
   const rightTabs = level => RIGHT_TABS[norm(level)];
 
   // Thuộc tính (68_sections.core.js): ở Cơ bản hiện Núm, Hỏi Claude và mục chính (khoá 'basic' của lõi inspector; không có thì

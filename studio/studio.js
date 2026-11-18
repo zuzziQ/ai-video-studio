@@ -457,7 +457,7 @@ function inspTabs(c) {
       <div class="acts"><button data-act="json" class="primary"><i class="ti ti-check"></i> Áp dụng JSON</button></div>`, 'ti-code')]];
 }
 const KIND_IC = { clip: 'ti-movie', line: 'ti-letter-t', cap: 'ti-badge-cc', node: 'ti-hierarchy', badge: 'ti-badge', sfx: 'ti-bell', music: 'ti-music', scene: 'ti-sparkles' };
-// S21 M145: cột phải = nhóm tab Thuộc tính · Lớp · Dự án (lõi features/68_right.core.js). #insp vẫn là thân của tab đang mở, nên
+// S21 M145: cột phải = nhóm tab Thuộc tính · Lớp · Claude (S24 M170) · Dự án (lõi features/68_right.core.js). #insp vẫn là thân của tab đang mở, nên
 // mọi selector cũ (#insp [data-f=…], 03_nextstep, workflow.focus) chạy như trước. Chưa nạp lõi thì giữ hành vi cũ (không có dải tab).
 const RT = { tab: null, had: false, detail: null, ext: {} };
 const rtStore = { get() { try { return localStorage.getItem('avs.rtab'); } catch { return null; } }, set(v) { try { localStorage.setItem('avs.rtab', v); } catch { /* chế độ riêng tư */ } } };
@@ -533,6 +533,7 @@ function renderInspector() {
   rightTabsBar(tab); el.dataset.rtab = tab;
   if (tab === 'project') { el.innerHTML = projectPanel(); return; }
   if (tab === 'layers') { if (RT.ext.layers) RT.ext.layers(el); else el.innerHTML = '<div class="rempty">Chưa có bảng Lớp.</div>'; return; }
+  if (tab === 'claude') { if (RT.ext.claude) RT.ext.claude(el); else el.innerHTML = '<div class="rempty">Chưa có Hỏi Claude.</div>'; return; } // S24 M170: 75_ask.js
   if (!sel) {
     if (RT.detail) { el.innerHTML = RT.detail.html; RT.detail.mount?.(el); return; } // M147: chi tiết mục thư viện
     RT.tab = 'project'; rightTabsBar('project'); el.dataset.rtab = 'project'; el.innerHTML = projectPanel(); return; // M156: không còn ô "Chưa chọn element"

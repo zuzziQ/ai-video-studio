@@ -8,7 +8,7 @@ const C = createRequire(import.meta.url)('../../studio/features/68_right.core.js
 const read = f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
 
 test('ba tab theo thứ tự Thuộc tính · Lớp · Dự án', () => {
-  assert.deepEqual(C.KEYS, ['props', 'layers', 'project']);
+  assert.deepEqual(C.KEYS, ['props', 'layers', 'claude', 'project']);
   assert.ok(C.valid('layers')); assert.equal(C.valid('x'), false);
 });
 

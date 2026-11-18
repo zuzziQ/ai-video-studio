@@ -34,11 +34,11 @@ test('mức của panel: opts.level pro luôn thắng, bước lạ (Tự lái) 
 });
 
 test('cột phải: Cơ bản không có tab Lớp', () => {
-  assert.deepEqual(L.rightTabs('basic'), ['props', 'project']);
-  assert.deepEqual(L.rightTabs('pro'), ['props', 'layers', 'project']);
-  assert.deepEqual(L.rightTabs('lạ'), ['props', 'layers', 'project']);
+  assert.deepEqual(L.rightTabs('basic'), ['props', 'claude', 'project']);
+  assert.deepEqual(L.rightTabs('pro'), ['props', 'layers', 'claude', 'project']);
+  assert.deepEqual(L.rightTabs('lạ'), ['props', 'layers', 'claude', 'project']);
   const kb = L.rightTabs('basic');
-  assert.deepEqual(R.tabsFor(kb).map(t => t[0]), ['props', 'project']);
+  assert.deepEqual(R.tabsFor(kb).map(t => t[0]), ['props', 'claude', 'project']);
   assert.equal(R.valid('layers', kb), false); assert.equal(R.valid('layers'), true);
   assert.equal(R.initialTab('layers', false, kb), 'project'); // tab Lớp đã lưu nhưng đang Cơ bản
   assert.equal(R.initialTab('layers', true, kb), 'props');

@@ -7,11 +7,11 @@
 //   bằng AI), Nguồn (S.ai.cleanup, S.transcript.review, kịch bản /api/script, Studio.longform.highlights, hook mở đầu = Studio.assist
 //   'text' → 3 biến thể), Kiểm tra (S.qc.fixAll, giải thích lỗi qua bộ định tuyến, S.qc.variants, ghi chú ghim S.pins), Xuất và đăng
 //   (Studio.publish.write / cover, Studio.schedule.next). Kết quả sửa video qua Studio.review: xem trước,
-//   Nhận = một bước ⌘Z, Bỏ = như cũ. Chỉ gọi mô hình khi người dùng gửi (C23). Phím / mở thanh; ✦ trên thanh nổi và đầu Thuộc tính.
-// S23 M163 (C30, C31): hai dạng theo Studio.layout (AskCore.formOf). 'col' — Cơ bản, video dọc: cột Claude thay cột phải, gợi ý
-//   xếp dọc, kết quả không giới hạn cao, thanh xem lại (#rvbar của 74_review.js) và khi chọn element thì #insp (mục chính + Núm,
-//   01_level.core.js) dời vào cột. 'row' — video ngang, Chuyên nghiệp, cửa sổ hẹp: một dòng dưới khung, gợi ý hiện khi gõ.
-//   CSS bố cục ở khối "S23 M163" cuối studio.css.
+//   Nhận = một bước ⌘Z, Bỏ = như cũ. Chỉ gọi mô hình khi người dùng gửi (C23).
+// S24 M170 (C34, C35): một dạng — nội dung nằm trong tab Claude của cột phải (Studio.right.addTab('claude'), mọi khổ × chế độ);
+//   bỏ dòng dưới khung và cột cạnh khung của M163. #askbar giữ nguyên id (72_elem_ai.js vẽ bên trong), không dời #insp / #rvbar
+//   nữa: thanh Nhận / Bỏ của Studio.review luôn ngay dưới khung (place()). Phím / và nút ✦ (#askbtn, thanh nút phát) mở tab
+//   Claude (bỏ ⤢ / mở cột phải đang gấp qua Studio.layout.revealRight) rồi đặt con trỏ vào ô hỏi.
 'use strict';
 (() => {
   const S = window.Studio, AC = window.AskCore;
@@ -20,20 +20,25 @@
   const OWNER = 'ask';
   const css = document.createElement('style');
   css.textContent = `
-#askbar { flex: none; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-top: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface)); min-width: 0; }
+#askbar { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: rgb(var(--color-surface)); min-width: 0; }
 #askbar[hidden] { display: none; }
-#askbar .ask-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-#askbar .ask-ic { color: rgb(var(--color-accent-text)); flex: none; }
-#askbar .ask-chip { flex: none; display: inline-flex; align-items: center; gap: var(--space-1); max-width: 40%; height: 26px; padding: 0 var(--space-2); border-radius: var(--radius-pill);
+#askbar .ask-head { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-sm); }
+#askbar .ask-head .ti { color: rgb(var(--color-accent-text)); align-self: center; }
+#askbar .ask-head span { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
+#insp .ask-none { padding: var(--space-4); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
+#insp .ask-none[hidden] { display: none; }
+#askbtn { color: rgb(var(--color-accent-text)); }
+#askbar .ask-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+#askbar .ask-chip { order: -1; flex: none; display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; height: 26px; padding: 0 var(--space-2); border-radius: var(--radius-pill);
   border: 1px solid rgb(var(--color-line-strong)); background: rgb(var(--color-surface-raised)); font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-fg-muted)); }
 #askbar .ask-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #askbar .ask-chip button { border: 0; background: none; padding: 0; height: 18px; width: 18px; justify-content: center; color: rgb(var(--color-fg-subtle)); }
 #askbar .ask-chip button:hover { color: rgb(var(--color-fg)); }
 #askbar input[data-ask-in] { flex: 1; min-width: 0; height: 30px; }
-#askbar .ask-quick { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
-#askbar .ask-quick button { height: 24px; padding: 0 var(--space-2); font-size: var(--text-2xs); border-radius: var(--radius-pill); }
+#askbar .ask-quick { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+#askbar .ask-quick button { width: 100%; height: 30px; padding: 0 var(--space-2); justify-content: flex-start; font-size: var(--text-xs); border-radius: var(--radius-control); }
 #askbar .ask-out:empty { display: none; }
-#askbar .ask-out { max-height: min(200px, 26vh); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1); } /* khung xem không bị ép mất */
+#askbar .ask-out { display: flex; flex-direction: column; gap: var(--space-1); } /* cột phải cuộn cả tab: không giới hạn cao */
 #askbar .ask-st { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
 #askbar .ask-st .ti-loader-2, #askbar .eai-st .ti-loader-2, #askbar .eai-var .th .ti-loader-2 { animation: ui-spin 1s linear infinite; }
 #askbar .ask-reply { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-xs); line-height: 1.45; color: rgb(var(--color-fg)); }
@@ -42,8 +47,8 @@
 #askbar .ask-err { font-size: var(--text-xs); color: rgb(var(--color-danger-text)); }
 #askbar .ask-warn { font-size: var(--text-2xs); color: rgb(var(--color-warning-text)); }
 #askbar .acts { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 0; }
-#askbar .eai-vars { flex-direction: row; }
-#askbar .eai-var { flex: 1; grid-template-columns: 56px minmax(0, 1fr); }
+#askbar .eai-vars { flex-direction: column; }
+#askbar .eai-var { grid-template-columns: 56px minmax(0, 1fr); }
 #askbar .eai-vars.wide .eai-var { grid-template-columns: 96px minmax(0, 1fr); }
 #askbar .eai-vars.wide .eai-var .th { grid-row: span 3; }
 #insp .eai-note { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); margin-top: var(--space-1); }
@@ -75,40 +80,28 @@
   // ---------- thanh ----------
   const bar = document.createElement('div');
   bar.id = 'askbar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Hỏi Claude');
-  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div><div class="ask-row"><i class="ti ti-sparkles ask-ic" aria-hidden="true"></i><span class="ask-chip" title="Phạm vi đang hỏi"></span>
+  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div><div class="ask-row"><span class="ask-chip" title="Phạm vi đang hỏi"></span>
     <input data-ask-in type="text" maxlength="300" placeholder="Hỏi Claude…  ( / )" aria-label="Hỏi Claude">
     <button class="primary" data-ask="send" title="Gửi (Enter)" aria-label="Gửi"><i class="ti ti-send"></i></button></div>
-    <div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-out" aria-live="polite"></div>
-    <div class="ask-slot ask-rv"></div><div class="ask-slot ask-insp" role="region" aria-label="Element đang chọn"></div>`;
-  ($('#controls') || $('#stagewrap'))?.after(bar);
+    <div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-out" aria-live="polite"></div>`;
   const inp = bar.querySelector('[data-ask-in]'), chipEl = bar.querySelector('.ask-chip'), quickEl = bar.querySelector('.ask-quick'), outEl = bar.querySelector('.ask-out');
-  const refit = () => window.dispatchEvent(new Event('resize'));
-  requestAnimationFrame(refit);
+  // bước không có Hỏi Claude (Cài đặt): tab hiện một dòng thay thanh
+  const none = document.createElement('div'); none.className = 'ask-none'; none.hidden = true;
+  none.textContent = 'Bước Cài đặt không có Hỏi Claude. Sang một bước khác để hỏi.';
 
-  // ---------- S23 M163: cột / dòng ----------
-  const slotRv = bar.querySelector('.ask-rv'), slotIn = bar.querySelector('.ask-insp');
-  let FORM = '';
-  // Đặt thanh xem lại và #insp đúng chỗ theo dạng; gọi mỗi lần vẽ lại (check) và khi bố cục đổi. Chỉ dời DOM khi lệch chỗ.
+  // ---------- thanh Nhận / Bỏ ngay dưới khung ----------
+  // M170: #rvbar (74_review.js) luôn nằm giữa #stagewrap và #controls ở mọi bố cục; 74_review.js gọi place() khi tạo thanh.
   function place() {
-    const f = scope() ? AC.formOf(S.layout?.get()) : 'row'; // thanh ẩn (Cài đặt): trả mọi thứ về chỗ cũ
-    let moved = false;
-    if (f !== FORM) { FORM = f; bar.dataset.form = f; moved = true; }
-    const rv = $('#rvbar'), ins = $('#insp'), right = $('#right');
-    const want = AC.colParts(f, { review: !!rv, sel: !!S.sel, detail: !!S.right?.detail });
-    if (rv) {
-      if (want.rv && rv.parentNode !== slotRv) { slotRv.append(rv); moved = true; }
-      else if (!want.rv && rv.parentNode === slotRv) { $('#controls')?.before(rv); moved = true; }
-    }
-    if (ins && right) {
-      if (want.insp && ins.parentNode !== slotIn) { slotIn.append(ins); moved = true; }
-      else if (!want.insp && ins.parentNode === slotIn) { right.append(ins); moved = true; }
-    }
-    if (moved) refit(); // khung xem co giãn theo phần vừa vào / ra cột
+    const rv = $('#rvbar'), c = $('#controls');
+    if (rv && c && rv.nextElementSibling !== c) c.before(rv);
   }
-  S.layout?.on(() => place());
-  // Dòng: gợi ý chỉ hiện khi đang gõ (CSS :focus-within) → khung xem co giãn theo
-  bar.addEventListener('focusin', () => { if (FORM === 'row') requestAnimationFrame(refit); });
-  bar.addEventListener('focusout', () => { if (FORM === 'row') requestAnimationFrame(refit); });
+
+  // ---------- nút ✦ ở thanh nút phát (cạnh ⤢; thanh co theo container, ai-video-studio-058) ----------
+  const btn = document.createElement('button');
+  btn.id = 'askbtn'; btn.className = 'icon'; btn.title = 'Hỏi Claude (/): mở tab Claude ở cột phải'; btn.setAttribute('aria-label', 'Hỏi Claude');
+  btn.innerHTML = '<i class="ti ti-sparkles"></i>';
+  btn.addEventListener('click', () => open());
+  $('#expand')?.before(btn);
 
   const busy = () => AS.st === 'running' || AS.st === 'working' || S.elemAi?.st === 'running';
   function paintScope(sc) {
@@ -133,7 +126,7 @@
   }
   function paint(force) {
     const sc = scope();
-    bar.hidden = !sc;
+    bar.hidden = !sc; none.hidden = !!sc;
     if (!sc) return;
     paintScope(sc);
     const h = outHtml(sc);
@@ -144,10 +137,9 @@
   function check() {
     place();
     const sc = scope(), sig = JSON.stringify([sc?.kind, sc?.chip, sc?.cid, sc?.knobs, sc?.qc, step(), busy(), S.PPS, AS.range]);
-    const was = !bar.hidden;
     // đổi bước: câu trả lời / lỗi của bước trước không còn đúng chỗ (vd. "Dán link trang bán…" khi đã sang Kiểm tra)
     if (AS.at !== step()) { AS.at = step(); if (AS.st === 'reply' || AS.st === 'error') Object.assign(AS, { st: 'idle', reply: '', err: '', acts: [], warnings: [] }); }
-    if (sig !== AS.sig) { AS.sig = sig; paint(); if (was === bar.hidden) refit(); } // hiện / ẩn thanh → khung xem co giãn lại
+    if (sig !== AS.sig) { AS.sig = sig; paint(); }
   }
   S._ov.push(check);
   document.addEventListener('click', () => requestAnimationFrame(check), true);
@@ -414,9 +406,12 @@
     if (!document.getElementById('modal')?.hidden) return;
     e.preventDefault(); open();
   });
+  // M170: / và ✦ — bỏ ⤢ / mở cột phải đang gấp, sang tab Claude, đặt con trỏ vào ô hỏi
   function open() {
     check();
-    if (bar.hidden) return S.toast('Cài đặt không có thanh Hỏi Claude');
+    if (bar.hidden) return S.toast('Cài đặt không có Hỏi Claude');
+    S.layout?.revealRight?.();
+    if (S.right?.tab !== 'claude') S.right?.show?.('claude');
     inp.focus(); inp.select();
   }
   // S23 M164: giao một việc của bước từ nơi khác (popover điểm trên thanh bước, 03_stepscore.js), như bấm gợi ý nhanh.
@@ -428,6 +423,8 @@
     runAction({ action, params: { ...params }, reply: '' }, sc);
     return true;
   }
-  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange, place, get form() { return FORM; } };
+  // M170: thân tab Claude. renderInspector gọi mỗi lần vẽ cột phải; chỉ gắn lại khi tab vừa mở (giữ chữ đang gõ và focus)
+  S.right?.addTab?.('claude', el => { if (bar.parentNode !== el || none.parentNode !== el) el.replaceChildren(bar, none); paint(); });
+  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange, place, bar, input: inp };
   requestAnimationFrame(() => paint(true));
 })();

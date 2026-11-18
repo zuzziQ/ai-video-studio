@@ -1,6 +1,7 @@
 // S23 M166: nghiệm thu bố cục — ma trận cửa sổ 1024 / 1440 / 1920 × khổ 9:16 / 1:1 / 16:9 (+ 4:5 ở ngưỡng) × Cơ bản / Chuyên nghiệp
 // × 3 mức timeline, chạy trên lõi thuần studio/features/76_layout.core.js. Số đo Studio thật (khung, nút phát, tràn ngang, cuộn kép)
 // ở docs/plans/S23-bo-cuc-theo-kho-video.md mục 8; test này giữ các bất biến mà lần đo đó dựa vào.
+// S24 M170 (C34, C35): không còn askPos; cột phải (tab Thuộc tính · Lớp · Claude) ở mọi ô, Cơ bản như Chuyên nghiệp.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -25,22 +26,21 @@ test('mọi ô: nút phát một dòng dưới khung, giá trị vùng hợp l�
     const r = L.compute({ ratio: c.ratio, mode: c.mode, width: c.w, tl: c.tl });
     const at = `${c.asp} ${c.w} ${c.mode} ${c.tl}`;
     assert.equal(r.controls, 'row', at); // ai-video-studio-058: thanh nút phát không xếp dọc
-    assert.ok(['side', 'bottom'].includes(r.askPos), at);
+    assert.equal(r.askPos, undefined, at);
     assert.ok(L.TLS.includes(r.tl), at);
     assert.ok(['panel', 'flyout', 'none'].includes(r.lib), at);
-    assert.ok(['panel', 'claude', 'none'].includes(r.right), at);
+    assert.ok(['panel', 'none'].includes(r.right), at);
     n++;
   }
   assert.equal(n, VPS.length * 4 * 2 * 4);
 });
 
-test('Hỏi Claude cạnh khung chỉ khi video dọc (< 0,8) và cửa sổ ≥ 1280 px (C30, C31)', () => {
+test('cột phải có ở mọi khổ × chế độ × bề rộng; khổ không đổi chỗ của Claude (C34, C35)', () => {
   for (const c of cells()) {
     const r = L.compute({ ratio: c.ratio, mode: c.mode, width: c.w, tl: c.tl });
-    const side = c.ratio < 0.8 && c.w >= 1280;
-    assert.equal(r.askPos, side ? 'side' : 'bottom', `${c.asp} ${c.w}`);
-    // Cơ bản: cột Claude thay cột phải khi cạnh khung, không cột phải khi dưới khung; Chuyên nghiệp luôn Thuộc tính
-    assert.equal(r.right, c.mode === 'pro' ? 'panel' : side ? 'claude' : 'none', `${c.asp} ${c.w} ${c.mode}`);
+    assert.equal(r.right, 'panel', `${c.asp} ${c.w} ${c.mode}`);
+    // cùng ô ở khổ khác: vùng giống hệt (tỉ lệ chỉ còn dùng cho khung xem)
+    assert.deepEqual(r, L.compute({ ratio: 9 / 16, mode: c.mode, width: c.w, tl: c.tl }), `${c.asp} ${c.w} ${c.mode}`);
     assert.equal(r.lib, c.mode === 'pro' ? (c.w < 1280 ? 'none' : 'panel') : 'flyout'); // M168: Chuyên nghiệp hẹp tự gấp thư viện
   }
 });
@@ -62,14 +62,15 @@ test('timeline mọi mức chừa đủ chỗ cho thanh trên + khung + nút ph�
   assert.equal(L.tlHeight('compact', 999, 768), 120);
 });
 
-test('gấp cột (M165) và ⤢ chỉ bớt cột, không đổi vị trí Hỏi Claude hay nút phát', () => {
+test('gấp cột (M165) và ⤢ chỉ bớt cột, không đổi nút phát hay timeline; ] gấp cột phải ở cả Cơ bản (M170)', () => {
   for (const c of cells()) {
     const base = L.compute({ ratio: c.ratio, mode: c.mode, width: c.w, tl: c.tl });
     for (const o of [{ foldLib: true }, { foldRight: true }, { focus: true }]) {
       const r = L.compute({ ratio: c.ratio, mode: c.mode, width: c.w, tl: c.tl, ...o });
-      assert.equal(r.askPos, base.askPos); assert.equal(r.controls, 'row'); assert.equal(r.tl, base.tl);
-      if (c.mode === 'basic' && !o.focus) assert.deepEqual([r.lib, r.right], [base.lib, base.right]); // Cơ bản bỏ qua [ / ]
-      if (o.focus) { assert.equal(r.lib, 'none'); assert.notEqual(r.right, 'panel'); }
+      assert.equal(r.controls, 'row'); assert.equal(r.tl, base.tl);
+      if (o.foldLib && c.mode === 'basic') assert.equal(r.lib, 'flyout'); // Cơ bản: thư viện là ngăn trượt, [ mở / đóng ngăn
+      if (o.foldRight) assert.equal(r.right, 'none'); // cả hai chế độ
+      if (o.focus) { assert.equal(r.lib, 'none'); assert.equal(r.right, 'none'); }
     }
   }
 });

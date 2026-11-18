@@ -109,15 +109,14 @@ body.np-busy > *:not(#modal):not(.toast) { visibility: hidden; }
 /* ---------- main grid ---------- */
 main { --libw: clamp(312px, 22vw, 420px); position: absolute; top: 50px; left: 0; right: 0; bottom: var(--tlh); display: grid; grid-template-columns: 68px var(--libw) minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
 /* S23 M165: hai cột theo chế độ (data-lib / data-right của Studio.layout; ngăn trượt và phím [ ] ở features/78_cols.js).
-   Chuyên nghiệp gấp thư viện (data-lib=none) / cột phải (data-right=none); Cơ bản giữ cột phải như cũ (cột Claude là M163).
+   Chuyên nghiệp gấp thư viện (data-lib=none); cả hai chế độ gấp cột phải (data-right=none, phím ], S24 M170 / C35).
    Cơ bản: #lib thành ngăn trượt tuyệt đối trong main (không chiếm cột lưới), mở khi body[data-libopen]. Phải đứng trước luật ⤢.
    PR 192: dòng .help ~70 ký tự cần ~390 px chữ → ngăn trượt rộng 420 px; Chuyên nghiệp --libw 312 px (≤ 1418 px) tới 420 px (≥ 1910 px),
    cửa sổ hẹp hơn thì gấp bằng [ để lấy chỗ cho khung. */
-body[data-lib="none"] main { grid-template-columns: 68px minmax(0, 1fr) 340px; }
-body:not(.wf-basic)[data-right="none"] main { grid-template-columns: 68px var(--libw) minmax(0, 1fr); }
-body:not(.wf-basic)[data-lib="none"][data-right="none"] main { grid-template-columns: 68px minmax(0, 1fr); }
-body[data-lib="none"] #lib, body:not(.wf-basic)[data-right="none"] #right { display: none; }
-body[data-lib="flyout"] main { grid-template-columns: 68px minmax(0, 1fr) 340px; }
+body[data-lib="none"] main, body[data-lib="flyout"] main { grid-template-columns: 68px minmax(0, 1fr) 340px; }
+body[data-right="none"] main { grid-template-columns: 68px var(--libw) minmax(0, 1fr); }
+body[data-lib="none"][data-right="none"] main, body[data-lib="flyout"][data-right="none"] main { grid-template-columns: 68px minmax(0, 1fr); }
+body[data-lib="none"] #lib, body[data-right="none"] #right { display: none; }
 body[data-lib="flyout"] #lib { position: absolute; z-index: 40; left: 68px; top: 0; bottom: 0; width: min(420px, calc(100vw - 68px - var(--space-6)));
   box-shadow: var(--shadow-overlay); visibility: hidden; opacity: 0; transform: translateX(calc(-1 * var(--space-3)));
   transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), visibility 0s linear var(--duration-fast); }
@@ -125,7 +124,7 @@ body[data-lib="flyout"][data-libopen] #lib { visibility: visible; opacity: 1; tr
 body[data-lib="flyout"][data-libopen].libdrag #lib { opacity: .2; pointer-events: none; } /* đang kéo một mục: thấy chỗ thả */
 body[data-lib="flyout"]:not([data-libopen]) #rail button.on:not(:hover) { background: transparent; } /* ngăn đóng: chỉ còn vạch của panel gần nhất */
 @media (prefers-reduced-motion: reduce) { body[data-lib="flyout"] #lib { transition: none; } }
-/* S23 M161: bố cục theo Studio.layout (features/76_layout.js gắn data-ask / data-tl / data-focus … lên body). Nút ⤢ = data-focus */
+/* S23 M161: bố cục theo Studio.layout (features/76_layout.js gắn data-tl / data-lib / data-right / data-focus … lên body). Nút ⤢ = data-focus */
 body[data-focus] main { grid-template-columns: 68px minmax(0, 1fr); }
 body[data-focus] #lib, body[data-focus] #right { display: none; }
 
@@ -350,14 +349,6 @@ body[data-focus] #lib, body[data-focus] #right { display: none; }
 
 /* ---------- center / preview (stays neutral grey: --stage-*) ---------- */
 #center { display: flex; flex-direction: column; min-width: 0; background: rgb(var(--color-canvas)); }
-/* S23 M161: Hỏi Claude cạnh khung (data-ask=side, video dọc): #center thành hai cột, #askbar sang cột phải của nó.
-   Giao diện cột đầy đủ là M163. Thanh ẩn (bước Cài đặt) thì không chừa cột. */
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 22vw, 340px); grid-template-rows: auto minmax(0, 1fr) auto auto; }
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) > * { grid-column: 1; min-width: 0; }
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #stagewrap { grid-row: 2; }
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #rvbar { grid-row: 3; }
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #controls { grid-row: 4; }
-body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #askbar { grid-column: 2; grid-row: 1 / -1; border-top: 0; border-left: 1px solid rgb(var(--color-line)); justify-content: flex-start; overflow-y: auto; }
 #stagewrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
   background: radial-gradient(ellipse at 50% 45%, rgb(var(--stage-glow)) 0%, rgb(var(--stage-bg)) 70%); }
 #stagebox { position: relative; border-radius: var(--radius-xs); overflow: hidden; box-shadow: 0 0 0 1px rgb(var(--color-white) / .06), var(--shadow-overlay); background: rgb(var(--stage-frame)); }
@@ -415,7 +406,7 @@ body[data-ask="side"] #center:has(> #askbar:not([hidden])) > #askbar { grid-colu
 #right:has(#rtabs:not([hidden])) { --rtabs-h: 37px; }
 #rtabs { position: sticky; top: 0; z-index: 4; display: flex; height: var(--rtabs-h); padding: 0 var(--space-2); background: rgb(var(--color-surface)); border-bottom: 1px solid rgb(var(--color-line-strong)); }
 #rtabs[hidden] { display: none; }
-#rtabs button { position: relative; flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); padding: 0 var(--space-1); background: transparent; border: 0; border-radius: 0; color: rgb(var(--color-fg-subtle)); font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap; }
+#rtabs button { position: relative; flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); padding: 0 var(--space-1); background: transparent; border: 0; border-radius: 0; color: rgb(var(--color-fg-subtle)); font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap; }
 #rtabs button span { overflow: hidden; text-overflow: ellipsis; }
 #rtabs button:hover { color: rgb(var(--color-fg)); }
 #rtabs button.on { color: rgb(var(--color-fg)); }
@@ -837,34 +828,6 @@ body[data-tl="strip"] #tlstrip { display: block; }
 #tlstrip .scr-tip { position: absolute; bottom: calc(100% + 6px); padding: 2px var(--space-1); border-radius: var(--radius-xs); background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); color: rgb(var(--color-fg)); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; z-index: 7; box-shadow: var(--shadow-card); }
 #tlstrip .scr-tip[hidden] { display: none; }
 #tlstrip.scr-seeking { cursor: grabbing; }
-
-/* S23 M163: Hỏi Claude hai dạng theo Studio.layout (features/75_ask.js, AskCore.formOf; C30, C31).
-   Cột (data-form=col): Cơ bản + video dọc (data-right=claude) — cột Claude thay cột phải (#right ẩn, #insp dời vào cột khi chọn
-   element), gợi ý xếp dọc, kết quả không giới hạn cao, thanh xem lại (#rvbar) nằm trong cột.
-   Dòng (data-form=row): video ngang, Chuyên nghiệp, cửa sổ hẹp — một dòng dưới khung; gợi ý nhanh hiện khi đang gõ. */
-/* #center lấy luôn ô của cột phải (đúng cả khi #lib là cột lưới lẫn ngăn trượt của M165); ⤢ đã tự ẩn #right */
-body.wf-basic[data-right="claude"]:not([data-focus]) main:has(#askbar:not([hidden])) > #center { grid-column: span 2; }
-body.wf-basic[data-right="claude"] main:has(#askbar:not([hidden])) > #right { display: none; }
-body[data-right="claude"] #center:has(> #askbar:not([hidden])) { grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 380px); }
-/* Chuyên nghiệp video dọc: Thuộc tính ở cột phải, Claude là dòng dưới khung (khối M161 xếp cột cho mọi chế độ) */
-body[data-ask="side"]:not([data-right="claude"]) #center:has(> #askbar:not([hidden])) { display: flex; }
-body[data-ask="side"]:not([data-right="claude"]) #center:has(> #askbar:not([hidden])) > #askbar { border-left: 0; border-top: 1px solid rgb(var(--color-line)); overflow: visible; }
-#askbar .ask-head { display: none; }
-#askbar .ask-slot:empty { display: none; }
-#askbar[data-form="row"]:not(:focus-within) .ask-quick { display: none; }
-#askbar[data-form="col"] { --rtabs-h: 0px; gap: var(--space-2); padding: var(--space-3); background: rgb(var(--color-surface)); }
-#askbar[data-form="col"] .ask-head { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-sm); }
-#askbar[data-form="col"] .ask-head .ti { color: rgb(var(--color-accent-text)); align-self: center; }
-#askbar[data-form="col"] .ask-head span { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
-#askbar[data-form="col"] .ask-row { flex-wrap: wrap; }
-#askbar[data-form="col"] .ask-row .ask-ic { display: none; }
-#askbar[data-form="col"] .ask-chip { order: -1; max-width: 100%; }
-#askbar[data-form="col"] .ask-quick { flex-direction: column; flex-wrap: nowrap; }
-#askbar[data-form="col"] .ask-quick button { width: 100%; height: 30px; justify-content: flex-start; border-radius: var(--radius-control); font-size: var(--text-xs); }
-#askbar[data-form="col"] .ask-out { max-height: none; overflow: visible; }
-#askbar[data-form="col"] .eai-vars { flex-direction: column; }
-#askbar[data-form="col"] .ask-rv #rvbar { padding: var(--space-2); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); }
-#askbar[data-form="col"] .ask-insp { margin: var(--space-1) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); border-top: 1px solid rgb(var(--color-line)); }
 
 /* S23 M160 (PR 182): chấm ghim lúc nghỉ thu còn 12 px, không số, để không che góc element bên dưới; rê chuột, đang mở, đang ở chế độ
    ghim hoặc focus bàn phím thì về cỡ đầy (24 px, có số). Góc nhọn dưới-trái vẫn đúng điểm ghim (translateY(-100%) của 73_pins.js). */

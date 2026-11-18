@@ -12,36 +12,32 @@ const read = f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8'
 const RATIO = { '9:16': 9 / 16, '4:5': 0.8, '1:1': 1, '16:9': 16 / 9 };
 
 test('bảng khổ × chế độ × bề rộng (C29, C31)', () => {
-  // [khổ, chế độ, bề rộng] → [askPos, tl, lib, right, controls]
+  // [khổ, chế độ, bề rộng] → [tl, lib, right, controls]. S24 M170 (C35): cột phải (panel, có tab Claude) ở mọi ô.
   const rows = [
-    ['9:16', 'basic', 1920, 'side', 'strip', 'flyout', 'claude', 'row'],
-    ['9:16', 'pro', 1920, 'side', 'full', 'panel', 'panel', 'row'],
-    ['9:16', 'basic', 1440, 'side', 'strip', 'flyout', 'claude', 'row'],
-    ['9:16', 'pro', 1440, 'side', 'full', 'panel', 'panel', 'row'],
-    ['9:16', 'basic', 1280, 'side', 'strip', 'flyout', 'claude', 'row'],
-    ['9:16', 'basic', 1279, 'bottom', 'compact', 'flyout', 'none', 'row'],
-    ['9:16', 'pro', 1024, 'bottom', 'compact', 'none', 'panel', 'row'], // M168: cửa sổ hẹp tự gấp thư viện
-    ['4:5', 'basic', 1600, 'bottom', 'strip', 'flyout', 'none', 'row'], // 0,8 không < 0,8
-    ['1:1', 'pro', 1600, 'bottom', 'full', 'panel', 'panel', 'row'],
-    ['16:9', 'basic', 1920, 'bottom', 'strip', 'flyout', 'none', 'row'],
-    ['16:9', 'pro', 1920, 'bottom', 'full', 'panel', 'panel', 'row'],
-    ['16:9', 'pro', 1024, 'bottom', 'compact', 'none', 'panel', 'row'],
+    ['9:16', 'basic', 1920, 'strip', 'flyout', 'panel', 'row'],
+    ['9:16', 'pro', 1920, 'full', 'panel', 'panel', 'row'],
+    ['9:16', 'basic', 1440, 'strip', 'flyout', 'panel', 'row'],
+    ['9:16', 'pro', 1440, 'full', 'panel', 'panel', 'row'],
+    ['9:16', 'basic', 1280, 'strip', 'flyout', 'panel', 'row'],
+    ['9:16', 'basic', 1279, 'compact', 'flyout', 'panel', 'row'],
+    ['9:16', 'pro', 1024, 'compact', 'none', 'panel', 'row'], // M168: cửa sổ hẹp tự gấp thư viện
+    ['4:5', 'basic', 1600, 'strip', 'flyout', 'panel', 'row'],
+    ['1:1', 'pro', 1600, 'full', 'panel', 'panel', 'row'],
+    ['16:9', 'basic', 1920, 'strip', 'flyout', 'panel', 'row'],
+    ['16:9', 'pro', 1920, 'full', 'panel', 'panel', 'row'],
+    ['16:9', 'pro', 1024, 'compact', 'none', 'panel', 'row'],
   ];
-  for (const [k, mode, width, ask, tl, lib, right, controls] of rows) {
+  for (const [k, mode, width, tl, lib, right, controls] of rows) {
     const r = L.compute({ ratio: RATIO[k], mode, width });
-    assert.deepEqual([r.askPos, r.tl, r.lib, r.right, r.controls], [ask, tl, lib, right, controls], `${k} ${mode} ${width}`);
+    assert.deepEqual([r.tl, r.lib, r.right, r.controls], [tl, lib, right, controls], `${k} ${mode} ${width}`);
     assert.equal(r.narrow, width < 1280);
   }
 });
 
-test('ghim kiểu ở ⋯ → Bố cục thắng Tự động, trừ cửa sổ hẹp', () => {
-  assert.equal(L.compute({ ratio: RATIO['16:9'], mode: 'basic', width: 1600, pin: 'side' }).askPos, 'side');
-  assert.equal(L.compute({ ratio: RATIO['9:16'], mode: 'pro', width: 1600, pin: 'bottom' }).askPos, 'bottom');
-  assert.equal(L.compute({ ratio: RATIO['16:9'], mode: 'basic', width: 1200, pin: 'side' }).askPos, 'bottom');
-  assert.equal(L.compute({ ratio: RATIO['9:16'], mode: 'pro', width: 1600, pin: 'lạ' }).pin, 'auto');
-  // tỉ lệ chưa biết (khung chưa tải) → dưới khung
-  assert.equal(L.askPos(undefined, 1600, 'auto'), 'bottom');
-  assert.equal(L.askPos(0, 1600, 'auto'), 'bottom');
+test('S24 M170: không còn ghim Claude cạnh / dưới khung (askPos, pin)', () => {
+  const r = L.compute({ ratio: RATIO['16:9'], mode: 'basic', width: 1600, pin: 'side' });
+  assert.equal(r.askPos, undefined); assert.equal(r.pin, undefined); assert.equal(r.right, 'panel');
+  for (const k of ['askPos', 'normPin', 'PINS', 'PIN_LABEL', 'SIDE_RATIO']) assert.equal(L[k], undefined, k);
 });
 
 test('mức timeline nhớ theo chế độ, cửa sổ hẹp nhớ riêng', () => {
@@ -90,16 +86,16 @@ test('kéo mép trên bắt về mức gần nhất, đầy đủ kẹp theo c�
   assert.equal(L.tlHeight('full', 9999, 400), 180); // cửa sổ rất thấp: vẫn tối thiểu 180
 });
 
-test('nút ⤢ (focus): ẩn thanh thư viện và cột Thuộc tính, cột Claude ở lại', () => {
-  const p = L.compute({ ratio: RATIO['9:16'], mode: 'pro', width: 1600, focus: true });
-  assert.deepEqual([p.lib, p.right, p.focus], ['none', 'none', true]);
-  const b = L.compute({ ratio: RATIO['9:16'], mode: 'basic', width: 1600, focus: true });
-  assert.deepEqual([b.lib, b.right], ['none', 'claude']);
+test('nút ⤢ (focus): ẩn thư viện và cột phải ở cả hai chế độ (M170)', () => {
+  for (const mode of L.MODES) {
+    const p = L.compute({ ratio: RATIO['9:16'], mode, width: 1600, focus: true });
+    assert.deepEqual([p.lib, p.right, p.focus], ['none', 'none', true], mode);
+  }
 });
 
 test('chỗ nối: Studio.layout thay body.expanded, CSS theo data-*', () => {
   const js = read('studio/features/76_layout.js');
-  for (const k of ['S.layout =', 'get()', 'set(', 'on(', "'data-ask'", "'data-tl'", 'LayoutCore', 'wf-more', 'S.zoomPending'])
+  for (const k of ['S.layout =', 'get()', 'set(', 'on(', "'data-right'", "'data-tl'", 'LayoutCore', 'wf-more', 'S.zoomPending'])
     assert.ok(js.includes(k), `76_layout.js thiếu ${k}`);
   const st = read('studio/studio.js');
   assert.ok(!/classList\.(toggle|contains|add)\('expanded'\)/.test(st), 'studio.js còn body.expanded');
@@ -109,11 +105,11 @@ test('chỗ nối: Studio.layout thay body.expanded, CSS theo data-*', () => {
   assert.ok(!read('studio/features/74_review.js').includes("classList.contains('expanded')"));
   const css = read('studio/studio.css');
   assert.ok(!css.includes('body.expanded'), 'studio.css còn body.expanded');
-  // vùng giữa hẹp (1024 px, Claude cạnh khung ~280 px): thanh nút phát co theo container, không đẩy ⤢ / thời gian ra ngoài
+  // vùng giữa hẹp (1024 px): thanh nút phát co theo container, không đẩy ⤢ / thời gian ra ngoài
   assert.ok(!/#controls \{[^}]*grid-template-columns: 1fr auto 1fr/.test(css), '#controls không dùng grid 1fr auto 1fr (con tràn khi hẹp)');
   for (const k of ['container: ctl / inline-size', '@container ctl (max-width: 400px)', '@container ctl (max-width: 330px)'])
     assert.ok(css.includes(k), `studio.css thiếu ${k}`);
-  for (const k of ['body[data-ask="side"] #center','body[data-tl="strip"]', 'body[data-tl="compact"]', 'body[data-focus] main'])
+  for (const k of ['body[data-tl="strip"]', 'body[data-tl="compact"]', 'body[data-focus] main'])
     assert.ok(css.includes(k), `studio.css thiếu ${k}`);
 });
 

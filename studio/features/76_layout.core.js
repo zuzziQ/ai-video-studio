@@ -1,23 +1,20 @@
 // S23 M161: lõi thuần của bố cục Studio (docs/plans/S23-bo-cuc-theo-kho-video.md mục 2, 4; C29, C31).
-// Vào: tỉ lệ khung (rộng / cao của video), chế độ basic|pro, bề rộng cửa sổ, kiểu ghim (auto|side|bottom), mức timeline đã nhớ.
-// Ra: vùng của từng phần — askPos side|bottom (Hỏi Claude cạnh / dưới khung), tl strip|compact|full, lib panel|flyout|none,
-// right panel|claude|none, controls row (luôn dòng dưới khung từ M165). 76_layout.js gắn kết quả lên body (data-ask, data-tl, …) và đặt --tlh;
-// M162 (dải tua), M163 (Claude cạnh khung), M165 (hai cột) đọc qua Studio.layout. Không DOM: chạy trong trình duyệt
+// Vào: tỉ lệ khung (rộng / cao của video), chế độ basic|pro, bề rộng cửa sổ, mức timeline đã nhớ, trạng thái gấp cột.
+// Ra: vùng của từng phần — tl strip|compact|full, lib panel|flyout|none, right panel|none, controls row (luôn dòng dưới khung từ M165).
+// S24 M170 (C34, C35): bỏ askPos / ghim side|bottom — Hỏi Claude là tab Claude của cột phải ở mọi khổ × chế độ; Cơ bản có cột phải
+// giống Chuyên nghiệp (cùng tab, cùng gấp ], cùng luật cửa sổ hẹp), chỉ thư viện vẫn là ngăn trượt. 76_layout.js gắn kết quả lên
+// body (data-tl, data-lib, data-right, …) và đặt --tlh; M162 (dải tua), M165 (hai cột) đọc qua Studio.layout. Không DOM: chạy trong trình duyệt
 // (window.LayoutCore) và Node (scripts/tests/s23_layout.test.mjs). M167: khổ soạn của dự án (frameOf, C33).
 'use strict';
 (function (root) {
-  const SIDE_RATIO = 0.8;   // C31: tỉ lệ khung < 0,8 (dọc, 4:5 trở xuống) → Claude cạnh khung
-  const NARROW = 1280;      // C31: cửa sổ hẹp hơn → luôn Claude dưới khung, timeline gọn
+  const NARROW = 1280;      // C31: cửa sổ hẹp hơn → timeline gọn; Chuyên nghiệp tự gấp thư viện (M168)
   const TLS = ['strip', 'compact', 'full'];
-  const PINS = ['auto', 'side', 'bottom'];
   const MODES = ['basic', 'pro'];
   const TL_H = { strip: 40, compact: 120 }; // px; mức đầy đủ = chiều cao kéo tay (fullH)
   const FULL = { def: 300, min: 180, keep: 320 }; // keep: chiều cao tối thiểu chừa cho thanh trên + khung xem
-  const PIN_LABEL = { auto: 'Tự động', side: 'Claude cạnh khung', bottom: 'Claude dưới khung' };
   const TL_LABEL = { strip: 'Dải tua', compact: 'Gọn', full: 'Đầy đủ' };
 
   const normMode = v => (v === 'basic' ? 'basic' : 'pro');
-  const normPin = v => (PINS.includes(v) ? v : 'auto');
   const normTl = v => (TLS.includes(v) ? v : null);
   const isNarrow = w => Number.isFinite(+w) && +w > 0 && +w < NARROW;
 
@@ -26,29 +23,25 @@
   // Khoá localStorage (không tiền tố avs.) của mức timeline đã nhớ: theo chế độ, cửa sổ hẹp nhớ riêng một mức chung.
   const tlKey = (mode, narrow) => (narrow ? 'tl.narrow' : 'tl.' + normMode(mode));
 
-  function askPos(ratio, width, pin) {
-    if (isNarrow(width)) return 'bottom';
-    const p = normPin(pin);
-    if (p !== 'auto') return p;
-    const r = +ratio;
-    return Number.isFinite(r) && r > 0 && r < SIDE_RATIO ? 'side' : 'bottom';
-  }
-
-  // o: { ratio, mode, width, pin, tl (mức đã nhớ của tlKey), focus (nút ⤢: ẩn hai cột),
-  //      foldLib / foldRight (M165: Chuyên nghiệp gấp thư viện bằng phím [, cột phải bằng ]; Cơ bản bỏ qua),
-  //      narrowLib ('open' | null, M168: lần người dùng mở tay thư viện khi cửa sổ hẹp) }
+  // o: { ratio (khổ soạn; không còn quyết định chỗ của Claude, C35), mode, width, tl (mức đã nhớ của tlKey), focus (nút ⤢: ẩn hai cột),
+  //      foldLib (M165: Chuyên nghiệp gấp thư viện bằng phím [; Cơ bản thư viện là ngăn trượt nên bỏ qua),
+  //      foldRight (phím ]: gấp cột phải, CẢ HAI chế độ từ M170), narrowLib ('open' | null, M168: lần mở tay thư viện khi cửa sổ hẹp) }
   function compute(o = {}) {
-    const mode = normMode(o.mode), narrow = isNarrow(o.width), pin = normPin(o.pin), focus = !!o.focus;
+    const mode = normMode(o.mode), narrow = isNarrow(o.width), focus = !!o.focus;
     const autoFold = autoFoldLib(mode, o.width);
-    const foldLib = mode === 'pro' && (autoFold ? o.narrowLib !== 'open' : !!o.foldLib), foldRight = mode === 'pro' && !!o.foldRight;
-    const ask = askPos(o.ratio, o.width, pin);
+    const foldLib = mode === 'pro' && (autoFold ? o.narrowLib !== 'open' : !!o.foldLib), foldRight = !!o.foldRight;
     const tl = normTl(o.tl) || defaultTl(mode, narrow);
     let lib = mode === 'basic' ? 'flyout' : foldLib ? 'none' : 'panel';
-    let right = mode === 'pro' ? (foldRight ? 'none' : 'panel') : ask === 'side' ? 'claude' : 'none';
-    if (focus) { lib = 'none'; if (right === 'panel') right = 'none'; }
+    let right = foldRight ? 'none' : 'panel';
+    if (focus) { lib = 'none'; right = 'none'; }
     const controls = 'row'; // M165: chủ repo chốt 2026-11-18 nút phát luôn một dòng dưới khung (cột dọc khó hiểu với người dựng)
-    return { mode, narrow, pin, focus, foldLib, foldRight, autoFold, askPos: ask, tl, lib, right, controls };
+    return { mode, narrow, focus, foldLib, foldRight, autoFold, tl, lib, right, controls };
   }
+
+  // M170: phím / và nút ✦ mở tab Claude — cột phải đang ẩn thì các lệnh Studio.layout.set cần chạy trước ([[k, v], …]).
+  const revealRight = st => [...(st?.focus ? [['focus', false]] : []), ...(st?.foldRight ? [['foldRight', false]] : [])];
+  // Phím trần / (không ⌘ / Ctrl / ⌥) → mở tab Claude. k = { key, mod, alt }.
+  const askKey = k => !k.mod && !k.alt && k.key === '/';
 
   // M168: Chuyên nghiệp, cửa sổ < 1280 px → thư viện tự gấp (như phím [): 312 + 340 px hai cột để khung 16:9 còn 264×149 ở 1024.
   // Mở tay (phím [, bấm nút thanh trái) nhớ ở narrowLib = 'open', không tự gấp lại cho tới khi bề rộng qua ngưỡng (76_layout.js xoá).
@@ -97,8 +90,8 @@
     return { aspect, ratio, legacy, source, to };
   }
 
-  const T = { SIDE_RATIO, NARROW, TLS, PINS, MODES, TL_H, FULL, PIN_LABEL, TL_LABEL, normMode, normPin, normTl, isNarrow,
-    defaultTl, tlKey, askPos, compute, toggleFold, foldKey, flyoutClick, tlHeight, clampFull, maxFull, snap, cycle,
+  const T = { NARROW, TLS, MODES, TL_H, FULL, TL_LABEL, normMode, normTl, isNarrow,
+    defaultTl, tlKey, compute, revealRight, askKey, toggleFold, foldKey, flyoutClick, tlHeight, clampFull, maxFull, snap, cycle,
     CREATE_ASPECTS, createAspect, frameOf, autoFoldLib, foldStore };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.LayoutCore = T;
