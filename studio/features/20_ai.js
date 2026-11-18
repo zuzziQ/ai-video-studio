@@ -163,6 +163,28 @@
       if (panel === 'wf-aihelp') renderAi();
     });
   }
+  // S22 M153: AI dựng từ thanh Hỏi Claude (75_ask.js): không có hộp chọn, dùng mặc định (giữ gói, mật độ vừa) + yêu cầu của người dùng.
+  // Áp kế hoạch KHÔNG đẩy bước hoàn tác: thanh Hỏi Claude trả timeline về như cũ rồi đưa bản mới qua Studio.review (Nhận = một ⌘Z).
+  // → Promise<{ plan } | { error }>
+  async function build(o = {}) {
+    if (!CAP.length) return { error: 'Cần phụ đề trước: bước Nguồn → Lời thoại' };
+    const body = { goal: GOALS.includes(o.goal) ? o.goal : 'Khác', tone: TONES.includes(o.tone) ? o.tone : TONES[0], pack: o.pack || 'keep',
+      density: DENS.some(d => d[0] === o.density) ? o.density : 'vua', extra: String(o.extra || '').slice(0, 300), skip: [] };
+    if (!await S.saveNow()) return { error: 'Chưa lưu được dự án' };
+    const r = await S.api('/api/ai/edit', body);
+    if (!r.ok) return { error: r.error || 'Đang có tác vụ khác chạy' };
+    S.modal(`<h3><i class="ti ti-sparkles"></i> AI đang dựng…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="aicancel">Dừng</button></div>`);
+    $('#aicancel').onclick = () => S.api('/api/job/cancel', {});
+    return new Promise(ok => S.pollJob(async j => {
+      S.closeModal();
+      if (j.state !== 'done') return ok({ error: j.step || 'AI dựng chưa được' });
+      const plan = await S.api('/api/ai/plan');
+      if (plan.error) return ok({ error: plan.error });
+      lastPlan = plan; applyPlan(plan, { noUndo: true });
+      if (panel === 'wf-aihelp') renderAi();
+      ok({ plan });
+    }));
+  }
   // hai tuỳ chọn chạy nối sau AI dựng (lưu ở 80_autofill.js); pre: tiền tố id ô (panel / hộp)
   const afterOpts = pre => S.autofill ? `<div class="ai-after"><label class="ai-row ai-click"><input type="checkbox" id="${pre}-broll" class="ai-nf" ${S.autofill.opts.ai_broll ? 'checked' : ''}><span>Thêm b-roll <span class="muted">· chữ nổi, emoji, ảnh của bạn đúng lúc nói</span></span></label>
     <label class="ai-row ai-click"><input type="checkbox" id="${pre}-sfx" class="ai-nf" ${S.autofill.opts.ai_sfx ? 'checked' : ''}><span>Thêm âm thanh <span class="muted">· SFX theo cảnh, nhạc theo đoạn</span></span></label></div>` : '';
@@ -177,8 +199,8 @@
     const b = out.broll || {}, parts = [b.added != null ? `+${b.added} b-roll` : '', out.sfx ? 'âm thanh: ' + String(out.sfx).replace(/^level \d: /, '') : ''].filter(Boolean);
     return parts.length ? `<p class="muted"><i class="ti ti-bolt"></i> ${esc(parts.join(' · '))}.</p>` : '';
   }
-  function applyPlan(plan) {
-    S.pushUndo();
+  function applyPlan(plan, o = {}) {
+    if (!o.noUndo) S.pushUndo();
     const mine = s => (s._ai || s._recipe) && !s._orig;
     if (plan.pack !== TL.pack && TL.fx) TL.fx = TL.fx.filter(f => !f._recipe || f._orig);
     TL.pack = plan.pack; TL.caption_style = plan.caption_style || undefined;
@@ -380,5 +402,5 @@
 
   // For tests / Claude: Studio.ai.cut([[a,b]]) etc.
   // features/21_transcript.js (panel Lời thoại) uses cutRanges, wordSpan, allWords and the filler flags.
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, previewRange, detect: () => detect(), renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, previewRange, detect: () => detect(), renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
 })();

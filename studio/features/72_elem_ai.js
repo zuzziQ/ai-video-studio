@@ -4,12 +4,13 @@
 // S22 M152: kết quả xem qua Studio.review (74_review.js): dời playhead tới element + phát lặp, trước / sau, chia đôi, phóng to;
 // bản xem trước vẽ ở khung riêng, không ghi vào timeline. C27: bấm biến thể (hoặc phím 1/2/3) chỉ xem trên khung, Nhận mới áp.
 // Chỉ gọi mô hình khi người dùng bấm (C23), Huỷ được.
+// S22 M153 (C25): một lối vào là thanh Hỏi Claude dưới khung (75_ask.js). Ô nhập + gợi ý nhanh nằm ở thanh; kết quả (khác biệt,
+// 3 biến thể, núm gợi ý) vẽ trong thanh qua Studio.elemAi.html(); mục "Hỏi Claude" của Thuộc tính chỉ còn nút mở thanh.
 // "Gợi ý núm" (M148): element có trường núm (window.Knobs.allowed) → mô hình đề xuất 2–3 núm, server kiểm bằng KnobsCore.validateMap,
 // ở đây kiểm lại bằng Knobs.validateMap; "Thêm núm" lưu vào obj.knob_map (một bước ⌘Z), mục Núm vẽ thêm các núm đó.
 (() => {
   const S = window.Studio, esc = S.esc;
   const KINDS = new Set(['line', 'cap', 'node', 'badge', 'scene']);
-  const QUICK = ['nổi hơn', 'hợp thương hiệu', 'gọn hơn'];
   const FOCUS_IC = { style: 'ti-typography', anim: 'ti-sparkles', pos: 'ti-arrows-move' };
   // st: idle | running | edit (bản vá đang xem trước) | variants | error. Một trạng thái cho cả trang, gắn với cid của element.
   const ST = { cid: null, st: 'idle', ask: '', step: '', res: null, err: null, errKind: '', shots: null, shotErr: '', run: 0 };
@@ -17,31 +18,31 @@
   const RV = () => S.review, mine = () => !!RV()?.active && RV().owner === OWNER;
   const css = document.createElement('style');
   css.textContent = `
-#insp .eai { display: flex; flex-direction: column; gap: var(--space-2); }
-#insp .eai textarea { min-height: 48px; }
-#insp .eai .acts { margin-top: 0; }
-#insp .eai-st { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
-#insp .eai-st .ti-loader-2, #insp .eai-var .th .ti-loader-2 { animation: ui-spin 1s linear infinite; }
-#insp .eai-err { font-size: var(--text-xs); color: rgb(var(--color-danger-text)); line-height: 1.45; }
-#insp .eai-diff { display: flex; flex-direction: column; gap: var(--space-1); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-2); background: rgb(var(--color-surface-muted)); }
-#insp .eai-diff .d { display: grid; grid-template-columns: minmax(64px, auto) 1fr; gap: var(--space-2); font-size: var(--text-xs); align-items: baseline; }
-#insp .eai-diff .d span { color: rgb(var(--color-fg-muted)); }
-#insp .eai-diff .d s { color: rgb(var(--color-fg-subtle)); }
-#insp .eai-diff .d b { color: rgb(var(--color-accent-text-strong)); font-weight: 600; word-break: break-word; }
-#insp .eai-why, #insp .eai-warn { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
-#insp .eai-warn { color: rgb(var(--color-warning-text)); }
-#insp .eai-tag { font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); display: flex; align-items: center; gap: var(--space-1); }
-#insp .eai-vars { display: flex; flex-direction: column; gap: var(--space-2); }
-#insp .eai-var { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: start; gap: var(--space-1) var(--space-2); padding: var(--space-1); white-space: normal; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-raised)); text-align: left; min-width: 0; }
-#insp .eai-vars.wide .eai-var { grid-template-columns: minmax(0, 1fr); }
-#insp .eai-var:hover, #insp .eai-var:focus-visible { border-color: rgb(var(--color-line-hover)); }
-#insp .eai-var[aria-pressed="true"] { border-color: rgb(var(--color-accent)); background: rgb(var(--color-accent-soft) / .22); }
-#insp .eai-var .th { grid-row: span 3; width: 100%; aspect-ratio: 9 / 16; border-radius: var(--radius-control); overflow: hidden; background: rgb(var(--color-surface-muted)); display: flex; align-items: center; justify-content: center; color: rgb(var(--color-fg-subtle)); }
-#insp .eai-vars.wide .eai-var .th { grid-row: auto; aspect-ratio: 16 / 9; }
-#insp .eai-var .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
-#insp .eai-var b { font-size: var(--text-xs); color: rgb(var(--color-fg)); display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
-#insp .eai-var b kbd { font-size: var(--text-2xs); padding: 0 var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-line-strong)); color: rgb(var(--color-fg-muted)); font-weight: 400; }
-#insp .eai-var small { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); line-height: 1.35; overflow-wrap: anywhere; }`;
+#askbar .eai { display: flex; flex-direction: column; gap: var(--space-2); }
+#askbar .eai textarea { min-height: 48px; }
+#askbar .eai .acts { margin-top: 0; }
+#askbar .eai-st { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
+#askbar .eai-st .ti-loader-2, #askbar .eai-var .th .ti-loader-2 { animation: ui-spin 1s linear infinite; }
+#askbar .eai-err { font-size: var(--text-xs); color: rgb(var(--color-danger-text)); line-height: 1.45; }
+#askbar .eai-diff { display: flex; flex-direction: column; gap: var(--space-1); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-2); background: rgb(var(--color-surface-muted)); }
+#askbar .eai-diff .d { display: grid; grid-template-columns: minmax(64px, auto) 1fr; gap: var(--space-2); font-size: var(--text-xs); align-items: baseline; }
+#askbar .eai-diff .d span { color: rgb(var(--color-fg-muted)); }
+#askbar .eai-diff .d s { color: rgb(var(--color-fg-subtle)); }
+#askbar .eai-diff .d b { color: rgb(var(--color-accent-text-strong)); font-weight: 600; word-break: break-word; }
+#askbar .eai-why, #askbar .eai-warn { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
+#askbar .eai-warn { color: rgb(var(--color-warning-text)); }
+#askbar .eai-tag { font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); display: flex; align-items: center; gap: var(--space-1); }
+#askbar .eai-vars { display: flex; flex-direction: column; gap: var(--space-2); }
+#askbar .eai-var { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: start; gap: var(--space-1) var(--space-2); padding: var(--space-1); white-space: normal; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface-raised)); text-align: left; min-width: 0; }
+#askbar .eai-vars.wide .eai-var { grid-template-columns: minmax(0, 1fr); }
+#askbar .eai-var:hover, #askbar .eai-var:focus-visible { border-color: rgb(var(--color-line-hover)); }
+#askbar .eai-var[aria-pressed="true"] { border-color: rgb(var(--color-accent)); background: rgb(var(--color-accent-soft) / .22); }
+#askbar .eai-var .th { grid-row: span 3; width: 100%; aspect-ratio: 9 / 16; border-radius: var(--radius-control); overflow: hidden; background: rgb(var(--color-surface-muted)); display: flex; align-items: center; justify-content: center; color: rgb(var(--color-fg-subtle)); }
+#askbar .eai-vars.wide .eai-var .th { grid-row: auto; aspect-ratio: 16 / 9; }
+#askbar .eai-var .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#askbar .eai-var b { font-size: var(--text-xs); color: rgb(var(--color-fg)); display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+#askbar .eai-var b kbd { font-size: var(--text-2xs); padding: 0 var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-line-strong)); color: rgb(var(--color-fg-muted)); font-weight: 400; }
+#askbar .eai-var small { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); line-height: 1.35; overflow-wrap: anywhere; }`;
   document.head.appendChild(css);
 
   // ---------- đọc / áp trường trừu tượng (cùng hàm của inspector) ----------
@@ -108,10 +109,11 @@
   const knobAllowed = c => (window.Knobs?.allowed ? window.Knobs.allowed(c) : null);
   const knobPayload = c => ({ mode: 'knobs', kind: c.kind, type: c.obj.type === 'hf' ? 'hf:' + (c.obj.block || '') : c.obj.type || '', label: String(c.label || '').slice(0, 60),
     allowed: knobAllowed(c), existing: window.Knobs.tableFor(c).map(k => ({ id: k.id, label: k.label })), ask: ST.ask });
-  async function go(mode) {
+  async function go(mode, ask) {
     const c = S.sel; if (!c || ST.st === 'running') return;
+    if (ask != null) ST.ask = String(ask).slice(0, 300);
     closeMine();
-    if (mode === 'edit' && !ST.ask.trim()) { ST.st = 'error'; ST.err = 'Nhập điều muốn sửa, hoặc bấm một gợi ý nhanh.'; ST.errKind = 'input'; return paint(); }
+    if (mode === 'edit' && !ST.ask.trim()) { ST.st = 'error'; ST.err = 'Gõ điều muốn sửa vào thanh Hỏi Claude, hoặc bấm một gợi ý nhanh.'; ST.errKind = 'input'; return paint(); }
     Object.assign(ST, { cid: c.obj.cid, st: 'running', step: 'Đang gửi…', res: null, err: null, errKind: '', shots: null, shotErr: '' });
     paint();
     const r = await S.api('/api/elem/ai', mode === 'knobs' ? knobPayload(c) : payload(c, mode)).catch(e => ({ error: e.message }));
@@ -184,31 +186,25 @@
     }
     return '';
   }
-  function html() {
-    const run = ST.st === 'running';
-    return `<div class="eai" data-eai-box>
-      <textarea data-eai-in rows="2" placeholder="Ví dụ: chữ này nổi hơn, hợp tông thương hiệu" ${run ? 'disabled' : ''}>${esc(ST.ask)}</textarea>
-      <div class="pills">${QUICK.map(q => `<button data-eaiq="${esc(q)}" ${run ? 'disabled' : ''}>${esc(q)}</button>`).join('')}</div>
-      <div class="acts"><button class="primary" data-eai="send" ${run ? 'disabled' : ''}><i class="ti ti-send"></i> Gửi</button><button data-eai="variants" ${run ? 'disabled' : ''}><i class="ti ti-layout-grid"></i> 3 biến thể</button>${S.sel && knobAllowed(S.sel) ? `<button data-eai="knobs" ${run ? 'disabled' : ''} title="Mô hình đề xuất 2–3 núm điều chỉnh mới cho element này"><i class="ti ti-adjustments-horizontal"></i> Gợi ý núm</button>` : ''}</div>
-      <div class="eai-out" aria-live="polite">${outHtml()}</div>
-      <div class="help">Chỉ gọi mô hình khi bấm. ${S.tip('Mô hình theo Mô hình & giọng (Claude hoặc Ollama). AI chỉ đổi vị trí, cỡ, màu, font, kiểu, hoạt ảnh, xoay, thời lượng, chữ; núm gợi ý chỉ dùng trường của mục Núm.')}</div></div>`;
-  }
-  const box = () => document.querySelector('#insp [data-eai-box]');
-  function paint() { const b = box(); if (b) b.outerHTML = html(); }
-  function paintStep() { const s = document.querySelector('#insp [data-eai-box] .eai-step'); if (s) s.textContent = ST.step; }
+  // Phần kết quả, vẽ trong thanh Hỏi Claude (75_ask.js) khi phạm vi là element
+  const html = () => `<div class="eai" data-eai-box><div class="eai-out" aria-live="polite">${outHtml()}</div></div>`;
+  const box = () => document.querySelector('#askbar [data-eai-box]');
+  function paint() { const b = box(); if (b) b.outerHTML = html(); S.ask?.refresh?.(); }
+  function paintStep() { const s = document.querySelector('#askbar [data-eai-box] .eai-step'); if (s) s.textContent = ST.step; }
+
+  // Cho thanh Hỏi Claude: chạy một lượt (edit | variants | knobs) cho element đang chọn, vẽ kết quả, trạng thái
+  S.elemAi = { go, html, cancel, knobsOk: c => !!(c && knobAllowed(c)), get st() { return ST.st; }, get cid() { return ST.cid; } };
 
   S.addInspectorTab(c => {
     if (!KINDS.has(c.kind) || (c.kind === 'scene' && c.obj.type === 'hf' && !S.getPos(c))) return null;
     if (c.obj.cid !== ST.cid && !mine() && ST.st !== 'running') { ST.cid = c.obj.cid; reset(); }
-    return ['ai', 'Hỏi Claude', S.sect('', html())];
+    const note = ST.st === 'running' ? 'Claude đang làm…' : ST.st === 'edit' || ST.st === 'variants' || ST.st === 'knobs' ? 'Có kết quả ở thanh dưới khung' : '';
+    return ['ai', 'Hỏi Claude', S.sect('', `<div class="acts"><button data-askopen><i class="ti ti-sparkles"></i> Hỏi Claude về element này <kbd>/</kbd></button></div>${note ? `<div class="eai-note">${esc(note)}</div>` : ''}`)];
   });
 
-  const insp = document.getElementById('insp');
-  insp.addEventListener('input', e => { if (e.target.matches?.('[data-eai-in]')) ST.ask = e.target.value.slice(0, 300); });
-  insp.addEventListener('keydown', e => { if (e.target.matches?.('[data-eai-in]') && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go('edit'); } });
-  insp.addEventListener('click', e => {
-    const q = e.target.closest('[data-eaiq]');
-    if (q) { ST.ask = q.dataset.eaiq; return go('edit'); }
+  document.getElementById('insp').addEventListener('click', e => { if (e.target.closest('[data-askopen]')) S.ask?.open(); });
+  document.addEventListener('click', e => {
+    if (!e.target.closest?.('#askbar [data-eai-box]')) return;
     const v = e.target.closest('[data-eaivar]');
     if (v) { // C27: bấm biến thể = xem trên khung, chưa áp
       const i = +v.dataset.eaivar, it = ST.res?.variants?.[i]; if (!it) return;
@@ -216,9 +212,6 @@
       RV().pick(i); return paint();
     }
     const a = e.target.closest('[data-eai]')?.dataset.eai; if (!a) return;
-    if (a === 'send') return go('edit');
-    if (a === 'variants') return go('variants');
-    if (a === 'knobs') return go('knobs');
     if (a === 'addknobs') { const ks = ST.res?.knobs || []; reset(); addKnobs(ks); return paint(); }
     if (a === 'cancel') return cancel();
     if (a === 'accept') { // Nhận qua khung xem lại = một bước ⌘Z; khung đã đóng thì mở lại rồi Nhận

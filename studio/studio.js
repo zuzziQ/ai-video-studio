@@ -538,6 +538,7 @@ function renderInspector() {
   el.innerHTML = `<div class="itop"><div class="ihead"><span class="iic"><i class="ti ${KIND_IC[c.kind]}"></i></span><div class="it"><h3>${esc(c.kind === 'line' && c.scene.type === 'text' ? (o.text || 'Chữ thêm') : c.label)}</h3>
       <div class="sub"><span class="pill">${esc(tag)}</span><a class="time" data-act="seek"><i class="ti ti-clock-play"></i> ${fmt(c.t0)} – ${fmt(c.t1)}</a></div></div>
       <div class="ihbtn">${clip ? '' : ic('lock', !!o.locked, o.locked ? 'ti-lock' : 'ti-lock-open', o.locked ? 'Mở khoá (⌥⇧L)' : 'Khoá (⌥⇧L)') + ic('hide', !!o.hidden, o.hidden ? 'ti-eye-off' : 'ti-eye', o.hidden ? 'Hiện' : 'Ẩn')}
+      <button class="icon" data-act="ask" title="Hỏi Claude về element này (/)" aria-label="Hỏi Claude về element này"><i class="ti ti-sparkles"></i></button>
       <button class="icon" data-act="more" title="Lệnh khác" aria-label="Lệnh khác" aria-haspopup="menu"><i class="ti ti-dots"></i></button>
       <button class="icon" data-act="desel" title="Bỏ chọn (Esc)" aria-label="Bỏ chọn"><i class="ti ti-x"></i></button></div></div>
     ${secs.length > 1 ? `<nav class="isecbar" aria-label="Mục thuộc tính">${secs.map((s, i) => `<button data-secgo="${esc(s.key)}" class="${open[i] ? 'open' : ''}">${esc(s.label)}</button>`).join('')}</nav>` : ''}</div>
@@ -753,6 +754,7 @@ $('#insp').addEventListener('click', async e => {
   if (a === 'secmore') { SECT.more = !SECT.more; renderInspector(); return; } // S22 M151: "Thêm thuộc tính" ở Cơ bản
   if (a === 'lock') toggleLock();
   if (a === 'more') { const r = b.getBoundingClientRect(); Studio.cmdMenu?.(r.right - 200, r.bottom + 4); }
+  if (a === 'ask') Studio.ask?.open(); // S22 M153: thanh Hỏi Claude dưới khung, phạm vi = element đang chọn
   if (a === 'hide') { touch(o); o.hidden = !o.hidden || undefined; changed(true); }
   if (a === 'del') removeSel();
   if (a === 'dup') duplicateSel();
@@ -1762,7 +1764,7 @@ document.addEventListener('click', e => { const t = e.target.closest?.('.tip'); 
 // Features are plain scripts loaded after boot; they read/mutate TL/CAP through this object and call changed() after edits.
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
-  get T() { return T; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
+  get T() { return T; }, get PPS() { return PPS; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
   $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
