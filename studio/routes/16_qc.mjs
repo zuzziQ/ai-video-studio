@@ -7,6 +7,9 @@
 //   GET  /api/qc/gate                             → cổng chặn xuất (scripts/export_gate.mjs): {blocked, hard, overridable, issues, override, stale}
 //   POST /api/qc/override {reason}                → ghi lý do bỏ qua chặn xuất (chỉ lỗi claim / nguyên bản; lỗi chính sách → 400)
 //   POST /api/qc/undo                             → restore .studio/qc_backup.json (timeline + captions as before the fix)
+//   POST /api/qc/revert                           → S23 M159: Bỏ kết quả "Sửa hết lỗi" (Studio.review): qc.json + qc_backup.json
+//                                                   về như trước lần sửa (.studio/qc_prev.json, ghi lúc job sửa bắt đầu); không đụng
+//                                                   timeline (trình duyệt đã ghi lại bản cũ)
 //   POST /api/variants/run {n, kind, export, quality} → job "variants": scripts/variants.mjs → <project>_v1.._vN + variants.json
 //   GET  /api/variants                            → variants.json of this project (or of its base when a variant is open)
 //   GET  /api/variants/file?dir=&f=               → a still / video inside one of the listed variant folders
@@ -42,6 +45,10 @@ export default ctx => {
         ctx.job.step = 'Chuẩn bị kiểm tra';
         // written only once this job really starts (a refused run must not touch a running one's selection)
         if (keys) fs.writeFileSync(onlyFile, JSON.stringify(keys));
+        // S23 M159: chụp báo cáo + bản sao lưu trước lần sửa để Bỏ trả về đúng; lần kiểm không sửa thì bản chụp cũ hết giá trị
+        const prev = path.join(st, 'qc_prev.json');
+        if (b.fix) fs.writeFileSync(prev, JSON.stringify({ report: readJ(path.join(st, 'qc.json')), backup: readJ(path.join(st, 'qc_backup.json')) }));
+        else rmSync(prev, { force: true });
         try { await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); }); }
         finally { if (keys) rmSync(onlyFile, { force: true }); }
         ctx.job.out = '.studio/qc.json';
@@ -85,6 +92,16 @@ export default ctx => {
       fs.renameSync(f, path.join(st, `qc_backup_undone_${Date.now()}.json`));
       const q = readJ(path.join(st, 'qc.json')); if (q) { q.undone = new Date().toISOString(); fs.writeFileSync(path.join(st, 'qc.json'), JSON.stringify(q, null, 1)); }
       return ctx.json(res, { ok: true }), true;
+    }
+    if (p === '/api/qc/revert' && req.method === 'POST') {
+      const f = path.join(st, 'qc_prev.json'), pv = readJ(f);
+      if (!pv) return ctx.json(res, { error: 'Không có bản chụp trước lần sửa' }, 400), true;
+      for (const [k, v] of [['qc.json', pv.report], ['qc_backup.json', pv.backup]]) {
+        const t = path.join(st, k);
+        if (v) fs.writeFileSync(t, JSON.stringify(v, null, 1)); else rmSync(t, { force: true });
+      }
+      rmSync(f, { force: true });
+      return ctx.json(res, { ok: true, report: !!pv.report }), true;
     }
     if (p === '/api/variants/run' && req.method === 'POST') {
       const b = await ctx.body(req);

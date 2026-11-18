@@ -8,6 +8,8 @@
 //     Nhận / Bỏ nằm ngay dưới khung nên vẫn còn.
 //   - Biến thể (C27): bấm / phím 1…3 chỉ đổi bản xem trước; Nhận mới áp. Danh sách: bấm dòng = nhảy tới và phát; Nhận từng cái
 //     hoặc tất cả. Mỗi lần Nhận là một bước ⌘Z (pushUndo rồi apply(S.TL, S.CAP, true)).
+//   - S23 M159: khung chọn / thanh nổi vẽ theo timeline thật nên ẩn khi đang xem bản mới (body.rv-new), hiện lại khi giữ "Trước";
+//     SFX / nhạc chỉ có ở bản xem trước được phát kèm (RC.audioExtra), giữ "Trước" thì tắt.
 'use strict';
 (() => {
   const S = window.Studio, RC = window.ReviewCore;
@@ -48,7 +50,8 @@
 #rvbar .rv-go .t { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); font-variant-numeric: tabular-nums; flex: none; }
 #rvbar .rv-go .l { font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #rvbar .rv-go small { font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-#rvbar .rv-st { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); flex: none; }`;
+#rvbar .rv-st { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); flex: none; }
+body.rv-new #overlay, body.rv-new .cbar, body.rv-new .cmenu { visibility: hidden; }`;
   document.head.appendChild(css);
 
   let R = null; // phiên đang mở: { s (lõi), o (tuỳ chọn), range, loop, before, split, x, zoomed }
@@ -86,7 +89,7 @@
     try {
       const capped = p => Promise.race([p, new Promise(r => setTimeout(r, 1200))]);
       syncSize();
-      if (F.stale) { F.stale = false; await capped(F.win.init(previewObj())); }
+      if (F.stale) { F.stale = false; const tl = previewObj(); prepAudio(tl); await capped(F.win.init(tl)); }
       F.t = S.T; await capped(F.win.renderFrame(F.t));
       if (R) F.el.hidden = false; // chỉ hiện khi đã có một khung, không nháy trắng
     } catch (e) { console.error(e); }
@@ -97,6 +100,30 @@
   // Sau mỗi lần khung chính vẽ (drawOverlay → _ov): theo cỡ + thời điểm; timeline thật đổi (build) → dựng lại bản xem trước
   S._ov.push(() => { if (R && F) { syncSize(); if (F.stale || F.t !== S.T) paintFrame(); } });
   S._build.push(() => { if (R && F) F.stale = true; });
+
+  // ---------- âm thanh của bản xem trước ----------
+  const AU = { sfx: [], music: [], at: -1 };
+  const sfxSrc = name => { const L = typeof LIB !== 'undefined' ? LIB.sfx || [] : [], f = L.find(x => x.replace(/\.\w+$/, '') === name); return f ? '/assets/sfx/' + f : ''; };
+  const vol = g => Math.min(1, Math.max(0, Math.pow(10, (g ?? -12) / 20) * 2.2)); // như dbVol của studio.js
+  const audioOff = () => typeof TRK !== 'undefined' && !!TRK.audio?.hide;
+  function stopAudio() { for (const x of AU.music) x.el.pause(); }
+  function prepAudio(tl) {
+    stopAudio();
+    const ex = RC.audioExtra(S.TL, tl);
+    AU.sfx = ex.sfx;
+    AU.music = ex.music.map(m => ({ m, el: Object.assign(new Audio(m.file ? S.purl(m.file) : `/assets/music/${m.mood}.mp3`), { loop: true, volume: vol((m.gain ?? -16) + 4) }) }));
+    AU.at = -1;
+  }
+  function tickAudio(T) {
+    const on = R && !R.before && !audioOff();
+    if (on && AU.at >= 0 && T - AU.at < 0.5) for (const x of RC.sfxDue(AU.sfx, AU.at, T)) { const src = sfxSrc(x.name); if (src) { const a = new Audio(src); a.volume = vol(x.gain); a.play().catch(() => {}); } }
+    for (const { m, el } of AU.music) {
+      const inside = on && T >= m.t0 && T < m.t1;
+      if (inside && el.paused) { el.currentTime = (T - m.t0 + (m.offset || 0)) % (el.duration || 1e9); el.play().catch(() => {}); }
+      if (!inside && !el.paused) el.pause();
+    }
+    AU.at = T;
+  }
 
   // ---------- phát lặp ----------
   const playBtn = () => $('#play');
@@ -110,14 +137,17 @@
   function stopLoop() { if (!R) return; R.loop = false; if (S.playing) playBtn()?.click(); paintBar(); }
   S._play.push((ev, T) => {
     if (!R) return;
-    if (ev === 'stop') { if (R.loop) { R.loop = false; paintBar(); } return; }
-    if (ev === 'tick' && R.loop) { const n = RC.loopStep(T, R.range); if (n != null) S.setTime(n); }
+    if (ev === 'stop') { stopAudio(); AU.at = -1; if (R.loop) { R.loop = false; paintBar(); } return; }
+    if (ev !== 'tick') return;
+    tickAudio(T);
+    if (R.loop) { const n = RC.loopStep(T, R.range); if (n != null) { S.setTime(n); stopAudio(); AU.at = n; } }
   });
 
   // ---------- trước / sau, chia đôi, phóng to ----------
   function setBefore(on) {
     if (!R || R.before === !!on) return;
-    R.before = !!on; box()?.classList.toggle('rv-before', R.before); paintTags();
+    R.before = !!on; box()?.classList.toggle('rv-before', R.before); paintTags(); markNew();
+    if (R.before) stopAudio();
     const b = $('#rvbar [data-rv="before"]'); if (b) b.setAttribute('aria-pressed', String(R.before));
   }
   function setSplit(on) {
@@ -132,6 +162,7 @@
     l.hidden = !(R && (R.before || R.split)); r.hidden = !(R && R.split && !R.before);
     l.textContent = R?.split && !R.before ? 'Trước' : 'Bản cũ';
   }
+  const markNew = () => document.body.classList.toggle('rv-new', !!R && !R.before);
   const expanded = () => !!S.layout?.get().focus; // S23 M161: nút ⤢ = Studio.layout 'focus'
   function toggleZoom() { const b = $('#expand'); if (!b || !R) return; b.click(); R.zoomed = expanded(); paintBar(); }
   function stageParts() {
@@ -258,7 +289,7 @@
     R = { s, o: o || {}, range: null, loop: false, before: false, split: false, x: 0.5, zoomed: false };
     frame(); stageParts(); F.stale = true; F.el.hidden = true;
     box()?.style.setProperty('--rv-x', '0.5');
-    paintBar(); paintFrame();
+    markNew(); paintBar(); paintFrame();
     goTo(s.focus >= 0 ? s.focus : 0);
     return api;
   }
@@ -267,7 +298,7 @@
     const o = R.o, wasZoom = R.zoomed;
     if (R.loop && S.playing) playBtn()?.click();
     setBefore(false); setSplit(false);
-    R = null;
+    R = null; markNew(); stopAudio(); AU.sfx = []; AU.music = [];
     if (F) F.el.hidden = true;
     paintTags();
     $('#rvbar')?.remove();

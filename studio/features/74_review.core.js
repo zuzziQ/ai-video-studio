@@ -107,7 +107,28 @@
     return obj;
   }
 
-  const api = { PAD, MIN, range, loopStep, seekOf, create, openIdx, previewIdx, pick, focus, settle, settleAll, counts, keyAction, splitX, stamp, locate, markOrig };
+  // ---------- S23 M159: âm thanh của bản xem trước ----------
+  // Khung chính chỉ phát âm thanh của timeline thật; bản xem trước thêm SFX / nhạc (Tự động, AI dựng) thì phải tự phát phần
+  // thêm đó. So theo nội dung (bỏ cid / _orig): mục có trong bản xem trước mà không có trong timeline thật → phát thêm.
+  const akey = o => JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v));
+  function audioExtra(real, prev) {
+    const out = {};
+    for (const k of ['sfx', 'music']) {
+      const have = new Map();
+      for (const o of (real && real.audio && real.audio[k]) || []) { const s = akey(o); have.set(s, (have.get(s) || 0) + 1); }
+      out[k] = ((prev && prev.audio && prev.audio[k]) || []).filter(o => {
+        if (!o || o.hidden) return false;
+        const s = akey(o), n = have.get(s) || 0;
+        if (n) { have.set(s, n - 1); return false; }
+        return true;
+      });
+    }
+    return out;
+  }
+  // SFX cần phát khi playhead đi từ `from` tới `to` (nhảy lùi, vd. phát lặp quay về đầu đoạn → không phát gì lần này)
+  const sfxDue = (list, from, to) => (to < from ? [] : (list || []).filter(x => num(x.t) > from && num(x.t) <= to));
+
+  const api = { PAD, MIN, range, loopStep, seekOf, create, openIdx, previewIdx, pick, focus, settle, settleAll, counts, keyAction, splitX, stamp, locate, markOrig, audioExtra, sfxDue };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.ReviewCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
