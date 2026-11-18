@@ -107,7 +107,24 @@ body.np-busy > *:not(#modal):not(.toast) { visibility: hidden; }
 }
 
 /* ---------- main grid ---------- */
-main { position: absolute; top: 50px; left: 0; right: 0; bottom: var(--tlh); display: grid; grid-template-columns: 68px 312px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
+main { --libw: clamp(312px, 22vw, 420px); position: absolute; top: 50px; left: 0; right: 0; bottom: var(--tlh); display: grid; grid-template-columns: 68px var(--libw) minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
+/* S23 M165: hai cột theo chế độ (data-lib / data-right của Studio.layout; ngăn trượt và phím [ ] ở features/78_cols.js).
+   Chuyên nghiệp gấp thư viện (data-lib=none) / cột phải (data-right=none); Cơ bản giữ cột phải như cũ (cột Claude là M163).
+   Cơ bản: #lib thành ngăn trượt tuyệt đối trong main (không chiếm cột lưới), mở khi body[data-libopen]. Phải đứng trước luật ⤢.
+   PR 192: dòng .help ~70 ký tự cần ~390 px chữ → ngăn trượt rộng 420 px; Chuyên nghiệp --libw 312 px (≤ 1418 px) tới 420 px (≥ 1910 px),
+   cửa sổ hẹp hơn thì gấp bằng [ để lấy chỗ cho khung. */
+body[data-lib="none"] main { grid-template-columns: 68px minmax(0, 1fr) 340px; }
+body:not(.wf-basic)[data-right="none"] main { grid-template-columns: 68px var(--libw) minmax(0, 1fr); }
+body:not(.wf-basic)[data-lib="none"][data-right="none"] main { grid-template-columns: 68px minmax(0, 1fr); }
+body[data-lib="none"] #lib, body:not(.wf-basic)[data-right="none"] #right { display: none; }
+body[data-lib="flyout"] main { grid-template-columns: 68px minmax(0, 1fr) 340px; }
+body[data-lib="flyout"] #lib { position: absolute; z-index: 40; left: 68px; top: 0; bottom: 0; width: min(420px, calc(100vw - 68px - var(--space-6)));
+  box-shadow: var(--shadow-overlay); visibility: hidden; opacity: 0; transform: translateX(calc(-1 * var(--space-3)));
+  transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), visibility 0s linear var(--duration-fast); }
+body[data-lib="flyout"][data-libopen] #lib { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
+body[data-lib="flyout"][data-libopen].libdrag #lib { opacity: .2; pointer-events: none; } /* đang kéo một mục: thấy chỗ thả */
+body[data-lib="flyout"]:not([data-libopen]) #rail button.on:not(:hover) { background: transparent; } /* ngăn đóng: chỉ còn vạch của panel gần nhất */
+@media (prefers-reduced-motion: reduce) { body[data-lib="flyout"] #lib { transition: none; } }
 /* S23 M161: bố cục theo Studio.layout (features/76_layout.js gắn data-ask / data-tl / data-focus … lên body). Nút ⤢ = data-focus */
 body[data-focus] main { grid-template-columns: 68px minmax(0, 1fr); }
 body[data-focus] #lib, body[data-focus] #right { display: none; }

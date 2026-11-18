@@ -15,9 +15,9 @@ test('bảng khổ × chế độ × bề rộng (C29, C31)', () => {
   // [khổ, chế độ, bề rộng] → [askPos, tl, lib, right, controls]
   const rows = [
     ['9:16', 'basic', 1920, 'side', 'strip', 'flyout', 'claude', 'row'],
-    ['9:16', 'pro', 1920, 'side', 'full', 'panel', 'panel', 'column'],
+    ['9:16', 'pro', 1920, 'side', 'full', 'panel', 'panel', 'row'],
     ['9:16', 'basic', 1440, 'side', 'strip', 'flyout', 'claude', 'row'],
-    ['9:16', 'pro', 1440, 'side', 'full', 'panel', 'panel', 'column'],
+    ['9:16', 'pro', 1440, 'side', 'full', 'panel', 'panel', 'row'],
     ['9:16', 'basic', 1280, 'side', 'strip', 'flyout', 'claude', 'row'],
     ['9:16', 'basic', 1279, 'bottom', 'compact', 'flyout', 'none', 'row'],
     ['9:16', 'pro', 1024, 'bottom', 'compact', 'panel', 'panel', 'row'],

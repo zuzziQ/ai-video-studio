@@ -2,6 +2,7 @@
 //   Studio.layout.get()            → { askPos, tl, lib, right, controls, mode, narrow, pin, focus, tlH, ratio, width }
 //   Studio.layout.set(k, v)        k: 'tl' (strip|compact|full, nhớ avs.tl.<chế độ> / avs.tl.narrow), 'pin' (auto|side|bottom,
 //                                  nhớ avs.layout.pin), 'focus' (nút ⤢: ẩn hai cột, không nhớ), 'fullH' (px của mức đầy đủ, avs.tl.h)
+//                                  'foldLib' / 'foldRight' (M165: Chuyên nghiệp gấp thư viện / cột phải, nhớ avs.col.lib / avs.col.right)
 //   Studio.layout.on(fn)           fn(state, prev) sau mỗi lần đổi; trả hàm gỡ. M162 (dải tua), M163 (Claude cạnh khung),
 //                                  M165 (hai cột) đăng ký ở đây thay vì tự đo cửa sổ.
 //   Studio.layout.cycleTl(back) / dragStart() / drag(h) / dragEnd(h): phím ` và kéo mép trên timeline (studio.js).
@@ -24,7 +25,8 @@
   const ratio = () => (S.DW && S.DH ? S.DW / S.DH : body.classList.contains('landscape') ? 16 / 9 : 9 / 16);
   function compute() {
     const width = innerWidth, m = mode(), narrow = LC.isNarrow(width);
-    const r = LC.compute({ ratio: ratio(), mode: m, width, pin: store.get('layout.pin', 'auto'), tl: store.get(LC.tlKey(m, narrow), ''), focus });
+    const r = LC.compute({ ratio: ratio(), mode: m, width, pin: store.get('layout.pin', 'auto'), tl: store.get(LC.tlKey(m, narrow), ''), focus,
+      foldLib: store.get('col.lib', '') === 'off', foldRight: store.get('col.right', '') === 'off' });
     return { ...r, ratio: ratio(), width, tlH: LC.tlHeight(r.tl, +store.get('tl.h', LC.FULL.def), innerHeight) };
   }
 
@@ -46,6 +48,7 @@
     if (k === 'tl') { const t = LC.normTl(v); if (!t) return; const c = cur || compute(); store.set(LC.tlKey(c.mode, c.narrow), t); }
     else if (k === 'pin') store.set('layout.pin', LC.normPin(v) === 'auto' ? null : LC.normPin(v));
     else if (k === 'focus') focus = !!v;
+    else if (k === 'foldLib' || k === 'foldRight') store.set(k === 'foldLib' ? 'col.lib' : 'col.right', v ? 'off' : null); // M165, nhớ theo máy
     else if (k === 'fullH') store.set('tl.h', LC.clampFull(v, innerHeight));
     else return;
     apply();
