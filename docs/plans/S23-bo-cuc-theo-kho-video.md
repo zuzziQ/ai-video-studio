@@ -136,3 +136,63 @@ Mỗi mục một PR, test riêng `scripts/tests/s23_<mục>.test.mjs` cho lõi 
 - `C31` ngưỡng tự đổi bố cục: tỉ lệ khung < 0,8 (dọc, 4:5) → Claude cạnh khung; ≥ 0,8 → dưới khung; cửa sổ < 1280 px → luôn dưới
   khung, timeline gọn. Người dùng ghim được một kiểu (⋯ → Bố cục).
 - `C32` điểm: bỏ chip + thanh ở tab Dự án, chỉ còn vòng điểm trên thanh bước; tab Dự án giữ danh sách việc của bước đang xem.
+
+## 8. Nghiệm thu (`M166`, 2026-11-18)
+
+`main` ở `601c031` (M157–M165 đã merge), server Studio chạy từ worktree sau khi kéo main, 3 dự án thử chép từ một dự án thật (49,8 s,
+4 cảnh + `led_text` + `slam_bg`) đổi `width`/`height` thành 9:16, 1:1, 16:9. Đo bằng Chrome chạy ngầm (`puppeteer-core` +
+`scripts/chrome_profile.mjs`), viewport đúng cỡ, `localStorage` sạch mỗi ô.
+
+**Ma trận bố cục** (54 ô = 3 cửa sổ × 3 khổ × 2 chế độ × 3 mức timeline). Mỗi ô kiểm: trang không cuộn ngang / dọc, không phần tử tràn
+viewport mà không có tổ tiên cắt, không vùng cuộn dọc lồng nhau đang cuộn, 9 điểm trong khung `elementFromPoint` ra `#frame` /
+`#stagebox`, khung nằm trên timeline, `#play` nằm trên timeline và bấm trúng, không lỗi JS. Lõi thuần giữ các bất biến trong
+`scripts/tests/s23_layout_matrix.test.mjs`.
+
+| Khổ | Cửa sổ | Chế độ | Hỏi Claude | Khung: dải tua / gọn / đầy đủ (px) | Đạt |
+|---|---|---|---|---|---|
+| 9:16 | 1024×768 | Cơ bản | dưới khung | 292×519 / 247×439 / 146×259 | ✓ |
+| 9:16 | 1024×768 | Chuyên nghiệp | dưới khung | 264×469 / 247×439 / 146×259 | ✓ |
+| 9:16 | 1440×900 | Cơ bản | cạnh khung | 393×698 / 348×618 / 246×438 | ✓ |
+| 9:16 | 1440×900 | Chuyên nghiệp | cạnh khung | 366×651 / 321×571 / 220×391 | ✓ |
+| 9:16 | 1920×1080 | Cơ bản | cạnh khung | 494×878 / 449×798 / 348×618 | ✓ |
+| 9:16 | 1920×1080 | Chuyên nghiệp | cạnh khung | 467×831 / 422×751 / 321×571 | ✓ |
+| 1:1 ¹ | 1024×768 | Cơ bản | dưới khung | 292×519 / 247×439 / 146×259 | ✓ |
+| 1:1 ¹ | 1024×768 | Chuyên nghiệp | dưới khung | 264×469 / 247×439 / 146×259 | ✓ |
+| 1:1 ¹ | 1440×900 | Cơ bản | cạnh khung | 393×698 / 348×618 / 246×438 | ✓ |
+| 1:1 ¹ | 1440×900 | Chuyên nghiệp | cạnh khung | 366×651 / 321×571 / 220×391 | ✓ |
+| 1:1 ¹ | 1920×1080 | Cơ bản | cạnh khung | 494×878 / 449×798 / 348×618 | ✓ |
+| 1:1 ¹ | 1920×1080 | Chuyên nghiệp | cạnh khung | 467×831 / 422×751 / 321×571 | ✓ |
+| 16:9 | 1024×768 | Cơ bản | dưới khung | 576×324 / 576×324 / 460×259 | ✓ |
+| 16:9 | 1024×768 | Chuyên nghiệp | dưới khung | 264×149 / 264×149 / 264×149 | ✓ |
+| 16:9 | 1440×900 | Cơ bản | dưới khung | 992×558 / 992×558 / 695×391 | ✓ |
+| 16:9 | 1440×900 | Chuyên nghiệp | dưới khung | 675×380 / 675×380 / 675×380 | ✓ |
+| 16:9 | 1920×1080 | Cơ bản | dưới khung | 1472×828 / 1335×751 / 1015×571 | ✓ |
+| 16:9 | 1920×1080 | Chuyên nghiệp | dưới khung | 1052×592 / 1052×592 / 1015×571 | ✓ |
+
+¹ Studio chỉ có hai khổ soạn (`DW/DH` của `studio.js`: rộng > cao → 16:9, còn lại 9:16); dự án `width` = `height` hiện như 9:16, Hỏi
+Claude cạnh khung. Khổ vuông hiện là bản xuất thêm (`export_multi`). Ghi `M167`.
+
+Cả 54 ô đạt các tiêu chí trên. Ô chật: Chuyên nghiệp 1024×768 video 16:9 khung chỉ 264×149 (thư viện 312 + cột phải 340 chiếm 652 px
+của 1024) → `M168`. 16:9 Cơ bản 1024 dùng đủ bề ngang (576×324).
+
+**Thử bằng chuột thật** (CDP `Input.dispatchMouseEvent`: con trỏ thật của trình duyệt, không `dispatchEvent` trên DOM), 16:9 Chuyên
+nghiệp + Cơ bản 1440×900, 9:16 Cơ bản 1024 / 1440 / 1920, 9:16 Chuyên nghiệp 1440:
+
+| Mục (bảng mục 3) | Kết quả |
+|---|---|
+| Bấm chọn khối HF trên khung → khung chọn + thanh nổi | Đạt mọi ô; thanh nổi trong `#stagewrap` (16:9: 261×34 trên đỉnh khối) |
+| Kéo thả khối trên khung | Đạt: `x`/`y` đổi |
+| Bấm đúp sửa chữ trên khung (`led_text`), gõ, bấm ra ngoài | Đạt cả 16:9 và 9:16 |
+| Khung chọn xoay theo element (M160) | Đạt (`rotate: 20deg`); khối HF không có tay nắm cạnh (`StageCore.canResize`) nên chưa thử kéo cạnh đã xoay bằng chuột |
+| Chấm ghim (M160) | Đạt: mở 24 px, nghỉ 12 px |
+| Lớp: cảnh nền "back" (M160) | Một phần: `frame_grid` đúng; `slam_bg` (module cũ, không có `data-cid`) vẽ dưới người nhưng bảng Lớp xếp trên cùng, không ghi "· nền" → `M169` |
+| Chuyển cảnh: tách clip, bấm nút ở chỗ nối | **Lỗi, đã sửa**: cột phải đang ở tab Lớp thì `openSect('trans')` không đổi tab (nextTab giữ Lớp), người dùng không thấy gì. `openSect` sang Thuộc tính khi có element chọn |
+| Dải tua: kéo, bấm đúp | Đạt: kéo 20 % → 68 % thì playhead 33,9 / 49,8 s; bấm đúp → mức gọn |
+| Cơ bản 9:16 ≥ 1280: cột Hỏi Claude cạnh khung + dải tua + ngăn trượt | Đạt (1440: khung 393×698, cột 346 px; 1920: 494×878, cột 380 px); ngăn trượt 420 px mở khi bấm thanh trái, đóng khi bấm khung |
+| Cơ bản 16:9 / cửa sổ 1024: Hỏi Claude một dòng | Đạt (dòng 47 px dưới khung) |
+
+**Cần chủ repo chạy:** AI dựng / Tự lái thật với nhạc thương hiệu (#171, #173). Chuỗi Tự lái gọi `claude` (lượt của chủ repo),
+`notify` (Telegram), `deliver` (ghi vào Kho / Thành phẩm thật) và render; phiên nghiệm thu không gửi tin hay ghi Kho thay chủ repo.
+Lệnh: `node scripts/autopilot.mjs <video> --brand <kit có nhạc>` rồi mở dự án trong Studio, xem nhạc thương hiệu ở track Âm thanh.
+
+Test: `node --test scripts/tests/*.test.mjs` 865 test, 864 đạt, 1 bỏ qua (Windows); lần này không gặp lỗi chập chờn `batch_parallel`.

@@ -508,7 +508,9 @@ function setSect(key, on) {
   SECT.state = SectCore.setOpen(sectState(), sectKind(sel), key, on);
   try { localStorage.setItem('avs.isec', JSON.stringify(SECT.state)); } catch { /* chế độ riêng tư */ }
 }
-function openSect(key) { setSect(key, true); SECT.go = key; renderInspector(); } // mở + cuộn tới (dải mục, chỗ nối chuyển cảnh)
+// mở + cuộn tới (dải mục, chỗ nối chuyển cảnh). Mục nằm ở tab Thuộc tính: đang ở Lớp / Dự án thì sang Thuộc tính (S23 M166:
+// bấm chỗ nối trên timeline khi cột phải ở Lớp không thấy gì đổi, vì nextTab giữ Lớp)
+function openSect(key) { setSect(key, true); SECT.go = key; if (RT.tab !== 'props' && sel) showRightTab('props'); else renderInspector(); }
 const sectLine = () => $('#insp .itop')?.getBoundingClientRect().bottom ?? 0;
 function sectAfter() {
   const go = SECT.go && $(`#insp .isec[data-sec="${CSS.escape(SECT.go)}"]`), sc = $('#right');
