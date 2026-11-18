@@ -43,27 +43,30 @@
     return true;
   }
 
-  // Bảng lệnh của menu chuột phải (cũng là nút ⋯ của thanh nổi). ctx: {scenes, hasOrig, hidden, canEditText, canSplit}.
-  // Mỗi mục {id, label, icon, key?, off?}; '-' là gạch ngăn.
+  // Bảng lệnh của menu chuột phải (cũng là nút ⋯ của thanh nổi). ctx: {scenes, hasOrig, hidden, canEditText, canSplit, locked, canPaste}.
+  // Mỗi mục {id, label, icon, key?, off?}; '-' là gạch ngăn. S20 M141: Cắt / Chép / Dán, Khoá (element khoá: không cắt, xoá, đổi lớp).
   function menuItems(c, ctx = {}) {
     if (!c) return [];
+    const clip = (cut = true) => [...(cut ? [{ id: 'cut', label: 'Cắt', icon: 'ti-cut', key: '⌘X', off: !!ctx.locked }] : []),
+      { id: 'copy', label: c.kind === 'clip' ? 'Chép (dán = nhân bản sau clip)' : 'Chép', icon: 'ti-clipboard-copy', key: '⌘C' },
+      { id: 'paste', label: 'Dán tại playhead', icon: 'ti-clipboard', key: '⌘V', off: !ctx.canPaste }];
     if (c.kind === 'clip') return [
       { id: 'split', label: 'Tách tại playhead', icon: 'ti-scissors', key: '⌘B', off: !ctx.canSplit },
-      { id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D' }, '-',
+      { id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D' }, '-', ...clip(false), '-',
       { id: 'del', label: 'Xoá', icon: 'ti-trash', key: 'Del', danger: true }];
     if (c.kind === 'sfx' || c.kind === 'music') return [
-      { id: 'seek', label: 'Tua tới đầu', icon: 'ti-clock-play' }, { id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D', off: c.kind === 'music' }, '-',
+      { id: 'seek', label: 'Tua tới đầu', icon: 'ti-clock-play' }, { id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D', off: c.kind === 'music' }, '-', ...clip(), '-',
       { id: 'del', label: 'Xoá', icon: 'ti-trash', key: 'Del', danger: true }];
-    const L = layerOf(c, ctx.scenes || []), can = how => !!L && layerTarget(L.arr, L.item, how) >= 0;
+    const L = layerOf(c, ctx.scenes || []), can = how => !ctx.locked && !!L && layerTarget(L.arr, L.item, how) >= 0;
     const out = [];
-    if (ctx.canEditText) out.push({ id: 'edit', label: 'Sửa chữ', icon: 'ti-cursor-text', key: 'Bấm đúp' });
-    out.push({ id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D' }, { id: 'hide', label: ctx.hidden ? 'Hiện' : 'Ẩn', icon: ctx.hidden ? 'ti-eye' : 'ti-eye-off' });
-    if (L) out.push('-', { id: 'up', label: 'Đưa lên một lớp', icon: 'ti-arrow-bar-up', off: !can('up') }, { id: 'top', label: 'Đưa lên trên cùng', icon: 'ti-arrow-bar-to-up', off: !can('top') },
-      { id: 'down', label: 'Đưa xuống một lớp', icon: 'ti-arrow-bar-down', off: !can('down') }, { id: 'bottom', label: 'Đưa xuống dưới cùng', icon: 'ti-arrow-bar-to-down', off: !can('bottom') });
-    out.push('-');
+    if (ctx.canEditText && !ctx.locked) out.push({ id: 'edit', label: 'Sửa chữ', icon: 'ti-cursor-text', key: 'Bấm đúp' });
+    out.push({ id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D' }, { id: 'hide', label: ctx.hidden ? 'Hiện' : 'Ẩn', icon: ctx.hidden ? 'ti-eye' : 'ti-eye-off' }, '-', ...clip());
+    if (L) out.push('-', { id: 'up', label: 'Đưa lên một lớp', icon: 'ti-arrow-bar-up', key: '⌘]', off: !can('up') }, { id: 'top', label: 'Đưa lên trên cùng', icon: 'ti-arrow-bar-to-up', key: '⌘⌥]', off: !can('top') },
+      { id: 'down', label: 'Đưa xuống một lớp', icon: 'ti-arrow-bar-down', key: '⌘[', off: !can('down') }, { id: 'bottom', label: 'Đưa xuống dưới cùng', icon: 'ti-arrow-bar-to-down', key: '⌘⌥[', off: !can('bottom') });
+    out.push('-', { id: 'lock', label: ctx.locked ? 'Mở khoá' : 'Khoá', icon: ctx.locked ? 'ti-lock-open' : 'ti-lock', key: '⌥⇧L' });
     if (ctx.hasOrig) out.push({ id: 'reset', label: 'Về thiết kế', icon: 'ti-restore' });
     out.push({ id: 'note', label: 'Ghi chú cho Claude', icon: 'ti-message-2' }, { id: 'seek', label: 'Tua tới đầu', icon: 'ti-clock-play' }, '-',
-      { id: 'del', label: 'Xoá', icon: 'ti-trash', key: 'Del', danger: true });
+      { id: 'del', label: 'Xoá', icon: 'ti-trash', key: 'Del', danger: true, off: !!ctx.locked });
     return out;
   }
 

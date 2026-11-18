@@ -43,7 +43,7 @@
   // Đặt lại thanh nổi sau mỗi lần vẽ khung chọn (drawOverlay → Studio._ov).
   function place() {
     const c = sel(), k = C.barKind(c), box = ov.querySelector('.selbox:not(.multi):not(.crop)');
-    if (!c || !k || !box || S.playing || S.dragging || S.editing || S.multi.length || c.obj.hidden) { hide(); return; }
+    if (!c || !k || !box || S.playing || S.dragging || S.editing || S.multi.length || c.obj.hidden || c.obj.locked) { hide(); return; } // S20 M141: element khoá không có thanh nổi
     const key = keyOf(c);
     if (key !== sig || bar.hidden) { sig = key; closePop(); bar.innerHTML = barHtml(c); }
     bar.hidden = false;
@@ -57,11 +57,6 @@
 
   // ---- lệnh ----
   const setField = (f, v) => { const o = sel().obj; S.touch(o, f); if (v === '' || v == null) delete o[f]; else o[f] = v; S.changed(true); };
-  function layer(how) {
-    const c = sel(), L = C.layerOf(c, scenes()); if (!L) return;
-    if (C.layerTarget(L.arr, L.item, how) < 0) return S.toast(how === 'up' || how === 'top' ? 'Đã ở lớp trên cùng' : 'Đã ở lớp dưới cùng');
-    S.pushUndo(); C.moveLayer(L.arr, L.item, how); S.changed(true);
-  }
   function focusNote() {
     const find = () => $('#insp [data-f="note"]');
     if (!find()) for (const t of document.querySelectorAll('#insp [data-itab]')) { t.click(); if (find()) break; }
@@ -75,13 +70,16 @@
       case 'bold': return setField('weight', (o.weight ?? 900) >= 700 ? 500 : 900);
       case 'color': return togglePop(el);
       case 'replace': return S.workflow?.focus(C.replacePanel(o.type));
-      case 'up': case 'down': case 'top': case 'bottom': return layer(id);
+      case 'up': case 'down': case 'top': case 'bottom': return S.layerSel(id); // S20 M141: chung với ⌘] ⌘[ (studio.js)
       case 'dup': return S.duplicateSel();
+      case 'cut': case 'copy': return S.copySel(id === 'cut');
+      case 'paste': return S.pasteClip();
+      case 'lock': return S.toggleLock();
       case 'del': return S.removeSel();
       case 'split': return S.splitAtPlayhead();
       case 'edit': return S.startInlineEdit(c);
       case 'hide': S.touch(o); o.hidden = !o.hidden || undefined; return S.changed(true);
-      case 'reset': { if (!o._orig) return; S.pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note') delete o[k]; Object.assign(o, orig); return S.changed(true); }
+      case 'reset': { if (!o._orig) return; S.pushUndo(); const orig = o._orig; for (const k of Object.keys(o)) if (k !== 'cid' && k !== 'note' && k !== 'locked') delete o[k]; Object.assign(o, orig); return S.changed(true); }
       case 'note': return focusNote();
       case 'seek': return S.setTime(c.t0);
       case 'more': { const r = el.getBoundingClientRect(); return openMenu(r.left, r.bottom + 4); }
@@ -110,7 +108,7 @@
   // ---- menu chuột phải ----
   function openMenu(x, y) {
     const c = sel(); if (!c) return;
-    const items = C.menuItems(c, { scenes: scenes(), hasOrig: !!c.obj._orig, hidden: !!c.obj.hidden, canEditText: !!window.StageCore?.canEditText(c.kind, c.obj), canSplit: c.kind === 'clip' });
+    const items = C.menuItems(c, { scenes: scenes(), hasOrig: !!c.obj._orig, hidden: !!c.obj.hidden, canEditText: !!window.StageCore?.canEditText(c.kind, c.obj), canSplit: c.kind === 'clip', locked: !!c.obj.locked, canPaste: S.canPaste });
     if (!items.length) return;
     closePop();
     menu.innerHTML = items.map(it => (it === '-' ? '<hr>' : `<button role="menuitem" data-mi="${it.id}" class="${it.danger ? 'danger' : ''}" ${it.off ? 'disabled' : ''}>
