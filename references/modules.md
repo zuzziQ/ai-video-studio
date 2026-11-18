@@ -57,6 +57,7 @@ scene `keep` chỉ có phần hiện vào. Chữ dùng `anim()` khi ra: 0.22 s m
 | `step_cards` | chuỗi nhân quả 2–4 bước | `cards[{title,images[]\|emoji,t}]`, `highlight_t`, `hero`, `pip_fx` |
 | `end_card` | chốt | `label`, `text`, `fade_out` |
 | `black` | fade đen | `fade_in` |
+| `shape` | hình khối tự do (S20 M144, `engine/shape.js`) | `shape` rect\|rounded\|circle\|line\|arrow, `card {x,y,w,h}` (px thiết kế, góc trên trái; mặc định 300×300 giữa khung), `fill` (`none` = không nền), `stroke`, `stroke_w` (nét nằm trong hộp; đường / mũi tên mặc định 8), `radius` (rounded, tối đa nửa cạnh ngắn), `opacity` 0–1, `anim` fade\|pop\|wipe (vào; ra theo phong bì chung), `rot`. Đường / mũi tên nằm ngang giữa hộp, chiều dài = `w`; xoay bằng `rot`. Màu chỉ nhận #hex, rgb()/hsl(), tên màu, `var(--x)` |
 | `broll` | b-roll procedural (55 template) | `template`, `pal`, `text`, `sub`, `icon`, `num`, `unit`, `items`, `seed`, `layout` full\|card\|right\|left\|pip (+`x,y,w,h`,`rot`), `person` — xem `references/broll-library.md` |
 
 Mặc định ẩn phụ đề trong: slam_bg, mega, orbit, mosaic, mosaic_wall, end_card, flash_ring, iris, black. Ghi đè bằng `"hideCaptions": false|true` trên từng scene.

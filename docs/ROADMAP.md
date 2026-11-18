@@ -258,7 +258,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S20-chinh-truc-tiep-tren-khung.md` (s
 - [ ] **`M141`** (`area/infra`): phím tắt kiểu editor web: ⌘C / ⌘X / ⌘V (dán tại playhead), ⌥ + kéo nhân bản, ⌘] / ⌘[ / ⌘⌥] / ⌘⌥[ thứ tự lớp, ⌥⇧L khoá từng element (`obj.locked`), ⌘A chọn mọi element tại playhead, mũi tên theo `C19`, bảng phím tắt `?`. Sau `M140`.
 - [ ] **`M142`** (`area/infra`): bảng Lớp tại playhead trong panel Thành phần (kéo thả thứ tự, mắt, khoá), quét chọn trên khung, bấm lặp chọn lớp dưới. Sau `M141`.
 - [x] **`M143`** (`area/infra`): kéo mục từ thư viện (Chữ, Sticker, Media phủ, Hiệu ứng, HyperFrames) thả vào khung (tâm ở điểm thả) hoặc vào track timeline (đúng thời điểm thả). Xong 2026-11-18: `features/65_drop.js` + lõi `65_drop.core.js`, nút bấm giữ hành vi cũ, media thả vào Video chính vẫn là clip track chính, một bước hoàn tác (`s20_drop.test.mjs`).
-- [ ] **`M144`** (`area/export`): hình khối — loại cảnh `shape` mới trong engine (chữ nhật, bo góc, tròn, đường, mũi tên; nền, viền, độ mờ, hoạt ảnh), `StageCore.GEO.shape = 'card'`, panel Hình khối ở bước Dựng; test engine + dựng video mẫu trên máy. Làm song song được.
+- [x] **`M144`** (`area/export`): hình khối — loại cảnh `shape` mới trong engine (chữ nhật, bo góc, tròn, đường, mũi tên; nền, viền, độ mờ, hoạt ảnh), `StageCore.GEO.shape = 'card'`, panel Hình khối ở bước Dựng; test engine + dựng video mẫu trên máy. Làm song song được.
 
 ## 4. Bị chặn: cần quyết định
 
