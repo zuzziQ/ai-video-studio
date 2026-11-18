@@ -51,7 +51,7 @@ function renderPanel() {
   fn && fn();
 }
 // The component list is refreshed often (on seek); other panels only on demand.
-function renderList() { if (panel === 'comp') renderComps(); }
+function renderList() { if (panel === 'comp') renderComps(); if (window.Studio?.right?.tab === 'layers') Studio.right.refresh(); } // S21 M145: tab Lớp theo playhead
 const chips = (list, cur, attr) => `<div class="chips">${list.map(([v, l]) => `<button class="chip ${cur === v ? 'on' : ''}" data-${attr}="${esc(v)}">${esc(l)}</button>`).join('')}</div>`;
 const empty = (ic, title, sub) => `<div class="empty"><i class="ti ${ic}"></i><b>${title}</b><span>${sub}</span></div>`;
 

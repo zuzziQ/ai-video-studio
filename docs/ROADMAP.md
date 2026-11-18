@@ -260,6 +260,17 @@ Lập 2026-11-18, kế hoạch `docs/plans/S20-chinh-truc-tiep-tren-khung.md` (s
 - [x] **`M143`** (`area/infra`): kéo mục từ thư viện (Chữ, Sticker, Media phủ, Hiệu ứng, HyperFrames) thả vào khung (tâm ở điểm thả) hoặc vào track timeline (đúng thời điểm thả). Xong 2026-11-18: `features/65_drop.js` + lõi `65_drop.core.js`, nút bấm giữ hành vi cũ, media thả vào Video chính vẫn là clip track chính, một bước hoàn tác (`s20_drop.test.mjs`).
 - [x] **`M144`** (`area/export`): hình khối — loại cảnh `shape` mới trong engine (chữ nhật, bo góc, tròn, đường, mũi tên; nền, viền, độ mờ, hoạt ảnh), `StageCore.GEO.shape = 'card'`, panel Hình khối ở bước Dựng; test engine + dựng video mẫu trên máy. Làm song song được.
 
+### **`S21`** Cột phải kiểu Adobe: Thuộc tính · Lớp · Dự án, chi tiết cho mục bên trái, núm điều chỉnh kiểu Claude Design
+
+Lập 2026-11-18, kế hoạch `docs/plans/S21-cot-phai-thuoc-tinh.md` (Premiere / Illustrator / Photoshop Properties, Claude Design; ma trận giữ / nâng cấp / thêm / loại). Trái = công cụ, duyệt thư viện, quản lý dự án; phải = nhóm tab hiện đủ chi tiết của element đang chọn hoặc của mục đang xem bên trái.
+
+- [x] **`M145`** (`area/infra`): khung cột phải — nhóm tab Thuộc tính · Lớp · Dự án (tự đổi khi chọn / bỏ chọn, ghim được, nhớ `avs.rtab`), API `Studio.right`, dời bảng Lớp (M142) sang tab Lớp, tab Dự án = nội dung không-chọn-gì hiện nay. Giữ `#insp` cho phần Thuộc tính. Nền của đợt. Xong 2026-11-18: lõi `68_right.core.js` (`RightCore`: tab lúc mở, tự đổi khi chọn / bỏ chọn, Lớp không bị giành), dải `#rtabs` (role tablist, ← →), `Studio.right` (`show`, `addTab`, `setDetail`, `refresh`), bảng Lớp vẽ trong tab Lớp và theo playhead, `03_nextstep` vẽ khi tab Dự án mở; test `s21_right`; thử trong Studio ở 1440 và 1024 px.
+- [ ] **`M146`** (`area/infra`): Thuộc tính dạng mục xếp chồng như Premiere Properties — tab con thành mục thu gọn (nhớ theo loại element), dải mục dính để nhảy nhanh, đầu cố định có khoá / ẩn / ⋯; `addInspectorTab` giữ chữ ký. Sau `M145`; theo `C22`.
+- [ ] **`M147`** (`area/infra`): chi tiết mục thư viện — bấm một mục bên trái (mẫu, mẫu chữ, hiệu ứng / khối HyperFrames, sticker, hình, nhạc, chuyển cảnh, bộ lọc) thì Thuộc tính hiện xem trước lớn, bố cục / font / màu / lớp sẽ thêm / thời lượng / biến, nút Thêm tại playhead / Thay element đang chọn / Áp cả video. Sau `M145`, song song `M146`, `M150`.
+- [ ] **`M148`** (`area/infra`): núm điều chỉnh (2–4 thanh trượt mức cao mỗi loại cảnh / gói / khối, bảng ánh xạ có kiểm, không gọi Claude khi kéo) + màu / font của thương hiệu đứng đầu trong Thuộc tính và thanh nổi. Sau `M146`.
+- [ ] **`M149`** (`area/llm`): Hỏi Claude sửa element (bản vá trường cho phép, xem trước khác biệt, Nhận / Bỏ một bước hoàn tác) + Biến thể 3 phương án dựng ảnh nhỏ từ preview; "Gợi ý núm" cho khối lạ. Sau `M146`; theo `C23`.
+- [ ] **`M150`** (`area/infra`): ghi chú ghim trên khung (x, y, t), danh sách + Giao Claude sửa hết ở tab Dự án, vẫn ghi `note` để `.studio/notes.md` giữ định dạng. Sau `M145`.
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -282,6 +293,9 @@ Lập 2026-11-18, kế hoạch `docs/plans/S20-chinh-truc-tiep-tren-khung.md` (s
 - [ ] **`C18`** (`area/infra`): **có làm bộ cài một file `AI-Video-Studio-Setup.exe` không (`S15`).** Bộ cài kiểu Next → Finish (Inno Setup) kèm Node, Python, ffmpeg bản portable: người dùng không cần cài gì trước, kể cả Node. Giá: file 1–2 GB sau khi tải thư viện Python (hoặc bộ cài nhỏ tải dần), cần build trên Windows và ký số để SmartScreen không chặn (chứng chỉ ký mã có phí hằng năm). Đề xuất: làm sau `M116`, bắt đầu bằng bộ cài nhỏ tải dần, chưa ký số.
 - [x] **`C19`** (`area/infra`): **phím mũi tên khi đang chọn element trên khung (`S20`).** Đề xuất: theo vùng đang focus — vừa bấm trên khung thì mũi tên dời 1 px (Shift 10 px) như Canva; vừa bấm timeline hoặc không chọn gì thì lùi / tiến khung như CapCut; Alt + mũi tên luôn dời như `M124`. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C20`** (`area/infra`): **thanh nổi có thay một phần inspector không (`S20`).** Đề xuất: không; thanh nổi chỉ là lối tắt các thao tác hay dùng, inspector vẫn đủ mọi trường. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C21`** (`area/infra`): **bảng Lớp ở đâu (`S21`).** Đề xuất: tab Lớp ở cột phải cạnh Thuộc tính (như Photoshop); panel trái Thành phần giữ Tại đây / Tất cả / Đã chỉnh. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C22`** (`area/infra`): **tab con của inspector thành mục xếp chồng (`S21`).** Đề xuất: có, như Premiere Properties, kèm dải mục nhảy nhanh; chế độ Cơ bản ẩn mục Keyframe / Mặt nạ / Nâng cao như ẩn tab hôm nay. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C23`** (`area/llm`): **Hỏi Claude / Gợi ý núm / Biến thể tốn lượt mô hình (`S21`).** Đề xuất: chỉ chạy khi người dùng bấm, dùng mô hình đang chọn ở Mô hình & giọng (Ollama được), không tự gọi. Chốt 2026-11-18: theo đề xuất.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -300,6 +314,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S20-chinh-truc-tiep-tren-khung.md` (s
 13. **`S18`**: `M127` làm ngay (chỉ `scripts/highlights.mjs` + tab Cắt clip); `M128` sau `M126` (cùng thanh trên / luồng mở dự án); `M129` sau `M128` (đụng `studio/server.mjs`, rủi ro High).
 14. **`S19`**: song song `M132`+`M136` (trang chủ, chỉ báo việc nền), `M133`→`M134` (thương hiệu, hồ sơ, học), `M135` (bộ clip). `M132` chỉ sửa phần nút thanh trên của `15_autopilot.js`; thẻ Hồ sơ kênh của file đó thuộc `M133`.
 15. **`S20`**: `M139` trước (lát đầu); `M140` → `M141` nối tiếp (cùng bảng lệnh); `M142`, `M143` sau `M141`; `M144` song song (engine + panel mới). Không đụng `studio/server.mjs`.
+16. **`S21`**: `M145` trước (nền); rồi song song `M146`, `M147`, `M150`; sau `M146` song song `M148`, `M149`. Chỉ `M145`, `M146` sửa `renderInspector` của `studio/studio.js`.
 
 ## 6. Không làm
 

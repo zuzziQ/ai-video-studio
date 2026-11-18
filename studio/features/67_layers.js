@@ -1,13 +1,13 @@
-// S20 M142: bảng Lớp tại playhead — tab "Lớp" của panel Thành phần. Element đang hiện tại playhead theo thứ tự vẽ (trên cùng ở đầu,
+// S20 M142: bảng Lớp tại playhead. S21 M145 (C21): là tab "Lớp" của cột phải (Studio.right), không còn trong panel Thành phần. Element đang hiện tại playhead theo thứ tự vẽ (trên cùng ở đầu,
 // phụ đề ghim trên cùng, video chính ở đáy); mỗi dòng: icon loại, tên, mắt (obj.hidden), khoá (obj.locked: quét chọn và bấm lặp
 // bỏ qua; M141 chặn kéo / phím). Bấm dòng = chọn; kéo dòng đổi thứ tự trong cùng mảng (TL.scenes / lines / nodes), một bước hoàn tác.
 // Quét chọn và bấm lặp chọn lớp dưới nằm trong studio/studio.js (#overlay). Lõi thuần: 67_layers.core.js (window.Layers).
 'use strict';
 (() => {
   const S = window.Studio, L = window.Layers;
-  if (!S || !L || !S.addCompTab) return;
+  if (!S || !L || !S.right) return;
   const { $, esc } = S;
-  const body = $('#libbody');
+  const body = $('#insp'); // thân của tab đang mở ở cột phải; mọi selector dưới đây giới hạn trong #lyr
   let dragC = null, last = '';
 
   const scenes = () => S.TL?.scenes || [];
@@ -33,7 +33,7 @@
       <div role="list" aria-label="Lớp tại playhead">${list.map(row).join('') || '<div class="lysep">Tại playhead không có element nào.</div>'}</div></div>`;
     return last;
   }
-  S.addCompTab('layers', 'Lớp', html, 'Lớp tại playhead: thứ tự vẽ, ẩn, khoá', true); // tab đầu, mở mặc định
+  S.right.addTab('layers', el => { el.innerHTML = html(); });
 
   const compOfRow = el => el && S.compByCid(el.dataset.ly);
   body.addEventListener('click', e => {
@@ -69,7 +69,7 @@
     dragC = null; swallow = true; setTimeout(() => (swallow = false), 0); // click sau khi thả không chọn dòng
     clearMarks(); document.body.classList.remove('lydrag');
     const A = L.layerOf(a, scenes()), B = h && L.layerOf(h.c, scenes());
-    if (!B || !L.reorder(A.arr.slice(), A.item, B.item, h.above)) return S.renderPanel(); // thả đúng chỗ cũ / ngoài bảng: không thêm bước hoàn tác
+    if (!B || !L.reorder(A.arr.slice(), A.item, B.item, h.above)) return S.right.refresh(); // thả đúng chỗ cũ / ngoài bảng: không thêm bước hoàn tác
     S.pushUndo(); L.dropOn(a, h.c, h.above, scenes()); S.changed(true);
   });
 })();
