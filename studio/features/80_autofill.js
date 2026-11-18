@@ -51,7 +51,7 @@
   const loadLib = () => S.api('/api/brolllib').then(l => { LIB = l; if (document.querySelector('.af')) render(); }).catch(() => {});
   const LEVELS = [['nhe', 'Nhẹ', 'chỉ cảnh chính'], ['vua', 'Vừa', '+ riser, số, tiền'], ['phongphu', 'Phong phú', '+ từ khoá, cảm xúc']];
   const DEF = { goal: 'auto', variety: .6, density: 'vua', src: ['preset', 'hf', 'text', 'emoji', 'logo', 'aroll', 'media', 'lib'], level: 'vua', music: true, ai_broll: true, ai_sfx: true };
-  let O = { ...DEF }, last = null, busy = false;
+  let O = { ...DEF }, last = null, prevLast = null, busy = false;
   try { O = { ...DEF, ...JSON.parse(localStorage.getItem('avs_autofill') || '{}') }; } catch {}
   if (!O.v5) { O.src = [...new Set([...O.src, 'hf', 'logo', 'aroll', 'lib'])]; O.v5 = 1; } // new sources on by default once
   if (O.after_ai === false && !O.v6) { O.ai_broll = O.ai_sfx = false; } // M108: một công tắc cũ thành hai tuỳ chọn
@@ -140,6 +140,7 @@
       S.closeModal();
       await S.reload();
       const out = j.out || {}, b = out.broll || {}, kinds = Object.entries(b.kinds || {}).map(([k, v]) => `${S.typeName ? S.typeName(k) : k} ×${v}`).join(', ');
+      prevLast = last;
       last = [mode === 'clear' ? `Đã xoá ${b.removed ?? 0} cảnh tự động + SFX/nhạc tự động.` : '',
         b.added != null && mode !== 'clear' ? `B-roll: +${b.added}${b.goal ? ` · mục tiêu <b>${esc(b.goal.name)}</b>${b.goal.why === 'chọn tay' ? '' : ` (tự nhận theo ${esc(b.goal.why)})`}` : ''}<br>Nguồn: ${esc(Object.entries(b.sources || {}).map(([k, v]) => `${(SRCS.find(x => x[0] === k) || [k, k])[1]} ×${v}`).join(', ') || kinds)}${b.alts ? ` · ${b.alts} cảnh có phương án thay thế (bấm cảnh → tab “Phương án khác”)` : ''}${b.removed ? ` · thay ${b.removed} cảnh cũ` : ''}${b.claude ? ` · ${esc(b.claude)}` : ''}` : '',
         out.sfx && mode !== 'clear' ? 'Âm thanh: ' + esc(String(out.sfx).replace(/^level \d: /, '')) : ''].filter(Boolean).join('<br>');
@@ -184,6 +185,8 @@
   });
   function setAfter(k, v) { if (k === 'ai_broll' || k === 'ai_sfx') { O[k] = !!v; keep(); } }
   // 20_ai.js: hai tuỳ chọn của nút AI dựng đọc/ghi ở đây (lưu theo máy cùng các tuỳ chỉnh khác của Tự động)
-  S.autofill = { run, setAfter, afterMode, get opts() { return O; } };
+  // S23 M159: Bỏ kết quả trong Studio.review (75_ask.js) → dòng tóm tắt của panel về lượt trước
+  const forget = () => { last = prevLast; prevLast = null; render(); };
+  S.autofill = { run, forget, setAfter, afterMode, get opts() { return O; } };
   S.addPanel('autofill', 'ti-bolt', 'Tự động', render);
 })();

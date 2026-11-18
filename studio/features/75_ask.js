@@ -159,27 +159,29 @@
     Object.assign(tl, t); cap.splice(0, cap.length, ...c);
     return true;
   }
-  function openReview(title, sub, items) {
+  // drop(): S23 M159 — đóng mà không Nhận (Bỏ, hoặc bị phiên xem lại khác thay) thì trả nốt phần ngoài timeline về như cũ
+  //   (.studio/qc.json của Sửa hết lỗi, dòng tóm tắt của panel Tự động / AI dựng)
+  function openReview(title, sub, items, drop) {
     S.review?.open({ owner: OWNER, title, mode: 'list', items,
       onAccept: (its, n) => S.toast(n ? `Đã nhận “${its[0].label}” · ⌘Z để hoàn tác` : 'Không áp được'),
-      onClose: () => check() });
+      onClose: why => { if (why !== 'accepted') { try { drop?.(); } catch (e) { console.error(e); } } check(); } });
     setOut('idle');
   }
   // Việc chạy bằng hàm sẵn có ghi thẳng vào timeline (AI dựng, Tự động): chạy, chụp bản mới, trả timeline về như cũ (lưu lại bản cũ
   // vì job phía server đã ghi bản mới), rồi đưa bản mới qua Studio.review.
-  async function viaReview(title, run, then) {
+  async function viaReview(title, run, then, drop) {
     if (S.review?.active) S.review.close('replaced');
     const before = snap();
     setOut('working', { step: `Đang chạy ${title}…` });
     let res;
     try { res = await run(); } catch (e) { res = { error: e.message }; }
     const after = snap();
-    if (after === before) return res?.error ? setOut('error', { err: res.error }) : setOut('reply', { reply: `${title}: không có gì thay đổi.` });
+    if (after === before) { if (res?.error) drop?.(); return res?.error ? setOut('error', { err: res.error }) : setOut('reply', { reply: `${title}: không có gì thay đổi.` }); }
     const B = JSON.parse(before), A = JSON.parse(after);
     S.TL = B.TL; S.CAP = B.CAP; S.changed(true);
     await S.saveNow();
     const span = AC.changedSpan(B, A) || { t0: 0, t1: Math.min(6, S.TL.duration || 6) };
-    openReview(title, '', [{ label: title, sub: res?.sub || '', t0: span.t0, t1: span.t1, apply: (tl, cap) => replaceIn(tl, cap, A) }]);
+    openReview(title, '', [{ label: title, sub: res?.sub || '', t0: span.t0, t1: span.t1, apply: (tl, cap) => replaceIn(tl, cap, A) }], drop);
     then?.();
   }
   // Việc thuần (chuyển cảnh): áp trên bản sao để đếm, rồi mở xem lại
@@ -193,8 +195,18 @@
   const needCap = () => (!(S.CAP || []).length ? (setOut('reply', { reply: 'Cần phụ đề trước: bước Nguồn → Lời thoại → Tạo phụ đề.' }), true) : false);
 
   // ---------- M154: việc của các bước khác Dựng ----------
-  // Mở một panel của bước đang ở, không đổi chế độ (Cơ bản vẫn mở được panel Chuyên nghiệp: thanh trái hiện nó khi đang mở)
+  // Mở một panel của bước đang ở, không đổi chế độ. S23 M159: ở Cơ bản, panel Chuyên nghiệp do thanh mở (openP, hoặc hàm của panel
+  //   như Studio.products.ai tự gọi openPanel trong vài giây sau khi giao việc) không hiện nút trên thanh trái: 01_workflow.js giữ
+  //   nút của panel đang mở, hook _rail này chạy sau đó ẩn lại; đổi panel khác là hết. Mở từ chỗ khác (thả file, liên kết) giữ như cũ.
   const openP = id => (typeof window.openPanel === 'function' ? window.openPanel(id) : S.workflow?.focus(id));
+  let armUntil = 0, proOpen = '';
+  S._rail.push(rail => {
+    const cur = typeof panel !== 'undefined' ? panel : '', basic = S.workflow?.level === 'basic';
+    if (basic && performance.now() < armUntil && cur && S.workflow.hidden?.(cur)) proOpen = cur;
+    if (!proOpen) return;
+    if (cur !== proOpen || !basic) { proOpen = ''; return; }
+    const b = rail.querySelector(`button[data-p="${cur}"]`); if (b) b.hidden = true;
+  });
   // Hàm của panel trả { started } | { need } | { error }: need / error → nói ngay trên thanh; started → một câu chỉ chỗ có kết quả
   async function viaPanel(fn, where) {
     if (typeof fn !== 'function') return setOut('error', { err: 'Chưa có công cụ này' });
@@ -256,7 +268,7 @@
     }, () => {
       const n = S.pins?.open?.() || 0;
       if (n) setOut('reply', { reply: `Còn ${n} ghi chú ghim trên khung máy không tự sửa được.`, acts: [{ label: 'Giao Claude sửa hết', icon: 'ti-wand', run: () => S.pins.give() }] });
-    });
+    }, () => S.qc.revert?.());
   }
   async function postTime(p) {
     if (!S.schedule?.next) return setOut('error', { err: 'Chưa có Lịch đăng' });
@@ -267,6 +279,7 @@
   }
 
   async function runAction(pick, sc) {
+    armUntil = performance.now() + 5000; // panel mà việc này mở trong 5 s tới: xem hook _rail ở trên
     const p = pick.params || {}, dur = S.TL?.duration || 0;
     switch (pick.action) {
       case 'answer': return setOut('reply', { reply: pick.reply || 'Chưa có việc nào khớp.', warnings: pick.warnings });
@@ -287,12 +300,12 @@
         if (!S.autofill) return setOut('error', { err: 'Chưa có công cụ Tự động' });
         if (p.mode !== 'sfx' && needCap()) return;
         const nm = { all: 'Thêm b-roll + âm thanh', broll: 'Thêm b-roll', sfx: 'Thêm nhạc & SFX' }[p.mode] || 'Tự động';
-        return viaReview(nm, async () => { const out = await S.autofill.run(p.mode, { noUndo: true }); return out ? {} : { error: 'Chưa tự thêm được' }; });
+        return viaReview(nm, async () => { const out = await S.autofill.run(p.mode, { noUndo: true }); return out ? {} : { error: 'Chưa tự thêm được' }; }, null, () => S.autofill.forget?.());
       }
       case 'ai_build': {
         if (!S.ai?.build) return setOut('error', { err: 'Chưa có AI dựng' });
         if (needCap()) return;
-        return viaReview('AI dựng', () => S.ai.build({ extra: p.extra || '', density: p.density }));
+        return viaReview('AI dựng', () => S.ai.build({ extra: p.extra || '', density: p.density }), null, () => S.ai.forget?.());
       }
       case 'open_panel': {
         setOut(pick.reply ? 'reply' : 'idle', { reply: pick.reply || '' });

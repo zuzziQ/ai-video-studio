@@ -357,11 +357,13 @@
   //   brief()        → { score, issues: [{ t, kind, msg, sev }] } của lần kiểm tra gần nhất (bộ định tuyến giải thích lỗi) | null
   //   fixAll()       → Promise<{ q } | { error }>: kiểm tra + sửa hết (job qc, fix), timeline mới đã nạp; thanh đưa qua Studio.review
   //   variants(kind) → 3 phiên bản A/B (job variants, hộp So sánh như nút của thẻ A/B)
+  //   revert()       → S23 M159: Bỏ kết quả fixAll trong Studio.review — .studio/qc.json về như trước lần sửa, panel vẽ lại
   S.qc = {
     get last() { return last; },
     brief: () => (last ? { score: last.score, issues: (last.issues || []).filter(i => !i.fixed).map(i => ({ t: i.t, kind: i.kind_vi || i.kind, msg: i.msg, sev: i.severity })) } : null),
     fixAll: () => new Promise(ok => runQc({ fix: true, claude: $('#qcclaude')?.checked !== false, after: q => { S.closeModal(); rerender(); ok({ q }); }, fail: error => ok({ error }) })),
     variants: kind => runVariants({ kind }),
+    revert: async () => { const r = await S.api('/api/qc/revert', {}).catch(e => ({ error: e.message })); await load(); rerender(); return r; },
   };
   S.onReady(() => { load().then(rerender); loadVa().then(rerender); });
 })();

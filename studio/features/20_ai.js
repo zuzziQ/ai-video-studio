@@ -49,7 +49,7 @@
   const DENS = [['thua', 'Thưa', '5–7 graphic'], ['vua', 'Vừa', '8–11 graphic'], ['day', 'Dày', '12–15 graphic']];
   const packs = () => S.win?.PACKS || [];
   const packName = id => packs().find(p => p.id === id)?.name || id || '—';
-  let lastPlan = null, fl = null, flSel = new Set(), flBusy = false;
+  let lastPlan = null, prevPlan = null, planDropped = false, fl = null, flSel = new Set(), flBusy = false;
 
   // ---------- ripple cut on the main track ----------
   // Cut output-time ranges [[a,b],…]: split clips at the edges, drop the pieces inside, remap everything after. One undo step.
@@ -180,7 +180,7 @@
       if (j.state !== 'done') return ok({ error: j.step || 'AI dựng chưa được' });
       const plan = await S.api('/api/ai/plan');
       if (plan.error) return ok({ error: plan.error });
-      lastPlan = plan; applyPlan(plan, { noUndo: true });
+      prevPlan = lastPlan; planDropped = false; lastPlan = plan; applyPlan(plan, { noUndo: true });
       if (panel === 'wf-aihelp') renderAi();
       ok({ plan });
     }));
@@ -362,7 +362,7 @@
         box.innerHTML = on.length ? `<div class="help"><i class="ti ti-school"></i> Đang áp ${on.length} thói quen của <b>${esc(h.name)}</b> (tắt từng điều khi bấm AI dựng). <button class="wf-lnk" id="aip-hab-go">Quản lý</button></div>` : '';
         $('#aip-hab-go')?.addEventListener('click', () => (S.brandStyle ? S.brandStyle.open(h.id) : null));
       }).catch(() => {});
-      if (!lastPlan) S.api('/api/ai/plan').then(p => { if (!p.error && !lastPlan) { lastPlan = p; if (panel === 'wf-aihelp') renderAi(); } }).catch(() => {});
+      if (!lastPlan && !planDropped) S.api('/api/ai/plan').then(p => { if (!p.error && !lastPlan && !planDropped) { lastPlan = p; if (panel === 'wf-aihelp') renderAi(); } }).catch(() => {});
       return;
     }
     const list = fl ? fl.cuts.map((c, i) => `<div class="fl-it ${flSel.has(i) ? '' : 'off'}"><input type="checkbox" data-fl="${i}" ${flSel.has(i) ? 'checked' : ''}>
@@ -412,5 +412,7 @@
     detect();
     return { started: true };
   }
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, previewRange, detect: () => detect(), cleanup, renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
+  // S23 M159: Bỏ bản AI dựng trong Studio.review (75_ask.js) → thẻ kế hoạch của panel về lượt trước, không nạp lại bản vừa bỏ
+  const forget = () => { lastPlan = prevPlan; planDropped = !prevPlan; if (panel === 'wf-aihelp') renderAi(); };
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, forget, previewRange, detect: () => detect(), cleanup, renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
 })();
