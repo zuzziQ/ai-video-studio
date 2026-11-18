@@ -140,4 +140,24 @@
   }).observe(document.getElementById('modalbox'), { childList: true, subtree: true });
   Studio.onReady(() => Studio.addTopButton('<button class="ghost" id="pub-btn" title="Gói đăng mạng xã hội: caption, hashtag, ảnh bìa"><i class="ti ti-send"></i> Đăng</button>', () => open()));
   window.openPublish = open;
+  // S22 M154: thanh Hỏi Claude (75_ask.js), bước Xuất và đăng — mở hộp Đăng rồi chạy đúng nút của hộp; kết quả hiện trong hộp như khi bấm tay.
+  //   write({ platform: 'all' | id, notes }) → viết tiêu đề / caption / hashtag (job publish) · cover() → ô Gợi ý khung bìa (assistPanel)
+  //   → { started } | { need } (chưa có video đã xuất)
+  Studio.publish = {
+    async write(o = {}) {
+      await open();
+      if (!S.video) return { need: 'Chưa có video đã xuất: bấm Xuất trước, rồi viết nội dung đăng.' };
+      if (other()) return { need: 'Video đang chọn thuộc dự án khác: mở dự án đó để viết nội dung.' };
+      if (o.platform && o.platform !== 'all' && S.plats?.[o.platform]) { S.sel = Object.fromEntries(Object.keys(S.plats).map(k => [k, k === o.platform])); S.tab = o.platform; }
+      if (o.notes) S.notes = String(o.notes).slice(0, 200);
+      render(); gen();
+      return { started: true };
+    },
+    async cover() {
+      await open();
+      if (!coverAI || !Studio.coverSheet) return { need: 'Chưa có công cụ gợi ý ảnh bìa.' };
+      coverAI.start(); $('#pub-ai-cover')?.scrollIntoView({ block: 'nearest' });
+      return { started: true };
+    },
+  };
 })();

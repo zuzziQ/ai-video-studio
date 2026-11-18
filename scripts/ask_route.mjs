@@ -25,12 +25,23 @@ export function checkInput(raw) {
     t0: +b.sel.t0 || 0, t1: +b.sel.t1 || 0, knobs: !!b.sel.knobs,
   } : null;
   const range = b.range && Number.isFinite(+b.range.a) && Number.isFinite(+b.range.b) ? { a: Math.max(0, +b.range.a), b: Math.max(0, +b.range.b) } : null;
-  const scope = AskCore.scopeOf({ step: str(b.step, 12), sel, range });
-  if (!scope) throw bad('Cài đặt không có thanh Hỏi Claude');
   const I = b.info && typeof b.info === 'object' ? b.info : {};
+  const qc = checkQc(I.qc);
+  const scope = AskCore.scopeOf({ step: str(b.step, 12), sel, range, qc: !!qc });
+  if (!scope) throw bad('Cài đặt không có thanh Hỏi Claude');
   const n = (v, max) => Math.max(0, Math.min(max, Math.round(+v || 0)));
-  const ctx = { duration: Math.round(Math.max(0, Math.min(36000, +I.duration || 0)) * 10) / 10, clips: n(I.clips, 999), scenes: n(I.scenes, 9999), captions: n(I.captions, 99999), pack: str(I.pack, 40), text: sel?.text || '' };
+  const ctx = { duration: Math.round(Math.max(0, Math.min(36000, +I.duration || 0)) * 10) / 10, clips: n(I.clips, 999), scenes: n(I.scenes, 9999), captions: n(I.captions, 99999), pack: str(I.pack, 40), text: sel?.text || '',
+    qc: scope.step === 'check' ? qc : null };
   return { scope, ask, ctx };
+}
+// M154: kết quả kiểm tra gần nhất (16_qc.js) để mô hình giải thích lỗi: { score, issues: [{ t, kind, msg, sev }] } — tối đa 12 lỗi, chữ cắt ngắn
+const SEV = ['high', 'medium', 'low'];
+export function checkQc(v) {
+  if (!v || typeof v !== 'object' || !Array.isArray(v.issues)) return null;
+  const issues = v.issues.slice(0, 12).filter(i => i && typeof i === 'object').map(i => ({
+    t: Math.round(Math.max(0, Math.min(36000, +i.t || 0)) * 10) / 10, kind: str(i.kind, 40), msg: str(i.msg, 160), sev: SEV.includes(i.sev) ? i.sev : 'low',
+  })).filter(i => i.kind || i.msg);
+  return { score: Math.max(0, Math.min(100, Math.round(+v.score || 0))), issues };
 }
 
 function scopeText(input) {
@@ -40,7 +51,9 @@ function scopeText(input) {
   if (s.kind === 'clip') return `${base}\nPhạm vi: ${s.chip}${s.idx ? '' : ' (clip đầu, không có chuyển cảnh vào)'}.`;
   if (s.kind === 'range') return `${base}\nPhạm vi: đoạn ${s.chip} trên timeline (chuyển cảnh chỉ áp cho chỗ nối trong đoạn).`;
   if (s.kind === 'video') return `${base}\nPhạm vi: cả video, bước Dựng.`;
-  return `Phạm vi: bước ${S[s.step] || s.step}.`;
+  const q = s.step === 'check' && c.qc;
+  return `Phạm vi: bước ${S[s.step] || s.step}.${s.step === 'check' ? (q ? '' : ' Chưa có kết quả kiểm tra chất lượng.') : ''}${q ? '\n' + dataBlock(`Kết quả kiểm tra gần nhất: điểm ${q.score}/100, ${q.issues.length} lỗi`,
+    q.issues.map(i => `- ${AskCore.stamp(i.t)} [${i.sev}] ${i.kind}: ${i.msg}`).join('\n') || '(không có lỗi)') : ''}`;
 }
 function paramText(p) {
   const e = Object.entries(p);

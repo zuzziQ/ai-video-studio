@@ -402,5 +402,15 @@
 
   // For tests / Claude: Studio.ai.cut([[a,b]]) etc.
   // features/21_transcript.js (panel Lời thoại) uses cutRanges, wordSpan, allWords and the filler flags.
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, previewRange, detect: () => detect(), renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
+  // S22 M154: "Cắt lỗi nói" của thanh Hỏi Claude — mở panel Làm sạch lời nói rồi bấm Dò lỗi nói; danh sách chỗ cắt (tick / nghe thử /
+  // Cắt tất cả đã chọn) là ô đề xuất của panel. claude: nhờ Claude tìm câu nói hỏng.
+  function cleanup(o = {}) {
+    if (!allWords().length) return { need: 'Cần phụ đề trước: bước Nguồn → Lời thoại → Tạo phụ đề.' };
+    if (panel !== 'ai') openPanel('ai');
+    const c = $('#flclaude'); if (c && o.claude != null) c.checked = !!o.claude;
+    if (flBusy) return { started: true };
+    detect();
+    return { started: true };
+  }
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, previewRange, detect: () => detect(), cleanup, renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
 })();

@@ -282,6 +282,21 @@
       STY = r.styles; Studio.closeModal(); Studio.toast(`Đã lưu phong cách dựng của ${d.name}`); if (active()) render();
     };
   }
+  // S22 M154: "Dựng bộ thương hiệu" của thanh Hỏi Claude (75_ask.js): mở panel, sửa thương hiệu đang dùng (chưa có thì một bản mới lấy
+  // tên / màu của dự án), điền website nếu có rồi chạy ô Gợi ý bằng AI; đề xuất hiện ở ô đó, Nhận mới ghi vào form. → { started } | { need }
+  Studio.brandAi = async (o = {}) => {
+    if (!active()) (window.openPanel || (id => Studio.workflow?.focus(id)))('brands');
+    if (!LIST) await load();
+    if (!EDIT) {
+      const b = (LIST || []).find(x => x.id === cur()), t = Studio.TL?.brand || {};
+      EDIT = b ? { ...b } : { ...DEF, ...Object.fromEntries(['primary', 'accent', 'dark', 'light', 'font', 'disp', 'name', 'handle', 'phone', 'website'].filter(k => t[k]).map(k => [k, t[k]])), title: t.name || Studio.META?.name || '' };
+    }
+    if (o.website) EDIT.website = String(o.website).slice(0, 200);
+    render(); $('#libbody').scrollTop = 0;
+    if (!AI || (!EDIT.logoUrl && !EDIT.website && !EDIT.name && !EDIT.title)) { document.querySelector('[data-bk="website"]')?.focus(); return { need: 'Tải logo hoặc nhập website / tên thương hiệu rồi bấm Gợi ý bằng AI.' }; }
+    AI.start(); document.getElementById('bk-ai')?.scrollIntoView({ block: 'nearest' });
+    return { started: true };
+  };
   // Panel Tự lái mở thẳng trình sửa phong cách của thương hiệu đang chọn
   Studio.brandStyle = { summary: styleSummary, open(id) { document.querySelector('#rail [data-p="brands"]')?.click(); editStyle(id || 'chung'); } };
   // ---- quick switcher (top bar) ----

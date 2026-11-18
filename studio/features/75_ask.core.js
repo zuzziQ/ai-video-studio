@@ -2,10 +2,12 @@
 // Không DOM: chạy trong trình duyệt (window.AskCore) và trong Node (scripts/tests/s22_ask.test.mjs, scripts/ask_route.mjs).
 //   scopeOf(ctx)           → phạm vi đang hỏi { kind: video|range|elem|clip|step, step, chip, … } hoặc null (Cài đặt: không có thanh)
 //   actionsOf(scope)       → danh sách việc mô hình được chọn (luôn có 'answer' = chỉ trả lời bằng chữ)
-//   quickOf(scope)         → 3–4 gợi ý nhanh: chạy thẳng một việc với tham số cố định, không qua bộ định tuyến
+//   quickOf(scope)         → 3–4 gợi ý nhanh: chạy thẳng một việc với tham số cố định, không qua bộ định tuyến; gợi ý có `ask`
+//                            (vd. "Giải thích lỗi") gửi đúng câu đó qua bộ định tuyến (vẫn chỉ gọi mô hình khi bấm, C23)
 //   checkPick(raw, scope)  → { action, params, reply, warnings }: việc lạ → 'answer'; tham số lọc theo bảng, ngoài biên bị kẹp / bỏ
 //   transitionsApply(tl, p, range) / changedSpan(a, b) → áp chuyển cảnh lên một bản timeline; khoảng thời gian đổi giữa hai bản
-// Bảng mục 5 của docs/plans/S22-che-do-va-hoi-claude.md. Bước khác Dựng chỉ mở đúng panel (M154 nối việc thật).
+// Bảng mục 5 của docs/plans/S22-che-do-va-hoi-claude.md. M154: việc của Chuẩn bị / Nguồn / Kiểm tra / Xuất và đăng gọi hàm sẵn có
+// của panel (75_ask.js runAction); kết quả qua Studio.review hoặc ô đề xuất Studio.assistPanel của panel đó.
 'use strict';
 (function (root) {
   const STEPS = { prep: 'Chuẩn bị', source: 'Nguồn', build: 'Dựng', check: 'Kiểm tra', ship: 'Xuất và đăng' };
@@ -16,6 +18,10 @@
     zoom_out: 'thu ra', blur: 'nhoè', whip: 'lia nhanh', spin: 'xoay', wipe: 'gạt', circle: 'vòng tròn', flash: 'loé sáng', glitch: 'nhiễu' };
   const AUTOFILL = ['all', 'broll', 'sfx'];
   const DENS = ['thua', 'vua', 'day'];
+  // = /api/publish/platforms (scripts/publish.mjs); 'all' = mọi nền tảng đang tích ở hộp Đăng
+  const PLATS = ['tiktok', 'youtube', 'facebook', 'instagram', 'zalo'];
+  const PLAT_VI = { all: 'mọi nền tảng', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', instagram: 'Instagram', zalo: 'Zalo' };
+  const VA_KINDS = ['hook', 'style', 'both']; // = #vakind của 16_qc.js
   // panel mở được theo bước (id của PANELS trong 01_workflow.js)
   const PANELS = {
     prep: { brands: 'Bộ thương hiệu', products: 'Sản phẩm', kho: 'Kho' },
@@ -50,7 +56,8 @@
       return { kind: 'elem', step, ek: sel.kind, cid: sel.cid || '', text: !!text, knobs: !!sel.knobs, t0: +sel.t0 || 0, t1: +sel.t1 || 0, chip, icon: 'ti-pointer' };
     }
     if (step === 'build') return { kind: 'video', step, chip: 'Bước Dựng · cả video', icon: 'ti-movie' };
-    return { kind: 'step', step, chip: `Bước ${STEPS[step]}`, icon: 'ti-route' };
+    // qc: đã có kết quả kiểm tra (gợi ý "Giải thích lỗi" chỉ có nghĩa khi đó)
+    return { kind: 'step', step, chip: `Bước ${STEPS[step]}`, icon: 'ti-route', ...(step === 'check' ? { qc: !!ctx.qc } : {}) };
   }
 
   // ---------- danh sách việc của phạm vi ----------
@@ -66,15 +73,43 @@
     elem_variants: { what: 'Đưa 3 biến thể của element đang chọn để người dùng xem và chọn.', params: {} },
     elem_knobs: { what: 'Gợi ý 2–3 núm điều chỉnh mới cho element đang chọn.', params: {} },
     clip_transition: { what: 'Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ).', params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: 0.1, max: 1.5 } } },
+    // ---- M154: Chuẩn bị ----
+    brand_ai: { what: 'Dựng bộ thương hiệu (vai trò 4 màu, cặp font, giọng văn, slogan, CTA) từ logo đã tải, tên và website. website = link nếu người dùng đưa.',
+      params: { website: { t: 'str', max: 200 } } },
+    product_ai: { what: 'Viết hồ sơ / mô tả sản phẩm (tên, giá, ngành, điểm mạnh, claim chờ duyệt, FAQ) từ link trang bán hoặc ảnh. url = link nếu người dùng đưa.',
+      params: { url: { t: 'str', max: 300 } } },
+    // ---- Nguồn ----
+    clean_speech: { what: 'Dò tiếng đệm (ờ, à, ừm…), từ nói lặp, chỗ ngắt quá dài để cắt. claude = "co" để nhờ Claude tìm thêm câu nói hỏng (chậm hơn).',
+      params: { claude: { t: 'enum', values: ['co', 'khong'] } } },
+    fix_words: { what: 'Soát chữ nhận dạng sai trong lời thoại / phụ đề, đưa đề xuất sửa từng chỗ.', params: {} },
+    match_script: { what: 'Cho phụ đề theo đúng chữ của kịch bản đã dán ở bước Nguồn.', params: {} },
+    find_highlights: { what: 'Tìm đoạn hay trong một video dài, cắt thành nhiều clip ngắn (mỗi clip một dự án). brief = hướng dẫn chọn đoạn; n = số clip.',
+      params: { brief: { t: 'str', max: 300 }, n: { t: 'num', min: 3, max: 10 } } },
+    write_hook: { what: 'Viết 3 câu hook mở đầu (chữ lớn ở giây đầu) theo lời thoại; người dùng xem từng câu trên khung rồi chọn.', params: {} },
+    // ---- Kiểm tra ----
+    qc_fix_all: { what: 'Kiểm tra chất lượng rồi sửa hết lỗi sửa được (chữ tràn khung, che mặt, đè phụ đề, phụ đề dài, âm lượng…); xem lại trước khi nhận.', params: {} },
+    ab_hooks: { what: 'Tạo 3 phiên bản A/B để đăng thử: khác hook mở đầu (hook, Claude viết), khác gói style (style) hoặc cả hai (both).',
+      params: { kind: { t: 'enum', values: VA_KINDS } } },
+    // ---- Xuất và đăng ----
+    publish_write: { what: 'Viết tiêu đề, mô tả / caption, hashtag theo từng nền tảng từ lời thoại của video đã xuất. platform = một nền tảng hoặc all; notes = ghi chú cho người viết.',
+      params: { platform: { t: 'enum', values: ['all', ...PLATS] }, notes: { t: 'str', max: 200 } } },
+    cover: { what: 'Gợi ý ảnh bìa: Claude xem 9 khung hình, chọn 3 khung kèm chữ bìa.', params: {} },
+    post_time: { what: 'Tìm giờ đăng trống kế tiếp theo khung giờ của Lịch đăng.', params: { platform: { t: 'enum', values: PLATS } } },
     open_panel: { what: 'Mở đúng công cụ của bước để người dùng tự làm.', params: { panel: { t: 'enum', values: [] } } },
     answer: { what: 'Không việc nào khớp, hoặc chỉ là câu hỏi: trả lời ngắn bằng chữ, không sửa gì.', params: {} },
+  };
+  const STEP_ACTS = {
+    prep: ['brand_ai', 'product_ai'],
+    source: ['clean_speech', 'fix_words', 'match_script', 'find_highlights', 'write_hook'],
+    check: ['qc_fix_all', 'ab_hooks'],
+    ship: ['publish_write', 'cover', 'post_time'],
   };
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions']
       : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
         : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'open_panel'] : ['open_panel'])
-          : PANELS[scope.step] ? ['open_panel'] : [];
+          : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
       if (id === 'open_panel') params.panel = { t: 'enum', values: Object.keys(PANELS[scope.kind === 'clip' ? 'clip' : scope.step] || {}) };
@@ -86,6 +121,7 @@
   function quickOf(scope) {
     if (!scope) return [];
     const q = (label, action, params = {}, icon = 'ti-sparkles') => ({ label, action, params, icon });
+    const ask = (label, text, icon = 'ti-message-question') => ({ label, action: 'answer', params: {}, ask: text, icon });
     switch (scope.kind) {
       case 'video': return [q('AI dựng cả video', 'ai_build', { density: 'vua' }), q('Thêm b-roll', 'autofill', { mode: 'broll' }, 'ti-photo-plus'),
         q('Thêm nhạc & SFX', 'autofill', { mode: 'sfx' }, 'ti-music'), q('Chuyển cảnh mờ dần', 'transitions', { type: 'fade', dur: 0.4 }, 'ti-transition-right')];
@@ -97,14 +133,18 @@
       case 'clip': return [...(scope.idx > 0 ? [q('Chuyển cảnh mờ dần', 'clip_transition', { type: 'fade', dur: 0.4 }, 'ti-transition-right'),
         q('Chuyển cảnh lia nhanh', 'clip_transition', { type: 'whip', dur: 0.3 }, 'ti-wind')] : []),
       q('Bộ lọc màu', 'open_panel', { panel: 'filter' }, 'ti-color-filter'), q('B-roll phủ', 'open_panel', { panel: 'wf-broll' }, 'ti-photo-plus')];
-      default: {
-        const P = PANELS[scope.step] || {}, L = {
-          prep: [['brands', 'Dựng bộ thương hiệu'], ['products', 'Viết mô tả sản phẩm'], ['kho', 'Mở kho tư liệu']],
-          source: [['ai', 'Cắt lỗi nói'], ['words', 'Sửa lời thoại'], ['longform', 'Tìm đoạn hay']],
-          check: [['wf-qc', 'Kiểm tra & gợi ý sửa']],
-          ship: [['wf-publish', 'Tiêu đề, mô tả, hashtag'], ['wf-export', 'Khổ nên xuất'], ['schedule', 'Giờ đăng']],
-        }[scope.step] || [];
-        return L.filter(([p]) => P[p]).map(([p, l]) => q(l, 'open_panel', { panel: p }, 'ti-external-link'));
+      // M154: nút AI trùng của panel thành gợi ý ở đây (nút chính của panel vẫn giữ)
+      default: switch (scope.step) {
+        case 'prep': return [q('Dựng bộ thương hiệu', 'brand_ai', {}, 'ti-palette'), q('Viết mô tả sản phẩm', 'product_ai', {}, 'ti-package'),
+          q('Mở kho tư liệu', 'open_panel', { panel: 'kho' }, 'ti-folder')];
+        case 'source': return [q('Cắt lỗi nói', 'clean_speech', { claude: 'khong' }, 'ti-eraser'), q('Sửa chữ sai', 'fix_words', {}, 'ti-text-spellcheck'),
+          q('Viết hook mở đầu', 'write_hook', {}, 'ti-bolt'), q('Tìm đoạn hay', 'find_highlights', {}, 'ti-scissors')];
+        case 'check': return [q('Sửa hết lỗi', 'qc_fix_all', {}, 'ti-wand'),
+          ...(scope.qc ? [ask('Giải thích lỗi', 'Giải thích ngắn các lỗi của lần kiểm tra gần nhất: vì sao là lỗi và nên sửa thế nào.')] : []),
+          q('3 hook cho A/B', 'ab_hooks', { kind: 'hook' }, 'ti-versions')];
+        case 'ship': return [q('Tiêu đề, mô tả, hashtag', 'publish_write', { platform: 'all' }, 'ti-hash'), q('Ảnh bìa', 'cover', {}, 'ti-photo'),
+          q('Giờ đăng', 'post_time', { platform: 'tiktok' }, 'ti-calendar-time'), q('Khổ nên xuất', 'open_panel', { panel: 'wf-export' }, 'ti-aspect-ratio')];
+        default: return [];
       }
     }
   }
@@ -136,6 +176,11 @@
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
+    if (id === 'publish_write' && !params.platform) params.platform = 'all';
+    if (id === 'post_time' && !params.platform) params.platform = 'tiktok';
+    if (id === 'ab_hooks' && !params.kind) params.kind = 'hook';
+    if (id === 'clean_speech' && !params.claude) params.claude = 'khong';
+    if (id === 'find_highlights' && params.n != null) params.n = Math.round(params.n);
     if ((id === 'transitions' || id === 'clip_transition') && params.type !== 'none' && params.dur == null) params.dur = 0.4;
     return { action: id, params, reply, warnings };
   }
@@ -175,7 +220,7 @@
     return { t0: r2(Math.max(0, lo)), t1: r2(Math.max(lo, hi)) };
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts };
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

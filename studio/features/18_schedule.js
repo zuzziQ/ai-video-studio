@@ -351,6 +351,16 @@
     const abs = r => (r && !isAbs(r) && meta?.dir ? meta.dir + '/' + r : r);
     edit(null, { back: 'publish', file, platforms: plats, per: { ...(all?.[platform] || {}), all, thumb: abs(thumb) } });
   };
+  // S22 M154: "Giờ đăng" của thanh Hỏi Claude — giờ trống kế tiếp theo khung giờ của lịch (cùng luật nextSlot). → { when, label, slots } | { error }
+  Studio.schedule = {
+    async next(platform) {
+      if (!S.v) await load();
+      if (!S.v?.settings) return { error: 'Chưa đọc được lịch đăng' };
+      const when = nextSlot([platform || 'tiktok']), d = new Date(when);
+      const label = d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return { when, label, slots: S.v.settings.slots.slice() };
+    },
+  };
   Studio.addPanel('schedule', 'ti-calendar', 'Lịch đăng', () => { render(); load(); });
   Studio.onReady(() => load());
 })();

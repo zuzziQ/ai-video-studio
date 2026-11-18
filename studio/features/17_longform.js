@@ -212,5 +212,20 @@
     progress('Đang tạo video từ chủ đề…', async j => { Studio.closeModal(); S.topicOut = j.out; await refresh(); Studio.toast('Đã tạo video'); });
   }
 
+  // S22 M154: "Tìm đoạn hay" của thanh Hỏi Claude — mở tab Cắt clip, điền hướng dẫn / số clip rồi bấm Tìm khoảnh khắc hay (chưa chọn
+  // video dài thì chỉ mở và chờ chọn). Kết quả: danh sách clip của panel như khi bấm tay. → { started } | { need }
+  Studio.longform = {
+    async highlights(o = {}) {
+      S.tab = 'long'; LSset('tab', 'long');
+      if (document.querySelector('#rail .on')?.dataset.p !== 'longform') (window.openPanel || (id => Studio.workflow?.focus(id)))('longform');
+      else render();
+      if (!$('#lf-go')) render();
+      if (o.brief && $('#lf-brief')) $('#lf-brief').value = String(o.brief).slice(0, 600);
+      if (o.n && $('#lf-n')) { const n = [3, 4, 5, 6, 8, 10].reduce((a, b) => (Math.abs(b - o.n) < Math.abs(a - o.n) ? b : a)); $('#lf-n').value = String(n); }
+      if (!(S.picker?.value || S.video || '').trim()) { $('#lf-vp')?.scrollIntoView({ block: 'nearest' }); return { need: 'Chọn video dài (trong Kho hoặc từ máy) rồi bấm Tìm khoảnh khắc hay.' }; }
+      await startLong();
+      return { started: true };
+    },
+  };
   Studio.addPanel('longform', 'ti-scissors', 'Cắt clip từ video dài', () => { render(); refresh(); });
 })();

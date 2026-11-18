@@ -103,13 +103,12 @@
     $('#libbody').innerHTML = `<div class="help pb-intro">Claim, bằng chứng, từ cấm dùng chung cho mọi dự án. ${S.tip('Hồ sơ gồm claim kèm bằng chứng và trạng thái duyệt, cụm từ cấm, FAQ. Dự án trỏ tới một hồ sơ thì “Kiểm tra quảng cáo” đối chiếu theo hồ sơ, không cần nhập claim lại. Lưu trên máy ở ~/.ai-video-studio/products/.')}</div>
       ${EDIT ? form() : ''}
       ${LIST.map(card).join('') || (EDIT ? '' : '<div class="help">Chưa có hồ sơ nào.</div>')}
-      <div class="pb-act"><button id="pb-new2"><i class="ti ti-plus"></i> Hồ sơ mới</button>${S.assistPanel ? '<button id="pb-ainew" title="Tạo hồ sơ mới từ ảnh hoặc link sản phẩm"><i class="ti ti-sparkles"></i> Điền bằng AI</button>' : ''}${legacy ? '<button id="pb-fromproj" title="Lấy claim và cụm từ cấm đang nhập tay trong dự án này"><i class="ti ti-download"></i> Tạo từ claim của dự án</button>' : ''}</div>`;
+      <div class="pb-act"><button id="pb-new2"><i class="ti ti-plus"></i> Hồ sơ mới</button>${legacy ? '<button id="pb-fromproj" title="Lấy claim và cụm từ cấm đang nhập tay trong dự án này"><i class="ti ti-download"></i> Tạo từ claim của dự án</button>' : ''}</div>`;
     bind();
   }
   function bind() {
     const B = $('#libbody');
     $('#pb-new2').onclick = () => { EDIT = { claims: [{ status: 'approved' }] }; render(); };
-    $('#pb-ainew') && ($('#pb-ainew').onclick = () => { EDIT = { claims: [] }; PIMG = null; render(); B.scrollTop = 0; $('#pb-url')?.focus(); });
     $('#pb-fromproj') && ($('#pb-fromproj').onclick = () => {
       const a = S.TL.ads || {};
       // claim nhập tay chưa có bằng chứng: để "Chờ duyệt", người dùng điền bằng chứng rồi chuyển "Đã duyệt"
@@ -169,6 +168,21 @@
   // gắn một lần (không gắn lại mỗi lần render): xoá dòng claim/FAQ, tô viền theo trạng thái
   document.addEventListener('click', e => { const d = e.target.closest?.('.pb-form [data-pbdel]'); if (d) d.closest('.pb-cl, .pb-faq').remove(); });
   document.addEventListener('change', e => { const s = e.target.closest?.('.pb-form [data-f=status]'); if (s) s.closest('.pb-cl').dataset.st = s.value; });
-  S.products = { list: () => (LIST ? Promise.resolve(LIST) : load()), reload: load };
+  // S22 M154: "Viết mô tả sản phẩm" của thanh Hỏi Claude (thay nút "Điền bằng AI" cuối panel): mở panel, sửa hồ sơ dự án đang trỏ
+  // (chưa có thì hồ sơ mới), điền link nếu có rồi chạy ô Điền bằng AI; đề xuất ở ô đó, Nhận mới ghi vào form. → { started } | { need }
+  async function ai(o = {}) {
+    if (!active()) (window.openPanel || (id => S.workflow?.focus(id)))('products');
+    if (!LIST) await load();
+    if (!EDIT) {
+      const r = cur() ? await S.api('/api/products/' + encodeURIComponent(cur())).catch(() => null) : null;
+      EDIT = r && !r.error ? r : { claims: [] }; PIMG = null;
+    }
+    render(); $('#libbody').scrollTop = 0;
+    const url = $('#pb-url'); if (url && o.url) url.value = String(o.url).slice(0, 300);
+    if (!AI || (!PIMG && !url?.value.trim())) { url?.focus(); return { need: 'Dán link trang bán hoặc chọn ảnh sản phẩm rồi bấm Điền bằng AI.' }; }
+    AI.start(); $('#pb-aiwrap')?.scrollIntoView({ block: 'nearest' });
+    return { started: true };
+  }
+  S.products = { list: () => (LIST ? Promise.resolve(LIST) : load()), reload: load, ai };
   S.addPanel('products', 'ti-package', 'Sản phẩm', () => { render(); load(); });
 })();
