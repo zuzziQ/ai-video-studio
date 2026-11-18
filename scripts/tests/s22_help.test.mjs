@@ -15,17 +15,10 @@ const MAX = 120;
 export const EXCEPTIONS = {
 };
 
-// Ngoại lệ TẠM: các file đang thuộc phiên khác (S22). Xoá dòng khi PR đó merge rồi rút gọn file.
-// M156 (hướng dẫn đầu, khung hình, kiểm tra) và M152 PR #189 (xem trước, Hỏi Claude, Viết lại).
+// Ngoại lệ TẠM theo file (khớp theo tiền tố): file đang thuộc một PR khác chưa merge. Lý do phải bắt đầu bằng "TẠM"
+// và nêu khi nào gỡ, ví dụ 'studio/features/74_review': 'TẠM — M152 đang sửa; gỡ khi merge'.
+// M156 (#190) và M152 đã merge trước PR này nên danh sách rỗng.
 export const TEMP_FILES = {
-  'studio/features/02_onboarding.js': 'TẠM — M156 đang sửa; gỡ khi M156 merge',
-  'studio/features/01_setup.js': 'TẠM — M156 đang sửa; gỡ khi M156 merge',
-  'studio/features/63_frames.js': 'TẠM — M156 đang sửa; gỡ khi M156 merge',
-  'studio/features/16_qc.js': 'TẠM — M156 đang sửa; gỡ khi M156 merge',
-  'studio/features/72_elem_ai.js': 'TẠM — M152 (PR #189) đang sửa; gỡ khi merge',
-  'studio/features/06_ai_suggest.js': 'TẠM — M152 (PR #189) đang sửa; gỡ khi merge',
-  // 74_review*.js là file mới của M152, khớp theo tiền tố
-  'studio/features/74_review': 'TẠM — M152 (PR #189) file mới; gỡ khi merge',
 };
 
 export function uiFiles() {

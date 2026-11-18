@@ -191,7 +191,7 @@
       <div class="pills">${QUICK.map(q => `<button data-eaiq="${esc(q)}" ${run ? 'disabled' : ''}>${esc(q)}</button>`).join('')}</div>
       <div class="acts"><button class="primary" data-eai="send" ${run ? 'disabled' : ''}><i class="ti ti-send"></i> Gửi</button><button data-eai="variants" ${run ? 'disabled' : ''}><i class="ti ti-layout-grid"></i> 3 biến thể</button>${S.sel && knobAllowed(S.sel) ? `<button data-eai="knobs" ${run ? 'disabled' : ''} title="Mô hình đề xuất 2–3 núm điều chỉnh mới cho element này"><i class="ti ti-adjustments-horizontal"></i> Gợi ý núm</button>` : ''}</div>
       <div class="eai-out" aria-live="polite">${outHtml()}</div>
-      <div class="help">Chỉ gọi mô hình khi bấm. Mô hình theo Mô hình & giọng (Claude hoặc Ollama). AI chỉ đổi vị trí, cỡ, màu, font, kiểu, hoạt ảnh, xoay, thời lượng, chữ; núm gợi ý chỉ dùng trường của mục Núm.</div></div>`;
+      <div class="help">Chỉ gọi mô hình khi bấm. ${S.tip('Mô hình theo Mô hình & giọng (Claude hoặc Ollama). AI chỉ đổi vị trí, cỡ, màu, font, kiểu, hoạt ảnh, xoay, thời lượng, chữ; núm gợi ý chỉ dùng trường của mục Núm.')}</div></div>`;
   }
   const box = () => document.querySelector('#insp [data-eai-box]');
   function paint() { const b = box(); if (b) b.outerHTML = html(); }
