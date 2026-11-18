@@ -176,26 +176,35 @@ function rectOf(obj) {
   const b = el.getBoundingClientRect();
   return { x: b.left, y: b.top, w: b.width, h: b.height };
 }
+// S23 M160 (PR 174): hộp chưa xoay + góc của element xoay tay (engine đặt el.style.rotate) để khung chọn xoay theo element.
+// Không xoay thì như rectOf (rot 0). Chỉ dùng để vẽ; gióng, quét chọn, QC vẫn dùng hộp bao rectOf.
+function frameOf(obj) {
+  const el = elFor(obj), rot = el?.style.rotate || '', a = parseFloat(rot) || 0;
+  if (!a || el.id === 'cap') { const r = rectOf(obj); return r && { ...r, rot: 0 }; }
+  el.style.rotate = ''; const r = rectOf(obj); el.style.rotate = rot;
+  return r && { ...r, rot: a };
+}
 let SAFE = { x: 40, y: 130, w: 600, h: 870 };
 function drawOverlay() {
   const ov = $('#overlay'); let h = '';
   const box = (x, y, w, hh) => `data-dl="${x}" data-dt="${y}" data-dw="${w}" data-dh="${hh}"`;
+  const fbox = (r, pad) => { const f = StageCore.selFrame(r, r.rot, K, pad); return box(f.l, f.t, f.w, f.h) + (f.rot ? ` data-drot="${f.rot}"` : ''); }; // S23 M160 (PR 174)
   if ($('#safe').checked) h += `<div class="safe" ${box(SAFE.x * K, SAFE.y * K, SAFE.w * K, SAFE.h * K)}><span>vùng an toàn</span></div>`;
   if ($('[id=face]').checked) { const f = TL?.face || { x: 360, y: 520 }; const r = 120 * K; h += `<div class="facezone" ${box(f.x * K - r, f.y * K - r * 1.2, r * 2, r * 2.4)}></div>`; }
   const corners = '<i class="nw" data-h="nw"></i><i class="ne" data-h="ne"></i><i class="sw" data-h="sw"></i><i class="se" data-h="se"></i>';
   // S20 M139: viền mảnh quanh element dưới chuột (chưa chọn)
-  if (hoverC && hoverC !== sel && !multi.includes(hoverC) && !drag && !inEdit) { const r = rectOf(hoverC.obj); if (r) h += `<div class="hoverbox" ${box(r.x * K - 2, r.y * K - 2, r.w * K + 4, r.h * K + 4)}></div>`; }
+  if (hoverC && hoverC !== sel && !multi.includes(hoverC) && !drag && !inEdit) { const r = frameOf(hoverC.obj); if (r) h += `<div class="hoverbox" ${fbox(r, 2)}></div>`; }
   const lockMark = '<span class="lockmark ti ti-lock" title="Đã khoá · ⌥⇧L để mở"></span>'; // S20 M141
-  for (const m of multi) { const r = rectOf(m.obj); if (r) h += `<div class="selbox multi${m.obj.locked ? ' locked' : ''}" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${m.obj.locked ? lockMark : ''}</div>`; }
+  for (const m of multi) { const r = frameOf(m.obj); if (r) h += `<div class="selbox multi${m.obj.locked ? ' locked' : ''}" ${fbox(r, 3)}>${m.obj.locked ? lockMark : ''}</div>`; }
   if (sel && sel.kind === 'clip' && !TRK.video.lock) {
     // S17 M124: khung cắt video chính — kéo để dời, tay nắm góc để zoom (đè bám mặt ở clip này)
     h += `<div class="selbox crop ${sel.obj.crop_manual ? 'on' : ''}" ${box(0, 0, DW * K, DH * K)}>${corners}<span>${sel.obj.crop_manual ? 'Khung cắt chỉnh tay' : 'Kéo để dời khung cắt · góc để zoom'}</span></div>`;
   } else if (sel && inEdit?.c !== sel) {
-    const r = rectOf(sel.obj), lk = !!sel.obj.locked; // S20 M141: element khoá không có tay nắm
+    const r = frameOf(sel.obj), lk = !!sel.obj.locked; // S20 M141: element khoá không có tay nắm
     const edges = !lk && !multi.length && window.StageCore?.canResize(sel.kind, sel.obj.type) ? '<i class="n" data-h="n"></i><i class="s" data-h="s"></i><i class="e" data-h="e"></i><i class="w" data-h="w"></i>' : '';
     const rot = !lk && !multi.length && window.StageCore?.canRotate(sel.kind) ? '<b class="rotstem"></b><i class="rot" data-h="rot" title="Kéo để xoay · Shift: bắt 15°"></i>' : ''; // S20 M139
     const tip = drag?.rot && drag.moved ? `<span class="rottip">${sel.obj.rot || 0}°</span>` : '';
-    if (r) h += `<div class="selbox${lk ? ' locked' : ''}" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length || lk ? '' : corners + edges + rot}${lk ? lockMark : ''}${tip}</div>`;
+    if (r) h += `<div class="selbox${lk ? ' locked' : ''}" ${fbox(r, 3)}>${multi.length || lk ? '' : corners + edges + rot}${lk ? lockMark : ''}${tip}</div>`;
   }
   if (marq?.box) h += `<div class="marq" ${box(marq.box.x * K, marq.box.y * K, marq.box.w * K, marq.box.h * K)}></div>`; // S20 M142: hộp quét chọn
   if (guides) {
@@ -203,6 +212,7 @@ function drawOverlay() {
     for (const y of guides.gy || []) h += `<div class="guide h" ${box(0, y * K, DW * K, 0)}></div>`;
   }
   ov.innerHTML = h; applyDyn(ov);
+  for (const el of ov.querySelectorAll('[data-drot]')) el.style.rotate = el.dataset.drot + 'deg'; // S23 M160 (PR 174): khung xoay quanh tâm
   for (const f of window.Studio?._ov || []) f(); // S20 M140: thanh nổi theo khung chọn (66_canvas_cmds.js)
 }
 function pick(px, py) {
@@ -241,7 +251,8 @@ function activeKey(n) {
   for (const x of n.keys) if (x.t <= T + 1e-3) k = x;
   return k;
 }
-const SCENE_DEF = { led_text: [360, 400, 74], neon_text: [360, 400, 80], logo_row: [360, 310, 60], title_card: [360, 560, 50], icon_tap: [360, 985, 200], sticker: [360, 960, 320], follow_cta: [360, 858, 0], emoji_pop: [360, 640, 160] };
+const SCENE_DEF = { led_text: [360, 400, 74], neon_text: [360, 400, 80], logo_row: [360, 310, 60], title_card: [360, 560, 50], icon_tap: [360, 985, 200], sticker: [360, 960, 320], follow_cta: [360, 858, 0], emoji_pop: [360, 640, 160],
+  hf: [360, 640, 100] }; // S23 M160 (PR 175): khối HF hiểu size là % cỡ vừa khung (engine/hf.js, mặc định 100)
 function getPos(c) {
   const o = c.obj;
   if (c.kind === 'line') return { x: o.x ?? DW / 2, y: o.y ?? DH / 2, size: o.size || 48 };
@@ -264,8 +275,10 @@ function setPos(c, p) {
     o.card = { ...cur, x: Math.round(p.x), y: Math.round(p.y), w: Math.round(cur.w * f), h: Math.round(cur.h * f) };
     return;
   }
+  const d = SCENE_DEF[o.type] || [360, 640, 60]; // S23 M160 (PR 175): dời không ghi cỡ mặc định vào cảnh chưa có size
+  if (window.StageCore?.posPatch) { Object.assign(o, StageCore.posPatch(o, p, d[2])); return; }
   o.x = Math.round(p.x); o.y = Math.round(p.y);
-  if (p.size && SCENE_DEF[o.type]?.[2] !== 0) o.size = Math.round(p.size * 10) / 10;
+  if (p.size && d[2] !== 0) o.size = Math.round(p.size * 10) / 10;
 }
 const origSize = c => { const o = c.obj._orig; if (!o) return getPos(c)?.size; const tmp = { ...c, obj: { ...o, keys: c.obj.keys } }; return getPos(tmp)?.size; };
 
@@ -1054,7 +1067,8 @@ window.addEventListener('mousemove', e => {
   const thr = 6 / K, snap = drag.dup ? true : !e.altKey; // ⌥ đang giữ để nhân bản: vẫn gióng
   guides = null;
   if (drag.edge) {
-    let b = StageCore.resizeEdge(drag.b0, drag.edge, dx, dy, { sym: StageCore.geoOf(sel.obj.type) === 'wh' });
+    const u = sel.obj.rot ? StageCore.unrotate(dx, dy, sel.obj.rot) : { dx, dy }; // S23 M160 (PR 174): cạnh theo trục của element đã xoay
+    let b = StageCore.resizeEdge(drag.b0, drag.edge, u.dx, u.dy, { sym: StageCore.geoOf(sel.obj.type) === 'wh' });
     if (snap) { const s = StageCore.snapEdge(b, drag.edge, drag.lines, thr); b = s.r; guides = s; }
     StageCore.setBox(sel.obj, b, DW > DH);
   } else if (drag.handle) {
@@ -1474,7 +1488,8 @@ $('#fitall').addEventListener('click', () => { fit(); zoomFit(); });
 
 // ---------- keyboard ----------
 window.addEventListener('keydown', e => {
-  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && document.activeElement.type !== 'checkbox' && document.activeElement.type !== 'range';
+  const ae = document.activeElement; // S23 M160 (PR 185): thanh trượt (Núm) giữ mũi tên / Home / End cho chính nó
+  const typing = window.KeysCore ? KeysCore.fieldOwnsKey(ae, e.key) : /INPUT|TEXTAREA|SELECT/.test(ae?.tagName) && ae.type !== 'checkbox' && ae.type !== 'range';
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); return saveNow(); }
   if (typing) return;

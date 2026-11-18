@@ -18,7 +18,8 @@
   const isSel = c => S.sel?.obj === c.obj || S.multi.some(m => m.obj === c.obj);
 
   function row(c) {
-    const o = c.obj, drag = L.canDrag(c, scenes()), sub = c.kind === 'scene' ? S.typeName(o.type) : subOf(c);
+    const o = c.obj, drag = L.canDrag(c, scenes()), nen = c.kind === 'scene' && back.has(scenes().indexOf(o)) ? ' · nền' : '';
+    const sub = c.kind === 'scene' ? S.typeName(o.type) + nen : subOf(c);
     const tools = c.kind === 'clip' ? '' :
       `<button data-lyeye title="${o.hidden ? 'Hiện' : 'Ẩn'}" aria-label="${o.hidden ? 'Hiện' : 'Ẩn'}" aria-pressed="${!o.hidden}"><i class="ti ${o.hidden ? 'ti-eye-off' : 'ti-eye'}"></i></button>` +
       `<button data-lylock class="${o.locked ? 'on' : ''}" title="${o.locked ? 'Mở khoá' : 'Khoá (không chọn được trên khung)'}" aria-label="${o.locked ? 'Mở khoá' : 'Khoá'}" aria-pressed="${!!o.locked}"><i class="ti ${o.locked ? 'ti-lock' : 'ti-lock-open'}"></i></button>`;
@@ -26,9 +27,21 @@
       <i class="ti ti-grip-vertical grip ${drag ? '' : 'no'}" title="Kéo để đổi lớp"></i><i class="ti ${iconOf(c)} ic"></i>
       <div class="mid"><div class="t1">${esc(c.label || S.typeName(o.type) || '')}</div>${sub && sub !== c.label ? `<div class="t2">${esc(sub)}</div>` : ''}</div>${tools}</div>`;
   }
+  // S23 M160 (PR 178): cảnh engine vẽ ở lớp nền, đọc theo thứ tự phần tử data-cid trong preview tại playhead (Layers.backSet).
+  let back = new Set();
+  function backNow() {
+    const doc = S.win?.document, sc = scenes(); if (!doc) return new Set();
+    const seq = [];
+    for (const el of doc.querySelectorAll('#stage [data-cid]')) {
+      const c = S.compByCid(el.getAttribute('data-cid'));
+      if (c?.kind === 'scene' || (c?.kind === 'line' && c.scene?.type === 'text')) seq.push(sc.indexOf(c.scene || c.obj));
+    }
+    return L.backSet(seq);
+  }
   function html() {
     if (dragC) return last; // đang kéo dòng: giữ nguyên DOM (playhead / timeline vẽ lại không cắt ngang thao tác kéo)
-    const list = L.layerList(S.comps, scenes(), S.T);
+    back = backNow();
+    const list = L.layerList(S.comps, scenes(), S.T, back);
     last = `<div id="lyr"><div class="lyhint">Element tại ${S.fmt(S.T)}, trên cùng ở đầu. Kéo dòng để đổi lớp · kéo trên khoảng trống của khung để quét chọn · bấm lại element đang chọn để chọn lớp bên dưới.</div>
       <div role="list" aria-label="Lớp tại playhead">${list.map(row).join('') || '<div class="lysep">Tại playhead không có element nào.</div>'}</div></div>`;
     return last;
@@ -60,7 +73,7 @@
     if (!dragC) { if (Math.abs(e.clientY - pend.y) < 4) return; dragC = pend.c; pend.r.classList.add('dragging'); document.body.classList.add('lydrag'); }
     const r = document.elementFromPoint(e.clientX, e.clientY)?.closest('#lyr .lyr'), c = compOfRow(r);
     body.querySelectorAll('#lyr .drop-above, #lyr .drop-below').forEach(x => x.classList.remove('drop-above', 'drop-below'));
-    hit = c && L.canDrop(dragC, c, scenes()) ? { c, above: aboveOf(r, e.clientY) } : null; // khác mảng: không cho thả
+    hit = c && L.canDrop(dragC, c, scenes(), back) ? { c, above: aboveOf(r, e.clientY) } : null; // khác mảng: không cho thả
     if (hit) r.classList.add(hit.above ? 'drop-above' : 'drop-below');
   });
   window.addEventListener('mouseup', () => {
@@ -70,6 +83,6 @@
     clearMarks(); document.body.classList.remove('lydrag');
     const A = L.layerOf(a, scenes()), B = h && L.layerOf(h.c, scenes());
     if (!B || !L.reorder(A.arr.slice(), A.item, B.item, h.above)) return S.right.refresh(); // thả đúng chỗ cũ / ngoài bảng: không thêm bước hoàn tác
-    S.pushUndo(); L.dropOn(a, h.c, h.above, scenes()); S.changed(true);
+    S.pushUndo(); L.dropOn(a, h.c, h.above, scenes(), back); S.changed(true);
   });
 })();

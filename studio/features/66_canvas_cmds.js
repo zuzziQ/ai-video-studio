@@ -49,9 +49,16 @@
     if (!c || !k || !box || S.playing || S.dragging || S.editing || S.multi.length || c.obj.hidden || c.obj.locked) { hide(); return; } // S20 M141: element khoá không có thanh nổi
     const key = keyOf(c);
     if (key !== sig || bar.hidden) { sig = key; closePop(); bar.innerHTML = barHtml(c); }
-    bar.hidden = false;
+    bar.hidden = false; bar.classList.remove('v');
     const r = box.getBoundingClientRect(), w = wrap.getBoundingClientRect();
-    const p = C.placeBar({ l: r.left, t: r.top - 30, r: r.right, b: r.bottom }, { w: bar.offsetWidth, h: bar.offsetHeight }, { l: w.left + 4, t: w.top + 4, r: w.right - 4, b: w.bottom - 4 }); // −30: tay nắm xoay
+    const sr = { l: r.left, t: r.top - 30, r: r.right, b: r.bottom }, view = { l: w.left + 4, t: w.top + 4, r: w.right - 4, b: w.bottom - 4 }; // −30: tay nắm xoay
+    let p = C.placeBar(sr, { w: bar.offsetWidth, h: bar.offsetHeight }, view);
+    // S23 M160 (PR 177): thanh ngang không có chỗ ngoài element (element cao trong khung 9:16 hẹp) → thử thanh dọc cạnh khung chọn
+    if (!p.side && p.y < sr.b && p.y + bar.offsetHeight > sr.t) {
+      bar.classList.add('v');
+      const q = C.placeBar(sr, { w: bar.offsetWidth, h: bar.offsetHeight }, view);
+      if (q.side) p = q; else bar.classList.remove('v');
+    }
     bar.style.left = p.x + 'px'; bar.style.top = p.y + 'px';
   }
   function hide() { if (!bar.hidden) { bar.hidden = true; closePop(); } sig = ''; }
