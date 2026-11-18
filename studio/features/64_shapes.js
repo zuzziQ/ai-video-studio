@@ -41,7 +41,7 @@
   }
 
   function panel() {
-    $('#libbody').innerHTML = `<div class="help">Bấm để chèn hình vào giữa khung tại playhead (3 giây). Kéo trên preview để dời, tay nắm cạnh để giãn; màu, viền, hoạt ảnh ở tab Hình bên phải.</div>
+    $('#libbody').innerHTML = `<div class="help">Bấm để xem chi tiết ở cột phải; bấm đúp hoặc nút Thêm tại playhead để chèn hình vào giữa khung tại playhead (3 giây). Kéo trên preview để dời, tay nắm cạnh để giãn; màu, viền, hoạt ảnh ở tab Hình bên phải.</div>
       <div class="shgrid">${KINDS.map(([k, l, svg]) => `<button data-shadd="${k}" title="${l}"><svg viewBox="0 0 24 24">${svg}</svg><small>${l}</small></button>`).join('')}</div>`;
   }
   S.addPanel('shapes', 'ti-shape', 'Hình khối', panel, { step: 'build', level: 'basic' });
@@ -69,8 +69,13 @@
     let b;
     if ((b = e.target.closest('#libbody [data-shadd]'))) return add(b.dataset.shadd);
     if (!e.target.closest('#shpanel')) return;
-    if ((b = e.target.closest('[data-shk]'))) return set(o => {
-      const k = b.dataset.shk, was = LINEY.has(o.shape), now = LINEY.has(k); o.shape = k;
+    if ((b = e.target.closest('[data-shk]'))) return set(o => setKind(o, b.dataset.shk));
+    if ((b = e.target.closest('[data-sha]'))) return set(o => { o.anim = b.dataset.sha; });
+    if ((b = e.target.closest('[data-shsw]'))) return set(o => { o[b.dataset.shsw] = b.dataset.v; if (b.dataset.shsw === 'stroke' && !LINEY.has(o.shape) && !o.stroke_w) o.stroke_w = 6; });
+  });
+  // Đổi loại hình, giữ vị trí / màu / thời gian (tab Hình, và "Thay element đang chọn" của chi tiết thư viện, M147)
+  function setKind(o, k) {
+      const was = LINEY.has(o.shape), now = LINEY.has(k); o.shape = k;
       if (was !== now) { // đổi giữa hình kín và đường: giữ màu chính (nền <-> nét), đổi cao hộp cho hợp
         const main = was ? o.stroke : o.fill;
         if (now) { o.stroke = hex(main, DSTROKE); o.stroke_w = Math.max(o.stroke_w || 0, 8); delete o.fill; o.card = { ...(o.card || {}), h: k === 'arrow' ? 64 : 32 }; }
@@ -79,10 +84,8 @@
       if (k === 'circle' && o.card) o.card.h = o.card.w;
       if (k === 'arrow' && o.card && o.card.h < 40) o.card.h = 64;
       if (k === 'rounded' && o.radius == null) o.radius = 32;
-    });
-    if ((b = e.target.closest('[data-sha]'))) return set(o => { o.anim = b.dataset.sha; });
-    if ((b = e.target.closest('[data-shsw]'))) return set(o => { o[b.dataset.shsw] = b.dataset.v; if (b.dataset.shsw === 'stroke' && !LINEY.has(o.shape) && !o.stroke_w) o.stroke_w = 6; });
-  });
+  }
+  S.addShape = add; S.shapeKind = setKind; S.SHAPE_KINDS = KINDS;
   document.addEventListener('input', e => {
     const t = e.target; if (!t.closest?.('#shpanel')) return;
     if (t.dataset.shr) {

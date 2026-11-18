@@ -64,8 +64,8 @@ test('nguồn kéo: library.js gắn draggable + MIME, hàm chèn nhận {t, x, 
   assert.match(L, /e\.dataTransfer\.setData\(DropCore\.MIME, DropCore\.encode\(\.\.\.it\)\)/);
   for (const f of ['function addText(preset, o = {})', 'function addSticker(ch, o = {})', 'async function addPackItem(i, j, o = {})', 'function insertMedia(m, o = {})'])
     assert.ok(L.includes(f), f);
-  // nút bấm giữ hành vi cũ (playhead, vị trí mặc định)
-  for (const s of ["return addText();", "return addText(TEXT_PRESETS[+b.dataset.tp]);", "return addSticker(b.dataset.st);", "return addPackItem(i, j);"]) assert.ok(L.includes(s), s);
+  // nút / bấm đúp giữ hành vi cũ (playhead, vị trí mặc định); S21 M147: chèn qua libAct
+  for (const s of ["return addText();", "return addText(TEXT_PRESETS[+id]);", "return addSticker(id);", "addPackItem(i, j);"]) assert.ok(L.includes(s), s);
   assert.ok(!L.includes('text/x-avs-media'), 'bỏ MIME cũ, gộp vào DropCore.MIME');
 });
 
