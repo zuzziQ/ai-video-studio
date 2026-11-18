@@ -35,7 +35,7 @@
     body.toggleAttribute('data-narrow', st.narrow);
     body.toggleAttribute('data-focus', st.focus);
     if (!dragging) document.documentElement.style.setProperty('--tlh', st.tlH + 'px');
-    paintExpand(); paintMenu(); paintStrip();
+    paintExpand(); paintMenu();
     const same = prev && Object.keys(st).every(k => k === 'width' || st[k] === prev[k]);
     if (same) return;
     if (S.TL) { S.fit?.(); if (prev && prev.tl !== st.tl) { S.renderTimeline?.(); if (st.tl !== 'strip' && S.zoomPending) S.zoomFit?.(); } } // fit đọc cỡ #stagewrap mới; timeline vừa hiện lại thì vừa khung
@@ -86,11 +86,7 @@
   #wf-more .lay-seg button { flex: 1 1 auto; height: 28px; padding: 0 var(--space-2); font-size: var(--text-2xs); justify-content: center; background: transparent; border-color: rgb(var(--color-line)); color: rgb(var(--color-fg-muted)); gap: var(--space-1); }
   #wf-more .lay-seg button:hover { background: rgb(var(--color-surface-muted)); color: rgb(var(--color-fg)); }
   #wf-more .lay-seg button.on { background: rgb(var(--color-accent) / .18); border-color: rgb(var(--color-accent-text) / .6); color: rgb(var(--color-fg)); }
-  #wf-more .lay-note { padding: 0 var(--space-2) var(--space-1); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
-  #tlstrip { display: none; position: relative; flex: 1; margin: var(--space-2) var(--space-3); border-radius: var(--radius-xs); background: rgb(var(--color-surface-muted)); cursor: pointer; }
-  body[data-tl="strip"] #tlstrip { display: block; }
-  #tlstrip .tls-done { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-xs); background: rgb(var(--color-accent) / .35); pointer-events: none; }
-  #tlstrip .tls-head { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: rgb(var(--color-playhead)); pointer-events: none; }`;
+  #wf-more .lay-note { padding: 0 var(--space-2) var(--space-1); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }`;
   document.head.appendChild(css);
 
   const PIN_IC = { auto: 'ti-wand', side: 'ti-layout-sidebar-right', bottom: 'ti-layout-bottombar' };
@@ -115,30 +111,7 @@
       <div class="lay-seg" role="group" aria-label="Timeline (phím \`)">${LC.TLS.map(k => `<button data-lay-tl="${k}" class="${tl === k ? 'on' : ''}" aria-pressed="${tl === k}" title="Timeline ${esc(LC.TL_LABEL[k].toLowerCase())} (phím \`)"><i class="ti ${TL_IC[k]}"></i>${esc(LC.TL_LABEL[k])}</button>`).join('')}</div>`;
   }
 
-  // ---------- dải tua tạm (mức strip; ảnh nhỏ + vạch cắt là M162, features/77_scrub.js) ----------
-  const strip = document.createElement('div'); strip.id = 'tlstrip'; strip.setAttribute('role', 'slider');
-  strip.setAttribute('aria-label', 'Tua video (kéo hoặc bấm; phím ` mở timeline)'); strip.tabIndex = -1;
-  strip.innerHTML = '<div class="tls-done"></div><div class="tls-head"></div>';
-  $('#tlwrap')?.append(strip);
-  const doneEl = strip.querySelector('.tls-done'), headEl = strip.querySelector('.tls-head');
-  let raf = 0;
-  function paintStrip() {
-    if (cur?.tl !== 'strip') { cancelAnimationFrame(raf); raf = 0; return; }
-    if (raf) return;
-    const tick = () => {
-      const d = S.TL?.duration || 0, p = d ? Math.min(1, Math.max(0, S.T / d)) : 0;
-      doneEl.style.width = headEl.style.left = p * 100 + '%';
-      strip.setAttribute('aria-valuenow', String(Math.round(p * 100)));
-      raf = cur?.tl === 'strip' ? requestAnimationFrame(tick) : 0;
-    };
-    raf = requestAnimationFrame(tick);
-  }
-  let seeking = false;
-  const seekAt = x => { const r = strip.getBoundingClientRect(), d = S.TL?.duration || 0; if (d && r.width) S.setTime(Math.min(1, Math.max(0, (x - r.left) / r.width)) * d); };
-  strip.addEventListener('pointerdown', e => { if (e.button) return; seeking = true; strip.setPointerCapture(e.pointerId); seekAt(e.clientX); });
-  strip.addEventListener('pointermove', e => { if (seeking) seekAt(e.clientX); });
-  strip.addEventListener('pointerup', () => (seeking = false));
-  strip.addEventListener('dblclick', () => set('tl', 'compact'));
+  // dải tua (mức strip) là features/77_scrub.js (S23 M162): đăng ký qua Studio.layout.on
 
   // thanh trong #center hiện / ẩn (Hỏi Claude, xem lại thay đổi) → khung xem co giãn lại
   if (window.ResizeObserver && $('#stagewrap')) new ResizeObserver(() => S.fit?.()).observe($('#stagewrap'));

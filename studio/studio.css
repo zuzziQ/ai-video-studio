@@ -801,3 +801,22 @@ body.lydrag, body.lydrag * { cursor: grabbing !important; user-select: none; }
 #wf-sp .sp-pass summary:hover, #wf-sp .sp-pass summary:focus-visible { color: var(--tx); }
 #wf-sp .sp-pass li { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-1); }
 #wf-sp .sp-pass li .ti { color: var(--ok); }
+
+/* S23 M162: dải tua 40 px (body[data-tl="strip"], studio/features/77_scrub.js). Ảnh nhỏ theo thời gian, vạch cắt (ranh clip,
+   trắng cả cao) / cảnh (ngắn, màu nhấn, ở mép trên), phần đã phát phủ màu nhấn mờ, playhead, ô giờ khi rê. Bề rộng theo #tlwrap. */
+#tlstrip { display: none; position: relative; flex: 1; min-width: 0; margin: var(--space-1) var(--space-3); border-radius: var(--radius-xs); background: rgb(var(--color-surface-muted)); cursor: pointer; touch-action: none; user-select: none; outline: none; }
+body[data-tl="strip"] #tlstrip { display: block; }
+#tlstrip:focus-visible { box-shadow: 0 0 0 2px rgb(var(--color-accent-text) / .7); }
+#tlstrip .scr-film { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+#tlstrip .scr-film i { position: absolute; top: 0; bottom: 0; background: rgb(var(--color-black)) center / cover no-repeat; box-shadow: inset -1px 0 rgb(var(--color-black) / .35); }
+#tlstrip .scr-done { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: rgb(var(--color-accent) / .22); box-shadow: inset 0 -2px rgb(var(--color-accent)); pointer-events: none; }
+#tlstrip .scr-marks { position: absolute; inset: 0; pointer-events: none; }
+#tlstrip .scr-marks b { position: absolute; width: 2px; margin-left: -1px; }
+#tlstrip .scr-cut { top: 0; bottom: 0; background: rgb(var(--color-white) / .85); box-shadow: 0 0 0 1px rgb(var(--color-black) / .45); }
+#tlstrip .scr-scene { top: 0; height: 9px; border-radius: 0 0 2px 2px; background: rgb(var(--color-accent-text)); box-shadow: 0 0 0 1px rgb(var(--color-black) / .45); }
+#tlstrip .scr-hover { position: absolute; top: 0; bottom: 0; width: 1px; background: rgb(var(--color-white) / .5); pointer-events: none; }
+#tlstrip .scr-hover[hidden] { display: none; }
+#tlstrip .scr-head { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: rgb(var(--color-playhead)); box-shadow: 0 0 6px rgb(var(--color-black) / .6); pointer-events: none; }
+#tlstrip .scr-tip { position: absolute; bottom: calc(100% + 6px); padding: 2px var(--space-1); border-radius: var(--radius-xs); background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); color: rgb(var(--color-fg)); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; z-index: 7; box-shadow: var(--shadow-card); }
+#tlstrip .scr-tip[hidden] { display: none; }
+#tlstrip.scr-seeking { cursor: grabbing; }
