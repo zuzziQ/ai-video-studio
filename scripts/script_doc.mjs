@@ -9,6 +9,7 @@
 // Dùng cho: phụ đề theo đúng chữ kịch bản, thời điểm lấy từ lời nghe được (căn LCS như topic_video.mjs alignLine; không lời
 // thì chia đều theo đoạn), dấu cho ai_edit.mjs / tpl_fit.mjs, QC (đoạn chưa nói / nói lệch, ai_qc.mjs scriptIssues), claim gate.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -228,10 +229,10 @@ export function applyScript(dir, { tl, caps, heard, max = 4, fresh = false } = {
 }
 /** Bỏ kịch bản: xoá script.json, trả phụ đề whisper đã sao lưu (null khi không có bản sao lưu). */
 export function removeScript(dir) {
-  fs.rmSync(scriptFile(dir), { force: true });
+  rmSync(scriptFile(dir), { force: true });
   const backup = path.join(dir, '.studio', 'captions_noscript.json');
   let caps = null; try { caps = JSON.parse(fs.readFileSync(backup, 'utf8')); } catch { /* chưa áp lần nào */ }
-  fs.rmSync(backup, { force: true });
+  rmSync(backup, { force: true });
   return caps;
 }
 
@@ -244,7 +245,7 @@ export function stageScript(text, { name = '' } = {}) {
   if (raw.length > MAX_TEXT) throw Object.assign(new Error(`Kịch bản dài quá (${raw.length} ký tự, tối đa ${MAX_TEXT})`), { status: 400 });
   if (!parseScript(raw).length) throw Object.assign(new Error('Kịch bản không có chữ để nói'), { status: 400 });
   const id = 's-' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
-  try { for (const f of fs.readdirSync(stageDir())) { const p = path.join(stageDir(), f); if (/^s-.*\.json$/.test(f) && Date.now() - fs.statSync(p).mtimeMs > 30 * 864e5) fs.rmSync(p, { force: true }); } } catch { /* chưa có thư mục */ }
+  try { for (const f of fs.readdirSync(stageDir())) { const p = path.join(stageDir(), f); if (/^s-.*\.json$/.test(f) && Date.now() - fs.statSync(p).mtimeMs > 30 * 864e5) rmSync(p, { force: true }); } } catch { /* chưa có thư mục */ }
   wr(path.join(stageDir(), id + '.json'), { text: raw, name: String(name || '').slice(0, 120), at: new Date().toISOString() });
   return id;
 }

@@ -13,6 +13,7 @@
 //   node scripts/queue.mjs agent install|uninstall|status      (LaunchAgent com.aivideostudio.watch)
 import { shortErr, scrubPaths } from './err_text.mjs';
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -48,7 +49,7 @@ const LA_DIR = process.env.AVS_LA_DIR || path.join(os.homedir(), 'Library/Launch
 
 // BUSY / retryBusy (Windows busy-file retries) and withFileLock live in file_lock.mjs, shared with publish.mjs (M40).
 const rd = (f, d) => { try { return JSON.parse(retryBusy(() => fs.readFileSync(f, 'utf8'), 10)); } catch { return d; } };
-function wr(f, o) { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`; fs.writeFileSync(t, JSON.stringify(o, null, 1)); try { retryBusy(() => fs.renameSync(t, f)); } catch (e) { fs.rmSync(t, { force: true }); throw e; } }
+function wr(f, o) { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`; fs.writeFileSync(t, JSON.stringify(o, null, 1)); try { retryBusy(() => fs.renameSync(t, f)); } catch (e) { rmSync(t, { force: true }); throw e; } }
 const alive = pid => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
 // ---------- settings ----------
@@ -180,7 +181,7 @@ export function sweepRenderTmp(roots, sinceMs = 0, depth = 2) {
       if (e.name.startsWith('.render_')) {
         let st; try { st = fs.statSync(abs); } catch { continue; }
         if (Math.max(st.birthtimeMs || 0, st.ctimeMs || 0) + 2000 < sinceMs) continue;
-        try { fs.rmSync(abs, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); gone.push(abs); } catch { /* still locked: next sweep */ }
+        try { rmSync(abs, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); gone.push(abs); } catch { /* still locked: next sweep */ }
       } else if (d > 0 && e.name !== 'node_modules' && !e.name.startsWith('.git')) walk(abs, d - 1);
     }
   };
@@ -197,7 +198,7 @@ function tryLock(role) {
   wr(LOCK, { pid: process.pid, role, host: os.hostname(), since: new Date().toISOString() });
   return readLock()?.pid === process.pid;
 }
-function unlock() { const l = readLock(); if (l?.pid === process.pid) fs.rmSync(LOCK, { force: true }); }
+function unlock() { const l = readLock(); if (l?.pid === process.pid) rmSync(LOCK, { force: true }); }
 
 // ---------- runner ----------
 export class Runner {
@@ -395,10 +396,10 @@ export function agentInstall() {
 export function agentUninstall() {
   saveSettings({ agent: false });
   if (process.platform === 'win32') {
-    const done = () => { fs.rmSync(winVbs(), { force: true }); return { ok: true }; };
+    const done = () => { rmSync(winVbs(), { force: true }); return { ok: true }; };
     return process.env.AVS_NO_LAUNCHCTL ? Promise.resolve(done()) : new Promise(ok => execFile('schtasks', ['/delete', '/f', '/tn', WIN_TASK], () => ok(done())));
   }
-  const done = () => { fs.rmSync(plistPath(), { force: true }); return { ok: true }; };
+  const done = () => { rmSync(plistPath(), { force: true }); return { ok: true }; };
   if (!process.env.AVS_NO_LAUNCHCTL && process.platform === 'darwin' && fs.existsSync(plistPath()))
     return new Promise(ok => execFile('launchctl', ['bootout', `gui/${process.getuid()}/${LA_LABEL}`], () => ok(done())));
   return Promise.resolve(done());

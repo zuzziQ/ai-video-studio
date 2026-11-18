@@ -9,7 +9,7 @@
 //   node scripts/check-roadmap-link.mjs --body-file body.md --base origin/main [--title "..."] [--author dependabot[bot]]
 //
 // A line in the PR body, either of:
-//   Roadmap: S01, M05        IDs as written in docs/ROADMAP.md (**`S01`**)
+//   Roadmap: S01, M05, M157  IDs as written in docs/ROADMAP.md (**`S01`**, **`M157`**)
 //   Phát sinh: <why>         work that no roadmap item planned
 // Exit code 0 = ok, 1 = missing or wrong, 2 = usage error.
 
@@ -27,18 +27,19 @@ const EXEMPT_AUTHOR = /\[bot\]$/;
 
 const ROADMAP_LINE = /^[ \t>*-]*(?:Roadmap|Lộ trình)\s*:\s*(.+)$/im;
 const OUTSIDE_LINE = /^[ \t>*-]*Phát sinh\s*:\s*(\S.*)$/im;
-const ID = /\b[A-Z]\d{2}\b/g;
+// Two or three digits: S01, M05, M157 (the roadmap passed M99 in S12).
+const ID = /\b[A-Z]\d{2,3}\b/g;
 
-/** IDs the roadmap defines, written as **`S01`**. */
+/** IDs the roadmap defines, written as **`S01`** or **`M157`**. */
 export function roadmapIds(text) {
-  return new Set([...String(text).matchAll(/\*\*`([A-Z]\d{2})`\*\*/g)].map((m) => m[1]));
+  return new Set([...String(text).matchAll(/\*\*`([A-Z]\d{2,3})`\*\*/g)].map((m) => m[1]));
 }
 
 /** The plan folder each roadmap item links to: { S01: "plans/261028-1200-parent-topics/" }. */
 export function planDirs(text) {
   const out = {};
   for (const line of String(text).split(/\r?\n/)) {
-    const id = line.match(/\*\*`([A-Z]\d{2})`\*\*/)?.[1];
+    const id = line.match(/\*\*`([A-Z]\d{2,3})`\*\*/)?.[1];
     const dir = line.match(/\((?:\.\.\/|\/)?(plans\/[^/)\s]+\/)/)?.[1];
     if (id && dir) out[id] = dir;
   }

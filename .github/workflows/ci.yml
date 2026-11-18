@@ -71,6 +71,11 @@ jobs:
         if: always()
         run: node scripts/check_studio_tokens.mjs
 
+      # Node 24 trên Windows: fs.rmSync im lặng không xoá đường dẫn có dấu; mọi lệnh xoá qua scripts/fs_rm.mjs (M157).
+      - name: Không gọi fs.rmSync trực tiếp
+        if: always()
+        run: node scripts/check-rmsync.mjs
+
       - name: Test Python (scripts/tests)
         if: always()
         run: python3 -m unittest discover -s scripts/tests

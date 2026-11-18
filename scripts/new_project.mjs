@@ -5,6 +5,7 @@
 // Steps: whisper (transcribe.py) → cut silences (cut.py) → 30 fps frames → face position (find_face.py) → captions (captions.py)
 // → timeline.json (frame_grid + title_card, music bed). Progress lines "@@ <0..1> <step>" on stdout; exit ≠ 0 + Vietnamese error.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
@@ -78,7 +79,7 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
   try { return await build(d, ws, { src, model, pack, title, orient, lang, kit }, { run, onStep }); }
   catch (e) {
     // thư mục Studio tự đặt trong Du an/: lỗi giữa chừng thì không để lại thư mục rỗng (chỉ đúng một cấp dưới Du an/, chưa có timeline)
-    if (ws && path.dirname(d) === sub(ws, 'projects') && !['', '.', '..'].includes(path.basename(d)) && !fs.existsSync(path.join(d, 'timeline.json'))) fs.rmSync(d, { recursive: true, force: true });
+    if (ws && path.dirname(d) === sub(ws, 'projects') && !['', '.', '..'].includes(path.basename(d)) && !fs.existsSync(path.join(d, 'timeline.json'))) rmSync(d, { recursive: true, force: true });
     throw e;
   }
 }
@@ -91,12 +92,12 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
   let speech = null;
   try { const m = JSON.parse(fs.readFileSync(path.join(d, 'work/words_raw.json.meta.json'), 'utf8')); if (m && m.speech === false) speech = { none: true, dropped: (m.dropped || []).length, ...(m.noAudio ? { noAudio: true } : {}) }; } catch { /* bản cũ của transcribe.py: không có meta */ }
   onStep(speech ? 'Video không có lời nói: giữ nguyên cả clip' : 'Cắt khoảng lặng', .45);
-  fs.rmSync(path.join(d, 'work/aroll.mp4'), { force: true }); // M54: không ghi đè tại chỗ (có thể là liên kết cứng của bản anh em)
+  rmSync(path.join(d, 'work/aroll.mp4'), { force: true }); // M54: không ghi đè tại chỗ (có thể là liên kết cứng của bản anh em)
   await run(PY, ['-I', '-X', 'utf8', S('cut.py'), src, path.join(d, 'work/words_raw.json'), path.join(d, 'work')]);
   onStep(`Trích khung hình ${orient === 'horizontal' ? '16:9' : '9:16'}`, .6);
   const [FW, FH] = orient === 'horizontal' ? [1280, 720] : [720, 1280];
   // stale frames from an interrupted earlier run would make the clip longer than the audio
-  for (const f of fs.readdirSync(path.join(d, 'work/frames'))) if (f.endsWith('.jpg')) fs.rmSync(path.join(d, 'work/frames', f));
+  for (const f of fs.readdirSync(path.join(d, 'work/frames'))) if (f.endsWith('.jpg')) rmSync(path.join(d, 'work/frames', f));
   await run('ffmpeg', ['-v', 'error', '-y', '-i', path.join(d, 'work/aroll.mp4'), '-vf', `scale=${FW}:${FH}:force_original_aspect_ratio=increase,crop=${FW}:${FH}`, '-q:v', '3', path.join(d, 'work/frames/%05d.jpg')]);
   // timeline.face (bubble / PIP / hook anchor): find_face.py on a few frames; keep the default if no person is found.
   onStep('Tìm vị trí mặt', .75);

@@ -7,6 +7,7 @@
 // claims[].status: approved (phải có evidence) | pending | prohibited | expired. `expires` (YYYY-MM-DD) đã qua
 // thì claim approved được coi là expired.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -127,6 +128,6 @@ export function saveProduct(raw, dir = productsDir()) {
 export function deleteProduct(id, dir = productsDir()) {
   const f = productFile(id, dir);
   if (!fs.existsSync(f)) throw new ProductError(`không thấy hồ sơ sản phẩm “${id}”`, 404);
-  fs.rmSync(f);
+  rmSync(f);
   return { ok: true };
 }

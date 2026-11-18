@@ -5,6 +5,7 @@
 //   node scripts/qc_quick.mjs <project_dir | timeline.json> [--times 1.2,5,9.4] [--fix]
 // Ghi <project>/.studio/qc_quick.json {issues, stills, before, fixed, ms}; ảnh ở .studio/qc_quick/. Tiến độ "@@ <0..1> <bước>".
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+import { rmSync } from './fs_rm.mjs';
 import { pathToFileURL } from 'node:url';
 import { loadProject, saveProject, openEngine, domPass, domIssues, staticIssues, sampleTimes, applyDeterministic, isBase, qcKey, same, KIND_VI } from './ai_qc.mjs';
 import { qcHash } from './export_gate.mjs';
@@ -65,7 +66,7 @@ export async function quickQC(src, { times, fix = false, onP } = {}) {
       }
       if (changed) saveProject(proj, tl, caps);
     }
-    fs.rmSync(outDir, { recursive: true, force: true }); fs.mkdirSync(outDir, { recursive: true });
+    rmSync(outDir, { recursive: true, force: true }); fs.mkdirSync(outDir, { recursive: true });
     const near = t => P.samples.reduce((a, b) => (Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a), P.samples[0]);
     const stills = [];
     for (const [k, t] of ts.entries()) {
@@ -83,7 +84,7 @@ export async function quickQC(src, { times, fix = false, onP } = {}) {
     return result;
   } finally {
     if (E) await E.browser.close().catch(() => {});
-    fs.rmSync(tmp, { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true });
   }
 }
 

@@ -12,6 +12,7 @@
 //   GET  /api/variants/file?dir=&f=               → a still / video inside one of the listed variant folders
 //   POST /api/variants/open {dir}                 → open a listed variant (or the base) in the Studio
 import fs from 'node:fs'; import path from 'node:path';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import { readGate, recordOverride, projectHash } from '../../scripts/export_gate.mjs';
 
 export default ctx => {
@@ -42,7 +43,7 @@ export default ctx => {
         // written only once this job really starts (a refused run must not touch a running one's selection)
         if (keys) fs.writeFileSync(onlyFile, JSON.stringify(keys));
         try { await ctx.run('node', argv, progress).catch(e => { throw new Error(ctx.job.error || e.message); }); }
-        finally { if (keys) fs.rmSync(onlyFile, { force: true }); }
+        finally { if (keys) rmSync(onlyFile, { force: true }); }
         ctx.job.out = '.studio/qc.json';
       });
       return ctx.json(res, ok ? { ok } : { ok, error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;

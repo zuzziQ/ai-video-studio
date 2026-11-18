@@ -14,6 +14,7 @@
 // replaced by a template built only from approved claims if it still fails; the timeline gets ads.on/ads.product.
 // Output: one project folder (opens in Studio) + script.json; --export renders out/<name>.mp4. Progress: "@@ <0..1> <step>".
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -87,7 +88,7 @@ async function tts(text, voice, rate, outWav) {
   // trim leading/trailing silence, 48 kHz stereo
   const trim = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.06,areverse';
   await sh('ffmpeg', ['-v', 'error', '-y', '-i', tmp, '-af', trim, '-ar', '48000', '-ac', '2', outWav]);
-  fs.rmSync(tmp, { force: true });
+  rmSync(tmp, { force: true });
   return probe(outWav).dur;
 }
 
@@ -205,7 +206,7 @@ async function main() {
     let d = path.join(out, slug(topic)); for (let n = 2; fs.existsSync(d) && !sameTopic(d); n++) d = path.join(out, `${slug(topic)}-${n}`);
     out = d;
   }
-  fs.rmSync(path.join(out, 'work'), { recursive: true, force: true });
+  rmSync(path.join(out, 'work'), { recursive: true, force: true });
   fs.mkdirSync(path.join(out, 'work/tts'), { recursive: true }); fs.mkdirSync(path.join(out, 'media'), { recursive: true }); fs.mkdirSync(path.join(out, '.studio'), { recursive: true });
 
   // 1. script
@@ -284,7 +285,7 @@ async function main() {
     await sh('node', [S('broll.mjs'), 'render', 'bg--blobs--ember', path.join(out, '.studio/bg.mp4'), '--dur', '1', '--frames', tmpd, '--w', String(vert ? 720 : 1280), '--h', String(vert ? 1280 : 720)]);
     const fr = fs.readdirSync(tmpd).filter(f => f.endsWith('.jpg')).sort();
     fs.copyFileSync(path.join(tmpd, fr[Math.floor(fr.length / 2)]), bg);
-    fs.rmSync(tmpd, { recursive: true, force: true }); fs.rmSync(path.join(out, '.studio/bg.mp4'), { force: true });
+    rmSync(tmpd, { recursive: true, force: true }); rmSync(path.join(out, '.studio/bg.mp4'), { force: true });
   } catch (e) {
     await sh('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `gradients=s=${vert ? '720x1280' : '1280x720'}:c0=0x2a1510:c1=0x0a0a0a:x0=${vert ? 360 : 640}:y0=${vert ? 500 : 300}:x1=0:y1=0:type=radial`, '-frames:v', '1', bg]);
   }
@@ -349,7 +350,7 @@ async function main() {
 
   // cover still for the panel
   await sh('node', [S('render.mjs'), tlFile, path.join(out, '.studio/thumb_big.jpg'), '--still', String(r2(Math.min(total - .5, hookEnd - .4))), path.join(out, '.studio/thumb_big.jpg')]).catch(() => {});
-  if (fs.existsSync(path.join(out, '.studio/thumb_big.jpg'))) { await sh('ffmpeg', ['-v', 'error', '-y', '-i', path.join(out, '.studio/thumb_big.jpg'), '-vf', 'scale=360:-2', '-q:v', '4', path.join(out, '.studio/thumb.jpg')]).catch(() => {}); fs.rmSync(path.join(out, '.studio/thumb_big.jpg'), { force: true }); }
+  if (fs.existsSync(path.join(out, '.studio/thumb_big.jpg'))) { await sh('ffmpeg', ['-v', 'error', '-y', '-i', path.join(out, '.studio/thumb_big.jpg'), '-vf', 'scale=360:-2', '-q:v', '4', path.join(out, '.studio/thumb.jpg')]).catch(() => {}); rmSync(path.join(out, '.studio/thumb_big.jpg'), { force: true }); }
 
   let mp4 = null;
   if (args.includes('--export')) mp4 = await exportProject(out, { quality: opt('--quality', '1080'), onProgress: (k, s) => say(.66 + .33 * k, `Xuất video (${s}) ${Math.round(k * 100)}%`) });

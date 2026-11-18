@@ -6,6 +6,7 @@
 // and the project's files (/project/... = default project, /p/<tab id>/... = a tab's project, S18 M129). Saves timeline.json with history snapshots in <project>/.studio/.
 import http from 'node:http';
 import fs from 'node:fs';
+import { rmSync } from '../scripts/fs_rm.mjs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -199,7 +200,7 @@ function extractAudio(src, fr, cb = () => {}) {
   const tmp = path.join(fr, '.audio.tmp.m4a');
   execFile('ffmpeg', ['-v', 'error', '-y', '-i', src, '-map', '0:a:0?', '-vn', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', tmp], e => {
     audioPending.delete(out);
-    if (!e && fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, out); else fs.rmSync(tmp, { force: true });
+    if (!e && fs.existsSync(tmp) && fs.statSync(tmp).size > 1024) fs.renameSync(tmp, out); else rmSync(tmp, { force: true });
     cb();
   });
 }
@@ -225,14 +226,14 @@ function upload(req, name) {
     const safe = path.basename(name).replace(/[^\w.\-À-ỹ ]+/g, '_');
     fs.mkdirSync(P('media'), { recursive: true });
     // M54: xoá trước khi ghi (inode mới) — media/ của dự án anh em biến thể có thể là liên kết cứng tới bản gốc
-    const dst = P(`media/${safe}`); fs.rmSync(dst, { force: true });
+    const dst = P(`media/${safe}`); rmSync(dst, { force: true });
     const out = fs.createWriteStream(dst);
     req.pipe(out);
     out.on('error', bad);
     out.on('finish', () => {
       if (!VID.test(safe)) return ok({ name: safe });
       const fr = P(`media/${safe.replace(/\.\w+$/, '')}_frames`);
-      fs.rmSync(fr, { recursive: true, force: true }); fs.mkdirSync(fr, { recursive: true });
+      rmSync(fr, { recursive: true, force: true }); fs.mkdirSync(fr, { recursive: true });
       execFile('ffmpeg', ['-v', 'error', '-y', '-i', dst, '-vf', 'fps=30,scale=w=1280:h=1280:force_original_aspect_ratio=decrease', '-q:v', '3', path.join(fr, '%05d.jpg')],
         e => (e ? bad(e) : extractAudio(dst, fr, () => ok({ name: safe }))));
     });
@@ -257,9 +258,9 @@ function still(t, dest) {
     // overwrite that delivered copy in place; a failed render also keeps the old cover.
     const part = abs.replace(/(\.\w+)?$/, '.part$1');
     execFile('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, part, '--still', String(t), part], (e, so, se) => {
-      fs.rmSync(tmp, { force: true });
+      rmSync(tmp, { force: true });
       if (!e) try { fs.renameSync(part, abs); } catch (er) { e = er; }
-      fs.rmSync(part, { force: true });
+      rmSync(part, { force: true });
       // Short reason for the user (render.mjs's last stderr line), never the command line or a Node stack with machine paths.
       if (e) console.error('still:', e.message);
       e ? bad(Object.assign(new Error('Không chụp được khung hình: ' + shortErr(se, 'render lỗi')), { status: 500 })) : ok(out);
@@ -300,7 +301,7 @@ async function saveTemplate({ tpl, t = 1 }) {
     await still(Math.max(0, +t || 0), big);
     await new Promise(ok => execFile('ffmpeg', ['-v', 'error', '-y', '-i', big, '-vf', 'scale=360:-2', '-q:v', '4', jpg], () => ok()));
   } catch (e) { console.error('template cover', e.message); }
-  fs.rmSync(big, { force: true });
+  rmSync(big, { force: true });
   return { ok: true, id, file: path.join(dir, id + '.json') };
 }
 
@@ -343,7 +344,7 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
   }
   fs.mkdirSync(P('out'), { recursive: true });
   const out = `out/${path.basename(cur().dir)}_${stamp()}.mp4`;
-  fs.rmSync(P(out), { force: true }); // same minute, same name: never render over a copy already hard-linked into Thanh pham/ (M100)
+  rmSync(P(out), { force: true }); // same minute, same name: never render over a copy already hard-linked into Thanh pham/ (M100)
   job.step = 'Render khung hình';
   const total = (to ?? tl.duration) - (from ?? 0);
   // render.mjs resolves media against the timeline's folder, so the temp copy lives next to it via a relative symlink-free path.
@@ -357,7 +358,7 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
       const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l);
       if (m) { job.step = 'Render khung hình'; job.progress = Math.min(.99, (+m[1] - (from ?? 0)) / total); }
     });
-  } finally { fs.rmSync(tmpTl, { force: true }); }
+  } finally { rmSync(tmpTl, { force: true }); }
   job.out = out;
   // Extra aspect ratios (references/reframe-dub.md): honest derivatives of the file just rendered.
   if (aspects?.length) {
@@ -413,7 +414,7 @@ function startJob(kind, fn, payload) {
 // Server stopped (app quit, Ctrl+C) while a job runs: stop it (render.mjs then closes its Chromes) and drop this run's temp timelines.
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => {
   if (job?.state === 'running') killTree(job.proc);
-  for (const d of new Set([active?.dir, job?.dir].filter(Boolean))) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) fs.rmSync(path.join(d, f), { force: true });
+  for (const d of new Set([active?.dir, job?.dir].filter(Boolean))) for (const f of [`.export_${process.pid}.json`, `.still_${process.pid}.json`, `.cover_${process.pid}.json`]) rmSync(path.join(d, f), { force: true });
   dropTokenFile();
   setTimeout(() => process.exit(0), 300);
 });
@@ -584,7 +585,7 @@ async function handle(req, res) {
     if (p === '/api/srt' && req.method === 'POST') {
       const b = await body(req), { captions, timeline } = readProject(); fs.mkdirSync(P('out'), { recursive: true });
       // a delivered .srt is a hard link to this file: write a new file (rm, then write), never in place
-      const out = `out/${path.basename(cur().dir)}.srt`; fs.rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
+      const out = `out/${path.basename(cur().dir)}.srt`; rmSync(P(out), { force: true }); fs.writeFileSync(P(out), srt(captions));
       return json(res, b.deliver === true ? await deliverFiles({ out }, [{ src: P(out), name: `${path.basename(cur().dir)}.srt` }], timeline, { files: true }) : { out });
     }
     if (p === '/api/job') {
@@ -628,7 +629,7 @@ server.on('error', e => {
   setTimeout(() => process.exit(0), 1500);
 });
 let tokFile = null;
-function dropTokenFile() { try { if (tokFile && fs.readFileSync(tokFile, 'utf8') === TOKEN) fs.rmSync(tokFile, { force: true }); } catch {} }
+function dropTokenFile() { try { if (tokFile && fs.readFileSync(tokFile, 'utf8') === TOKEN) rmSync(tokFile, { force: true }); } catch {} }
 process.on('exit', dropTokenFile);
 server.listen(PORT, '127.0.0.1', () => {
   try { tokFile = writeTokenFile(PORT, TOKEN); } catch (e) { console.error('token file', tokenFile(PORT), e.message); }

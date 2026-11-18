@@ -6,6 +6,7 @@
 //   GET  /api/ai/plan                                  → that plan (the Studio applies it client-side, undoable)
 //   POST /api/ai/fillers {words,pause,fillers,claude}  → scripts/fillers.py; with claude:true it runs as job "fillers", result at GET /api/ai/fillers
 import fs from 'node:fs'; import path from 'node:path'; import { execFile } from 'node:child_process';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import { habitsFor, saveDelivered, getProfile } from '../../scripts/profile.mjs';
 import { workspaceOfProject } from '../../scripts/workspace.mjs';
 
@@ -42,7 +43,7 @@ export default ctx => {
       // S19 M138: nhạc riêng của thương hiệu (Phong cách dựng → Nhạc nền = Nhạc trong Kho); thói quen "không nhạc" vẫn thắng
       try { const m = getProfile(brandOf()).music; if (typeof m === 'string' && (m === 'kho' || m.startsWith('kho:')) && o.learned?.music !== 'off') o.music_pick = m; } catch { /* phong cách lỗi: nhạc AI chọn */ }
       fs.writeFileSync(path.join(st, 'ai_opts.json'), JSON.stringify(o));
-      fs.rmSync(path.join(st, 'ai_plan.json'), { force: true });
+      rmSync(path.join(st, 'ai_plan.json'), { force: true });
       const ok = ctx.startJob('ai', async () => {
         ctx.job.step = 'Chuẩn bị';
         await ctx.run('node', [S('ai_edit.mjs'), ctx.project.tlFile, '--opts', path.join(st, 'ai_opts.json'), '--out', path.join(st, 'ai_plan.json')], l => {
@@ -69,7 +70,7 @@ export default ctx => {
           return ctx.json(res, { error: 'Mỗi từ cần {w, s, e} với s, e là số giây' }, 400), true;
       }
       fs.writeFileSync(inF, JSON.stringify(Array.isArray(b.words) ? b.words : ctx.readProject().captions));
-      fs.rmSync(outF, { force: true });
+      rmSync(outF, { force: true });
       if (b.claude) {
         const ok = ctx.startJob('fillers', async () => {
           ctx.job.step = 'Dò lỗi nói + hỏi Claude câu nói hỏng (20–60 giây)'; ctx.job.progress = .2;

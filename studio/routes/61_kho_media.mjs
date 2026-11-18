@@ -8,6 +8,7 @@
 //                                                            bạn"). /api/kho/upload?brand= ghi theo thương hiệu, có thể là Kho khác với Kho
 //                                                            của dự án (dự án trong Kho tự chọn / .kho.json) — nhạc tải lên sẽ không hiện.
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
@@ -65,8 +66,8 @@ export default ctx => {
           let w;
           try { w = fs.createWriteStream(f, { flags: 'wx' }); await new Promise((ok, bad) => { w.once('open', ok); w.once('error', bad); }); }
           catch (e) { if (e.code === 'EEXIST' && i < 20) continue; throw e; }
-          try { await pipeline(req, w); } catch { fs.rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
-          if (req.aborted || req.readableAborted) { fs.rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
+          try { await pipeline(req, w); } catch { rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
+          if (req.aborted || req.readableAborted) { rmSync(f, { force: true }); throw fail('Tải lên bị ngắt, chưa lưu file', 400); }
           return ctx.json(res, { rel: W.relTo(ws, f), name: path.basename(f), size: fs.statSync(f).size }), true;
         }
       }

@@ -13,6 +13,7 @@
 // S12 M98: dự án mới ở <Kho>/Du an/<tên>-<mã> (Kho của --brand, không có thì thương hiệu của hồ sơ, không có nữa thì Kho Chung);
 // bước deliver đưa video, ảnh bìa, .srt, nội dung đăng vào <Kho>/Thanh pham/<YYYY-MM>/ (liên kết cứng), --out vẫn chép thêm như cũ.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -168,8 +169,8 @@ async function exportProject(dir, { quality = '1080', aspects = [] }, say) {
   }
   fs.mkdirSync(P('out'), { recursive: true });
   // leftovers of a run that was killed mid-export (temp timelines, half-written MP4)
-  for (const x of fs.readdirSync(dir)) if (/^\.(export|cover)_\d+\.json$/.test(x)) fs.rmSync(path.join(dir, x), { force: true });
-  for (const x of fs.readdirSync(P('out'))) if (/^\.(part|render)_/.test(x)) fs.rmSync(P('out/' + x), { recursive: true, force: true });
+  for (const x of fs.readdirSync(dir)) if (/^\.(export|cover)_\d+\.json$/.test(x)) rmSync(path.join(dir, x), { force: true });
+  for (const x of fs.readdirSync(P('out'))) if (/^\.(part|render)_/.test(x)) rmSync(P('out/' + x), { recursive: true, force: true });
   const out = `out/${path.basename(dir)}_${stamp()}.mp4`, part = `out/.part_${path.basename(out)}`;
   const tmpTl = path.join(dir, `.export_${process.pid}.json`);
   fs.writeFileSync(tmpTl, JSON.stringify({ ...rd(tlFile), width: vert ? W : H, height: vert ? H : W }));
@@ -177,7 +178,7 @@ async function exportProject(dir, { quality = '1080', aspects = [] }, say) {
   say(.08, 'Render khung hình');
   try {
     await run('node', [S('render.mjs'), tmpTl, P(part), ...(mix ? ['--audio', mix] : [])], l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) say(.08 + .72 * Math.min(1, +m[1] / total), `Render ${(+m[1]).toFixed(0)}/${total.toFixed(0)}s`); });
-  } finally { fs.rmSync(tmpTl, { force: true }); }
+  } finally { rmSync(tmpTl, { force: true }); }
   fs.renameSync(P(part), P(out));
   const native = vert ? '9:16' : '16:9';
   const outs = [{ aspect: native, out, note: 'Bản gốc (render thật)' }];
@@ -208,11 +209,11 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
   const prof0 = getProfile(styleRef || st?.profile);
   const prof = effectiveProfile(prof0);
   if (!st || restart) {
-    if (restart) fs.rmSync(path.join(dir, '.studio/autopilot'), { recursive: true, force: true });
+    if (restart) rmSync(path.join(dir, '.studio/autopilot'), { recursive: true, force: true });
     st = { version: 1, input: abs, steps: {} };
   }
   Object.assign(st, { profile: prof0.id, profileName: prof0.name, project: dir, out: outDir ? path.resolve(outDir) : st.out || null, state: 'running', pid: process.pid, started: st.started || new Date().toISOString(), learnedApplied: prof.applied });
-  if (from) { let on = false; for (const [id] of STEPS) { if (id === from) on = true; if (on) { delete st.steps[id]; fs.rmSync(path.join(dir, '.studio/autopilot', `pre_${id}.json`), { force: true }); } } }
+  if (from) { let on = false; for (const [id] of STEPS) { if (id === from) on = true; if (on) { delete st.steps[id]; rmSync(path.join(dir, '.studio/autopilot', `pre_${id}.json`), { force: true }); } } }
   if (isProj && !st.steps.new) st.steps.new = { state: 'skipped', msg: 'dự án có sẵn', sec: 0 };
   fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
   const save = () => wr(stFile, st);
@@ -432,7 +433,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       const tmp = path.join(dir, `.cover_${process.pid}.json`);
       fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? 1080 : 1920, height: vert ? 1920 : 1080 }));
       const out = P('out/cover.jpg');
-      try { await run('node', [S('render.mjs'), tmp, out, '--still', String(t), out]); } finally { fs.rmSync(tmp, { force: true }); }
+      try { await run('node', [S('render.mjs'), tmp, out, '--still', String(t), out]); } finally { rmSync(tmp, { force: true }); }
       res.cover = 'out/cover.jpg';
       return `khung ${t.toFixed(1)}s`;
     },
@@ -502,7 +503,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       st.steps[id] = { state: 'warn', msg: e.message, sec };
       console.log(`! ${label} lỗi, bỏ qua (${sec}s): ${e.message}`);
     }
-    fs.rmSync(path.join(dir, '.studio/autopilot', `pre_${id}.json`), { force: true });
+    rmSync(path.join(dir, '.studio/autopilot', `pre_${id}.json`), { force: true });
     save();
   }
   st.state = 'done'; st.progress = 1; st.finished = new Date().toISOString(); st.finishedMs = Date.now(); delete st.pid; delete st.error; save();

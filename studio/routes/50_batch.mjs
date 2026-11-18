@@ -2,6 +2,7 @@
 // Batches live in <project>/batch/<name>_<stamp>/ (job.json, status.json, 01_<row>/…); sheets uploaded to <project>/batch/_sheets/.
 import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { parseSheet, targetsOf, autoMap, loadSource } from '../../scripts/batch.mjs';
@@ -91,7 +92,7 @@ export default ctx => {
       const dir = path.join(root(), '_sheets'); fs.mkdirSync(dir, { recursive: true });
       const f = path.join(dir, `${ctx.stamp()}_${name}`); fs.writeFileSync(f, await raw(req));
       try { return ctx.json(res, sheetInfo(f)), true; } catch (e) {
-        fs.rmSync(f, { force: true }); // a sheet that cannot be read is not kept in _sheets/
+        rmSync(f, { force: true }); // a sheet that cannot be read is not kept in _sheets/
         // Parser internals (RangeError "outside buffer bounds" on a broken/empty file) mean nothing to the user.
         const why = e instanceof RangeError || /buffer|offset|bounds/i.test(e.message) ? 'file rỗng hoặc không phải CSV/XLSX hợp lệ' : e.message;
         return ctx.json(res, { error: 'Không đọc được bảng tính: ' + why }, 400), true;
@@ -105,7 +106,7 @@ export default ctx => {
       const b = await B(), dir = path.join(root(), '_preview');
       try {
         const jf = writeJob(dir, b), out = path.join(dir, `still_${Date.now()}.jpg`);
-        for (const f of fs.readdirSync(dir).filter(f => /^still_.*\.jpg$/.test(f))) fs.rmSync(path.join(dir, f), { force: true });
+        for (const f of fs.readdirSync(dir).filter(f => /^still_.*\.jpg$/.test(f))) rmSync(path.join(dir, f), { force: true });
         execFile('node', [BATCH, '--job', jf, '--preview', String(b.row || 0), '--t', String(b.t ?? 2.5), '--out', out], { maxBuffer: 1 << 24, timeout: 180000 }, (e, so, se) => {
           if (e) return ctx.json(res, { error: ((se || '') + (so || '')).split('\n').filter(l => l && !l.startsWith('@@')).slice(-3).join(' ') || e.message }, 500);
           let r; try { r = JSON.parse(so.trim().split('\n').pop()); } catch { return ctx.json(res, { error: 'Bản xem trước không trả kết quả: ' + so.slice(-200) }, 500); }
@@ -148,7 +149,7 @@ export default ctx => {
         const st = status(dir), bad = st ? st.rows.filter(r => r.state !== 'done').length : 0;
         ctx.job.step = bad ? `Xong, ${bad} dòng lỗi` : `Xong ${st?.total || 0} video`;
       });
-      if (!ok && !b.resume) fs.rmSync(dir, { recursive: true, force: true }); // lost the race to another job: drop the new folder
+      if (!ok && !b.resume) rmSync(dir, { recursive: true, force: true }); // lost the race to another job: drop the new folder
       return ctx.json(res, ok ? { ok: true, dir: rel(dir) } : { error: 'Đang có tác vụ khác chạy' }, ok ? 200 : 409), true;
     }
     if (p === '/api/batch/status') {

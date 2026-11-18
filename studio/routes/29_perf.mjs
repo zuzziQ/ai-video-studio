@@ -9,6 +9,7 @@
 // Chỉ xử lý đúng ba đường dẫn trên: mọi đường dẫn khác dưới /api/perf/ (vd /api/perf/advise của 31_perfai.mjs, M68) trả false
 // để route sau xử lý.
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -113,7 +114,7 @@ export default ctx => {
         const log = M.readPerfLog({ n: 5 }).reverse().find(e => e.profile === row.profile && String(e.at) >= since);
         Object.assign(row, { state: 'xong', wall_s: wall, sec: log?.sec ?? wall, fps: log?.fps ?? +(BENCH_SEC * fps / wall).toFixed(1),
           workers: log?.workers ?? null, encoder: log?.encoder ?? null, chrome: log?.chrome ?? null, waited_s: log?.waited_s ?? 0 });
-        fs.rmSync(out, { force: true });
+        rmSync(out, { force: true });
       }
       job.step = 'Xong';
     } catch (e) {
@@ -121,7 +122,7 @@ export default ctx => {
       throw e;
     } finally {
       // Windows giữ khoá file vài trăm ms sau khi tiến trình bị giết: thử lại khi xoá.
-      fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+      rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
     }
   }
 

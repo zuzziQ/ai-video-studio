@@ -2,6 +2,7 @@
 // cho từng nền tảng từ lời thoại; kiểm tra thông số MP4; xuất ảnh bìa; mở trang upload + hiện file trong Finder; lưu <project>/publish/<nền tảng>.txt.
 import { shortErr } from '../../scripts/err_text.mjs';
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
@@ -134,7 +135,7 @@ export default ctx => async (req, res, p, u) => {
     fs.mkdirSync(PUB, { recursive: true });
     const out = path.join(PUB, `cover_${t.toFixed(1).replace('.', '_')}s.jpg`);
     return new Promise(ok => execFile('node', [path.join(ctx.SKILL, 'scripts/render.mjs'), tmp, out, '--still', String(t), out], { timeout: 120000 }, (e, so, se) => {
-      fs.rmSync(tmp, { force: true });
+      rmSync(tmp, { force: true });
       if (e) console.error('publish/cover:', e.message); // full command + stack stay in the server log
       ok(e ? J({ error: 'Không render được ảnh bìa: ' + shortErr(se, 'render lỗi') }, 500) : J({ out: path.relative(ctx.project.dir, out), url: ctx.purl(path.relative(ctx.project.dir, out)) + '?' + Date.now() }));
     }));

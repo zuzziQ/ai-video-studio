@@ -11,6 +11,7 @@
 //    into a vertical project: TL.clips + clip.reframe from face_track.py so the speaker stays centred.
 // Writes <out>/highlights.json [{dir, title, hook, t0, t1, dur, score, reason, thumb, mode}] and prints "@@ <0..1> <step>".
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -69,7 +70,7 @@ async function transcript(src, model, dur) {
     if (dur) { const k = +m[2] / dur, el = (Date.now() - t0) / 1000; say(.01 + .29 * k, `Nhận giọng ${mmss(+m[2])}/${mmss(dur)}${k > .05 ? ` · còn ~${Math.round(el / k * (1 - k) / 60) || '<1'} phút` : ''}`); }
   } });
   const c = { words: JSON.parse(fs.readFileSync(f + '.part', 'utf8')), segs };
-  fs.writeFileSync(f, JSON.stringify(c)); fs.rmSync(f + '.part', { force: true }); fs.rmSync(f + '.part.16k.wav', { force: true });
+  fs.writeFileSync(f, JSON.stringify(c)); rmSync(f + '.part', { force: true }); rmSync(f + '.part.16k.wav', { force: true });
   return c;
 }
 async function silences(src) {
@@ -251,7 +252,7 @@ export async function findHighlights(src, o) {
 
 // ---------- one highlight → project folder (same steps as Studio's newProject) ----------
 export async function buildProject(src, h, dir, o, info, words, onStep = () => {}) {
-  fs.rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, 'work/frames'), { recursive: true }); fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
   const W = f => path.join(dir, 'work', f);
   onStep('cắt đoạn nguồn');
@@ -315,7 +316,7 @@ export async function buildProject(src, h, dir, o, info, words, onStep = () => {
   if (mode === 'reframe') { const k0 = track.keys.find(k => k.t >= 1) || track.keys[0] || { ox: 50 }; tvf = `crop=ih*9/16:ih:max(0\\,min(iw-ih*9/16\\,iw*${(k0.ox / 100).toFixed(3)}-ih*9/32)):0,scale=360:-2`; }
   if (mode === 'blurfill') tvf = 'scale=-2:360';
   await sh('ffmpeg', ['-v', 'error', '-y', '-i', path.join(dir, 'work/frames', `${fr}.jpg`), '-vf', tvf, '-q:v', '4', path.join(dir, '.studio/thumb.jpg')]).catch(() => {});
-  fs.rmSync(W('source.mp4'), { force: true }); // aroll.mp4 is the cut copy; the trimmed source is not needed any more
+  rmSync(W('source.mp4'), { force: true }); // aroll.mp4 is the cut copy; the trimmed source is not needed any more
   return { dir, dur: total, mode, face, track: track ? { found: track.found, cuts: track.cuts.length } : null };
 }
 
@@ -337,7 +338,7 @@ export async function exportProject(dir, { quality = '1080', onProgress = () => 
   try {
     // one retry with fewer Chrome workers (a busy machine can time a worker out)
     await go().catch(e => { console.error('render lỗi, thử lại với 2 luồng: ' + e.message.slice(0, 200)); return go(2); });
-  } finally { fs.rmSync(tmp, { force: true }); }
+  } finally { rmSync(tmp, { force: true }); }
   fs.renameSync(part, out);
   return out;
 }

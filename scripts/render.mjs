@@ -12,6 +12,7 @@
 // Chrome draws with the GPU when there is one (render_hw.mjs launchChrome); AVS_RENDER_GPU=0 forces SwiftShader.
 // Video is H.264 from NVENC/QSV/VideoToolbox when ffmpeg can open it, else libx264 (M52); AVS_ENCODER=x264 forces libx264.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -107,7 +108,7 @@ const tick = () => {
 
 // Abort (failed worker, or SIGTERM from the studio's cancel): stop every Chrome + ffmpeg, drop temp segments.
 const procs = []; let tmp = null;
-const abort = () => { for (const p of procs) p.kill('SIGKILL'); for (const b of browsers) b.process()?.kill('SIGKILL'); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); };
+const abort = () => { for (const p of procs) p.kill('SIGKILL'); for (const b of browsers) b.process()?.kill('SIGKILL'); if (tmp) rmSync(tmp, { recursive: true, force: true }); };
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => { abort(); process.exit(130); });
 // The studio server died (app quit): progress writes hit a closed pipe — clean up instead of leaving Chrome running.
 for (const s of [process.stdout, process.stderr]) s.on('error', () => { abort(); process.exit(1); });
@@ -149,7 +150,7 @@ if (workers === 1) {
       '-map', '0:v', '-c:v', 'copy', ...(audio ? ['-map', '1:a', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-shortest'] : []),
       '-movflags', '+faststart', outPath,
     ]);
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
 process.stdout.write(`\r${t1.toFixed(1)}s / ${t1}s  (${((Date.now() - started) / 1000).toFixed(0)}s elapsed)`);
 slot.release();

@@ -3,6 +3,7 @@
 //   GET  /api/audio/probe?file=media/x.mp3 → {dur}
 //   POST /api/audio/mix   → job: chạy mix_audio.py → {out: work/mix.wav}
 import fs from 'node:fs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 
@@ -25,7 +26,7 @@ export default ctx => async (req, res, p, u) => {
     const ss = Math.max(0, +b.ss || 0), dur = Math.min(10, Math.max(1, +b.dur || 5)), st = ctx.stamp();
     const dir = ctx.P('.studio/ab');
     fs.mkdirSync(dir, { recursive: true });
-    for (const x of fs.readdirSync(dir)) fs.rmSync(path.join(dir, x), { force: true });
+    for (const x of fs.readdirSync(dir)) rmSync(path.join(dir, x), { force: true });
     const A = path.join(dir, `orig_${st}.wav`), B = path.join(dir, `clean_${st}.wav`);
     const { preset = 'vua', ...over } = b.clean || {};
     try {

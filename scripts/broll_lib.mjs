@@ -5,6 +5,7 @@
 //   node scripts/broll_lib.mjs search "câu nói" [--n 5]
 // Spec: references/autofill.md §1c.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -56,7 +57,7 @@ export function add(file, { tags = [], title } = {}) {
 }
 export function remove(id) {
   const items = load(), it = items.find(x => x.id === id); if (!it) return false;
-  fs.rmSync(path.join(LIB, it.file), { force: true }); fs.rmSync(path.join(LIB, id + '_frames'), { recursive: true, force: true });
+  rmSync(path.join(LIB, it.file), { force: true }); rmSync(path.join(LIB, id + '_frames'), { recursive: true, force: true });
   save(items.filter(x => x.id !== id)); return true;
 }
 export function setTags(id, tags) { const items = load(), it = items.find(x => x.id === id); if (!it) return null; it.tags = tagList(tags); it.tagged = 'user'; save(items); return it; }

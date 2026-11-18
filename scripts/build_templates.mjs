@@ -12,6 +12,7 @@
 // (H.264, no audio, ≤ 400 KB) and a still at tpl.preview.still to templates/previews/<id>.jpg (≤ 60 KB).
 // Media referenced as media/<file> resolve to the footage project's media/ first, then examples/media/ (sample photos).
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -63,7 +64,7 @@ for (const e of fs.readdirSync(FOOT)) if (e !== 'media') linkPath(path.join(FOOT
 fs.mkdirSync(path.join(tmp, 'media'));
 for (const dir of [path.join(SK, 'examples', 'media'), path.join(FOOT, 'media')]) {
   if (!fs.existsSync(dir)) continue;
-  for (const e of fs.readdirSync(dir)) { const d = path.join(tmp, 'media', e); fs.rmSync(d, { force: true, recursive: false }); linkPath(path.join(dir, e), d); }
+  for (const e of fs.readdirSync(dir)) { const d = path.join(tmp, 'media', e); rmSync(d, { force: true, recursive: false }); linkPath(path.join(dir, e), d); }
 }
 const captions = typeof base.captions === 'string' ? JSON.parse(fs.readFileSync(path.join(FOOT, base.captions), 'utf8')) : (base.captions || []);
 const frameDir = path.join(FOOT, path.dirname(base.aroll.frames));
@@ -132,13 +133,13 @@ for (const { tpl } of todo) {
     if (fs.statSync(out).size <= MAX_MP4 || crf >= 40) break;
     crf += 2;
   }
-  fs.rmSync(fdir, { recursive: true, force: true });
+  rmSync(fdir, { recursive: true, force: true });
   const r = { id: tpl.id, scenes: applied.scenes, mp4: Math.round(fs.statSync(out).size / 1024) + 'KB', crf, jpg: Math.round(jpg.length / 1024) + 'KB', sec: ((Date.now() - t0) / 1000).toFixed(0), errs: [...new Set(errs)] };
   report.push(r);
   console.log(`${r.id.padEnd(28)} scenes=${r.scenes} mp4=${r.mp4} (crf ${crf}) jpg=${r.jpg} ${r.sec}s${r.errs.length ? '  ERR ' + r.errs.join(' | ') : ''}`);
 }
 await browser.close();
-if (!flag('--keep')) fs.rmSync(tmp, { recursive: true, force: true }); else console.log('temp project kept:', tmp);
+if (!flag('--keep')) rmSync(tmp, { recursive: true, force: true }); else console.log('temp project kept:', tmp);
 const bad = report.filter(r => r.errs.length);
 console.log(`\n${report.length} template(s) built, ${bad.length} with errors.`);
 process.exit(bad.length ? 2 : 0);

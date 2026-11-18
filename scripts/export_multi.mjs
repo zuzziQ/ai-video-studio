@@ -6,6 +6,7 @@
 //   9:16 source -> 1:1        : square crop that keeps the face and, when both fit, the caption zone (~74% height).
 //   9:16 source -> 16:9       : the whole vertical video centred over a blurred, zoomed copy of itself (nothing cropped).
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -60,13 +61,13 @@ export async function deriveAspects(src, aspects, opts = {}) {
     step('Dò mặt trên bản đã xuất (để cắt khung bám mặt)');
     const tj = path.join(outDir, `.${base}_face.json`);
     await run(py, ['-I', '-X', 'utf8', path.join(SKILL, 'scripts/face_track.py'), src, '--fps', '5', '--out', tj]);
-    keys = JSON.parse(fs.readFileSync(tj, 'utf8')).keys; fs.rmSync(tj, { force: true });
+    keys = JSON.parse(fs.readFileSync(tj, 'utf8')).keys; rmSync(tj, { force: true });
     if (!keys.length) keys = [{ t: 0, ox: 50, oy: 42 }];
   }
   for (const [n, a] of todo.entries()) {
     const out = path.join(outDir, `${base}_${a.replace(':', 'x')}.mp4`);
     step(`Tạo bản ${a} (${n + 1}/${todo.length})`);
-    fs.rmSync(out, { force: true }); // có thể đã liên kết cứng sang Thanh pham/ (S12 M100): ffmpeg -y sẽ ghi đè tại chỗ
+    rmSync(out, { force: true }); // có thể đã liên kết cứng sang Thanh pham/ (S12 M100): ffmpeg -y sẽ ghi đè tại chỗ
     let vf, ow, oh;
     if (vert && a === '16:9') {
       oh = even(W); ow = even(oh * 16 / 9); // keep the short side (1080x1920 -> 1920x1080)
@@ -92,7 +93,7 @@ export async function deriveAspects(src, aspects, opts = {}) {
     await run('ffmpeg', ['-v', 'error', '-y', '-i', src, '-filter_complex', vf, '-map', '[v]', '-map', '0:a?', ...venc, '-c:a', 'copy', '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', out], l => {
       const m = /out_time_ms=(\d+)/.exec(l); if (m) prog((n + Math.min(1, +m[1] / 1e6 / dur)) / todo.length);
     });
-    fs.rmSync(path.join(outDir, `.${base}_${a.replace(':', 'x')}.cmd`), { force: true });
+    rmSync(path.join(outDir, `.${base}_${a.replace(':', 'x')}.cmd`), { force: true });
     res.push({ aspect: a, out, w: ow, h: oh, note: NOTES[`${native}>${a}`] });
   }
   return { native, outs: res };

@@ -2,6 +2,7 @@
 // chuyển một lần từ profiles.json (giữ file cũ), cộng "Học từ chỉnh sửa". Spec: references/autopilot.md. CLI:
 //   node scripts/profile.mjs list | show <id> | default <id> | learn <project_dir> | reset-learned <id>
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -56,7 +57,7 @@ function writeAtomic(f, obj) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const tmp = `${f}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(obj, null, 1));
-  try { retryBusy(() => fs.renameSync(tmp, f)); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  try { retryBusy(() => fs.renameSync(tmp, f)); } catch (e) { rmSync(tmp, { force: true }); throw e; }
 }
 // null = chưa có file. File hỏng thì ném lỗi: không coi là rỗng rồi ghi đè điều đã học (bài học queue.json, ai-video-studio-005).
 function readRaw() {

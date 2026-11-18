@@ -8,6 +8,7 @@
 //   hook lấy từ thư viện hook (scripts/hooks_lib.mjs), cổng đa dạng nguồn (M20) và ước tính (M23) in ra trước khi chạy.
 //   Mỗi bản ghi trục vào variants.json (variants[].axes) và timeline._variant.axes. Spec: references/variant-matrix.md.
 import fs from 'node:fs'; import path from 'node:path'; import { spawn } from 'node:child_process';
+import { rmSync } from './fs_rm.mjs';
 import { pathToFileURL } from 'node:url';
 import { readGate, gateText } from './export_gate.mjs';
 import { SKILL, PY, loadProject, saveProject, designOf, isBase, openEngine, engineInit, engineShot, askClaude, parseJson } from './ai_qc.mjs';
@@ -164,10 +165,10 @@ async function exportProject(dir, quality, onP, { workers = null, env = null } =
   }
   fs.mkdirSync(path.join(dir, 'out'), { recursive: true });
   const out = `out/${path.basename(dir)}.mp4`, tmp = path.join(dir, `.export_${process.pid}.json`);
-  fs.rmSync(path.join(dir, out), { force: true }); // bản cũ có thể đã liên kết cứng sang Thanh pham/ (M100): ffmpeg -y sẽ ghi đè tại chỗ
+  rmSync(path.join(dir, out), { force: true }); // bản cũ có thể đã liên kết cứng sang Thanh pham/ (M100): ffmpeg -y sẽ ghi đè tại chỗ
   fs.writeFileSync(tmp, JSON.stringify({ ...tl, width: vert ? W : H, height: vert ? H : W }));
   try { await run('node', [path.join(SKILL, 'scripts/render.mjs'), tmp, path.join(dir, out), ...(mix ? ['--audio', mix] : []), ...(workers ? ['--workers', String(workers)] : [])], dir, l => { const m = /([\d.]+)s \/ ([\d.]+)s/.exec(l); if (m) onP(+m[1] / +m[2]); }, env); }
-  finally { fs.rmSync(tmp, { force: true }); }
+  finally { rmSync(tmp, { force: true }); }
   return out;
 }
 
@@ -223,7 +224,7 @@ function newSibling(dir, i) {
   let dst = `${dir}_v${i + 1}`;
   if (fs.existsSync(dst)) {
     const prev = (() => { try { return JSON.parse(fs.readFileSync(path.join(dst, 'timeline.json'), 'utf8'))._variant?.base; } catch { return null; } })();
-    if (prev && path.resolve(prev) === dir) fs.rmSync(dst, { recursive: true, force: true });
+    if (prev && path.resolve(prev) === dir) rmSync(dst, { recursive: true, force: true });
     else { let k = 2; while (fs.existsSync(`${dir}_v${i + 1}_${k}`)) k++; dst = `${dir}_v${i + 1}_${k}`; }
   }
   // M54: clone APFS trên macOS, nơi khác liên kết cứng khung + video nguồn (chỉ đọc), chép thật phần còn lại (scripts/project_clone.mjs)

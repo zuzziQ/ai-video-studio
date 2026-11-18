@@ -1,6 +1,7 @@
 // Khoá file giữa các tiến trình cho các tệp JSON dùng chung (queue.json — M24, schedule.json — M40).
 // Tách nguyên văn từ scripts/queue.mjs để publish.mjs dùng chung; hành vi không đổi.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -27,12 +28,12 @@ export function withFileLock(lockFile, fn, { timeoutMs = 15000, staleMs = 30000 
     if (fd !== null) {
       const mine = JSON.stringify({ pid: process.pid, host: os.hostname(), t: Date.now(), tok: crypto.randomBytes(6).toString('hex') });
       try { fs.writeSync(fd, mine); } finally { fs.closeSync(fd); }
-      try { return fn(); } finally { try { if (lockText(lockFile) === mine) retryBusy(() => fs.rmSync(lockFile, { force: true })); } catch {} }
+      try { return fn(); } finally { try { if (lockText(lockFile) === mine) retryBusy(() => rmSync(lockFile, { force: true })); } catch {} }
     }
     let info = null, age = 0, raw = null;
     try { age = Date.now() - fs.statSync(lockFile).mtimeMs; raw = lockText(lockFile); info = JSON.parse(raw); } catch {}
     const dead = info?.pid && info.host === os.hostname() && info.pid !== process.pid && !alive(info.pid);
-    if (dead || age > staleMs) { try { if (lockText(lockFile) === raw) fs.rmSync(lockFile, { force: true }); } catch {} continue; }
+    if (dead || age > staleMs) { try { if (lockText(lockFile) === raw) rmSync(lockFile, { force: true }); } catch {} continue; }
     if (Date.now() - t0 > timeoutMs) throw new Error(`${path.basename(lockFile).replace(/\.lock$/, '')} đang bị khoá quá ${Math.round(timeoutMs / 1000)} s (${lockFile})`);
     sleepSync(Math.min(50, 2 + k * 2) + Math.random() * 5);
   }

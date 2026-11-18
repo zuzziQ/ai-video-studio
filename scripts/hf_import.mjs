@@ -6,6 +6,7 @@
 // then:  node scripts/thumbs.mjs <project>/timeline.json --only hf_sp,hf_so,…   (library thumbnails)
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { findChrome } from './platform.mjs';
@@ -100,7 +101,7 @@ async function importOne([name, group, label], tools) {
   const meta = JSON.parse(fs.readFileSync(path.join(dir, 'registry-item.json'), 'utf8'));
   const htmlName = fs.existsSync(path.join(dir, 'demo.html')) ? 'demo.html' : (meta.files || []).map(f => f.path).find(p => p.endsWith('.html'));
   const dst = path.join(OUT, name);
-  fs.rmSync(dst, { recursive: true, force: true });
+  rmSync(dst, { recursive: true, force: true });
   copyDir(dir, dst);
   await remoteAssets(meta, dst);
 
@@ -110,7 +111,7 @@ async function importOne([name, group, label], tools) {
   fs.writeFileSync(tmp, mount(fs.readFileSync(path.join(dir, htmlName), 'utf8'), dir).replace(/<script\b([^>]*)>/gi, (m, a) => /\stype\s*=/i.test(a) ? `<script${a.replace(/(\stype\s*=\s*["']?)/i, '$1x-hfoff-')}>` : `<script${OFF}${a}>`));
   const p0 = tools.raw;
   await p0.goto(pathToFileURL(tmp).href, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  fs.rmSync(tmp);
+  rmSync(tmp);
   const marked = await p0.evaluate(() => {
     const root = document.querySelector('[data-composition-id]') || document.body, idx = new Map(), texts = [];
     // demo scaffolding around a mounted sub-composition: static siblings hidden, ancestors see-through (script-made nodes untouched)
@@ -134,7 +135,7 @@ async function importOne([name, group, label], tools) {
   html = s > 0 ? html.slice(0, s) + '<script>window.__hfApply&&window.__hfApply()</script>' + html.slice(s) : html;
   fs.writeFileSync(path.join(dst, 'index.html'), html);
   localize(path.join(dst, 'index.html')); // CDN libraries → engine/hf/_lib
-  if (htmlName !== 'index.html') fs.rmSync(path.join(dst, htmlName), { force: true });
+  if (htmlName !== 'index.html') rmSync(path.join(dst, htmlName), { force: true });
 
   const W = meta.dimensions?.width || marked.w || 1920, H = meta.dimensions?.height || marked.h || 1080, dur = meta.duration || marked.dur || 5;
   // 2) play it: must have a GSAP timeline and draw something
@@ -188,7 +189,7 @@ await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () 
   for (let it; (it = queue.shift());) {
     const r = await importOne(it, tools).catch(e => ({ name: it[0], fail: String(e.message || e).slice(0, 160) }));
     if (r.ok) { cat[r.name] = r.ok; console.log(`ok   ${r.name} ${r.ok.layer} ${r.ok.w}x${r.ok.h} ${r.ok.dur}s vars:${r.ok.vars.length} texts:${r.ok.texts.length}${r.ok.errs ? ' ⚠ ' + r.ok.errs[0] : ''}`); }
-    else { fails.push(r); delete cat[r.name]; fs.rmSync(path.join(OUT, r.name), { recursive: true, force: true }); console.log(`FAIL ${r.name}: ${r.fail}${r.errs?.length ? ' · ' + r.errs[0] : ''}`); }
+    else { fails.push(r); delete cat[r.name]; rmSync(path.join(OUT, r.name), { recursive: true, force: true }); console.log(`FAIL ${r.name}: ${r.fail}${r.errs?.length ? ' · ' + r.errs[0] : ''}`); }
   }
 }));
 await browser.close();

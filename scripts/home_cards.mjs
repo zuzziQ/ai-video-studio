@@ -6,6 +6,7 @@
 //                     (work/frames, hoặc video đầu tiên trong timeline, hoặc work/aroll.mp4; chỉ file nằm trong thư mục dự án).
 //                     Lỗi thì ghi .studio/thumb.none để không thử lại mỗi lần mở trang chủ. Mỗi lúc chỉ chạy một ffmpeg.
 import fs from 'node:fs';
+import { rmSync } from './fs_rm.mjs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { workspaceOfProject } from './workspace.mjs';
@@ -92,7 +93,7 @@ async function makeThumb(dir, run) {
     ok = ok && mtime(tmp) > 0;
   }
   if (ok) fs.renameSync(tmp, out);
-  else { fs.rmSync(tmp, { force: true }); fs.writeFileSync(path.join(dir, NONE), new Date().toISOString()); }
+  else { rmSync(tmp, { force: true }); fs.writeFileSync(path.join(dir, NONE), new Date().toISOString()); }
   return ok;
 }
 /** Chờ hàng tạo ảnh chạy hết (dùng trong test). */
