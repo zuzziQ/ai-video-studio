@@ -34,7 +34,7 @@ function renderRail() {
 }
 $('#rail').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) openPanel(b.dataset.p); });
 function openPanel(p) {
-  if (document.body.classList.contains('expanded')) { document.body.classList.remove('expanded'); setTimeout(fit, 0); }
+  if (window.Studio?.layout?.get().focus) window.Studio.layout.set('focus', false); // S23 M161: mở panel thì thoát ⤢
   qOf[panel] = $('#search').value; panel = p; $('#search').value = qOf[p] || ''; query = $('#search').value;
   renderRail(); renderPanel();
   if (p === 'tpl' && !TEMPLATES) loadTemplates();

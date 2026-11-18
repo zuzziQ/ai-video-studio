@@ -132,7 +132,7 @@
     l.hidden = !(R && (R.before || R.split)); r.hidden = !(R && R.split && !R.before);
     l.textContent = R?.split && !R.before ? 'Trước' : 'Bản cũ';
   }
-  const expanded = () => document.body.classList.contains('expanded');
+  const expanded = () => !!S.layout?.get().focus; // S23 M161: nút ⤢ = Studio.layout 'focus'
   function toggleZoom() { const b = $('#expand'); if (!b || !R) return; b.click(); R.zoomed = expanded(); paintBar(); }
   function stageParts() {
     const sb = box(); if (!sb || $('#rvsplit')) return;

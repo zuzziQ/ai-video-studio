@@ -1191,7 +1191,7 @@ function renderTimeline() {
   rh += `<div class="endmark" data-dl="${dur * PPS}"></div>`;
   $('#ruler').innerHTML = rh; applyDyn($('#ruler'));
   let th = '', lh = '';
-  const label = (key, name, ic, h, tools = true) => `<div class="lrow ${key === 'video' ? 'main' : ''}" data-dh="${h}"><i class="ti ${ic}"></i><span>${name}</span>
+  const label = (key, name, ic, h, tools = true) => `<div class="lrow ${key === 'video' ? 'main' : ''}" data-lk="${key}" data-dh="${h}"><i class="ti ${ic}"></i><span>${name}</span>
     ${tools ? `<button class="lt ${TRK[key].hide ? 'on' : ''}" data-thide="${key}" title="Ẩn trên preview"><i class="ti ${TRK[key].hide ? 'ti-eye-off' : 'ti-eye'}"></i></button><button class="lt ${TRK[key].lock ? 'on' : ''}" data-tlock="${key}" title="Khoá track"><i class="ti ${TRK[key].lock ? 'ti-lock' : 'ti-lock-open'}"></i></button>` : ''}</div>`;
   for (const [key, name, ic] of TRACKS) {
     const lk = TRK[key]?.lock ? ' locked' : '', hd = TRK[key]?.hide ? ' hid' : '';
@@ -1371,9 +1371,15 @@ $('#tlinner').addEventListener('drop', e => {
 // resizable timeline height
 (() => {
   let rs = null;
-  $('#tlwrap').addEventListener('mousedown', e => { const r = $('#tlwrap').getBoundingClientRect(); if (e.clientY - r.top < 6) { rs = { y: e.clientY, h: r.height }; e.preventDefault(); } });
-  window.addEventListener('mousemove', e => { if (!rs) return; const h = clamp(rs.h - (e.clientY - rs.y), 180, innerHeight - 320); document.documentElement.style.setProperty('--tlh', h + 'px'); fit(); });
-  window.addEventListener('mouseup', () => (rs = null));
+  // S23 M161: kéo tự do (từ dải tua 40 px), thả thì Studio.layout bắt về mức gần nhất (dải tua / gọn / đầy đủ) và nhớ theo chế độ
+  $('#tlwrap').addEventListener('mousedown', e => { const r = $('#tlwrap').getBoundingClientRect(); if (e.clientY - r.top < 6) { rs = { y: e.clientY, h: r.height, last: r.height }; Studio.layout?.dragStart(); e.preventDefault(); } });
+  window.addEventListener('mousemove', e => {
+    if (!rs) return;
+    const h = rs.h - (e.clientY - rs.y);
+    if (Studio.layout) rs.last = Studio.layout.drag(h); else { rs.last = clamp(h, 180, innerHeight - 320); document.documentElement.style.setProperty('--tlh', rs.last + 'px'); }
+    fit();
+  });
+  window.addEventListener('mouseup', () => { if (rs) Studio.layout?.dragEnd(rs.last); rs = null; });
 })();
 
 // ---------- playback ----------
@@ -1456,10 +1462,9 @@ $('#safebtn').addEventListener('click', () => toggleOv('#safe', '#safebtn'));
 $('#facebtn').addEventListener('click', () => toggleOv('[id=face]', '#facebtn'));
 $('#safe').addEventListener('change', drawOverlay);
 $('[id=face]').addEventListener('change', drawOverlay);
+// S23 M161: nút ⤢ = Studio.layout 'focus' (ẩn thư viện + cột phải; features/76_layout.js vẽ lại nút và gọi fit)
 function toggleExpand() {
-  document.body.classList.toggle('expanded');
-  $('#expand').innerHTML = `<i class="ti ${document.body.classList.contains('expanded') ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}"></i>`;
-  $('#expand').title = document.body.classList.contains('expanded') ? 'Thu nhỏ preview' : 'Phóng to preview';
+  if (Studio.layout) return Studio.layout.set('focus', !Studio.layout.get().focus);
   setTimeout(fit, 0);
 }
 $('#expand').addEventListener('click', toggleExpand);
@@ -1480,7 +1485,7 @@ window.addEventListener('keydown', e => {
   const act = window.KeysCore?.actionOf(e); // S20 M141: chép / dán, thứ tự lớp, khoá, chọn tất cả, bảng phím tắt
   if (act && runKey(act, e)) return;
   if (e.key === ' ') { e.preventDefault(); return play(); }
-  if (e.key === 'Escape') { if (document.body.classList.contains('expanded')) return toggleExpand(); return select(null); }
+  if (e.key === 'Escape') { if (Studio.layout?.get().focus) return toggleExpand(); return select(null); }
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return removeSel(); }
   if (e.key.startsWith('Arrow') && !mod && window.KeysCore) { // S20 M141 (C19): dời khi vừa chọn trên khung, tua khi vừa bấm timeline; ⌥ luôn dời
     e.preventDefault();
@@ -1765,7 +1770,7 @@ document.addEventListener('click', e => { const t = e.target.closest?.('.tip'); 
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get PPS() { return PPS; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
-  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw,
+  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit,
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
