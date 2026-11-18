@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { askJSON, runLLM, LlmError } from './llm.mjs';
 import { safeFetch } from './net_guard.mjs';
 import { pyBin } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { INDUSTRIES } from './products.mjs';
 import { normalizeEntries, nameEntries } from './dict.mjs';
 import { phrase as shortPhrase } from './tpl_fit.mjs';
@@ -142,7 +143,7 @@ export async function renderPage(url, { fetchImpl, lookup, timeoutMs = 25_000, m
   const st = { status: 0, blocked: 0, requests: 0, mainError: '' }, deadline = Date.now() + timeoutMs;
   let browser = null, timer = null;
   const work = (async () => {
-    browser = await pptr.launch({ executablePath: exe, headless: /chrome-headless-shell/i.test(exe) ? 'shell' : true, pipe: true, timeout: 15_000,
+    browser = await launchChrome(pptr, { executablePath: exe, headless: /chrome-headless-shell/i.test(exe) ? 'shell' : true, pipe: true, timeout: 15_000,
       args: ['--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-background-networking', '--disable-component-update',
         '--disable-sync', '--disable-default-apps', '--mute-audio', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-features=DnsOverHttps',
         // lớp sau: request nào lọt interception (websocket, URL dạng IP không qua resolver) đi vào proxy chết, kể cả loopback

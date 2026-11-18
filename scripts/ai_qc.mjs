@@ -15,6 +15,7 @@ import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'
 import { spawn, execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin } from './platform.mjs';
+import { launchChrome } from './chrome_profile.mjs';
 import { runLLM, parseLooseJSON } from './llm.mjs';
 import { qcHash } from './export_gate.mjs';
 import { createRequire } from 'node:module';
@@ -123,7 +124,8 @@ const capText = c => (c.words || []).map(w => w.w).join(' ');
 export async function openEngine(dir, { scale = .75 } = {}) {
   const { default: puppeteer } = await import('puppeteer-core');
   if (!CHROME) throw new Error('Không tìm thấy Google Chrome (cần để render ảnh kiểm tra).');
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
+  // hồ sơ Chrome riêng, dọn có thử lại: thư mục tạm của puppeteer làm sập server bằng EBUSY trên Windows (scripts/chrome_profile.mjs)
+  const browser = await launchChrome(puppeteer, { executablePath: CHROME, headless: true,
     args: ['--allow-file-access-from-files', '--force-color-profile=srgb', '--hide-scrollbars', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
   const page = (await browser.pages())[0] || await browser.newPage();
   const E = { browser, page, dir, scale, failed: [], errors: [], curT: null };
