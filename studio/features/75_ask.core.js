@@ -6,6 +6,7 @@
 //                            (vd. "Giải thích lỗi") gửi đúng câu đó qua bộ định tuyến (vẫn chỉ gọi mô hình khi bấm, C23)
 //   checkPick(raw, scope)  → { action, params, reply, warnings }: việc lạ → 'answer'; tham số lọc theo bảng, ngoài biên bị kẹp / bỏ
 //   transitionsApply(tl, p, range) / changedSpan(a, b) → áp chuyển cảnh lên một bản timeline; khoảng thời gian đổi giữa hai bản
+//   logEntry / logPush / logParse  → S24 M171: lượt của luồng hỏi đáp (.studio/ask_log.json, 200 lượt, không lưu ảnh)
 // Bảng mục 5 của docs/plans/S22-che-do-va-hoi-claude.md. M154: việc của Chuẩn bị / Nguồn / Kiểm tra / Xuất và đăng gọi hàm sẵn có
 // của panel (75_ask.js runAction); kết quả qua Studio.review hoặc ô đề xuất Studio.assistPanel của panel đó.
 'use strict';
@@ -220,7 +221,92 @@
     return { t0: r2(Math.max(0, lo)), t1: r2(Math.max(lo, hi)) };
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
+  // ---------- S24 M171: luồng hỏi đáp của dự án (.studio/ask_log.json) ----------
+  // Mỗi lượt: { id, at, step, scope: { kind, chip, cid?, a?, b?, t0?, t1? }, src: ask|quick|run, q, kind: reply|error|card|info, text,
+  //   warnings?, card?: { title, sub, what?: [≤ 6 dòng "đã đổi gì"], t0, t1, state: open|accepted|dropped|undone|stale } }. Chỉ chữ và số: trường lạ bị bỏ, chuỗi có ảnh
+  //   (data:…;base64) bị xoá — không lưu ảnh. logPush giữ LOG_MAX lượt gần nhất, cùng id thì thay (đổi trạng thái thẻ).
+  const LOG_MAX = 200;
+  const LOG_KINDS = ['reply', 'error', 'card', 'info'], LOG_SRC = ['ask', 'quick', 'run'], CARD_ST = ['open', 'accepted', 'dropped', 'undone', 'stale'];
+  const SCOPE_KINDS = ['video', 'range', 'elem', 'clip', 'step'];
+  const noImg = s => (/data:[\w/+.-]+;base64,/i.test(s) ? '' : s);
+  const ls = (v, n) => noImg(str(v, n));
+  const fin = v => (v !== null && v !== '' && Number.isFinite(+v) ? r2(Math.max(0, Math.min(36000, +v))) : undefined);
+  function logEntry(raw) {
+    const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+    if (!o) return null;
+    const id = String(o.id || '').replace(/[^\w-]/g, '').slice(0, 32), kind = LOG_KINDS.includes(o.kind) ? o.kind : '';
+    if (!id || !kind) return null;
+    const s = o.scope && typeof o.scope === 'object' ? o.scope : {};
+    const scope = { kind: SCOPE_KINDS.includes(s.kind) ? s.kind : 'step', chip: ls(s.chip, 60) };
+    if (s.cid) scope.cid = String(s.cid).replace(/[^\w.:-]/g, '').slice(0, 40);
+    for (const k of ['a', 'b', 't0', 't1']) { const v = fin(s[k]); if (v !== undefined) scope[k] = v; }
+    const e = { id, at: Math.max(0, Math.round(+o.at || 0)), step: STEPS[o.step] ? o.step : 'build', scope, src: LOG_SRC.includes(o.src) ? o.src : 'ask',
+      q: ls(o.q, 300), kind, text: ls(o.text, 1200) };
+    const w = (Array.isArray(o.warnings) ? o.warnings : []).map(x => ls(x, 120)).filter(Boolean).slice(0, 3);
+    if (w.length) e.warnings = w;
+    if (kind === 'card') {
+      const c = o.card && typeof o.card === 'object' ? o.card : {};
+      e.card = { title: ls(c.title, 80) || 'Thay đổi', sub: ls(c.sub, 120), t0: fin(c.t0) ?? 0, t1: fin(c.t1) ?? 0, state: CARD_ST.includes(c.state) ? c.state : 'open' };
+      const what = (Array.isArray(c.what) ? c.what : []).map(x => ls(x, 60)).filter(Boolean).slice(0, 6);
+      if (what.length) e.card.what = what;
+    }
+    return e;
+  }
+  // Tóm tắt "đã đổi gì" giữa hai bản { TL, CAP } cho thẻ kết quả: cảnh thêm / sửa / bỏ theo loại, dòng phụ đề đổi, SFX / nhạc,
+  //   chỗ nối đổi chuyển cảnh. Cảnh cùng loại vừa mất vừa thêm tính là "sửa". Tối đa 6 dòng ngắn.
+  const SCENE_VI = { text: 'chữ', broll: 'b-roll', media: 'b-roll', media_card: 'thẻ ảnh', image: 'ảnh', video: 'video', lower_third: 'tên dưới' };
+  function changeSummary(a, b) {
+    const key = x => JSON.stringify(x, (k, v) => (k === '_orig' ? undefined : v));
+    const delta = (xa = [], xb = []) => {
+      const m = new Map();
+      for (const x of xa) m.set(key(x), (m.get(key(x)) || 0) + 1);
+      const add = [];
+      for (const x of xb) { const k = key(x), n = m.get(k) || 0; if (n) m.set(k, n - 1); else add.push(x); }
+      const rem = [];
+      for (const x of xa) { const k = key(x), n = m.get(k) || 0; if (n > 0) { rem.push(x); m.set(k, n - 1); } }
+      return { add, rem };
+    };
+    const out = [], lab = sc => SCENE_VI[sc?.type] || 'graphic';
+    const sc = delta(a?.TL?.scenes, b?.TL?.scenes), by = {};
+    for (const x of sc.add) (by[lab(x)] ||= [0, 0])[0]++;
+    for (const x of sc.rem) (by[lab(x)] ||= [0, 0])[1]++;
+    for (const [l, [ad, rm]] of Object.entries(by)) {
+      const ed = Math.min(ad, rm);
+      if (ad - ed) out.push(`+${ad - ed} ${l}`);
+      if (ed) out.push(`sửa ${ed} ${l}`);
+      if (rm - ed) out.push(`bỏ ${rm - ed} ${l}`);
+    }
+    const cap = delta(a?.CAP, b?.CAP), nc = Math.max(cap.add.length, cap.rem.length);
+    if (nc) out.push(`${nc} dòng phụ đề`);
+    for (const [k, l] of [['sfx', 'SFX'], ['music', 'nhạc nền']]) {
+      const d = delta(a?.TL?.audio?.[k], b?.TL?.audio?.[k]), ed = Math.min(d.add.length, d.rem.length);
+      if (d.add.length - ed) out.push(`+${d.add.length - ed} ${l}`);
+      if (ed) out.push(`sửa ${ed} ${l}`);
+      if (d.rem.length - ed) out.push(`bỏ ${d.rem.length - ed} ${l}`);
+    }
+    const ca = a?.TL?.clips || [], cb = b?.TL?.clips || [];
+    const nt = cb.filter((c, i) => i > 0 && key(c.transition) !== key(ca[i]?.transition)).length;
+    if (nt) out.push(`${nt} chỗ nối chuyển cảnh`);
+    return out.slice(0, 6);
+  }
+  function logPush(list, raw, max = LOG_MAX) {
+    const e = logEntry(raw), out = (Array.isArray(list) ? list : []).filter(x => x && x.id);
+    if (!e) return out.slice(-max);
+    const i = out.findIndex(x => x.id === e.id);
+    if (i >= 0) out[i] = e; else out.push(e);
+    return out.slice(-max);
+  }
+  // đọc file (chuỗi JSON hoặc đã parse; hỏng → rỗng): lọc từng lượt, bỏ lượt trùng id, giữ LOG_MAX lượt cuối
+  function logParse(v, max = LOG_MAX) {
+    let a = v;
+    if (typeof v === 'string') { try { a = JSON.parse(v); } catch { a = null; } }
+    if (a && !Array.isArray(a) && Array.isArray(a.items)) a = a.items;
+    if (!Array.isArray(a)) return [];
+    return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
+  }
+
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts,
+    logEntry, logPush, logParse, changeSummary }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

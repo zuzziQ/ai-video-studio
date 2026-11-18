@@ -12,6 +12,11 @@
 //   bỏ dòng dưới khung và cột cạnh khung của M163. #askbar giữ nguyên id (72_elem_ai.js vẽ bên trong), không dời #insp / #rvbar
 //   nữa: thanh Nhận / Bỏ của Studio.review luôn ngay dưới khung (place()). Phím / và nút ✦ (#askbtn, thanh nút phát) mở tab
 //   Claude (bỏ ⤢ / mở cột phải đang gấp qua Studio.layout.revealRight) rồi đặt con trỏ vào ô hỏi.
+// S24 M171: tab là một luồng hỏi đáp của dự án — mỗi lượt (câu hỏi / gợi ý nhanh / việc giao từ nơi khác) thành một mục xếp theo
+//   thời gian, cuộn được, lưu .studio/ask_log.json qua /api/ask/log (AskCore.logPush: 200 lượt, không lưu ảnh). Kết quả sửa video là
+//   thẻ có nút Xem: mở lại Studio.review (thanh Nhận / Bỏ #rvbar vẫn dưới khung); thẻ nhớ Đã nhận / Đã bỏ; việc ghi đè cả timeline
+//   (AI dựng, Tự động, Sửa hết lỗi) không Xem lại được khi video đã đổi. Ô đề xuất (đang chạy, đề xuất element của 72_elem_ai)
+//   nằm ngay dưới luồng; ô hỏi + chip phạm vi + gợi ý nhanh dính đáy tab.
 'use strict';
 (() => {
   const S = window.Studio, AC = window.AskCore;
@@ -35,8 +40,9 @@
 #askbar .ask-chip button { border: 0; background: none; padding: 0; height: 18px; width: 18px; justify-content: center; color: rgb(var(--color-fg-subtle)); }
 #askbar .ask-chip button:hover { color: rgb(var(--color-fg)); }
 #askbar input[data-ask-in] { flex: 1; min-width: 0; height: 30px; }
-#askbar .ask-quick { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-#askbar .ask-quick button { width: 100%; height: 30px; padding: 0 var(--space-2); justify-content: flex-start; font-size: var(--text-xs); border-radius: var(--radius-control); }
+#askbar .ask-quick { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
+#askbar .ask-quick:empty { display: none; }
+#askbar .ask-quick button { max-width: 100%; height: 26px; padding: 0 var(--space-2); font-size: var(--text-2xs); border-radius: var(--radius-pill); }
 #askbar .ask-out:empty { display: none; }
 #askbar .ask-out { display: flex; flex-direction: column; gap: var(--space-1); } /* cột phải cuộn cả tab: không giới hạn cao */
 #askbar .ask-st { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); }
@@ -56,12 +62,41 @@
 .cbar button.ask { color: rgb(var(--color-accent-text)); }
 #tlinner .ask-range { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; background: rgb(var(--color-accent-soft) / .18);
   border-left: 1px solid rgb(var(--color-accent)); border-right: 1px solid rgb(var(--color-accent)); }
-#tlinner .ask-range[hidden] { display: none; }`;
+#tlinner .ask-range[hidden] { display: none; }
+/* S24 M171: luồng hỏi đáp — cuộn cùng cột phải (#right), ô đề xuất dưới luồng, ô hỏi + chip + gợi ý nhanh dính đáy cột; câu hỏi bên phải */
+#insp[data-rtab="claude"] { display: flex; flex-direction: column; min-height: calc(100% - var(--rtabs-h)); }
+#insp[data-rtab="claude"] > #askbar { flex: 1; padding-bottom: 0; }
+#askbar .ask-thread { flex: 1; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding: var(--space-1) 0; }
+#askbar .ask-empty { margin: auto 0; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); line-height: 1.45; color: rgb(var(--color-fg-muted)); }
+#askbar .ask-empty p { margin: 0; }
+#askbar .ask-msg { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+#askbar .ask-q { align-self: flex-end; max-width: 92%; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+#askbar .ask-q p { margin: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-control); background: rgb(var(--color-accent-soft) / .22); font-size: var(--text-xs); line-height: 1.4; color: rgb(var(--color-fg)); overflow-wrap: anywhere; }
+#askbar .ask-meta { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#askbar .ask-msg.pending .ask-q p { opacity: .8; }
+#askbar .ask-reply.info { color: rgb(var(--color-fg-muted)); }
+#askbar .ask-reply.info .ti { color: rgb(var(--color-success-text)); }
+#askbar .ask-card { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); background: rgb(var(--color-surface-raised)); min-width: 0; }
+#askbar .ask-card .ttl { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--text-xs); }
+#askbar .ask-card .ttl .ti { color: rgb(var(--color-accent-text)); }
+#askbar .ask-card .ttl b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#askbar .ask-card .st { flex: none; font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); }
+#askbar .ask-card[data-st="accepted"] .st { color: rgb(var(--color-success-text)); }
+#askbar .ask-card[data-st="view"] { border-color: rgb(var(--color-accent)); }
+#askbar .ask-card[data-st="view"] .st { color: rgb(var(--color-accent-text)); }
+#askbar .ask-card .sub { font-size: var(--text-2xs); color: rgb(var(--color-fg-muted)); overflow-wrap: anywhere; }
+#askbar .ask-card .what { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+#askbar .ask-card .what li { padding: 0 var(--space-1); border-radius: var(--radius-xs); background: rgb(var(--color-surface-muted)); font-size: var(--text-2xs); color: rgb(var(--color-fg)); }
+#askbar .ask-comp { position: sticky; bottom: 0; z-index: 3; display: flex; flex-direction: column; gap: var(--space-2); margin: 0 calc(-1 * var(--space-3)); padding: var(--space-2) var(--space-3) var(--space-3);
+  background: rgb(var(--color-surface)); border-top: 1px solid rgb(var(--color-line)); }`;
   document.head.appendChild(css);
 
   // st: idle | running (đang hỏi bộ định tuyến) | working (đang chạy việc) | reply | error
   // acts: nút đi kèm câu trả lời [{ label, icon, run }] (vd. "Mở Lịch đăng", "Giao Claude sửa hết")
-  const AS = { st: 'idle', step: '', reply: '', err: '', errKind: '', warnings: [], acts: [], run: 0, range: null, sig: '' };
+  const AS = { st: 'idle', step: '', run: 0, range: null, sig: '' };
+  // M171: luồng của dự án. items = các lượt đã xong (AskCore.logEntry); turn = lượt đang chạy (chưa lưu); live: id → { spec, base,
+  //   dropped } của thẻ còn Xem được trong phiên này; acts: id → nút đi kèm câu trả lời (hàm, không lưu); viewing = thẻ đang mở xem
+  const TH = { items: [], turn: null, live: new Map(), acts: new Map(), viewing: '', h: '', n: 0, saveErr: false };
 
   // ---------- phạm vi ----------
   const step = () => S.workflow?.step || 'build';
@@ -80,11 +115,13 @@
   // ---------- thanh ----------
   const bar = document.createElement('div');
   bar.id = 'askbar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Hỏi Claude');
-  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div><div class="ask-row"><span class="ask-chip" title="Phạm vi đang hỏi"></span>
+  bar.innerHTML = `<div class="ask-head"><i class="ti ti-sparkles" aria-hidden="true"></i><b>Claude</b><span>làm thay, bạn duyệt</span></div>
+    <div class="ask-thread" role="log" aria-label="Hỏi đáp với Claude"></div><div class="ask-out" aria-live="polite"></div>
+    <div class="ask-comp"><div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-row"><span class="ask-chip" title="Phạm vi đang hỏi"></span>
     <input data-ask-in type="text" maxlength="300" placeholder="Hỏi Claude…  ( / )" aria-label="Hỏi Claude">
-    <button class="primary" data-ask="send" title="Gửi (Enter)" aria-label="Gửi"><i class="ti ti-send"></i></button></div>
-    <div class="ask-quick" role="group" aria-label="Gợi ý nhanh"></div><div class="ask-out" aria-live="polite"></div>`;
-  const inp = bar.querySelector('[data-ask-in]'), chipEl = bar.querySelector('.ask-chip'), quickEl = bar.querySelector('.ask-quick'), outEl = bar.querySelector('.ask-out');
+    <button class="primary" data-ask="send" title="Gửi (Enter)" aria-label="Gửi"><i class="ti ti-send"></i></button></div></div>`;
+  const inp = bar.querySelector('[data-ask-in]'), chipEl = bar.querySelector('.ask-chip'), quickEl = bar.querySelector('.ask-quick'), outEl = bar.querySelector('.ask-out'),
+    threadEl = bar.querySelector('.ask-thread');
   // bước không có Hỏi Claude (Cài đặt): tab hiện một dòng thay thanh
   const none = document.createElement('div'); none.className = 'ask-none'; none.hidden = true;
   none.textContent = 'Bước Cài đặt không có Hỏi Claude. Sang một bước khác để hỏi.';
@@ -112,15 +149,10 @@
     bar.querySelector('[data-ask="send"]').disabled = b;
   }
   const warnHtml = w => (w || []).length ? `<div class="ask-warn"><i class="ti ti-alert-triangle"></i> ${esc(w.slice(0, 3).join('; '))}</div>` : '';
+  // ô đề xuất dưới luồng: việc đang chạy (+ Huỷ), hoặc đề xuất element của 72_elem_ai (cũ → mới, 3 biến thể, Nhận / Bỏ)
   function outHtml(sc) {
     if (AS.st === 'running' || AS.st === 'working') return `<div class="ask-st" role="status"><i class="ti ti-loader-2"></i><span class="ask-step">${esc(AS.step || 'Đang chạy…')}</span></div>
       ${AS.st === 'running' ? '<div class="acts"><button data-ask="cancel"><i class="ti ti-x"></i> Huỷ</button></div>' : ''}`;
-    if (AS.st === 'error') {
-      const setup = ['missing', 'login', 'quota', 'model', 'exit'].includes(AS.errKind);
-      return `<div class="ask-err" role="alert"><i class="ti ti-alert-circle"></i> ${esc(AS.err || 'Có lỗi')}</div><div class="acts">${setup ? '<button data-ask="engines"><i class="ti ti-cpu"></i> Mở Mô hình & giọng</button>' : ''}<button data-ask="dismiss">Đóng</button></div>`;
-    }
-    if (AS.st === 'reply') return `<div class="ask-reply"><i class="ti ti-message-circle"></i><p>${esc(AS.reply)}</p><button class="ghost icon" data-ask="dismiss" title="Đóng" aria-label="Đóng"><i class="ti ti-x"></i></button></div>${warnHtml(AS.warnings)}
-      ${AS.acts.length ? `<div class="acts">${AS.acts.map((a, i) => `<button data-askact="${i}"><i class="ti ${a.icon || 'ti-arrow-right'}"></i> ${esc(a.label)}</button>`).join('')}</div>` : ''}`;
     if (elemShown(sc)) return S.elemAi.html();
     return '';
   }
@@ -131,14 +163,133 @@
     paintScope(sc);
     const h = outHtml(sc);
     if (force || h !== outEl.dataset.h) { outEl.innerHTML = h; outEl.dataset.h = h; }
+    paintThread(force);
     paintRange();
+  }
+
+  // ---------- M171: luồng hỏi đáp ----------
+  const hhmm = at => { const d = new Date(at), p = n => String(n).padStart(2, '0'), now = new Date();
+    return `${d.toDateString() === now.toDateString() ? '' : `${p(d.getDate())}/${p(d.getMonth() + 1)} `}${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const SCOPE_ICON = { video: 'ti-movie', range: 'ti-arrows-horizontal', elem: 'ti-pointer', clip: 'ti-movie', step: 'ti-route' };
+  const CARD_LABEL = { open: 'Chưa nhận', accepted: 'Đã nhận', dropped: 'Đã bỏ', undone: 'Đã hoàn tác', stale: 'Video đã đổi' };
+  const spanTxt = c => (c.t1 > c.t0 ? `${c.sub ? ' · ' : ''}${AC.stamp(c.t0)}–${AC.stamp(c.t1)}` : '');
+  function qHtml(e) {
+    const meta = `<span class="ask-meta"><i class="ti ${SCOPE_ICON[e.scope?.kind] || 'ti-route'}"></i>${esc(e.scope?.chip || '')}${e.at ? ` · ${hhmm(e.at)}` : ''}</span>`;
+    return `<div class="ask-q">${meta}${e.q ? `<p>${esc(e.q)}</p>` : ''}</div>`;
+  }
+  // lượt về một element / clip: nút mở lại đúng mục đó ở tab Thuộc tính để xem giá trị thật sau khi Nhận
+  const propsBtn = e => ((e.scope?.kind === 'elem' || e.scope?.kind === 'clip') && e.scope.cid && e.kind !== 'error'
+    ? `<button class="ghost" data-askprops="${esc(e.scope.cid)}" title="Chọn lại mục này và mở tab Thuộc tính"><i class="ti ti-adjustments-horizontal"></i> Xem ở Thuộc tính</button>` : '');
+  function aHtml(e) {
+    const acts = TH.acts.get(e.id) || [], pb = propsBtn(e);
+    const actsHtml = acts.length || pb ? `<div class="acts">${acts.map((a, i) => `<button data-askact="${e.id}:${i}"><i class="ti ${a.icon || 'ti-arrow-right'}"></i> ${esc(a.label)}</button>`).join('')}${pb}</div>` : '';
+    if (e.kind === 'card') {
+      const c = e.card, viewing = TH.viewing === e.id && S.review?.active, L = TH.live.get(e.id);
+      const can = !!L && !L.after && (c.state === 'open' || c.state === 'dropped' || c.state === 'undone');
+      // Hoàn tác = ⌘Z / nút ↶ của thanh trên, chỉ khi bước hoàn tác trên cùng đúng là lần Nhận này (timeline chưa đổi thêm)
+      const undo = !!L?.after && c.state === 'accepted' && snap() === L.after;
+      const st = viewing ? 'Đang xem' : CARD_LABEL[c.state] || '';
+      return `<div class="ask-card" data-st="${viewing ? 'view' : c.state}"><div class="ttl"><i class="ti ti-movie"></i><b>${esc(c.title)}</b><span class="st">${esc(st)}</span></div>
+        ${c.sub || c.t1 > c.t0 ? `<div class="sub">${esc(c.sub)}${spanTxt(c)}</div>` : ''}
+        ${c.what?.length ? `<ul class="what" aria-label="Đã đổi">${c.what.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+        ${(can && !viewing) || undo ? `<div class="acts">${can && !viewing ? `<button data-askview="${e.id}"><i class="ti ti-eye"></i> Xem</button>` : ''}${undo ? `<button data-askundo="${e.id}" title="Hoàn tác lần Nhận này (⌘Z)"><i class="ti ti-arrow-back-up"></i> Hoàn tác</button>` : ''}</div>` : ''}</div>${actsHtml}`;
+    }
+    if (e.kind === 'error') return `<div class="ask-err" role="alert"><i class="ti ti-alert-circle"></i> ${esc(e.text || 'Có lỗi')}</div>${actsHtml}`;
+    const icon = e.kind === 'info' ? 'ti-check' : 'ti-message-circle';
+    return `<div class="ask-reply${e.kind === 'info' ? ' info' : ''}"><i class="ti ${icon}"></i><p>${esc(e.text)}</p></div>${warnHtml(e.warnings)}${actsHtml}`;
+  }
+  function threadHtml() {
+    const rows = TH.items.map(e => `<div class="ask-msg" data-askid="${e.id}">${qHtml(e)}${aHtml(e)}</div>`);
+    if (TH.turn) rows.push(`<div class="ask-msg pending">${qHtml(TH.turn)}</div>`);
+    if (!rows.length) return `<div class="ask-empty"><p>Hỏi về cả video, một khoảng thời gian (Shift + kéo trên thước), element hay clip đang chọn, hoặc bấm một gợi ý bên dưới.</p>
+      <p>Claude chỉ chạy khi bạn gửi; thay đổi trên video luôn xem trước rồi mới Nhận.</p></div>`;
+    return rows.join('');
+  }
+  // vẽ lại khi luồng đổi; có lượt mới thì cuộn cột phải xuống cuối
+  function paintThread(force) {
+    const h = threadHtml(), n = TH.items.length + (TH.turn ? 1 : 0);
+    if (!force && h === TH.h) return;
+    threadEl.innerHTML = h; TH.h = h;
+    if (n !== TH.n) { TH.n = n; scrollEnd(); }
+  }
+  function scrollEnd() {
+    requestAnimationFrame(() => { const r = document.getElementById('right'); if (r && bar.isConnected && S.right?.tab === 'claude') r.scrollTop = r.scrollHeight; });
+  }
+  const newId = () => `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const scopeRec = sc => {
+    const o = { kind: sc?.kind || 'step', chip: sc?.chip || '' };
+    for (const k of ['cid', 'a', 'b', 't0', 't1']) if (sc?.[k] != null && sc[k] !== '') o[k] = sc[k];
+    return o;
+  };
+  // bắt đầu một lượt: câu hỏi hiện ngay trong luồng (chưa lưu)
+  function begin(sc, src, q) { TH.turn = { id: newId(), at: Date.now(), step: step(), scope: scopeRec(sc), src, q: String(q || '') }; paintThread(); }
+  // kết thúc lượt (hoặc một mục không có câu hỏi, vd. lời nhắc sau Sửa hết lỗi): lưu và vẽ; trả id
+  function finish(kind, o = {}) {
+    const t = TH.turn || { id: newId(), at: Date.now(), step: step(), scope: scopeRec(scope()), src: 'run', q: '' };
+    TH.turn = null;
+    const e = AC.logEntry({ ...t, kind, text: o.text || '', warnings: o.warnings, card: o.card });
+    if (!e) return '';
+    if (o.acts?.length) TH.acts.set(e.id, o.acts);
+    save(e);
+    return e.id;
+  }
+  function save(e) {
+    TH.items = AC.logPush(TH.items, e);
+    for (const id of TH.live.keys()) if (!TH.items.some(x => x.id === id)) TH.live.delete(id);
+    paintThread();
+    S.api('/api/ask/log', { entry: e }).then(r => { if (r?.error) throw new Error(r.error); TH.saveErr = false; }).catch(err => {
+      if (!TH.saveErr) { TH.saveErr = true; S.toast(`Chưa lưu được lịch sử hỏi đáp: ${err.message}`); }
+    });
+  }
+  function setCard(id, state) {
+    const e = TH.items.find(x => x.id === id);
+    if (!e?.card || e.card.state === state) return paintThread(true);
+    save({ ...e, card: { ...e.card, state } });
+  }
+  // Thẻ kết quả: spec = { title, sub?, what?, mode, items, pick?, drop?, strict?, accept? } (what = AskCore.changeSummary). strict: việc ghi đè cả timeline (bản mới chụp
+  //   lúc chạy) → chỉ Xem lại được khi timeline còn như lúc tạo thẻ. drop(): đóng mà không Nhận lần đầu (trả phần ngoài timeline).
+  function cardReview(spec) {
+    const its = spec.items || [];
+    if (!its.length) return;
+    const t0 = Math.min(...its.map(i => +i.t0 || 0)), t1 = Math.max(...its.map(i => +i.t1 || 0));
+    const sub = spec.sub ?? (its.length > 1 ? `${its.length} phương án` : its[0].sub || '');
+    const id = finish('card', { card: { title: spec.title, sub, what: spec.what, t0, t1, state: 'open' } });
+    TH.live.set(id, { spec, base: snap(), dropped: false });
+    view(id);
+  }
+  function view(id) {
+    const L = TH.live.get(id);
+    if (!L) return;
+    if (L.spec.strict && snap() !== L.base) { TH.live.delete(id); setCard(id, 'stale'); return S.toast('Video đã đổi từ lúc đó nên không xem lại được. Hỏi lại để có bản mới.'); }
+    if (S.review?.active) S.review.close('replaced');
+    TH.viewing = id;
+    let got = false;
+    S.review?.open({ owner: OWNER, title: L.spec.title, mode: L.spec.mode || 'list', items: L.spec.items, ...(L.spec.pick != null ? { pick: L.spec.pick } : {}),
+      onAccept: (its, n) => {
+        if (L.spec.accept) L.spec.accept(its, n); else S.toast(n ? `Đã nhận “${its[0].label}” · ⌘Z để hoàn tác` : 'Không áp được');
+        if (n) { got = true; L.after = snap(); setCard(id, 'accepted'); }
+      },
+      onClose: () => {
+        if (TH.viewing === id) TH.viewing = '';
+        if (!got) {
+          if (!L.dropped) { L.dropped = true; try { L.spec.drop?.(); } catch (e) { console.error(e); } }
+          setCard(id, 'dropped');
+        }
+        paintThread(true); check();
+      } });
+    paintThread(true);
+  }
+  function undoCard(id) {
+    const L = TH.live.get(id);
+    if (!L?.after || snap() !== L.after) { if (L) L.after = null; paintThread(true); return S.toast('Đã có thay đổi khác sau lần Nhận này: dùng ⌘Z hoặc Lịch sử.'); }
+    const u = document.getElementById('undo');
+    if (!u) return S.toast('Bấm ⌘Z để hoàn tác');
+    u.click(); L.after = null; setCard(id, 'undone'); check();
   }
   // Vẽ lại khi phạm vi đổi (chọn element, đổi bước, khoảng chọn); rẻ: so một chuỗi
   function check() {
     place();
     const sc = scope(), sig = JSON.stringify([sc?.kind, sc?.chip, sc?.cid, sc?.knobs, sc?.qc, step(), busy(), S.PPS, AS.range]);
-    // đổi bước: câu trả lời / lỗi của bước trước không còn đúng chỗ (vd. "Dán link trang bán…" khi đã sang Kiểm tra)
-    if (AS.at !== step()) { AS.at = step(); if (AS.st === 'reply' || AS.st === 'error') Object.assign(AS, { st: 'idle', reply: '', err: '', acts: [], warnings: [] }); }
     if (sig !== AS.sig) { AS.sig = sig; paint(); }
   }
   S._ov.push(check);
@@ -174,7 +325,16 @@
 
   // ---------- chạy việc ----------
   const snap = () => JSON.stringify({ TL: S.TL, CAP: S.CAP || [] });
-  const setOut = (st, o = {}) => { Object.assign(AS, { st, step: '', reply: '', err: '', errKind: '', warnings: [], acts: [] }, o); paint(true); check(); };
+  // st: running / working = ô đề xuất hiện tiến độ; reply / error / idle = xong lượt → một mục trong luồng (idle: o.note, vd. "Đã mở …")
+  const SETUP = ['missing', 'login', 'quota', 'model', 'exit'];
+  const openEngines = () => { const b = document.getElementById('eng-btn'); if (b) b.click(); else S.toast('Mở menu ⋯ → Mô hình & giọng'); };
+  function setOut(st, o = {}) {
+    AS.st = st === 'running' || st === 'working' ? st : 'idle'; AS.step = o.step || '';
+    if (st === 'reply') finish('reply', { text: o.reply, warnings: o.warnings, acts: o.acts });
+    else if (st === 'error') finish('error', { text: o.err || 'Có lỗi', acts: SETUP.includes(o.errKind) ? [{ label: 'Mở Mô hình & giọng', icon: 'ti-cpu', run: openEngines }] : [] });
+    else if (st === 'idle' && TH.turn) finish('info', { text: o.note || 'Đã giao việc.' });
+    paint(true); check();
+  }
   // Thay nội dung một bản timeline / phụ đề bằng bản mới (giữ nguyên đối tượng: review áp lên bản sao hoặc S.TL / S.CAP thật)
   function replaceIn(tl, cap, A) {
     const t = JSON.parse(JSON.stringify(A.TL)), c = JSON.parse(JSON.stringify(A.CAP));
@@ -184,11 +344,11 @@
   }
   // drop(): S23 M159 — đóng mà không Nhận (Bỏ, hoặc bị phiên xem lại khác thay) thì trả nốt phần ngoài timeline về như cũ
   //   (.studio/qc.json của Sửa hết lỗi, dòng tóm tắt của panel Tự động / AI dựng)
-  function openReview(title, sub, items, drop) {
-    S.review?.open({ owner: OWNER, title, mode: 'list', items,
-      onAccept: (its, n) => S.toast(n ? `Đã nhận “${its[0].label}” · ⌘Z để hoàn tác` : 'Không áp được'),
-      onClose: why => { if (why !== 'accepted') { try { drop?.(); } catch (e) { console.error(e); } } check(); } });
-    setOut('idle');
+  // M171: mở qua thẻ của luồng (Xem lại được); strict = bản mới thay cả timeline
+  function openReview(title, sub, items, drop, strict, what) {
+    AS.st = 'idle';
+    cardReview({ title, ...(sub ? { sub } : {}), mode: 'list', items, drop, strict, what });
+    paint(true); check();
   }
   // Việc chạy bằng hàm sẵn có ghi thẳng vào timeline (AI dựng, Tự động): chạy, chụp bản mới, trả timeline về như cũ (lưu lại bản cũ
   // vì job phía server đã ghi bản mới), rồi đưa bản mới qua Studio.review.
@@ -204,7 +364,7 @@
     S.TL = B.TL; S.CAP = B.CAP; S.changed(true);
     await S.saveNow();
     const span = AC.changedSpan(B, A) || { t0: 0, t1: Math.min(6, S.TL.duration || 6) };
-    openReview(title, '', [{ label: title, sub: res?.sub || '', t0: span.t0, t1: span.t1, apply: (tl, cap) => replaceIn(tl, cap, A) }], drop);
+    openReview(title, '', [{ label: title, sub: res?.sub || '', t0: span.t0, t1: span.t1, apply: (tl, cap) => replaceIn(tl, cap, A) }], drop, true, AC.changeSummary(B, A));
     then?.();
   }
   // Việc thuần (chuyển cảnh): áp trên bản sao để đếm, rồi mở xem lại
@@ -212,7 +372,8 @@
     const tl = JSON.parse(JSON.stringify(S.TL)), n = apply(tl);
     if (!n) return setOut('reply', { reply: `${title}: không có chỗ nào để đổi.` });
     const span = AC.changedSpan({ TL: S.TL, CAP: [] }, { TL: tl, CAP: [] }) || { t0, t1 }; // phát lặp đúng chỗ nối đổi đầu tiên → cuối
-    openReview(title, '', [{ label: title, sub: typeof n === 'number' ? `${n} chỗ nối` : '', t0: span.t0, t1: span.t1, apply: tl2 => !!apply(tl2) }]);
+    openReview(title, '', [{ label: title, sub: typeof n === 'number' ? `${n} chỗ nối` : '', t0: span.t0, t1: span.t1, apply: tl2 => !!apply(tl2) }], null, false,
+      AC.changeSummary({ TL: S.TL, CAP: [] }, { TL: tl, CAP: [] }));
   }
   const needCapQuiet = () => !(S.CAP || []).length;
   const needCap = () => (!(S.CAP || []).length ? (setOut('reply', { reply: 'Cần phụ đề trước: bước Nguồn → Lời thoại → Tạo phụ đề.' }), true) : false);
@@ -237,7 +398,7 @@
     let r; try { r = await fn(); } catch (e) { r = { error: e.message }; }
     if (r?.error) return setOut('error', { err: r.error });
     if (r?.need) return setOut('reply', { reply: r.need });
-    return where ? setOut('reply', { reply: where }) : setOut('idle');
+    return where ? setOut('reply', { reply: where }) : setOut('idle', { note: 'Đã giao việc: kết quả hiện ở panel vừa mở.' });
   }
   const speech = (t0, t1) => (S.CAP || []).flatMap(c => c.words || []).filter(w => w.s >= t0 && w.s < t1).map(w => w.w).join(' ').trim();
   // Hook mở đầu: Studio.assist('text', viết) theo lời thoại 15 s đầu → 3 câu thành 3 biến thể của Studio.review (chữ lớn 0–2,5 s)
@@ -258,10 +419,11 @@
     // chữ của engine không tự xuống dòng (nowrap): cỡ chữ co theo độ dài để vừa ~90% bề ngang khung
     const fit = text => Math.max(28, Math.min(tall ? 72 : 64, Math.floor((S.DW || 720) * 0.9 / (Math.max(1, [...text].length) * 0.56))));
     const scene = text => ({ type: 'text', t0: 0, t1, added: true, _ai: true, lines: [{ text, t: 0, y: tall ? 520 : 300, ...(tall ? {} : { x: 640 }), style: 'yellow', size: fit(text), anim: 'pop' }] });
-    S.review?.open({ owner: OWNER, title: 'Hook mở đầu', mode: 'variants', pick: 0,
+    AS.st = 'idle';
+    cardReview({ title: 'Hook mở đầu', sub: `${lines.length} câu, chọn một · chữ lớn`, mode: 'variants', pick: 0,
       items: lines.map(l => ({ label: l, sub: 'chữ lớn 0–2,5 s', t0: 0, t1, apply: tl => { (tl.scenes ||= []).push(scene(l)); return true; } })),
-      onAccept: (its, n) => S.toast(n ? `Đã thêm hook “${its[0].label}” · ⌘Z để hoàn tác` : 'Không áp được'), onClose: () => check() });
-    setOut('idle');
+      accept: (its, n) => S.toast(n ? `Đã thêm hook “${its[0].label}” · ⌘Z để hoàn tác` : 'Không áp được') });
+    paint(true); check();
   }
   // Phụ đề theo kịch bản đã lưu (19_script.js "Dùng kịch bản"): chạy lại qua /api/script rồi xem trước; chưa có kịch bản → mở ô Kịch bản
   async function matchScript() {
@@ -308,7 +470,7 @@
       case 'answer': return setOut('reply', { reply: pick.reply || 'Chưa có việc nào khớp.', warnings: pick.warnings });
       case 'elem_edit': case 'elem_variants': case 'elem_knobs': {
         if (!S.elemAi || !S.sel || S.sel.obj.cid !== sc.cid) return setOut('error', { err: 'Element đã bỏ chọn. Chọn lại rồi hỏi.' });
-        setOut('idle');
+        setOut('idle', { note: 'Đề xuất hiện ngay bên dưới: xem trước trên khung rồi Nhận hoặc Bỏ.' });
         return S.elemAi.go(pick.action === 'elem_edit' ? 'edit' : pick.action === 'elem_variants' ? 'variants' : 'knobs', p.ask);
       }
       case 'transitions': {
@@ -331,7 +493,8 @@
         return viaReview('AI dựng', () => S.ai.build({ extra: p.extra || '', density: p.density }), null, () => S.ai.forget?.());
       }
       case 'open_panel': {
-        setOut(pick.reply ? 'reply' : 'idle', { reply: pick.reply || '' });
+        const nm = AC.PANELS[sc.kind === 'clip' ? 'clip' : sc.step]?.[p.panel];
+        setOut(pick.reply ? 'reply' : 'idle', { reply: pick.reply || '', note: nm ? `Đã mở ${nm}.` : 'Đã mở công cụ.' });
         return S.workflow?.focus(p.panel);
       }
       // ---- M154 ----
@@ -353,10 +516,13 @@
   }
 
   // Câu tự do → bộ định tuyến (server), kiểm lại ở đây bằng đúng phạm vi đang hiện
-  async function send() {
-    const ask = inp.value.trim(), sc = scope();
+  // text: câu của gợi ý có `ask` (label = nhãn gợi ý hiện trong luồng); không có → chữ trong ô hỏi
+  async function send(text, label) {
+    const ask = (text || inp.value).trim(), sc = scope();
     if (!sc || busy()) return;
     if (!ask) { inp.focus(); return; }
+    begin(sc, label ? 'quick' : 'ask', label || ask);
+    if (!text) inp.value = '';
     setOut('running', { step: 'Đang gửi…' });
     const r = await S.api('/api/ask', { ask, step: step(), sel: selInfo(), range: AS.range, info: info() }).catch(e => ({ error: e.message }));
     if (!r.ok) return setOut('error', { err: r.error || 'Không gửi được' });
@@ -369,31 +535,39 @@
       if (r?.step && r.step !== AS.step) { AS.step = r.step; const s = outEl.querySelector('.ask-step'); if (s) s.textContent = r.step; }
       return setTimeout(() => poll(run, sc), 700);
     }
-    if (r.state !== 'done') return setOut(r.state === 'cancelled' ? 'idle' : 'error', { err: r.error, errKind: r.kind || '' });
+    if (r.state !== 'done') return setOut(r.state === 'cancelled' ? 'idle' : 'error', { err: r.error, errKind: r.kind || '', note: 'Đã huỷ.' });
     const now = scope();
     if (!now || now.kind !== sc.kind || (now.cid || '') !== (sc.cid || '')) return setOut('reply', { reply: 'Phạm vi đã đổi trong lúc chờ nên chưa làm gì. Hỏi lại nhé.' });
     const pick = AC.checkPick(r, sc); // kiểm lần hai bằng bảng việc của trình duyệt
-    inp.value = '';
     runAction(pick, sc);
   }
-  async function cancel() { await S.api('/api/ask/cancel', {}).catch(() => {}); AS.run++; setOut('idle'); }
+  async function cancel() { await S.api('/api/ask/cancel', {}).catch(() => {}); AS.run++; setOut('idle', { note: 'Đã huỷ.' }); }
 
   // ---------- sự kiện ----------
   bar.addEventListener('click', e => {
     const q = e.target.closest('[data-askq]');
     if (q && !q.disabled) {
-      const sc = scope(), it = AC.quickOf(sc)[+q.dataset.askq]; if (!it) return;
-      if (it.ask) { inp.value = it.ask; return send(); } // gợi ý là một câu hỏi (vd. Giải thích lỗi): qua bộ định tuyến như khi gõ
+      const sc = scope(), it = AC.quickOf(sc)[+q.dataset.askq]; if (!it || busy()) return;
+      if (it.ask) return send(it.ask, it.label); // gợi ý là một câu hỏi (vd. Giải thích lỗi): qua bộ định tuyến như khi gõ
+      begin(sc, 'quick', it.label);
       runAction({ action: it.action, params: it.params, reply: '' }, sc); return;
     }
     const ac = e.target.closest('[data-askact]');
-    if (ac) { const f = AS.acts[+ac.dataset.askact]?.run; setOut('idle'); f?.(); return; }
+    if (ac) { const [id, i] = ac.dataset.askact.split(':'), f = TH.acts.get(id)?.[+i]?.run; TH.acts.delete(id); paintThread(true); f?.(); return; }
+    const v = e.target.closest('[data-askview]');
+    if (v) return view(v.dataset.askview);
+    const u = e.target.closest('[data-askundo]');
+    if (u) return undoCard(u.dataset.askundo);
+    const pr = e.target.closest('[data-askprops]');
+    if (pr) {
+      const c = S.compByCid?.(pr.dataset.askprops);
+      if (!c) return S.toast('Mục này không còn trên timeline');
+      S.select?.(c, true); S.right?.show?.('props'); return;
+    }
     const a = e.target.closest('[data-ask]')?.dataset.ask; if (!a) return;
     if (a === 'send') return send();
     if (a === 'cancel') return cancel();
     if (a === 'unrange') return clearRange();
-    if (a === 'dismiss') return setOut('idle');
-    if (a === 'engines') { const b = document.getElementById('eng-btn'); if (b) b.click(); else S.toast('Mở menu ⋯ → Mô hình & giọng'); }
   });
   inp.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); send(); }
@@ -420,11 +594,15 @@
     const sc = AC.scopeOf({ step: st, qc: !!S.qc?.last });
     if (!sc || busy() || !AC.actionsOf(sc).some(a => a.id === action)) return false;
     check();
+    begin(sc, 'run', AC.quickOf(sc).find(q => q.action === action)?.label || action);
     runAction({ action, params: { ...params }, reply: '' }, sc);
     return true;
   }
   // M170: thân tab Claude. renderInspector gọi mỗi lần vẽ cột phải; chỉ gắn lại khi tab vừa mở (giữ chữ đang gõ và focus)
   S.right?.addTab?.('claude', el => { if (bar.parentNode !== el || none.parentNode !== el) el.replaceChildren(bar, none); paint(); });
-  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange, place, bar, input: inp };
+  S.ask = { open, run, refresh: () => paint(true), get range() { return AS.range; }, clearRange, place, bar, input: inp, get log() { return TH.items; } };
   requestAnimationFrame(() => paint(true));
+  // M171: lịch sử của dự án đang mở (mỗi trang một dự án). Lượt vừa xong trước khi tải về đứng sau (cùng id: bản ở đây thắng)
+  const loadLog = () => S.api('/api/ask/log').then(r => { TH.items = AC.logParse([...(r?.items || []), ...TH.items]); paintThread(true); }).catch(() => {});
+  if (S.onReady) S.onReady(loadLog); else loadLog();
 })();

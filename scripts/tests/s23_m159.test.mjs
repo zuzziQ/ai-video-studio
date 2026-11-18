@@ -72,7 +72,8 @@ test('job sửa chụp qc_prev.json trước khi chạy ai_qc, lần kiểm khô
 
 test('75_ask.js: Bỏ (đóng không Nhận) gọi hoàn trả của từng việc; 74_review.js ẩn khung chọn khi xem bản mới', () => {
   const a = read('studio/features/75_ask.js');
-  assert.match(a, /onClose: why => \{ if \(why !== 'accepted'\)/);
+  // S24 M171: đóng mà không Nhận (thẻ của luồng hỏi đáp) gọi drop() một lần
+  assert.match(a, /if \(!got\) \{\s+if \(!L\.dropped\) \{ L\.dropped = true; try \{ L\.spec\.drop\?\.\(\);/);
   assert.match(a, /\(\) => S\.qc\.revert\?\.\(\)\);/);
   assert.match(a, /S\.autofill\.forget\?\.\(\)/);
   assert.match(a, /S\.ai\.forget\?\.\(\)/);
