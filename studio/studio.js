@@ -10,6 +10,7 @@ let T = 0, playing = false, sel = null, comps = [], dirty = false, undoStack = [
 // S18 M129: gốc URL file của dự án trong tab này (/p/<mã tab>/ do server cấp; chưa nạp thì /project/ = dự án mặc định)
 const PB = () => META?.base || '/project/';
 let multi = [], guides = null; // S17 M124: element chọn thêm bằng Shift (sel là element chính); đường gióng khi kéo
+let drag = null, hoverC = null, inEdit = null; // kéo trên preview (M124); S20 M139: element dưới chuột, ô gõ chữ tại chỗ đang mở
 let query = '', K = .5, win = null, needInit = true, busy = false, pending = false, SNAP = true;
 const ITAB = {};
 
@@ -146,6 +147,7 @@ async function draw() {
     const capped = p => Promise.race([p, new Promise(r => setTimeout(r, 1200))]);
     if (needInit) { needInit = false; await capped(win.init(previewTL())); }
     await capped(win.renderFrame(T));
+    if (inEdit) { const el = elFor(inEdit.c.obj); if (el) el.style.visibility = 'hidden'; } // S20 M139: chữ gốc ẩn khi đang gõ tại chỗ
   } catch (e) { console.error(e); }
   busy = false;
   drawOverlay();
@@ -180,14 +182,18 @@ function drawOverlay() {
   if ($('#safe').checked) h += `<div class="safe" ${box(SAFE.x * K, SAFE.y * K, SAFE.w * K, SAFE.h * K)}><span>vùng an toàn</span></div>`;
   if ($('[id=face]').checked) { const f = TL?.face || { x: 360, y: 520 }; const r = 120 * K; h += `<div class="facezone" ${box(f.x * K - r, f.y * K - r * 1.2, r * 2, r * 2.4)}></div>`; }
   const corners = '<i class="nw" data-h="nw"></i><i class="ne" data-h="ne"></i><i class="sw" data-h="sw"></i><i class="se" data-h="se"></i>';
+  // S20 M139: viền mảnh quanh element dưới chuột (chưa chọn)
+  if (hoverC && hoverC !== sel && !multi.includes(hoverC) && !drag && !inEdit) { const r = rectOf(hoverC.obj); if (r) h += `<div class="hoverbox" ${box(r.x * K - 2, r.y * K - 2, r.w * K + 4, r.h * K + 4)}></div>`; }
   for (const m of multi) { const r = rectOf(m.obj); if (r) h += `<div class="selbox multi" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}></div>`; }
   if (sel && sel.kind === 'clip' && !TRK.video.lock) {
     // S17 M124: khung cắt video chính — kéo để dời, tay nắm góc để zoom (đè bám mặt ở clip này)
     h += `<div class="selbox crop ${sel.obj.crop_manual ? 'on' : ''}" ${box(0, 0, DW * K, DH * K)}>${corners}<span>${sel.obj.crop_manual ? 'Khung cắt chỉnh tay' : 'Kéo để dời khung cắt · góc để zoom'}</span></div>`;
-  } else if (sel) {
+  } else if (sel && inEdit?.c !== sel) {
     const r = rectOf(sel.obj);
     const edges = !multi.length && window.StageCore?.canResize(sel.kind, sel.obj.type) ? '<i class="n" data-h="n"></i><i class="s" data-h="s"></i><i class="e" data-h="e"></i><i class="w" data-h="w"></i>' : '';
-    if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length ? '' : corners + edges}</div>`;
+    const rot = !multi.length && window.StageCore?.canRotate(sel.kind) ? '<b class="rotstem"></b><i class="rot" data-h="rot" title="Kéo để xoay · Shift: bắt 15°"></i>' : ''; // S20 M139
+    const tip = drag?.rot && drag.moved ? `<span class="rottip">${sel.obj.rot || 0}°</span>` : '';
+    if (r) h += `<div class="selbox" ${box(r.x * K - 3, r.y * K - 3, r.w * K + 6, r.h * K + 6)}>${multi.length ? '' : corners + edges + rot}${tip}</div>`;
   }
   if (guides) {
     for (const x of guides.gx || []) h += `<div class="guide v" ${box(x * K, 0, 0, DH * K)}></div>`;
@@ -704,7 +710,6 @@ const packs = () => (win && win.PACKS) || [];
 // ---------- stage interactions ----------
 // S17 M124: kéo dời (cả nhóm Shift), tay nắm góc phóng đều, tay nắm cạnh đổi riêng rộng / cao (cảnh StageCore.canResize),
 // đường gióng tới mép / giữa khung, vùng an toàn và element khác (Alt = tắt), khung cắt video chính khi đang chọn clip.
-let drag = null;
 const touchAll = list => { pushUndo(); for (const c of list) if (!c.obj._orig) c.obj._orig = JSON.parse(JSON.stringify(c.obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v))); };
 function otherRects(skip) {
   return comps.filter(c => c.kind !== 'clip' && c.kind !== 'sfx' && c.kind !== 'music' && !skip.includes(c) && T >= c.t0 && T < c.t1 && !c.obj.hidden)
@@ -735,7 +740,7 @@ $('#overlay').addEventListener('mousedown', e => {
   if (!handle && (!e.target.closest('.selbox') || onCrop || e.shiftKey)) {
     const c = pick(px, py);
     if (e.shiftKey && c && sel && sel.kind !== 'clip' && c.kind !== 'clip') { toggleMulti(c); e.preventDefault(); return; }
-    if (c) { if (c !== sel && !multi.includes(c)) select(c); }
+    if (c) { if (c !== sel && !multi.includes(c)) { select(c); revealOnTimeline(c); } }
     else if (!onCrop) { if (sel) select(null); }
   }
   if (!sel) return;
@@ -743,6 +748,11 @@ $('#overlay').addEventListener('mousedown', e => {
     if (TRK.video.lock || (!onCrop && !handle)) return;
     const o = sel.obj;
     drag = { crop: true, sx: e.clientX, sy: e.clientY, handle, z0: o.zoom || 1, ox0: o.ox ?? 50, oy0: o.oy ?? 45, ar: cropAr(o), moved: false };
+    e.preventDefault(); return;
+  }
+  if (handle === 'rot') { // S20 M139: tay nắm xoay quanh tâm hộp đang thấy
+    const r = rectOf(sel.obj); if (!r) return;
+    drag = { rot: true, sx: e.clientX, sy: e.clientY, c: { x: r.x + r.w / 2, y: r.y + r.h / 2 }, p0: { x: px, y: py }, rot0: sel.obj.rot || 0, moved: false };
     e.preventDefault(); return;
   }
   const group = [sel, ...multi].map(c => ({ c, p0: getPos(c) })).filter(g => g.p0);
@@ -778,6 +788,7 @@ window.addEventListener('mousemove', e => {
   const dx = (e.clientX - drag.sx) / K, dy = (e.clientY - drag.sy) / K;
   if (!drag.moved && Math.hypot(dx, dy) < 2) return;
   if (drag.crop) return cropMove(e, dx, dy);
+  if (drag.rot) return rotMove(e);
   if (!drag.moved) { touchAll(drag.group.map(g => g.c)); drag.moved = true; }
   const thr = 6 / K, snap = !e.altKey;
   guides = null;
@@ -809,7 +820,82 @@ window.addEventListener('mouseup', () => {
     if (bad.length) toast(bad[0].msg + (bad.length > 1 ? ` (+${bad.length - 1})` : ''));
   }, 180);
 });
-$('#overlay').addEventListener('dblclick', () => { const i = $('#insp [data-f="text"], #insp [data-f="captext"]'); if (i) { i.focus(); i.select?.(); } });
+function rotMove(e) {
+  const o = sel.obj, box = $('#stagebox').getBoundingClientRect();
+  if (!drag.moved) { touch(o, 'rot'); drag.moved = true; }
+  const d = StageCore.rotFromDrag(drag.c, drag.p0, { x: (e.clientX - box.left) / K, y: (e.clientY - box.top) / K }, drag.rot0, { step: e.shiftKey ? 15 : 0 });
+  if (d) o.rot = d; else delete o.rot;
+  needInit = true; build(); draw(); syncPosInputs();
+}
+// S20 M139: rê chuột trên preview → viền mảnh quanh element dưới chuột (một lần mỗi khung hình)
+let hoverRaf = 0;
+$('#overlay').addEventListener('mousemove', e => {
+  if (drag || e.buttons || playing || inEdit || hoverRaf) return;
+  const { clientX: x, clientY: y } = e;
+  hoverRaf = requestAnimationFrame(() => {
+    hoverRaf = 0;
+    const box = $('#stagebox').getBoundingClientRect(), c = pick((x - box.left) / K, (y - box.top) / K);
+    if (c !== hoverC) { hoverC = c; drawOverlay(); }
+  });
+});
+$('#overlay').addEventListener('mouseleave', () => { if (hoverC) { hoverC = null; drawOverlay(); } });
+// Chọn trên preview: cuộn timeline tới khối của element (nếu đang khuất) và nháy khối một lần.
+function revealOnTimeline(c) {
+  const sc = $('#tlscroll'), b = c && (c.kind === 'clip' ? $(`#tlinner .clip[data-ci="${c.idx}"]`) : $(`#tlinner .blk[data-cid="${c.obj.cid}"]`));
+  if (!sc || !b) return;
+  const v = sc.getBoundingClientRect(), r = b.getBoundingClientRect();
+  const { dx, dy } = StageCore.revealDelta({ l: v.left, r: v.right, t: v.top + RULER_H, b: v.bottom }, { l: r.left, r: r.right, t: r.top, b: r.bottom });
+  if (dx) sc.scrollLeft += dx; if (dy) sc.scrollTop += dy;
+  b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash');
+  setTimeout(() => b.classList.remove('flash'), 900);
+}
+// S20 M139: bấm đúp chữ trên preview → gõ ngay tại chỗ (ô gõ đè đúng hộp, cùng font / cỡ / màu). Enter hoặc bấm ra ngoài = xong,
+// Esc = huỷ; một bước hoàn tác. Phụ đề và element khác: đưa con trỏ vào ô chữ của inspector như trước.
+$('#overlay').addEventListener('dblclick', e => {
+  const box = $('#stagebox').getBoundingClientRect(), c = pick((e.clientX - box.left) / K, (e.clientY - box.top) / K) || sel;
+  if (c && StageCore.canEditText(c.kind, c.obj) && !TRK[c.track]?.lock) { if (c !== sel) select(c); return startInlineEdit(c); }
+  const i = $('#insp [data-f="text"], #insp [data-f="captext"]'); if (i) { i.focus(); i.select?.(); }
+});
+async function startInlineEdit(c) {
+  if (inEdit) finishInlineEdit(true);
+  if (playing) stop();
+  // hoạt ảnh vào (pop, slide, fly…) đang chạy thì hộp đo lệch: đứng sau lúc vào xong
+  if (T < c.t0 + .45 && c.t1 - c.t0 > .5) { setTime(Math.min(c.t0 + .45, c.t1 - .05)); await new Promise(r => setTimeout(r, 160)); }
+  const el = elFor(c.obj); if (!el) return toast('Chữ chưa hiện ở thời điểm này');
+  const rot = el.style.rotate; el.style.rotate = ''; // đo hộp chưa xoay; ô gõ xoay cùng góc
+  const r = rectOf(c.obj), cs = win.getComputedStyle(el), st = StageCore.editStyle(cs, K);
+  el.style.rotate = rot;
+  if (!r) return;
+  const ta = document.createElement('textarea');
+  ta.id = 'inedit'; ta.rows = 1; ta.spellcheck = false; ta.value = c.obj.text || ''; ta.setAttribute('aria-label', 'Sửa chữ');
+  Object.assign(ta.style, st, { textAlign: cs.textAlign === 'start' ? 'center' : cs.textAlign });
+  if (c.obj.rot) ta.style.rotate = `${c.obj.rot}deg`;
+  inEdit = { c, ta, orig: ta.value, cx: (r.x + r.w / 2) * K, cy: (r.y + r.h / 2) * K, minW: r.w * K, h: r.h * K };
+  $('#stagebox').appendChild(ta);
+  const fitBox = () => { // giãn theo chữ, giữ tâm hộp
+    ta.style.width = '0px'; const w = Math.max(inEdit.minW, ta.scrollWidth + 8 * K); ta.style.width = w + 'px';
+    const h = Math.max(inEdit.h, (parseFloat(ta.style.lineHeight) || 0) + 4); ta.style.height = h + 'px'; // một dòng (Enter = xong)
+    ta.style.left = (inEdit.cx - w / 2) + 'px'; ta.style.top = (inEdit.cy - h / 2) + 'px';
+  };
+  fitBox();
+  el.style.visibility = 'hidden'; hoverC = null; drawOverlay();
+  ta.addEventListener('input', () => { if (ta.value.includes('\n')) { ta.value = ta.value.replace(/\n/g, ''); return finishInlineEdit(); } fitBox(); });
+  ta.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finishInlineEdit(true); }
+    else if (ev.key === 'Enter') { ev.preventDefault(); finishInlineEdit(); }
+  });
+  ta.addEventListener('blur', () => finishInlineEdit());
+  ta.focus(); ta.select();
+}
+function finishInlineEdit(cancel = false) {
+  const ed = inEdit; if (!ed) return; inEdit = null;
+  const v = ed.ta.value.trim(); ed.ta.remove();
+  const el = elFor(ed.c.obj); if (el) el.style.visibility = '';
+  if (!cancel && v && v !== ed.orig) {
+    touch(ed.c.obj, 'text'); ed.c.obj.text = v; changed(true); // inspector, nhãn khối timeline, danh sách cùng đổi
+    toast('Đã sửa chữ · ⌘Z để hoàn tác');
+  } else { if (!cancel && !v) toast('Chữ trống: giữ nội dung cũ'); drawOverlay(); }
+}
 
 // ---------- timeline ----------
 let PPS = 60, lastTrackSig = '';
