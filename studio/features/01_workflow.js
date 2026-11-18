@@ -171,6 +171,9 @@
     for (const seg of document.querySelectorAll('[data-wf="lv"]'))
       seg.innerHTML = [['basic', 'Cơ bản', 'ti-user'], ['pro', 'Chuyên nghiệp', 'ti-user-star']].map(([k, l, ic]) => `<button data-lv="${k}" class="${level === k ? 'on' : ''}" aria-pressed="${level === k}" title="${esc(LV_TIP[k])}" aria-label="${l}"><i class="ti ${ic}"></i><span>${l}</span></button>`).join('');
   }
+  // Công tắc nằm trên thanh đầu từ S22 M151: vẽ ngay khi mở Studio. Trước đây chỉ vẽ trong setLevel / openMore, nên máy đã lưu
+  // avs.uiLevel (không gọi setLevel lúc mở) thấy công tắc rỗng 10 px tới khi mở menu ⋯.
+  renderLv();
   // quiet: đặt chế độ lúc mở Studio (C13), không báo toast
   function setLevel(v, quiet = false) {
     level = v === 'basic' ? 'basic' : 'pro'; store.set('uiLevel', level);

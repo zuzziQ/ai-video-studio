@@ -130,3 +130,9 @@ test('timeline ẩn (dải tua) thì vừa khung lại khi hiện, không kẹp 
   assert.match(st, /function zoomFit\(\) \{ const w = \$\('#tlscroll'\)\.clientWidth; if \(!w\) \{ ZFIT = true; return; \}/);
   assert.ok(st.includes('fit, zoomFit, get zoomPending()'), 'Studio.zoomFit / zoomPending cho 76_layout.js');
 });
+
+test('công tắc Cơ bản | Chuyên nghiệp vẽ ngay khi mở Studio (máy đã lưu avs.uiLevel)', () => {
+  const wf = read('studio/features/01_workflow.js');
+  const def = wf.indexOf('function renderLv()'), call = wf.indexOf('\n  renderLv();\n');
+  assert.ok(def > 0 && call > def, '01_workflow.js phải gọi renderLv() ở mức đầu (ngoài setLevel / openMore)');
+});
