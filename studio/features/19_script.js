@@ -3,7 +3,7 @@
 //   Studio.scriptCard.mount(el)   bước Nguồn: lưu vào dự án đang mở (.studio/script.json), phụ đề theo đúng chữ kịch bản
 //   Studio.scriptStage.mount(el)  panel Tự lái: giữ chữ cho video kế tiếp; .take() → id kịch bản chờ ('' khi để trống)
 // S27 M193: dấu dựng [MOOD] [NHẠC] [A-ROLL] [SFX] (+ "| nguồn" của B-ROLL, "| kiểu" của CHỮ); nút "Gợi ý dấu" (chỉ khi có Claude):
-// Claude chèn dấu vào chính chữ đó, hiện so sánh (dấu thêm tô màu), người dùng Nhận hết / Bỏ rồi mới Lưu. Bảng dựng: .studio/build_sheet.json.
+// Claude chèn dấu vào chính chữ đó, hiện so sánh (dấu thêm tô màu), người dùng Nhận hết / Bỏ rồi mới Lưu. Dấu dựng đọc vào .studio/build_sheet.json (nội bộ: AI dựng làm theo, không có bảng để sửa).
 // S27 M197: mở .xlsx / .csv (kịch bản theo đoạn giây): server tự nhận cột (cột lạ thành ghi chú), chỉ khi không nhận ra cột lời mới
 // hiện bảng chọn vai trò cột; hàng thành đoạn có [MỐC: …] [GHI CHÚ: …]. Chỉ dẫn không cần bước Nhận / Bỏ: AI dựng làm theo.
 (() => {
@@ -98,7 +98,7 @@
       ${A?.drift?.length > 3 ? li(true, 'ti-clock-exclamation', `… và ${A.drift.length - 3} đoạn lệch nữa`) : ''}
       ${segs.some(s => s.note?.length) ? li(false, 'ti-notes', `${segs.reduce((n, s) => n + (s.note?.length || 0), 0)} chỉ dẫn dựng: AI dựng làm theo`) : ''}
       ${segs.some(s => s.raw?.length) ? li(true, 'ti-alert-triangle', `Dấu chưa hiểu: ${esc(segs.flatMap(s => s.raw || []).slice(0, 3).join(' '))}`) : ''}
-      ${P.sheet ? li(!!P.sheet.error, 'ti-table', P.sheet.error ? `Bảng dựng lỗi: ${esc(P.sheet.error)}` : `Bảng dựng: ${P.sheet.rows} đoạn${P.sheet.miss ? ` · ${P.sheet.miss} ô chưa có nguồn` : ''} <button class="ai-lnk" data-sc="sheet">Mở bảng dựng</button>`) : ''}</ul>`;
+      ${P.sheet ? li(!!P.sheet.error || !!P.sheet.miss, 'ti-wand', P.sheet.error ? `Đọc dấu dựng lỗi: ${esc(P.sheet.error)}` : `AI dựng làm theo dấu của ${P.sheet.rows} đoạn${P.sheet.miss ? ` · ${P.sheet.miss} dấu chưa tìm được cảnh / tiếng` : ''}`) : ''}</ul>`;
   }
   // luôn vẽ vào phần tử đang gắn (P.el): Studio.reload() vẽ lại panel Nguồn giữa lúc lưu, phần tử cũ bị gỡ
   function renderCard() {
@@ -154,8 +154,6 @@
       } catch (e) { Studio.toast(e.message); }
       P.busy = false; renderCard();
     };
-    const sh = el.querySelector('[data-sc="sheet"]'); // S27 M194: panel Bảng dựng (23_buildsheet.js)
-    if (sh) sh.onclick = () => (Studio.buildSheet ? Studio.buildSheet.open() : Studio.workflow?.focus?.('buildsheet'));
     const clr = el.querySelector('[data-sc="clear"]');
     if (clr) clr.onclick = async () => {
       if (!confirm('Bỏ kịch bản của dự án này? Phụ đề quay về bản nhận dạng tự động (nếu còn bản sao lưu).')) return;
@@ -188,7 +186,7 @@
       P.busy = false; renderCard();
     };
   }
-  // tóm tắt bảng dựng cho dòng trạng thái (sửa từng ô ở panel Bảng dựng, studio/features/23_buildsheet.js, M194)
+  // tóm tắt dấu dựng cho dòng trạng thái (S27 M194: AI dựng tự làm theo dấu; ghi chú trên khối đã dựng ở 23_scriptnotes.js)
   function loadSheet() {
     const dir = P.dir;
     Studio.api('/api/script/sheet').then(r => {

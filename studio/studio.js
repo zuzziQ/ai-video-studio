@@ -565,7 +565,7 @@ function renderInspector() {
       <button class="icon" data-act="more" title="Lệnh khác" aria-label="Lệnh khác" aria-haspopup="menu"><i class="ti ti-dots"></i></button>
       <button class="icon" data-act="desel" title="Bỏ chọn (Esc)" aria-label="Bỏ chọn"><i class="ti ti-x"></i></button></div></div>
     ${secs.length > 1 ? `<nav class="isecbar" aria-label="Mục thuộc tính">${secs.map((s, i) => `<button data-secgo="${esc(s.key)}" class="${open[i] ? 'open' : ''}">${esc(s.label)}</button>`).join('')}</nav>` : ''}</div>
-    <div class="ibody">${askRow(c)}${multi.length && !clip ? alignBlock() : ''}${secs.map((s, i) => `<div class="isec ${open[i] ? 'open' : ''}" data-sec="${esc(s.key)}">
+    <div class="ibody">${askRow(c)}${Studio._itop.map(f => f(c) || '').join('')}${multi.length && !clip ? alignBlock() : ''}${secs.map((s, i) => `<div class="isec ${open[i] ? 'open' : ''}" data-sec="${esc(s.key)}">
       <button class="isec-h" data-sect="${esc(s.key)}" aria-expanded="${open[i]}"><i class="ti ${s.icon}"></i><span>${esc(s.label)}</span><i class="ti ti-chevron-down car"></i></button>
       ${open[i] ? `<div class="isec-b">${s.html}</div>` : ''}</div>`).join('')}${moreBtn}${clip ? '' : actions(c) + noteBlock(o)}</div>`;
   requestAnimationFrame(sectAfter);
@@ -1251,7 +1251,7 @@ function renderTimeline() {
     if (!list.length && !['cap', 'audio'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
     const n = lanes(list), h = Math.max(28, n * 24 + 5);
     th += `<div class="track${lk}${hd}" data-track="${key}" data-dh="${h}">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} ${c.obj.locked ? 'lockd' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
-      data-dl="${c.t0 * PPS}" data-dw="${Math.max(8, (c.t1 - c.t0) * PPS - 2)}" data-dt="${3 + c.lane * 24}" data-dbc="${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}">
+      data-dl="${c.t0 * PPS}" data-dw="${Math.max(8, (c.t1 - c.t0) * PPS - 2)}" data-dt="${3 + c.lane * 24}" data-dbc="${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}${esc(Studio._tip.map(f => f(c) || '').join(''))}">
       <span class="h l"></span>${c.obj.locked ? '<i class="ti ti-lock lk" title="Đã khoá"></i>' : ''}${c.obj.note ? '<span class="note"></span>' : ''}${c.kind === 'sfx' ? '<i class="ti ti-bell"></i>' : c.kind === 'music' ? '<i class="ti ti-music"></i>' : c.icon ? `<i class="ti ${c.icon}"></i>` : ''}${esc(c.label)}${Studio._blk.map(f => f(c, PPS)).join('')}<span class="h r"></span></div>`).join('') + '</div>';
     lh += label(key, name, ic, h);
   }
@@ -1847,7 +1847,7 @@ const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get PPS() { return PPS; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
   $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, newProject, openTemplates: openTemplatesFor, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
-  select, sect, typeName, compOf: obj => compOf(obj),
+  select, sect, openSect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
   FONTS, SWATCH, ANIM_LIST, fontOpt, setTimes: (c, t0, t1) => setTimes(c, t0, t1, false), rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
@@ -1861,6 +1861,7 @@ const Studio = window.Studio = {
   get comps() { return comps; }, trackLocked: c => !!TRK[c?.track]?.lock, revealOnTimeline: c => revealOnTimeline(c), pickAll: (x, y) => pickAll(x, y),
   addCompTab(key, label, fn, title, first) { if (!COMP_EXT[key]) { COMP_TABS[first ? 'unshift' : 'push']([key, label, title]); if (first) tab = key; } COMP_EXT[key] = fn; if (panel === 'comp') renderComps(); },
   _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
+  _tip: [], _itop: [], // S27 M194: _tip: fn(comp) -> chữ thêm vào tooltip khối timeline; _itop: fn(comp) -> HTML đầu Thuộc tính (dưới hàng Hỏi Claude)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
   // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … }, { step: 'build', level: 'basic' })
   // opts (optional, M82): step 'prep'|'source'|'build'|'check'|'ship'|'settings', level 'basic'|'pro' — read by features/01_workflow.js

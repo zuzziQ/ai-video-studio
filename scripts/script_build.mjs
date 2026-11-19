@@ -97,7 +97,7 @@ export async function pickBroll(q, want, src, taken = new Set()) {
   const [first, ...rest] = hits;
   const alts = rest.slice(0, 3).map(x => `${x.src}:${x.id}`);
   if (src.ai && !want && alts.length < 3) alts.push(`ai:${q}`);
-  return { q, src: first.src, pick: first.id, alts };
+  return { q, src: first.src, pick: first.id, alts, ...(want ? { want } : {}) }; // want: nguồn ép từ dấu (AI dựng không đổi sang nguồn khác)
 }
 
 // ---------- bảng dựng ----------
@@ -282,37 +282,8 @@ ${String(text).slice(0, 20000)}
 """`;
 }
 
-// ---------- S27 M194: sửa ô, áp bảng lên timeline (mục 2.3, 2.4) ----------
-export const CELL_ONE = ['mood', 'music', 'aroll'], CELL_LIST = ['broll', 'sfx', 'screen'];
+// ---------- S27 M194: AI dựng theo kịch bản (mục 2.3, 2.4): bảng nội bộ → kế hoạch, ghi chú _script trên mục đã dựng ----------
 const SCREEN_STY = { so: ['yellow', 120], gia: ['yellow', 110], tieude: ['white', 96], trichdan: ['white', 60], danhsach: ['white', 64] };
-/**
- * Sửa một ô của bảng (panel Bảng dựng): ô sửa tay thành nguồn `user` (lần dựng lại giữ). Hàm thuần, sửa `sheet` tại chỗ.
- * field mood|music|aroll: value = object ô ({v} / {frame, take, off}); null = về luật (`auto`, giá trị rỗng).
- * field broll|sfx|screen: i = chỉ số mục (bỏ trống = thêm mục mới), value null = bỏ mục đó. field lock: value true/false.
- * → hàng đã sửa, hoặc { error }
- */
-export function editCell(sheet, seg, field, value, i = null) {
-  const row = (sheet?.rows || []).find(r => r.seg === seg);
-  if (!row) return { error: 'Không có hàng này trong bảng dựng' };
-  if (field === 'lock') { row.lock = !!value; return row; }
-  if (row.lock) return { error: 'Hàng đang khoá: mở khoá rồi sửa' };
-  const clean = v => Object.fromEntries(Object.entries(v || {}).filter(([k, x]) => !['from', 'inherit'].includes(k) && x !== undefined));
-  if (CELL_ONE.includes(field)) {
-    if (value == null) row[field] = field === 'aroll' ? { frame: null, take: null, from: 'auto' } : { v: field === 'music' ? 'bed' : null, from: 'auto' };
-    else if (typeof value !== 'object') return { error: 'Giá trị ô không hợp lệ' };
-    else row[field] = { ...clean(value), from: 'user' };
-    return row;
-  }
-  if (!CELL_LIST.includes(field)) return { error: 'Cột lạ' };
-  const list = Array.isArray(row[field]) ? row[field] : (row[field] = []);
-  if (i != null && !(Number.isInteger(i) && i >= 0 && i < list.length)) return { error: 'Mục không có' };
-  if (value == null) { if (i != null) list.splice(i, 1); return row; }
-  if (typeof value !== 'object') return { error: 'Giá trị ô không hợp lệ' };
-  const v = clean(value);
-  if (i == null) { if (list.length >= 4) return { error: 'Tối đa 4 mục mỗi ô' }; list.push({ ...v, from: 'user' }); }
-  else list[i] = { ...v, from: 'user' }; // thay hẳn: trường của nguồn cũ (miss, pending, alts…) không sót lại
-  return row;
-}
 const chosen = c => !!c && c.from !== 'auto';
 /** Mood chốt của cả bảng (ô mark / user / claude): mood phủ nhiều giây nhất; null khi chỉ có ô luật. */
 export function sheetMood(sheet) {
@@ -320,58 +291,104 @@ export function sheetMood(sheet) {
   for (const r of sheet?.rows || []) if (chosen(r.mood) && r.mood.v && r.t0 != null && r.spoken !== false) sec.set(r.mood.v, (sec.get(r.mood.v) || 0) + Math.max(.1, (r.t1 ?? r.t0) - r.t0));
   return [...sec].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 }
-/** Hàng nào đã có mục trên timeline (cảnh / SFX mang `_sheet`). → Set<seg> */
-export const appliedSegs = tl => new Set([...(tl?.scenes || []), ...(tl?.audio?.sfx || [])].filter(x => Number.isInteger(x?._sheet)).map(x => x._sheet));
+/** Hàng mà bảng tự dựng (có CHỮ, hoặc B-ROLL đã có nguồn): AI dựng không đặt graphic chồng giờ các hàng này. → Set<seg> */
+export const builtSegs = sheet => new Set((sheet?.rows || []).filter(r => r.t0 != null && r.spoken !== false
+  && ((r.screen || []).some(x => String(x?.text || '').trim()) || (r.broll || []).some(b => b && (b.pick || b.src === 'ai') && !b.miss))).map(r => r.seg));
 /** Khoá media của một ô B-roll ("kho:<rel>", "lib:<id>", "stock:<url>", "ai:<mô tả>"); null với b-roll động / ô trống. */
 export const mediaKey = b => (!b || b.miss ? null : b.src === 'ai' ? `ai:${b.q}` : b.pick && ['kho', 'lib', 'stock'].includes(b.src) ? `${b.src}:${b.pick}` : null);
+const cut = (s, n) => { s = String(s ?? '').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+const base = p => String(p || '').split(/[\\/?#]/).filter(Boolean).pop() || '';
 /**
- * Bảng dựng → kế hoạch thô cùng dạng Claude trả cho ai_edit.mjs (đi tiếp qua validate rồi applyPlan, như AI dựng). Hàm thuần.
- * o: { design: [DW, DH], media: { [mediaKey]: { seq } | { path } } (media đã đưa vào dự án lúc Áp), dynIds: Set id b-roll động,
- *      dynCat: Map id → mục catalog b-roll động (A-ROLL bỏ: b-roll động phủ toàn khung) }
- * → { text: [cảnh chữ thô], dyn: [cảnh b-roll động thô], photos: [cảnh ảnh / clip đủ media], sfx: [{name, t, _sheet}],
- *     music: {mood, gain} | undefined, dropped: [lý do], clips: [] (A-roll theo kịch bản là M196) }
+ * Yêu cầu của kịch bản mà AI dựng phải làm (ô `mark` / `user` / `claude`; ô luật `auto` không tính). Mỗi yêu cầu một `id`
+ * ("<đoạn>:chu|broll|sfx:<i>", "<đoạn>:mood", "<đoạn>:aroll") trùng `_script.id` của mục dựng được. → [{ id, seg, t0, kind, text }]
+ */
+export function scriptRequests(sheet) {
+  const out = [];
+  for (const r of sheet?.rows || []) {
+    if (r.t0 == null || r.spoken === false) continue;
+    const add = (id, kind, text) => out.push({ id: `${r.seg}:${id}`, seg: r.seg, t0: r.t0, kind, text: cut(text, 80) });
+    if (chosen(r.mood) && r.mood.v && r.mood.inherit == null) add('mood', 'MOOD', r.mood.text || r.mood.v);
+    if (r.aroll?.off && r.aroll.from !== 'auto') add('aroll', 'A-ROLL', 'bỏ');
+    (r.screen || []).forEach((x, i) => { if (chosen(x) && String(x?.text || '').trim()) add(`chu:${i}`, 'CHỮ', x.text); });
+    (r.broll || []).forEach((b, i) => { if (chosen(b)) add(`broll:${i}`, 'B-ROLL', b.q || b.pick); });
+    (r.sfx || []).forEach((x, i) => { if (chosen(x)) add(`sfx:${i}`, 'SFX', x.q || x.name); });
+  }
+  return out;
+}
+/**
+ * Bảng dựng → kế hoạch thô cùng dạng Claude trả cho ai_edit.mjs (đi tiếp qua validate rồi applyPlan). Hàm thuần.
+ * Mỗi mục mang `_sheet` (đoạn) và `_script` { id, kind, text, note } (ghi chú kịch bản trên khối timeline / Thuộc tính).
+ * o: { design: [DW, DH], media: { [mediaKey]: { seq } | { path } } (media đã đưa vào dự án), mediaErr: { [mediaKey]: lý do },
+ *      dynIds: Set id b-roll động, dynCat: Map id → mục catalog b-roll động (A-ROLL bỏ: b-roll động phủ toàn khung) }
+ * → { text: [cảnh chữ thô], dyn: [cảnh b-roll động thô], photos: [cảnh ảnh / clip đủ media], sfx: [{name, t, _sheet, _script}],
+ *     music: {mood, gain, _sheet, _script} | undefined, dropped: [lý do], miss: { [id yêu cầu]: lý do }, clips: [] (A-roll là M196) }
  */
 export function sheetToPlan(sheet, tl = {}, o = {}) {
   const vert = (tl.height || 1920) > (tl.width || 1080), [, DH] = o.design || (vert ? [720, 1280] : [1280, 720]);
-  const dur = tl.duration || Infinity, media = o.media || {}, out = { text: [], dyn: [], photos: [], sfx: [], dropped: [], clips: [] };
+  const dur = tl.duration || Infinity, media = o.media || {}, out = { text: [], dyn: [], photos: [], sfx: [], dropped: [], miss: {}, clips: [] };
+  const fail = (id, what, why, at) => { out.miss[id] = why; out.dropped.push(`${at}: ${what}: ${why}`); };
   for (const r of sheet?.rows || []) {
     if (r.t0 == null || r.spoken === false) continue;
-    const t0 = r.t0, t1 = Math.min(dur, Math.max(t0 + .8, r.t1 ?? t0 + 2)), len = t1 - t0, tag = { _sheet: r.seg }, at = `bảng dựng đoạn ${r.seg + 1}`;
-    const scr = (r.screen || []).filter(x => String(x?.text || '').trim());
-    scr.forEach((x, i) => {
-      const [style, size] = SCREEN_STY[x.kind] || ['yellow', 84], a = t0 + i * len / scr.length;
-      out.text.push({ type: 'text', t0: r2(a), dur: r2(Math.min(3.5, Math.max(1.2, len / scr.length))), ...tag,
+    const t0 = r.t0, t1 = Math.min(dur, Math.max(t0 + .8, r.t1 ?? t0 + 2)), len = t1 - t0, at = `kịch bản đoạn ${r.seg + 1}`;
+    const tag = (id, kind, text, note, from) => ({ _sheet: r.seg, _script: { id: `${r.seg}:${id}`, kind, text: cut(text, 80), note, ...(from === 'auto' ? { auto: true } : {}) } });
+    const scr = (r.screen || []).map((x, i) => ({ x, i })).filter(({ x }) => String(x?.text || '').trim());
+    scr.forEach(({ x, i }, k) => {
+      const [style, size] = SCREEN_STY[x.kind] || ['yellow', 84], a = t0 + k * len / scr.length;
+      out.text.push({ type: 'text', t0: r2(a), dur: r2(Math.min(3.5, Math.max(1.2, len / scr.length))), ...tag(`chu:${i}`, 'CHỮ', x.text, 'chữ trên khung', x.from),
         params: { hideCaptions: false, lines: [{ text: String(x.text).trim(), t: 0, style, size, y: Math.round(DH * .3), anim: 'pop' }] } });
     });
-    const ok = b => b && (b.pick || b.src === 'ai') && !b.miss, br = (r.broll || []).filter(ok), cover = !!r.aroll?.off;
-    for (const b of (r.broll || []).filter(b => !ok(b))) out.dropped.push(`${at}: B-ROLL “${String(b?.q || '').slice(0, 40)}” chưa có cảnh (${b?.miss || 'ô trống'})`);
-    br.forEach((b, i) => {
-      const step = len / br.length, a = cover ? t0 + i * step : Math.min(t1 - .8, t0 + .15 + i * step), d = cover ? step : Math.min(2.5, Math.max(1, step - .15));
+    const ok = b => b && (b.pick || b.src === 'ai') && !b.miss, cover = !!r.aroll?.off;
+    const all = (r.broll || []).map((b, i) => ({ b, i })), br = all.filter(({ b }) => ok(b));
+    for (const { b, i } of all.filter(({ b }) => !ok(b))) fail(`${r.seg}:broll:${i}`, `B-ROLL “${cut(b?.q, 40)}”`, b?.miss || 'chưa có cảnh hợp', at);
+    br.forEach(({ b, i }, k) => {
+      const step = len / br.length, a = cover ? t0 + k * step : Math.min(t1 - .8, t0 + .15 + k * step), d = cover ? step : Math.min(2.5, Math.max(1, step - .15));
+      const id = `broll:${i}`, full = cover ? ' · phủ cả khung (A-ROLL bỏ)' : '';
       if (b.src === 'dong') {
-        if (o.dynIds && !o.dynIds.has(b.pick)) { out.dropped.push(`${at}: b-roll động “${b.pick}” không có trong thư viện`); return; }
-        const e = cover && o.dynCat?.get(b.pick);
+        if (o.dynIds && !o.dynIds.has(b.pick)) { fail(`${r.seg}:${id}`, `B-ROLL “${cut(b.q || b.pick, 40)}”`, `b-roll động “${b.pick}” không có trong thư viện`, at); return; }
+        const e = cover && o.dynCat?.get(b.pick), t = tag(id, 'B-ROLL', b.q || b.pick, `b-roll động “${b.pick}”${full}`, b.from);
         if (e) { // A-ROLL bỏ: phủ toàn khung như b-roll tự động (auto_broll sceneFor 'full')
-          const params = Object.fromEntries(Object.entries(e).filter(([k]) => !['id', 'topic', 'tags'].includes(k)));
-          out.photos.push({ type: 'broll', ...params, t0: r2(a), t1: r2(Math.min(dur, a + d)), layout: 'full', ...(vert ? { fit: 'portrait' } : {}), _ai: true, ...tag });
-        } else out.dyn.push({ type: 'media_card', t0: r2(a), dur: r2(d), ...tag, params: { screen: { broll: { id: b.pick } } } });
+          const params = Object.fromEntries(Object.entries(e).filter(([k2]) => !['id', 'topic', 'tags'].includes(k2)));
+          out.photos.push({ type: 'broll', ...params, t0: r2(a), t1: r2(Math.min(dur, a + d)), layout: 'full', ...(vert ? { fit: 'portrait' } : {}), _ai: true, ...t });
+        } else out.dyn.push({ type: 'media_card', t0: r2(a), dur: r2(d), ...t, params: { screen: { broll: { id: b.pick } } } });
         return;
       }
       const m = media[mediaKey(b)];
-      if (!m) { out.dropped.push(`${at}: B-ROLL “${String(b.q || b.pick).slice(0, 40)}” chưa đưa được vào dự án`); return; }
+      if (!m) { fail(`${r.seg}:${id}`, `B-ROLL “${cut(b.q || b.pick, 40)}”`, o.mediaErr?.[mediaKey(b)] || 'chưa đưa được cảnh vào dự án', at); return; }
       const credit = { kho: 'Kho', lib: 'Thư viện của tôi', stock: 'Stock', ai: 'Ảnh AI' }[b.src];
-      out.photos.push({ type: 'photo', mode: 'full', t0: r2(a), t1: r2(Math.min(dur, a + d)), media: m.seq ? { ...m.seq, t0: r2(a) } : m.path, kb: m.seq ? .04 : .12, kb_dir: i % 2 ? -1 : 1, credit, _ai: true, ...tag });
+      const note = b.src === 'ai' ? `ảnh AI tạo theo mô tả${full}` : `${b.src === 'stock' ? 'video stock' : `cảnh ${credit}`} “${cut(base(b.pick), 40)}”${full}`;
+      out.photos.push({ type: 'photo', mode: 'full', t0: r2(a), t1: r2(Math.min(dur, a + d)), media: m.seq ? { ...m.seq, t0: r2(a) } : m.path, kb: m.seq ? .04 : .12, kb_dir: k % 2 ? -1 : 1, credit, _ai: true,
+        ...tag(id, 'B-ROLL', b.q || b.pick, note, b.from) });
     });
-    for (const x of r.sfx || []) {
-      if (!x?.name) { out.dropped.push(`${at}: SFX “${String(x?.q || '').slice(0, 30)}” không có trong thư viện`); continue; }
-      out.sfx.push({ name: x.name, t: r2(Math.max(0, Math.min(dur - .2, x.at ?? t0))), ...tag });
-    }
+    if (cover && !br.length && r.aroll.from !== 'auto') fail(`${r.seg}:aroll`, 'A-ROLL bỏ', 'không có cảnh minh hoạ để phủ đoạn', at);
+    (r.sfx || []).forEach((x, i) => {
+      if (!x?.name) { fail(`${r.seg}:sfx:${i}`, `SFX “${cut(x?.q, 30)}”`, 'không có tiếng này trong thư viện SFX', at); return; }
+      out.sfx.push({ name: x.name, t: r2(Math.max(0, Math.min(dur - .2, x.at ?? t0))), ...tag(`sfx:${i}`, 'SFX', x.q || x.name, `tiếng “${x.name}”`, x.from) });
+    });
   }
   const mood = sheetMood(sheet);
-  if (mood) out.music = { mood, gain: -20 };
+  if (mood) {
+    const rows = sheet.rows || [], r = rows.find(x => chosen(x.mood) && x.mood.v === mood && x.mood.inherit == null) || rows.find(x => x.mood?.v === mood);
+    const seg = r?.seg ?? 0;
+    out.music = { mood, gain: -20, _sheet: seg, _script: { id: `${seg}:mood`, kind: 'MOOD', text: cut(r?.mood?.text || mood, 80), note: `nhạc nền mood ${mood} cho cả video` } };
+  }
   return out;
 }
-/** Bảng dựng cho prompt AI dựng (thay dấu thô): ô mark / user là ràng buộc cứng; hàng đã áp (`applied`) Claude không đặt graphic chồng. */
-export function sheetPrompt(sheet, applied = new Set()) {
+/** A-ROLL bỏ đã làm khi đoạn có cảnh phủ cả khung (ảnh / b-roll động `full`). Gắn vào kế hoạch đã dựng để scriptReport đếm. */
+export const coverIds = scenes => new Set(scenes.filter(s => s._sheet != null && ((s.type === 'photo' && s.mode === 'full') || (s.type === 'broll' && s.layout === 'full'))).map(s => `${s._sheet}:aroll`));
+/**
+ * Báo cáo "theo kịch bản" của một lần AI dựng: yêu cầu nào đã có mục (theo `_script.id` của cảnh / SFX / nhạc, A-ROLL bỏ theo cảnh
+ * phủ khung), yêu cầu nào chưa và vì sao. → { total, done, req: [{ id, seg, t0, kind, text, ok, why? }] }
+ */
+export function scriptReport(reqs, { scenes = [], sfx = [], music = null } = {}, miss = {}) {
+  const have = new Set([...scenes, ...sfx, ...(music ? [music] : [])].map(x => x?._script?.id).filter(Boolean));
+  for (const id of coverIds(scenes)) have.add(id);
+  const why = q => miss[q.id] || (q.kind === 'MOOD' ? 'một nền nhạc cho cả video: chưa đổi nhạc giữa chừng'
+    : q.kind === 'CHỮ' ? 'chữ chưa đặt được (chồng cảnh khác hoặc quá dài)' : 'chưa dựng được');
+  const req = reqs.map(q => (have.has(q.id) ? { ...q, ok: true } : { ...q, ok: false, why: why(q) }));
+  return { total: req.length, done: req.filter(x => x.ok).length, req };
+}
+/** Bảng dựng cho prompt AI dựng (thay dấu thô): ô mark / user là ràng buộc cứng; hàng `built` (bảng tự dựng) Claude không đặt graphic chồng. */
+export function sheetPrompt(sheet, built = new Set()) {
   const fx = n => (n == null ? '?' : Number(n).toFixed(1)), cut = (s, n) => (String(s).length > n ? String(s).slice(0, n) + '…' : String(s));
   const hard = c => (c && (c.from === 'mark' || c.from === 'user') ? ' (chốt)' : c?.from === 'note' ? ' (theo chỉ dẫn)' : '');
   return (sheet?.rows || []).filter(r => r.t0 != null && r.spoken !== false).map(r => {
@@ -387,74 +404,6 @@ export function sheetPrompt(sheet, applied = new Set()) {
     if (r.focus?.on) parts.push(`FOCUS ${r.focus.on === 'speaker' ? 'người nói' : `sản phẩm${r.focus.target ? ` "${cut(r.focus.target, 40)}"` : ''}`}${hard(r.focus)}`);
     for (const n of r.note || []) parts.push(`KỊCH BẢN YÊU CẦU (nguyên văn, làm theo khi dựng): "${cut(n, 160)}"`);
     const head = `Đ${r.seg + 1} [${fx(r.t0)}–${fx(r.t1)}] ${r.kind !== 'body' ? r.kind.toUpperCase() + ' ' : ''}"${cut(r.say, 90)}"`;
-    return head + (r.lock ? ' · khoá cả hàng' : '') + (applied.has(r.seg) ? ' · ĐÃ TRÊN TIMELINE' : '') + (parts.length ? '\n   · ' + parts.join('\n   · ') : '');
+    return head + (r.lock ? ' · khoá cả hàng' : '') + (built.has(r.seg) ? ' · DỰNG SẴN' : '') + (parts.length ? '\n   · ' + parts.join('\n   · ') : '');
   }).join('\n');
-}
-
-const MUSIC_V = new Set(['bed', 'tat', 'bat', 'doi', 'to', 'nho']), FRAME_V = new Set(['can', 'trung', 'rong']);
-const SRC_V = new Set(['kho', 'lib', 'stock', 'ai', 'dong']), KIND_V = new Set(['so', 'gia', 'tieude', 'trichdan', 'danhsach']);
-const str = (v, n) => String(v ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
-/**
- * Làm sạch giá trị một ô người dùng gửi lên (route 23_buildsheet) trước editCell. o: { moods: Set, sfx: Set tên SFX,
- * kho: Set rel trong Kho, lib: Set id thư viện, dyn: Set id b-roll động }. → value sạch | null (xoá / về luật) | { error }
- */
-export function cleanCell(field, v, o = {}) {
-  if (v == null) return null;
-  if (typeof v !== 'object' || Array.isArray(v)) return { error: 'Giá trị ô không hợp lệ' };
-  const bad = m => ({ error: m });
-  if (field === 'mood') { const m = str(v.v, 40); if (!m) return null; return o.moods && !o.moods.has(m) ? bad('Mood không có trong thư viện nhạc') : { v: m }; }
-  if (field === 'music') { const m = str(v.v, 130); if (!MUSIC_V.has(m) && !/^kho(:.+)?$/.test(m)) return bad('Giá trị nhạc lạ'); return { v: m }; }
-  if (field === 'aroll') {
-    const frame = v.frame == null || v.frame === '' ? null : str(v.frame, 8);
-    if (frame && !FRAME_V.has(frame)) return bad('Cỡ khung lạ');
-    const take = v.take == null || v.take === '' ? null : Number.isInteger(+v.take) && +v.take > 0 && +v.take < 100 ? +v.take : NaN;
-    if (Number.isNaN(take)) return bad('Take phải là số 1–99');
-    return { frame, take, ...(v.off ? { off: true } : {}) };
-  }
-  if (field === 'screen') { const text = str(v.text, 120); if (!text) return bad('Chữ trống'); const kind = v.kind ? str(v.kind, 12) : null; if (kind && !KIND_V.has(kind)) return bad('Kiểu chữ lạ'); return { text, kind }; }
-  if (field === 'sfx') {
-    const name = str(v.name, 60); if (!name) return bad('Chưa chọn SFX');
-    if (o.sfx && !o.sfx.has(name)) return bad('SFX không có trong thư viện');
-    const at = v.at == null || v.at === '' ? null : Number(v.at);
-    if (at != null && !(Number.isFinite(at) && at >= 0)) return bad('Thời điểm SFX lạ');
-    return { name, q: str(v.q || name, 60), at: at == null ? null : r2(at), pos: str(v.pos || 'dau', 40) };
-  }
-  if (field === 'broll') {
-    const q = str(v.q, 120), src = str(v.src, 8), pick = v.pick == null ? null : str(v.pick, 600);
-    if (!SRC_V.has(src)) return bad('Nguồn B-roll lạ');
-    if (src === 'ai') { if (!q) return bad('Ảnh AI cần mô tả'); return { q, src, pick: null, alts: [], pending: 'Ảnh AI tạo lúc Áp' }; }
-    if (!pick) return bad('Chưa chọn cảnh');
-    const set = { kho: o.kho, lib: o.lib, dong: o.dyn }[src];
-    if (set && !set.has(pick)) return bad(src === 'kho' ? 'File không có trong Kho' : src === 'lib' ? 'Không có trong thư viện' : 'Không có b-roll động này');
-    if (src === 'stock' && !/^https:\/\/\S+$/i.test(pick)) return bad('Link stock phải là https');
-    const alts = Array.isArray(v.alts) ? v.alts.filter(x => typeof x === 'string').slice(0, 4).map(x => x.slice(0, 600)) : undefined;
-    return { q: q || pick.split(/[\\/]/).pop(), src, pick, ...(alts ? { alts } : {}) };
-  }
-  return bad('Cột lạ');
-}
-/** "Dựng lại ô trống": prompt một lần cho cả bảng (không mỗi hàng một lần). Claude trả {rows:[{seg, mood, sfx:[tên], broll:[mô tả]}]}. */
-export function fillPrompt(sheet, { moods = [], sfx = [], brand = '' } = {}) {
-  const rows = (sheet?.rows || []).filter(r => !r.lock && r.t0 != null && r.spoken !== false);
-  const need = r => [r.mood?.from === 'auto' ? 'mood' : '', !(r.sfx || []).length ? 'sfx' : '', !(r.broll || []).length && r.kind === 'body' ? 'broll' : ''].filter(Boolean);
-  const list = rows.filter(r => need(r).length).map(r => `Đ${r.seg} [${((r.t1 ?? r.t0) - r.t0).toFixed(1)}s] cần: ${need(r).join(', ')} · "${String(r.say).slice(0, 160)}"`);
-  return { n: list.length, prompt: `Bạn là editor video ngắn${brand ? ` cho thương hiệu "${brand}"` : ''}. Lấp các ô còn trống của bảng dựng theo đoạn bên dưới.
-- mood: một mood trong danh sách: ${moods.join(', ')}. Cả video nên dùng 1–2 mood, đổi tối đa một lần mỗi ~10 giây.
-- sfx: 0–1 tên SFX trong danh sách, chỉ ở chỗ thật cần nhấn: ${sfx.slice(0, 60).join(', ')}.
-- broll: 0–1 mô tả cảnh minh hoạ ngắn, cụ thể bằng tiếng Việt (vd "căn hộ chung cư ban đêm"); đoạn nói về con người / cảm xúc thì để trống.
-Chỉ trả ô được hỏi. Trả về DUY NHẤT JSON: {"rows":[{"seg":0,"mood":"…","sfx":["…"],"broll":["…"]}]}
-
-CÁC ĐOẠN:
-${list.join('\n')}` };
-}
-/** Áp kết quả "Dựng lại ô trống" vào ô `auto` / trống (ô mark / user / hàng khoá không đổi). Ô Claude lấp ghi `from: claude`.
- *  pick(q) → Promise<ô B-roll của pickBroll>. → số ô đã lấp */
-export async function applyFill(sheet, out, { moods = [], sfx = [], pick } = {}) {
-  let n = 0;
-  for (const x of Array.isArray(out?.rows) ? out.rows : []) {
-    const r = (sheet.rows || []).find(y => y.seg === +x.seg); if (!r || r.lock || r.t0 == null) continue;
-    const m = moodOf(x.mood || '', moods); if (m && r.mood?.from === 'auto') { r.mood = { v: m, from: 'claude' }; n++; }
-    if (!(r.sfx || []).length) for (const name of (Array.isArray(x.sfx) ? x.sfx : []).slice(0, 1)) { const s2 = sfxOf(name, sfx); if (s2) { r.sfx = [{ name: s2, q: str(name, 60), at: r.t0, pos: 'dau', from: 'claude' }]; n++; } }
-    if (!(r.broll || []).length && r.kind === 'body' && pick) for (const q of (Array.isArray(x.broll) ? x.broll : []).slice(0, 1).map(v => str(v, 120)).filter(Boolean)) { r.broll = [{ ...(await pick(q)), from: 'claude' }]; n++; }
-  }
-  return n;
 }

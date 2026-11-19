@@ -97,22 +97,32 @@ Mỗi ô B-roll tìm theo thứ tự, dừng ở nguồn đầu có kết quả 
 
 Tuỳ chọn nguồn ở dấu (`| kho`, `| stock`…) chỉ dùng nguồn đó; không có kết quả thì ô đỏ "Kho không có cảnh khớp", không tự rơi xuống nguồn khác.
 
-### 2.3 Giao diện
+### 2.3 Giao diện: không có bảng để sửa (đổi hướng 2026-11-19)
 
-Panel **Bảng dựng** (tab của ô Kịch bản ở bước Dựng, và mở được từ tab Claude): mỗi hàng một đoạn, cột Lời (rút gọn, bấm thì nhảy tới giờ đó),
-Mood, Nhạc, A-roll, B-roll (ảnh nhỏ + nguồn + "Đổi"), SFX (nút nghe thử), Chữ. Mỗi ô sửa được bằng danh sách chọn; cột B-roll có
-"Tìm khác" / "Chọn từ Kho". Đầu bảng: **Dựng lại ô trống** (Claude), **Áp lên timeline**, **Hoàn tác lần áp**.
-Kiểm bằng số đo theo `responsive-layout` ở 1280 px: bảng cuộn dọc trong panel, không cuộn ngang trang.
+Chủ repo 2026-11-19: panel Bảng dựng (bản đầu của `M194`, PR #241) khó hiểu với người dùng nên bỏ. Người dùng chỉ nhập kịch bản (có dấu) rồi
+bấm **AI dựng**; AI dựng tự làm theo dấu, không có bảng hay nút nào phải cài thêm. `.studio/build_sheet.json` vẫn là dữ liệu nội bộ.
+
+- **Ghi chú kịch bản trên chính chỗ đã dựng.** Mỗi mục dựng theo dấu (chữ, b-roll, SFX, nhạc nền) mang `_script` { id, kind, text, note }.
+  Trỏ vào khối trên timeline: tooltip "Kịch bản: [B-ROLL: căn hộ] · Đã dựng: cảnh Kho “can-ho.mp4”". Chọn khối: dòng ghi chú đầu Thuộc tính
+  kèm **Sửa tay** (mở mục đầu của Thuộc tính, tự sang tab Thuộc tính: bài học `ai-video-studio-059`) và **Hỏi Claude** (tab Claude với câu
+  hỏi điền sẵn về khối đang chọn và yêu cầu kịch bản; không thêm thanh Claude mới).
+- **Một dòng tóm tắt** ở panel AI dựng của bước Dựng: "Theo kịch bản: 12/14 yêu cầu đã dựng · 2 cần xem". Bấm = tua tới yêu cầu cần xem kế
+  tiếp, chọn khối cùng đoạn nếu có, báo lý do ("⚠ Chưa dựng được [B-ROLL: sổ hồng]: Kho không có cảnh khớp"). Đếm trên timeline hiện tại:
+  mục đã xoá / ẩn thành "cần xem".
+- Ô Kịch bản (bước Nguồn) chỉ còn dòng "AI dựng làm theo dấu của N đoạn · x dấu chưa tìm được cảnh / tiếng".
 
 ### 2.4 Áp lên timeline
 
 Hàm thuần `sheetToPlan(sheet, tl, caps)` → cùng dạng `plan` của `ai_edit.mjs` (`scenes`, `music`, `sfx`, + mới `clips` cho A-roll), rồi đi qua
 `validate` + `applyPlan` sẵn có, nên:
 
-- mọi mục sinh ra có `_ai: true` và `_sheet: <seg>`; người dùng sửa thì có `_orig` như mọi mục khác và lần Áp sau giữ lại;
-- một lần Áp = **một bước hoàn tác** (đi qua `pushUndo` của Studio), thẻ khay việc có Hoàn tác như AI dựng (`M185`);
-- AI dựng (`ai_edit.mjs`) khi có bảng dựng: prompt nhận bảng thay cho dấu thô, các ô `mark` / `user` là ràng buộc cứng, Claude chỉ lấp phần trống
-  và đặt graphic ngoài các ô đã chốt. Không có bảng thì chạy như hiện nay.
+- mọi mục sinh ra có `_ai: true`, `_sheet: <seg>` và `_script`; người dùng sửa thì có `_orig` như mọi mục khác và lần AI dựng sau giữ lại
+  (mục mới cùng đoạn cùng loại không thêm lần nữa);
+- AI dựng (`ai_edit.mjs`, job `ai`) có kịch bản đã căn: dựng lại bảng nội bộ (`sheetFor`), prompt nhận bảng thay dấu thô (ô `mark` / `user`
+  là ràng buộc cứng, hàng "DỰNG SẴN" Claude không đặt graphic chồng), Claude lấp phần còn lại; xong thì đưa media của dấu B-ROLL vào dự án
+  (`sheetMedia`), `planFromSheet` rồi `mergeScript` gộp vào kế hoạch của Claude (cảnh / SFX của Claude chồng dấu bị bỏ, nhạc mang mood
+  dấu), đặt né mặt một lần cho cả kế hoạch. Một `ai_plan.json`, Studio áp một lần = **một bước hoàn tác**. Không có kịch bản thì chạy như cũ.
+- `plan.script` = { total, done, req } (`scriptRequests` + `scriptReport`): lý do của từng yêu cầu chưa dựng được, có cấu trúc.
 - `applyPlan` có hai bản (server `ai_edit.mjs` và client `20_ai.js`): sửa cả hai trong cùng PR, test so kết quả hai bản trên cùng đầu vào.
 
 ## 3. Nhạc theo đoạn, vẫn một nền nhạc tự sinh
@@ -153,7 +163,7 @@ Người dùng quay lại một đoạn nhiều lần (nhiều file trong `Nguon
 3. Chọn take mỗi đoạn: dấu `[A-ROLL: clip N]` thắng; không có thì điểm = `ratio` (chính) − phạt lỗi nói − phạt đoạn bị cắt cụt (đầu / cuối đoạn
    không khớp), hoà thì take **sau** (thường là lần quay tốt hơn). Đoạn không take nào đạt 30 % → hàng đỏ "chưa quay".
 4. Ra `TL.clips` nối theo thứ tự kịch bản: mỗi đoạn một clip `{src, audio, in, out}` của take đã chọn, cỡ khung từ `aroll.frame`
-   (`zoom` / `ox` / `oy` quanh mặt của take đó; chưa dò mặt thì giữ `cover`). Bảng dựng cho đổi take từng hàng (nghe thử đoạn đó).
+   (`zoom` / `ox` / `oy` quanh mặt của take đó; chưa dò mặt thì giữ `cover`). Đổi take từng đoạn bằng dấu `[A-ROLL: clip N]` hoặc ghi chú trên khối A-roll (mục 2.3; không có bảng để sửa).
 5. Một take dài chứa cả kịch bản là trường hợp riêng của bước này (một take, chỉ cắt phần ngoài kịch bản), nên 4.1 và 4.2 dùng chung đường áp.
 
 Không tự xoá file take; các take không dùng vẫn ở `Nguon/`. Giọng nối giữa các take đi qua `mix_audio.py` nhánh `clips` hiện có
@@ -178,16 +188,16 @@ Không tự xoá file take; các take không dùng vẫn ở `Nguon/`. Giọng n
 
 Video (một hoặc nhiều take) + kịch bản → căn (đã có) → bảng dựng → sửa → Áp. Tự lái: bước `script` sinh bảng dựng (không Claude thì chỉ
 từ dấu + luật), bước `ai` đọc bảng thay cho dấu thô; chọn take và cắt lời ngoài kịch bản **không** chạy trong Tự lái (cần người duyệt),
-chỉ ghi vào `summary.json` để thẻ việc báo "Có 3 đoạn lời ngoài kịch bản, mở Bảng dựng để cắt".
+chỉ ghi vào `summary.json` để thẻ việc báo "Có 3 đoạn lời ngoài kịch bản, xem ở bước Dựng để cắt".
 
 ## 6. Chia mục, thứ tự, tệp nóng, rủi ro
 
 | Mục | Nội dung | Tệp chính | Ước dòng | Tệp nóng | Sau |
 |---|---|---|---|---|---|
 | `M193` | Dấu mới (mục 1) trong `parseScript` + `scriptPrompt` + `scriptMarks`; `build_sheet.json` và `buildSheet` thuần (mục 2.1, 2.2 không gồm ảnh AI); Gợi ý dấu (1.1); `references/script.md` | `scripts/script_doc.mjs`, `scripts/script_build.mjs` (mới), `studio/routes/19_script.mjs`, `studio/features/19_script.js`, test `s27_m193` | 500–700 | không | — |
-| `M194` | Panel Bảng dựng (2.3), `sheetToPlan` + Áp `_ai` một bước hoàn tác (2.4), AI dựng đọc bảng, QC dấu mới (`script_mark` cho SFX / A-roll / B-roll theo nguồn) | `studio/features/23_buildsheet.js` + `studio/routes/23_buildsheet.mjs` (mới), `scripts/ai_edit.mjs`, `studio/features/20_ai.js`, `scripts/ai_qc.mjs` | 600–800 | `scripts/ai_qc.mjs` | `M193` |
+| `M194` | AI dựng theo dấu kịch bản, ghi chú trên khối + dòng tóm tắt (2.3), `sheetToPlan` + gộp vào kế hoạch AI một bước hoàn tác (2.4), QC dấu mới (`script_mark` cho SFX / A-roll / B-roll theo nguồn) | `studio/features/23_scriptnotes.js` (mới), `scripts/script_build.mjs`, `scripts/ai_edit.mjs`, `studio/features/20_ai.js`, `scripts/ai_qc.mjs` | 600–800 | `scripts/ai_qc.mjs` | `M193` |
 | `M195` | Nhạc theo đoạn (mục 3): `musicFromSheet`, `_was`, `_sheet`, `music_auto` bỏ qua nền `_sheet`, đặt `duck` | `scripts/script_build.mjs`, `scripts/ai_edit.mjs` + `studio/features/20_ai.js` (`applyPlan` hai bản), `scripts/auto_sfx.py`, test hồi quy cạnh `build_quality.test.mjs` | 300–450 | không | `M194` |
-| `M196` | A-roll (mục 4): cắt lời ngoài kịch bản, job `script_takes`, `alignTakes`, chọn take, ra `TL.clips`, cỡ khung | `scripts/script_doc.mjs` / `script_build.mjs`, `scripts/queue.mjs` (một loại job), `studio/features/23_buildsheet.js` | 600–800 | `scripts/queue.mjs` | `M194`; song song được với `M195` (khác vùng; cùng `23_buildsheet.js` thì làm nối tiếp) |
+| `M196` | A-roll (mục 4): cắt lời ngoài kịch bản, job `script_takes`, `alignTakes`, chọn take, ra `TL.clips`, cỡ khung | `scripts/script_doc.mjs` / `script_build.mjs`, `scripts/queue.mjs` (một loại job), `studio/features/23_scriptnotes.js` | 600–800 | `scripts/queue.mjs` | `M194`; song song được với `M195` (khác vùng; cùng `23_buildsheet.js` thì làm nối tiếp) |
 | `M191` | Trước khi quay (mục 5.1): `estimateTimes`, 3 phương án, khung tĩnh, lưu mẫu thương hiệu / video mới, danh sách quay | `scripts/script_build.mjs`, route + feature mới `24_scriptdraft`, `scripts/queue.mjs` (job `script_draft`) | 600–800 | `scripts/queue.mjs` | `M194`, `M195`; sau `M196` nếu cùng sửa `queue.mjs` |
 | `M192` | Claude nhớ gu thương hiệu (giữ như cũ), thêm: ô bảng dựng người dùng đổi (`from: user`) là tín hiệu học | như mục cũ | — | — | `M191` |
 

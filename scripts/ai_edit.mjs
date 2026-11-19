@@ -3,6 +3,8 @@
 //          [--pack keep|auto|<pack id>] [--density thua|vua|day] [--extra "…"] [--model sonnet] [--apply]
 // Output plan (references/ai-edit.md): { pack, caption_style, hook, captions:[{i,t0,words:[{w,hl?,br?}]}], scenes:[…full scenes, _ai:true],
 //   music:{mood,gain}, sfx:[{t,name,gain}], summary, dropped:[…] }. --apply writes it into timeline.json (replaces earlier _ai items only).
+// S27 M194: dự án có kịch bản đã căn → dấu của kịch bản dựng thẳng (mục mang _sheet + _script ghi chú), Claude lấp phần còn lại;
+//   plan.script = { total, done, req:[{id, seg, t0, kind, text, ok, why?}] } (dòng "Theo kịch bản" ở Studio). --no-stock: không tìm stock.
 // Progress lines on stdout: "@@ <0..1> <step>" (read by studio/routes/20_ai.mjs).
 import fs from 'node:fs';
 import os from 'node:os'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
@@ -13,7 +15,8 @@ import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
 import { faceZone } from './face_track_project.mjs';
 import { safeOf, designOf } from './ai_qc.mjs'; // ai_qc runs its CLI only when executed directly; Chrome opens only in placePlan
 import { readScript, scriptMarks, scriptPrompt, markMissing } from './script_doc.mjs';
-import { readSheet, sheetToPlan, sheetPrompt, appliedSegs, mediaKey, sheetMood as sheetMoodOf } from './script_build.mjs'; // S27 M194: bảng dựng
+// S27 M194: AI dựng theo kịch bản — bảng dựng nội bộ (.studio/build_sheet.json) dựng lại mỗi lần, áp cùng kế hoạch của Claude
+import { readSheet, sheetFor, sheetToPlan, sheetPrompt, builtSegs, mediaKey, dynamicFor, scriptRequests, scriptReport, sheetMood as sheetMoodOf } from './script_build.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -96,13 +99,13 @@ export function buildPrompt({ tl, caps, cat, lib, o, script, sheet }) {
   const safe = `Vùng an toàn để đặt chữ (ngoài vùng này bị nút / mô tả của app che): x ${pc(SF.x, DW)}–${pc(SF.x + SF.w, DW)}%, y ${pc(SF.y, DH)}–${pc(SF.y + SF.h, DH)}%. Phụ đề nằm ở phần dưới khung (khoảng y ${vertical ? '62–80' : '75–92'}%).`;
   const layout = (fz ? `Mặt người nói nằm khoảng x ${fz.x0}–${fz.x1}%, y ${fz.y0}–${fz.y1}% của khung (tính từ góc trên trái). ` : 'Không dò được mặt người nói. ') + safe;
   // S17 M123: kịch bản có sẵn của người dùng — nội dung và dấu của nó thắng việc tự nghĩ
-  // S27 M194: có bảng dựng thì prompt nhận bảng thay cho dấu thô: ô (chốt) là ràng buộc cứng, Claude chỉ lấp phần trống
+  // S27 M194: có bảng dựng thì prompt nhận bảng thay cho dấu thô: ô (chốt) là ràng buộc cứng; hàng DỰNG SẴN studio tự đặt, Claude lấp phần còn lại
   const sheetTxt = script && sheet?.rows?.length ? `
-# Bảng dựng theo đoạn (người dùng đã duyệt; thay cho dấu thô của kịch bản)
-${sheetPrompt(sheet, appliedSegs(tl))}
-LUẬT BẢNG DỰNG (bắt buộc, thắng cả LUẬT KỊCH BẢN bên dưới khi mâu thuẫn): ô ghi "(chốt)" là ràng buộc cứng (dấu trong kịch bản hoặc người dùng tự sửa), không đổi, không bỏ.
-- Hàng "ĐÃ TRÊN TIMELINE": cảnh chữ / b-roll / SFX của hàng đó đã đặt sẵn; KHÔNG đặt graphic nào trong khoảng giờ của hàng đó.
-- Hàng có CHỮ / B-ROLL nhưng chưa trên timeline: đặt đúng nội dung đó trong khoảng giờ của hàng.
+# Kịch bản theo đoạn, đã đọc dấu (thay cho dấu thô của kịch bản)
+${sheetPrompt(sheet, builtSegs(sheet))}
+LUẬT DẤU KỊCH BẢN (bắt buộc, thắng cả LUẬT KỊCH BẢN bên dưới khi mâu thuẫn): ô ghi "(chốt)" là ràng buộc cứng (dấu người dùng ghi trong kịch bản), không đổi, không bỏ.
+- Hàng "DỰNG SẴN": studio tự đặt chữ / b-roll / SFX của hàng đó theo dấu; KHÔNG đặt graphic nào trong khoảng giờ của hàng đó.
+- Hàng có CHỮ / B-ROLL nhưng không "DỰNG SẴN": đặt đúng nội dung đó trong khoảng giờ của hàng.
 - MOOD chốt là mood của "music" (chọn mood gần nhất trong danh sách nhạc nền). Hàng không có ô chốt thì bạn dựng như bình thường.
 ` : '';
   const scr = script ? `
@@ -298,8 +301,9 @@ export function inventedNumbers(scene, said) {
   walk(scene);
   return bad;
 }
+const sheetTag = x => (Number.isInteger(x?._sheet) ? { _sheet: x._sheet, ...(x._script && typeof x._script === 'object' ? { _script: x._script } : {}) } : {});
 export function validate(raw, { tl, caps, cat, lib, o, script }) {
-  const fromSheet = !!o.sheet; // S27 M194: kế hoạch từ bảng dựng (planFromSheet): giữ _sheet, không giới hạn 15 cảnh
+  const fromSheet = !!o.sheet; // S27 M194: kế hoạch từ bảng dựng (planFromSheet): giữ _sheet + _script, không giới hạn 15 cảnh
   const dropped = [], cuts = []; // cuts: graphic text cut to fit (S13 · M111, shortenCuts)
   const dur = tl.duration;
   const keep = o.pack && o.pack !== 'auto';
@@ -337,19 +341,20 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     const params = cleanText(s.params && typeof s.params === 'object' ? s.params : {}, it.ex, '', cuts);
     for (const k of ['type', 't0', 't1', 'cid', '_orig', '_ai']) delete params[k];
     const ex = shiftRel(it.ex, t0, t1);
-    const scene = { ...ex, ...shiftRel(params, t0, t1), type: s.type, t0, t1, _ai: true, ...(fromSheet && Number.isInteger(s._sheet) ? { _sheet: s._sheet } : {}) };
+    const scene = { ...ex, ...shiftRel(params, t0, t1), type: s.type, t0, t1, _ai: true, ...(fromSheet ? sheetTag(s) : {}) };
     fixBroll(scene, lib, used);
     const made = inventedNumbers(scene, said);
     if (made.length) { dropped.push(`cảnh ${s.type} @${t0}s: số liệu "${made.slice(0, 3).join('", "')}" không có trong lời thoại`); continue; }
     sc.push(scene);
   }
   sc.sort((a, b) => a.t0 - b.t0);
-  // S27 M194: cảnh của bảng dựng đã trên timeline (applyPlan giữ lại) là ô đã chốt: cảnh AI chồng giờ đó bị bỏ
-  const fixed = fromSheet ? [] : (tl.scenes || []).filter(s => Number.isInteger(s._sheet) && !s._base && !s.hidden);
+  // S27 M194: cảnh theo kịch bản đã trên timeline mà lần này không dựng lại (applyPlan giữ): cảnh AI chồng giờ đó bị bỏ.
+  // o.merge = lần AI dựng có kịch bản: mục _sheet cũ được thay, cảnh chồng cảnh mới bị bỏ ở mergeScript
+  const fixed = fromSheet || o.merge ? [] : (tl.scenes || []).filter(s => Number.isInteger(s._sheet) && !s._base && !s.hidden);
   const scenes = [];
   for (const s of sc) {
     const f = fixed.find(x => x.t0 < s.t1 - .05 && x.t1 > s.t0 + .05);
-    if (f) { dropped.push(`cảnh ${s.type} @${s.t0}s chồng cảnh của bảng dựng (đoạn ${f._sheet + 1})`); continue; }
+    if (f) { dropped.push(`cảnh ${s.type} @${s.t0}s chồng cảnh theo kịch bản (đoạn ${f._sheet + 1})`); continue; }
     const prev = scenes[scenes.length - 1];
     if (prev && s.t0 < prev.t1 - .05) {
       if (prev.t1 + .8 <= s.t1) { s.t0 = r2(prev.t1); clampT(s, s.t0, s.t1); }
@@ -369,7 +374,7 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     const name = sfxNames.has(x.name) ? x.name : sfxNames.has(String(x.name).replace(/_\d+$/, '')) ? String(x.name).replace(/_\d+$/, '') : null;
     const t = wordT(x.c, x.w) ?? (typeof x.t === 'number' ? x.t : null);
     if (!name || t == null || t >= dur) { dropped.push(`SFX "${x.name}" không hợp lệ`); continue; }
-    sfx.push({ t: r2(Math.max(0, t - .05)), name, gain: -12, _ai: true, ...(fromSheet && Number.isInteger(x._sheet) ? { _sheet: x._sheet } : {}) });
+    sfx.push({ t: r2(Math.max(0, t - .05)), name, gain: -12, _ai: true, ...(fromSheet ? sheetTag(x) : {}) });
   }
   const marks = script ? scriptMarks(script) : [], hookMark = marks.find(m => m.kind === 'hook');
   const cut60 = s => { s = String(s).trim(); if (s.length <= 60) return s; const w = s.slice(0, 61).split(/\s+/); w.pop(); return w.join(' ') || s.slice(0, 60); };
@@ -416,24 +421,27 @@ export function applyLearned(plan, L) {
 // Không xét gain để đổi gain mặc định không làm hỏng nhận diện.
 export const isUserMusic = m => !!m && (!!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech'))));
 export const hasUserBed = (music, dur) => (music || []).some(m => isUserMusic(m) && m.t0 <= .05 && m.t1 >= dur - .1);
-// S27 M194: nền nhạc do bảng dựng đặt (mood chốt) phủ cả video: AI dựng giữ như nhạc người dùng chọn
+// S27 M194: nền nhạc theo dấu MOOD (_sheet) phủ cả video: AI dựng không kèm kịch bản giữ như nhạc người dùng chọn
 export const hasSheetBed = (music, dur) => (music || []).some(m => m._sheet != null && m.t0 <= .05 && m.t1 >= dur - .1);
 // Apply a plan: earlier AI items (and untouched recipe items) are replaced; anything the user edited (_orig) or added stays.
-// S27 M194: mục của bảng dựng (_sheet) cũng giữ: AI dựng chỉ thay mục AI của chính nó. Kế hoạch bảng dựng (plan.sheet) đi applySheet.
-// Bản client: studio/features/20_ai.js applyPlan / applySheet (cùng luật; scripts/tests/s27_m194.test.mjs so hai bản).
+// S27 M194: kế hoạch theo kịch bản (plan.script) thay cả mục _sheet cũ chưa sửa tay; mục _sheet bạn đã sửa tay (_orig) giữ, và mục mới
+// cùng đoạn cùng loại không thêm lần nữa. Kế hoạch không kèm kịch bản giữ mục _sheet và nền nhạc của nó (như nhạc người dùng chọn).
+// Bản client: studio/features/20_ai.js applyPlan (cùng luật; scripts/tests/s27_m194.test.mjs so hai bản).
 export function applyPlan(tl, caps, plan) {
-  if (plan.sheet) return applySheet(tl, plan);
   const starter = !!tl._starter; delete tl._starter; // never-opened "Video mới" project: its starter scenes are placeholders
-  const mine = s => starter || ((s._ai || s._recipe) && !s._orig && s._sheet == null);
+  const merged = !!plan.script, key = x => `${x._sheet}|${x.type || x.name}`;
+  const mine = s => starter || ((s._ai || s._recipe) && !s._orig && (merged || s._sheet == null));
+  const mineS = new Set(merged ? (tl.scenes || []).filter(s => s._sheet != null && s._orig).map(key) : []);
+  const mineX = new Set(merged ? (tl.audio?.sfx || []).filter(x => x._sheet != null && x._orig).map(key) : []);
   tl.pack = plan.pack; tl.caption_style = plan.caption_style || undefined;
   if (plan.hook) tl.title = plan.hook;
-  tl.scenes = [...(tl.scenes || []).filter(s => !mine(s)), ...plan.scenes];
+  tl.scenes = [...(tl.scenes || []).filter(s => !mine(s)), ...plan.scenes.filter(s => s._sheet == null || !mineS.has(key(s)))];
   tl.audio = tl.audio || {};
   // plan.music null (thói quen "không nhạc", M134): bỏ nhạc _ai cũ, không thêm nhạc mới
   // S26 M182: nhạc người dùng đã chọn / chỉnh (isUserMusic) được giữ và thắng nhạc AI; chỉ nhạc _ai/_auto hoặc nhạc khởi đầu chưa ai đụng bị thay
-  const keep = hasUserBed(tl.audio.music, tl.duration) || hasSheetBed(tl.audio.music, tl.duration);
-  tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || m._sheet != null || !(m._ai || m._auto || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
-  tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !x._ai || x._sheet != null), ...plan.sfx];
+  const keep = hasUserBed(tl.audio.music, tl.duration) || (!merged && hasSheetBed(tl.audio.music, tl.duration));
+  tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
+  tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x)))];
   let n = 0;
   for (const e of plan.captions) {
     const c = caps[e.i];
@@ -444,41 +452,38 @@ export function applyPlan(tl, caps, plan) {
   applyDict(caps, plan.dict);
   return n;
 }
-// S27 M194: Áp bảng dựng. Không đổi gói, kiểu phụ đề, tiêu đề, phụ đề. Mục _sheet cũ chưa sửa tay bị thay; cảnh AI / Tự động chưa sửa tay
-// chồng giờ cảnh mới của bảng bị bỏ (bảng là ràng buộc). plan.music undefined = giữ nhạc; có thì thay nền _ai/_auto/_sheet (nhạc người dùng giữ).
-export function applySheet(tl, plan) {
-  const span = (plan.scenes || []).filter(s => !s._base);
-  const old = s => s._sheet != null && !s._orig;
-  const hit = s => (s._ai || s._auto) && !s._orig && !s._base && !s._recipe && s._sheet == null && span.some(x => x.t0 < s.t1 - .05 && x.t1 > s.t0 + .05);
-  // mục của bảng bạn đã sửa tay (_orig) được giữ, nên mục mới cùng đoạn cùng loại không thêm lần nữa
-  const mineS = new Set((tl.scenes || []).filter(s => s._sheet != null && s._orig).map(s => `${s._sheet}|${s.type}`));
-  const mineX = new Set((tl.audio?.sfx || []).filter(x => x._sheet != null && x._orig).map(x => `${x._sheet}|${x.name}`));
-  tl.scenes = [...(tl.scenes || []).filter(s => !old(s) && !hit(s)), ...(plan.scenes || []).filter(s => !mineS.has(`${s._sheet}|${s.type}`))];
-  tl.audio = tl.audio || {};
-  if (plan.music !== undefined) {
-    const keep = hasUserBed(tl.audio.music, tl.duration);
-    tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
-  }
-  tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !(x._sheet != null && !x._orig)), ...(plan.sfx || []).filter(x => !mineX.has(`${x._sheet}|${x.name}`))];
-  return 0;
-}
 /**
- * S27 M194: bảng dựng → kế hoạch đầy đủ (plan.sheet = true) qua validate như bản của Claude. ctx = { tl, caps, cat, lib };
- * media = { [mediaKey]: {seq}|{path} } đã liên kết vào dự án (Kho, thư viện, stock, ảnh AI). Chữ và b-roll động validate riêng
- * (hai lớp được chồng nhau), ảnh / clip thêm thẳng. Cảnh nền của gói (_base) không lặp lại.
+ * S27 M194: dấu của kịch bản (bảng dựng nội bộ) → phần kế hoạch đi qua validate như bản của Claude. ctx = { tl, caps, cat, lib };
+ * media = { [mediaKey]: {seq}|{path} } đã liên kết vào dự án (Kho, thư viện, stock, ảnh AI), mediaErr = { [mediaKey]: lý do }.
+ * Chữ và b-roll động validate riêng (hai lớp được chồng nhau), ảnh / clip thêm thẳng. Cảnh nền của gói (_base) không lặp lại.
+ * → { scenes, music | undefined, sfx, clips, miss: { [id yêu cầu]: lý do }, dropped, cuts }
  */
-export function planFromSheet(sheet, { tl, caps, cat, lib }, media = {}) {
-  const raw = sheetToPlan(sheet, tl, { design: designOf(tl), media, dynIds: new Set(lib.broll.map(x => x.id)), dynCat: new Map(lib.broll.map(x => [x.id, x])) });
+export function planFromSheet(sheet, { tl, caps, cat, lib }, media = {}, mediaErr = {}) {
+  const raw = sheetToPlan(sheet, tl, { design: designOf(tl), media, mediaErr, dynIds: new Set(lib.broll.map(x => x.id)), dynCat: new Map(lib.broll.map(x => [x.id, x])) });
   const ctx = { tl, caps, cat, lib, o: { pack: 'keep', sheet: true }, script: null };
   const head = { pack: tl.pack, caption_style: tl.caption_style };
   const a = validate({ ...head, scenes: raw.text, sfx: raw.sfx, music: raw.music || null }, ctx), b = validate({ ...head, scenes: raw.dyn }, ctx);
   const scenes = [...a.scenes, ...b.scenes].filter(s => !s._base).concat(raw.photos).sort((x, y) => x.t0 - y.t0);
-  const seg0 = (sheet.rows || []).find(r => r.mood?.v === raw.music?.mood && r.mood.from !== 'auto')?.seg ?? 0;
-  const music = raw.music ? { ...a.music, _sheet: seg0 } : undefined;
-  const nT = scenes.filter(s => s.type === 'text').length, nB = scenes.length - nT;
-  return { sheet: true, pack: a.pack, caption_style: tl.caption_style, hook: '', captions: [], scenes, music, sfx: a.sfx, clips: raw.clips,
-    dropped: [...raw.dropped, ...a.dropped, ...b.dropped], cuts: a.cuts, created: new Date().toISOString(),
-    summary: `Bảng dựng: ${nT} chữ, ${nB} b-roll, ${a.sfx.length} SFX${music ? `, nhạc ${music.mood}` : ''}.` };
+  const music = raw.music ? { ...a.music, _sheet: raw.music._sheet, _script: raw.music._script } : undefined;
+  return { scenes, music, sfx: a.sfx, clips: raw.clips, miss: raw.miss, dropped: [...raw.dropped, ...a.dropped, ...b.dropped], cuts: a.cuts };
+}
+/**
+ * S27 M194: gộp phần dựng theo dấu kịch bản (planFromSheet) vào kế hoạch của Claude, sửa `plan` tại chỗ: cảnh của Claude chồng giờ cảnh
+ * theo kịch bản bị bỏ (dấu thắng), SFX của Claude trùng lúc SFX theo kịch bản bị bỏ, nhạc nền mang mood + ghi chú của dấu MOOD.
+ * Lời "kịch bản: dấu B-ROLL / CHỮ … chưa có cảnh" của Claude thay bằng lý do của từng yêu cầu (báo cáo plan.script).
+ */
+export function mergeScript(plan, sp) {
+  const own = [];
+  for (const s of plan.scenes) {
+    const f = !s._base && sp.scenes.find(x => x.t0 < s.t1 - .05 && x.t1 > s.t0 + .05);
+    if (f) { plan.dropped.push(`cảnh ${s.type} @${s.t0}s chồng cảnh theo kịch bản (đoạn ${f._sheet + 1})`); continue; }
+    own.push(s);
+  }
+  plan.scenes = [...own.filter(s => s._base), ...[...own.filter(s => !s._base), ...sp.scenes].sort((x, y) => x.t0 - y.t0)];
+  plan.sfx = [...plan.sfx.filter(x => !sp.sfx.some(y => Math.abs(y.t - x.t) < .3)), ...sp.sfx].sort((x, y) => x.t - y.t);
+  if (plan.music && sp.music) plan.music = { ...plan.music, mood: sp.music.mood, _sheet: sp.music._sheet, _script: sp.music._script };
+  plan.dropped = [...plan.dropped.filter(d => !/^kịch bản: dấu (B-ROLL|CHỮ) /.test(d)), ...sp.dropped];
+  return plan;
 }
 
 // ---------- CLI ----------
@@ -489,13 +494,18 @@ async function main() {
   const optFile = opt('--opts'); if (optFile) Object.assign(o, readJson(optFile) || {});
   const { dir, tlFile, tl, caps } = loadProject(src);
   if (!caps.length) throw new Error('Dự án chưa có phụ đề (cần lời thoại để AI đọc).');
-  if (args.includes('--sheet')) return sheetMain(dir, tl, caps);
   say(.05, 'Đọc danh sách gói style từ engine');
   const cat = await engineCatalog(tl, caps, dir);
   const lib = libraries();
   const sc = readScript(dir), script = sc?.align ? sc : null; // S17 M123: chỉ kịch bản đã căn với phụ đề
-  const sheet = script ? readSheet(dir) : null; // S27 M194: bảng dựng làm ràng buộc
-  const ctx = { tl, caps, cat, lib, o, script, sheet };
+  // S27 M194: kịch bản đã căn → dựng lại bảng nội bộ (giờ đã căn, Kho / thư viện / stock), Claude lấp phần dấu không có
+  let sheet = null;
+  if (script) {
+    say(.08, 'Đọc dấu của kịch bản, tìm cảnh trong Kho / thư viện');
+    try { sheet = await sheetFor(dir, { tl, captions: caps, stock: !args.includes('--no-stock') }); } catch (e) { console.log('Bảng dựng: ' + String(e.message || e).slice(0, 200)); sheet = readSheet(dir); }
+    if (!sheet?.rows?.length) sheet = null;
+  }
+  const ctx = { tl, caps, cat, lib, o: { ...o, merge: !!sheet }, script, sheet };
   const prompt = buildPrompt(ctx);
   fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
   fs.writeFileSync(path.join(dir, '.studio/ai_prompt.txt'), prompt);
@@ -513,10 +523,16 @@ async function main() {
     const n = await shortenCuts(plan, p => askJSON(p, { task: 'text', model, cwd: os.tmpdir(), shape: 'object', retries: 0 }));
     console.log(`chữ quá dài: ${plan.cuts.length} · Claude viết ngắn lại ${n}`);
   }
-  // S27 M194: mood chốt của bảng dựng thắng mood Claude chọn; nền nhạc bảng đã đặt thì giữ
+  // S27 M194: dựng theo dấu kịch bản (media vào dự án, planFromSheet) rồi gộp vào kế hoạch của Claude: một kế hoạch, một bước hoàn tác
+  let sp = null;
+  if (sheet) {
+    const media = await sheetMedia(dir, tl, sheet, (k, t) => say(.925 + k * .005, t), lib.broll);
+    sp = planFromSheet(sheet, { tl, caps, cat, lib }, media.media, media.err);
+    mergeScript(plan, sp);
+  }
+  // mood chốt của kịch bản thắng mood Claude chọn
   const sm = sheet && sheetMoodOf(sheet);
   if (plan.music && sm && lib.music.some(m => m.mood === sm)) plan.music.mood = sm;
-  if (plan.music && hasSheetBed(tl.audio?.music, tl.duration)) { plan.music = null; plan.keptMusic = true; plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + 'Giữ nhạc của bảng dựng.'; }
   // S26 M182: đã có nhạc phủ cả video do người dùng chọn/chỉnh → giữ, không đề xuất nhạc mới
   if (plan.music && hasUserBed(tl.audio?.music, tl.duration)) { plan.music = null; plan.keptMusic = true; plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + 'Giữ nhạc bạn chọn.'; }
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
@@ -527,12 +543,17 @@ async function main() {
     say(.93, 'Đặt graphic né mặt, phụ đề và mép khung');
     try {
       const { placePlan } = await import('./ai_qc.mjs');
-      const kept = (tl.scenes || []).filter(s => !(tl._starter || ((s._ai || s._recipe) && !s._orig))); // what applyPlan keeps
+      const kept = (tl.scenes || []).filter(s => !(tl._starter || ((s._ai || s._recipe) && !s._orig && (!!sp || s._sheet == null)))); // what applyPlan keeps
       // the plan's scenes go in as tagged copies (a failed placement leaves plan.scenes untouched, no tag leaks into the plan)
       const r = await placePlan(dir, tl, caps, { ...plan, scenes: [...kept, ...plan.scenes.map(s => ({ ...s, _planned: true }))] },
-        { only: s => s._planned, tag: { _ai: true, _planned: true }, onP: k => say(.93 + k * .06, `Đặt graphic né mặt và phụ đề… ${Math.round(k * 100)}%`) });
+        { only: s => s._planned && !(s._sheet != null && (s.type === 'photo' || s.layout === 'full')), tag: { _ai: true, _planned: true }, onP: k => say(.93 + k * .06, `Đặt graphic né mặt và phụ đề… ${Math.round(k * 100)}%`) });
       plan.scenes = r.scenes.filter(s => s._planned).map(({ _planned, ...s }) => s); plan.placed = { moved: r.moved, left: r.left.map(i => ({ t: i.t, kind: i.kind, msg: i.msg })) };
     } catch (e) { console.log('Bỏ qua bước đặt chỗ: ' + e.message.slice(0, 200)); plan.placed = { error: e.message.slice(0, 200) }; }
+  }
+  if (sp) { // báo cáo cuối cùng (sau nhạc, đặt chỗ): "Theo kịch bản: x/y yêu cầu đã dựng"
+    if (plan.keptMusic && sp.music) sp.miss[sp.music._script.id] = 'giữ nhạc bạn đã chọn cho video';
+    plan.script = scriptReport(scriptRequests(sheet), plan, sp.miss);
+    plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + `Theo kịch bản: ${plan.script.done}/${plan.script.total} yêu cầu đã dựng.`;
   }
   const out = path.resolve(dir, opt('--out', '.studio/ai_plan.json'));
   fs.writeFileSync(out, JSON.stringify(plan, null, 1));
@@ -546,53 +567,45 @@ async function main() {
   }
   say(1, 'Xong');
 }
-// S27 M194: `--sheet`: Áp bảng dựng (job `buildsheet` của studio/routes/23_buildsheet.mjs). Đưa media của các ô B-roll vào dự án
-// (Kho: useFromKho, thư viện, stock tải về, ảnh AI chỉ khi `--ai`), planFromSheet, đặt graphic né mặt, ghi --out (mặc định
-// .studio/sheet_plan.json). Không ghi timeline: Studio áp ở trình duyệt (một bước hoàn tác), `--apply` ghi thẳng (dòng lệnh).
-async function sheetMain(dir, tl, caps) {
-  const sheet = readSheet(dir);
-  if (!sheet?.rows?.length) throw new Error('Dự án chưa có bảng dựng (lưu kịch bản ở bước Nguồn trước).');
-  say(.05, 'Đọc danh sách gói style từ engine');
-  const cat = await engineCatalog(tl, caps, dir), lib = libraries();
-  const want = new Map();
-  for (const r of sheet.rows) if (r.t0 != null && r.spoken !== false) for (const b of r.broll || []) { const k = mediaKey(b); if (k && !want.has(k)) want.set(k, b); }
-  const media = {}, vertical = (tl.height || 1920) > (tl.width || 1080), allowAi = args.includes('--ai');
+// S27 M194: đưa media của các ô B-roll theo kịch bản vào dự án (Kho: useFromKho, thư viện, stock tải về, ảnh AI khi dấu ghi
+// `| ảnh AI` và có khoá). Ô lỗi (tải stock 429, file Kho mất…) thử lần lượt phương án kế (`alts`, không tự tạo ảnh AI) rồi b-roll động
+// khớp chữ nhất; ô có nguồn ép từ dấu (`want`) chỉ thử nguồn đó. Ô đổi nguồn được sửa trong `sheet` đang nhớ (không ghi file).
+// Lỗi không chặn lần dựng: ô đó vào báo cáo "cần xem". → { media: { [mediaKey]: {seq}|{path} }, err: { [mediaKey gốc]: lý do } }
+export async function sheetMedia(dir, tl, sheet, onP = () => {}, dynCat = []) {
+  const cells = [];
+  for (const r of sheet.rows || []) if (r.t0 != null && r.spoken !== false) for (const b of r.broll || []) if (mediaKey(b)) cells.push(b);
+  const media = {}, err = {}, done = new Map(), vertical = (tl.height || 1920) > (tl.width || 1080);
   let K = null, L = null, A = null, i = 0;
-  for (const [k, b] of want) {
-    say(.15 + .5 * i++ / want.size, `Đưa b-roll vào dự án (${i}/${want.size}): ${String(b.q || b.pick).slice(0, 40)}`);
-    try {
-      if (b.src === 'kho') { K ||= await import('./kho_media.mjs'); const it = await K.useFromKho(dir, K.khoOf(dir, tl), b.pick, { credit: 'Kho · bảng dựng', maxDur: 30, why: 'bảng dựng' }); media[k] = it.seq ? { seq: it.seq } : { path: it.path }; }
-      else if (b.src === 'lib') { L ||= await import('./broll_lib.mjs'); const it = L.load().find(x => x.id === b.pick); if (!it) throw new Error('không còn trong thư viện'); const r = L.useIn(it, dir); media[k] = typeof r === 'string' ? { path: r } : { seq: r }; }
-      else if (b.src === 'stock') { A ||= await import('./ai_broll.mjs'); const kind = /\.(jpe?g|png|webp)(\?|$)/i.test(b.pick) ? 'photo' : 'video'; const r = await A.fetchMedia(b.pick, dir, { kind, name: b.q || 'broll', dur: 3, vertical, meta: { provider: 'stock · bảng dựng', url: b.pick } }); media[k] = r.seq ? { seq: r.seq } : { path: r.path }; }
-      else if (b.src === 'ai') {
-        if (!allowAi) throw new Error('chưa bật tạo ảnh AI lúc Áp');
-        A ||= await import('./ai_broll.mjs');
-        const name = `ai_sheet_${String(b.q).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').replace(/[^a-z0-9]+/gi, '_').slice(0, 40).toLowerCase() || 'anh'}.png`;
-        const out = path.join(dir, 'media', name);
-        if (!fs.existsSync(out)) await A.genImage(`${b.q}. Ảnh minh hoạ thật, không chữ, không logo.`, out, { vertical });
-        media[k] = { path: `media/${name}` };
-      }
-    } catch (e) { console.log(`B-roll ${k.slice(0, 80)}: ${String(e.message || e).slice(0, 200)}`); }
+  const fetchOne = async (c, q) => {
+    if (c.src === 'kho') { K ||= await import('./kho_media.mjs'); const it = await K.useFromKho(dir, K.khoOf(dir, tl), c.pick, { credit: 'Kho · kịch bản', maxDur: 30, why: 'kịch bản' }); return it.seq ? { seq: it.seq } : { path: it.path }; }
+    if (c.src === 'lib') { L ||= await import('./broll_lib.mjs'); const it = L.load().find(x => x.id === c.pick); if (!it) throw new Error('không còn trong thư viện'); const r = L.useIn(it, dir); return typeof r === 'string' ? { path: r } : { seq: r }; }
+    if (c.src === 'stock') { A ||= await import('./ai_broll.mjs'); const kind = /\.(jpe?g|png|webp)(\?|$)/i.test(c.pick) ? 'photo' : 'video'; const r = await A.fetchMedia(c.pick, dir, { kind, name: q || 'broll', dur: 3, vertical, meta: { provider: 'stock · kịch bản', url: c.pick } }); return r.seq ? { seq: r.seq } : { path: r.path }; }
+    if (c.src === 'ai') {
+      A ||= await import('./ai_broll.mjs');
+      const name = `ai_sheet_${String(q).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').replace(/[^a-z0-9]+/gi, '_').slice(0, 40).toLowerCase() || 'anh'}.png`;
+      const out = path.join(dir, 'media', name);
+      if (!fs.existsSync(out)) await A.genImage(`${q}. Ảnh minh hoạ thật, không chữ, không logo.`, out, { vertical });
+      return { path: `media/${name}` };
+    }
+    throw new Error('nguồn lạ');
+  };
+  for (const b of cells) {
+    onP(i++ / cells.length, `Đưa cảnh theo kịch bản vào dự án (${i}/${cells.length}): ${String(b.q || b.pick).slice(0, 40)}`);
+    const key0 = mediaKey(b), alt = s => { const j = s.indexOf(':'); return { src: s.slice(0, j), pick: s.slice(j + 1) }; };
+    const cands = [{ src: b.src, pick: b.pick }, ...(b.want ? [] : (b.alts || []).filter(s => typeof s === 'string' && !s.startsWith('ai:')).map(alt))];
+    if (!b.want) { const d = dynamicFor(b.q || '', dynCat)[0]; if (d) cands.push({ src: 'dong', pick: d.id }); }
+    let first = null, ok = false;
+    for (const c of cands) {
+      if (c.src === 'dong') { Object.assign(b, c); ok = true; break; } // b-roll động: không cần đưa file vào dự án
+      const k = mediaKey({ ...c, q: b.q });
+      if (!k) continue;
+      if (!done.has(k)) try { done.set(k, { m: await fetchOne(c, b.q) }); } catch (e) { done.set(k, { err: String(e.message || e).slice(0, 120) }); }
+      const d = done.get(k);
+      if (d.m) { media[k] = d.m; Object.assign(b, c); ok = true; break; }
+      first ||= d.err; console.log(`B-roll ${k.slice(0, 80)}: ${d.err}`);
+    }
+    if (!ok) err[key0] = first || 'chưa đưa được cảnh vào dự án';
   }
-  say(.7, 'Dựng kế hoạch từ bảng');
-  const plan = planFromSheet(sheet, { tl, caps, cat, lib }, media);
-  if (plan.music) try { const K2 = K || await import('./kho_media.mjs'); const k = await K2.khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
-  if (!args.includes('--no-place')) {
-    say(.75, 'Đặt graphic né mặt, phụ đề và mép khung');
-    try {
-      const { placePlan } = await import('./ai_qc.mjs');
-      const probe = JSON.parse(JSON.stringify(tl)), mine = new Set(plan.scenes); applySheet(probe, { ...plan, sfx: [] }); // những gì applySheet giữ
-      const kept = (probe.scenes || []).filter(s => !mine.has(s));
-      const r = await placePlan(dir, tl, caps, { ...plan, scenes: [...kept, ...plan.scenes.map(s => ({ ...s, _planned: true }))] },
-        { only: s => s._planned && s.type !== 'photo', tag: { _ai: true, _planned: true }, onP: k => say(.75 + k * .2, `Đặt graphic né mặt và phụ đề… ${Math.round(k * 100)}%`) });
-      plan.scenes = r.scenes.filter(s => s._planned).map(({ _planned, ...s }) => s); plan.placed = { moved: r.moved, left: r.left.map(x => ({ t: x.t, kind: x.kind, msg: x.msg })) };
-    } catch (e) { console.log('Bỏ qua bước đặt chỗ: ' + e.message.slice(0, 200)); plan.placed = { error: e.message.slice(0, 200) }; }
-  }
-  plan.dir = dir; // Studio chỉ áp khi đúng dự án đang mở (đổi dự án giữa lúc chạy thì không áp)
-  const out = path.resolve(dir, opt('--out', '.studio/sheet_plan.json'));
-  fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, JSON.stringify(plan, null, 1));
-  console.log(`bảng dựng: ${plan.scenes.length} cảnh · ${plan.sfx.length} sfx · nhạc ${plan.music?.mood || 'giữ'} · bỏ ${plan.dropped.length}`);
-  if (args.includes('--apply')) { applySheet(tl, plan); fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl, null, 1)); console.log('applied → timeline.json'); }
-  say(1, 'Xong');
+  return { media, err };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(path.resolve(process.argv[1]))).href) main().catch(e => { console.error('LỖI: ' + e.message); process.exit(1); });
