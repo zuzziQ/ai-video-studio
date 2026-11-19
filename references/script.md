@@ -148,3 +148,26 @@ cảnh → `broll[]` (Kho → thư viện → stock khi bật → động), thê
 `from: note` + `note` = câu gốc người dùng viết (ghi chú "Kịch bản yêu cầu …" trên timeline đọc lại); không đè ô `mark` / `user`.
 `sheetPrompt` gửi AI dựng các ô đó (`(theo chỉ dẫn)`) và mọi câu gốc dạng "KỊCH BẢN YÊU CẦU (nguyên văn, làm theo khi dựng)", nên câu luật
 chưa hiểu Claude làm theo lúc dựng. Không bao giờ sửa lời.
+
+## 10. A-roll theo kịch bản (S27 M196)
+
+Lõi `scripts/script_takes.mjs` (hàm thuần, test `scripts/tests/s27_m196.test.mjs`), route + feature `24_aroll`. Không panel, không cài đặt:
+dòng gọn trong hộp AI dựng. Không chạy trong Tự lái (chọn take và cắt lời cần người duyệt; Tự lái chỉ ghi số đoạn `offscript` vào kết quả bước `script`).
+
+- **Lời ngoài kịch bản**: `offscriptCuts(align.offscript, lời trên timeline)` → khoảng nên cắt, mép nới `PAD` = 0,15 s về phía lặng nhưng không lấn
+  từ kề bên; bỏ đoạn đã không còn ở mốc đó (timeline đổi) và đoạn có mốc từ vỡ kiểu Whisper bịa (`brokenShape`: từ > 3 s, ≥ 40 % từ dài 0,
+  mật độ < 0,8 từ/s; bài học `ai-video-studio-041`). Hộp "Xem để cắt" không tick sẵn; cắt = `Studio.ai.cutRanges` (một bước hoàn tác), lưu rồi
+  danh sách tính lại.
+- **Nhiều take**: mỗi nguồn có tiếng khác nhau trong `TL.clips` là một take, xếp theo giờ file (mtime) rồi thứ tự trên timeline; `clip N` / `take N`
+  đếm từ 1 theo thứ tự đó. Job `script_takes` (`scripts/queue.mjs`) nhận dạng lời từng take một lần (cache `.studio/takes/<hash>.json`, hash =
+  cỡ + 1 MB đầu + 1 MB cuối + mô hình) và dò mặt trên khung của take; `alignTakes` căn mọi đoạn với mọi take theo cửa sổ (lần quay lại cùng câu
+  trong một take là một ứng viên: khớp nhiều hơn, ít từ thừa hơn, rồi lần sau); `pickTakes`: dấu `[A-ROLL: clip N | take N | tệp]` thắng, không thì
+  `takeScore` = ratio − 0,02 × từ thừa (≤ 0,2) − 0,05 × từ đầu / cuối hụt (≤ 2 mỗi bên), chênh ≤ 0,02 thì take sau; dưới 30 % hoặc khớp rời rạc (chữ khớp / chữ nghe được trong khoảng < 0,5, vd chỉ trùng "của", "là") = "chưa quay"; dấu trỏ
+  take không đạt ngưỡng đó thì chọn theo điểm, ghi lý do. Đoạn chỉ có dấu (không lời) bỏ qua; đoạn trùng đoạn trước trong cùng take báo "chưa quay".
+- `takesToClips`: mỗi đoạn một clip `{…clip mẫu của take, in, out, zoom/ox/oy, _sheet, _take}` theo thứ tự kịch bản; hai đoạn liền nhau trong cùng
+  take (ở giữa < 5 từ) nối ở giữa khoảng lặng (một take dài chứa cả kịch bản chỉ mất phần ngoài kịch bản). Cỡ khung: cận mặt zoom 1,6, trung 1,25
+  quanh mặt của take (`ox/oy` %), rộng hoặc chưa dò mặt thì giữ cover. Kết quả `.studio/takes_plan.json` (clips, phụ đề theo giờ mới, segments /
+  align, lựa chọn); **Áp** ở Studio thay `TL.clips` + phụ đề (thẻ kết cuối dời theo), `/api/aroll/applied` ghi align vào `script.json` và sao lưu
+  lời nhận dạng của các take vào `captions_noscript.json` (+ `heardDur`) để sửa kịch bản lần sau căn đúng. Clip mang `_script` { kind: "A-ROLL", note: take · khớp } nên Thuộc tính hiện ghi chú + Sửa tay / Hỏi Claude (`23_scriptnotes.js`).
+  Áp hỏi lại khi track chính đã đổi từ lúc dựng (`clipsKey`), nền nhạc phủ cả video theo độ dài mới, `/applied` nhận `at` của kế hoạch đã áp (khác → 409).
+  Graphic đã dựng giữ nguyên giờ: AI dựng lại.

@@ -210,7 +210,7 @@ export function docxText(buf) {
 }
 
 // ---------- căn chữ kịch bản với lời nghe được ----------
-function lcs(a, b) { // a, b: token đã chuẩn hoá → các cặp [i, j] khớp (giống topic_video.mjs lcsAlign)
+export function lcs(a, b) { // a, b: token đã chuẩn hoá → các cặp [i, j] khớp (giống topic_video.mjs lcsAlign)
   const n = a.length, m = b.length, W = m + 1, L = new Uint16Array((n + 1) * W);
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i * W + j] = a[i] && a[i] === b[j] ? L[(i + 1) * W + j + 1] + 1 : Math.max(L[(i + 1) * W + j], L[i * W + j + 1]);
   const pairs = []; let i = 0, j = 0;
