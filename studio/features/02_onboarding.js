@@ -252,7 +252,6 @@
   }
   async function saveBrand() {
     if (!W.name.trim()) throw new Error('Nhập tên thương hiệu.');
-    if (!W.logoFile && !W.kit?.logoUrl) throw new Error('Thêm logo để tiếp tục.');
     const brand = { title: W.name.trim(), name: W.name.trim(), phone: W.phone.trim(), website: W.website.trim(), handle: W.handle.trim() };
     if (W.kit) brand.id = W.kit.id;
     if (W.colors[0]) { brand.primary = W.colors[0]; brand.accent = W.colors[1] || W.colors[0]; }

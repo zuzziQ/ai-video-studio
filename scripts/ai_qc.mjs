@@ -616,11 +616,19 @@ function solve(B, inside, avoid) {
   }
   return best;
 }
-function hookText(tl, caps, claudeHook) {
+// S26 M181: ô tiêu đề của "Video mới" được điền sẵn tên file ("VIDEO-GOC"): chữ giống tên file không dùng làm hook khi còn lời thoại.
+export function fileLikeTitle(s, tl) {
+  const t = String(s || '').trim(), n = x => String(x || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t) return false;
+  if (tl?.title_auto && n(t) === n(tl.title)) return true;
+  return /\.\w{2,4}$/.test(t) || (!/\s/.test(t) && /[-_.]/.test(t) && !/[^ -]/.test(t) && !/[-_.]$/.test(t)) || /^(IMG|VID|MOV|DSC|PXL|MVI|VIDEO)[-_ ]?\d+/i.test(t);
+}
+export function hookText(tl, caps, claudeHook) {
   if (claudeHook) return claudeHook;
-  if (tl.title && tl.title.length <= 42) return tl.title;
+  const title = tl.title && tl.title.length <= 42 ? tl.title : '';
+  if (title && !fileLikeTitle(title, tl)) return title;
   const w = []; for (const c of caps) { for (const x of c.words) w.push(x.w); if (w.length >= 6 || /[.!?]$/.test(capText(c))) break; }
-  return w.slice(0, 6).join(' ');
+  return w.slice(0, 6).join(' ') || title; // tên file chỉ khi không còn gì khác
 }
 const STOP = new Set('là và thì mà của các có được này đó rất một nó chúng ta tôi bạn cho với trong để khi đã sẽ lại cũng nhưng những cái thế nào gì ra vào lên đi nhé nha ạ à ừ ờ thôi rồi hay hoặc nếu vì nên do bị từ tới đến ở như'.split(' '));
 const fitSize = (text, DW, max = 66) => Math.round(clamp(DW * .84 / (Math.max(4, text.length) * .6), 30, max));
@@ -803,7 +811,7 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
     // an opening overlay whose text became too small to work as a hook (shrunk to fit) → replace it by a big 2-line text
     const h = (tl.scenes || []).find(x => !x.hidden && !isBase(x, tl) && x.t0 < 1.5 && x.type !== 'text' && typeof x.text === 'string' && x.text.length > 3);
     if (touched.has('hook') && !h && !is.recheck) { fixed.add(is); continue; }
-    const txt = h ? h.text : hookText(tl, caps, null); if (!txt) continue;
+    const txt = h && !fileLikeTitle(h.text, tl) ? h.text : hookText(tl, caps, null); if (!txt) continue;
     if (h) { h.hidden = true; mark(h); }
     tl.scenes.push(textScene(tl, .05, Math.min(2.4, tl.duration), txt, freeY(tl, P, 0, 2.4)));
     tl.fx = [...(tl.fx || []), mark({ t: .05, type: 'punch' })];
@@ -821,9 +829,19 @@ export function applyDeterministic(tl, caps, issues, P, touched) {
     if (issues.includes(is)) fixed.add(is);
   }
   // 6. music masking speech → lower the music bed
-  for (const is of issues.filter(x => x.kind === 'music_masking')) if (!touched.has('gain')) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) - is.need_db); mark(m); } is.fix = { op: 'gain', db: -is.need_db }; fixed.add(is); }
+  // S26 M181: gợi ý gain của Claude (đã áp trước, touched.gainDb) không chặn phần máy đo: chỉ trừ phần Claude đã làm, còn thiếu thì cộng nốt
+  const gainLeft = (need, sign) => { const done = touched.has('gain') ? sign * (touched.gainDb || 0) : 0; return r2(need - done); };
+  for (const is of issues.filter(x => x.kind === 'music_masking')) {
+    const left = gainLeft(is.need_db, -1);
+    if (left > .5) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) - left); mark(m); } is.fix = { op: 'gain', db: -left }; } else is.fix = { op: 'gain', db: 0 };
+    fixed.add(is);
+  }
   // 6b. music bed too quiet to hear → raise it (M63)
-  for (const is of issues.filter(x => x.kind === 'music_quiet')) if (!touched.has('gain')) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) + is.need_db); mark(m); } is.fix = { op: 'gain', db: is.need_db }; fixed.add(is); }
+  for (const is of issues.filter(x => x.kind === 'music_quiet')) {
+    const left = gainLeft(is.need_db, 1);
+    if (left > .5) { for (const m of tl.audio.music || []) { m.gain = r2((m.gain ?? -20) + left); mark(m); } is.fix = { op: 'gain', db: left }; } else is.fix = { op: 'gain', db: 0 };
+    fixed.add(is);
+  }
   // 7. captions longer than 5 words (or off canvas) → split into ≤ 4-word lines, timing from the words
   const split = [];
   caps.forEach((c, k) => { if ((c.words.length > 5 || c._qc_split) && !c.hidden) split.push(k); delete c._qc_split; });
@@ -994,6 +1012,7 @@ export async function runQC(src, o = {}) {
         } catch (e) { console.error('[qc] soát lời thoại: ' + String(e.message).slice(0, 200)); }
       }
       const touched = new Set(applied.map(p => (p.op === 'hook' ? 'hook' : p.op === 'gain' ? 'gain' : ['move', 'resize', 'delete', 'retime', 'text'].includes(p.op) ? p.target : null)).filter(Boolean));
+      touched.gainDb = applied.filter(p => p.op === 'gain').reduce((a, p) => a + (+p.db || 0), 0); // dB gain Claude đã áp (cộng dồn)
       const fixedDet = applyDeterministic(tl, caps, detSel, P, touched);
       for (const i of det) if (fixedDet.has(i)) i.fixed = true;
       // re-check on the patched timeline (stills at the same times + every issue time); a 2nd placement round uses the new boxes

@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pyBin } from './platform.mjs';
+import { defaultAudio } from './audio_defaults.mjs';
 import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { faceTrack } from './face_track_project.mjs';
 import { forbiddenDir, AVS_HOME } from '../studio/security.mjs';
@@ -31,6 +32,11 @@ export function runCmd(cmd, argv, onLine, { cwd } = {}) {
   });
 }
 
+/** Hộp "Video mới" điền sẵn tên file vào ô tiêu đề: giống tên file (bỏ đuôi, dấu cách / - _, hoa thường) thì không phải tiêu đề người dùng gõ. */
+export function titleFromFile(title, src) {
+  const n = s => String(s || '').replace(/\.\w+$/, '').toLowerCase().replace(/[\s_.-]+/g, '');
+  return !n(title) || n(title) === n(path.basename(String(src || '')));
+}
 // Display orientation of a video (rotation metadata included): 'vertical' | 'horizontal'.
 /** Tiêu đề + viên thương hiệu cho thẻ kết (title_card) theo brand kit; không có thì tiêu đề trống, không viên. S16 M120. */
 export function endCard(brand, title = '') {
@@ -114,7 +120,7 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
   const dur = +(fs.readdirSync(path.join(d, 'work/frames')).length / 30).toFixed(2);
   const tl = {
     width: orient === 'horizontal' ? 1920 : 1080, height: orient === 'horizontal' ? 1080 : 1920, fps: 30, duration: +(dur + 2.5).toFixed(2),
-    pack, _starter: { pack, title, dur: +(dur + 2.5).toFixed(2) },
+    pack, _starter: { pack, title, dur: +(dur + 2.5).toFixed(2), ...(titleFromFile(title, src) ? { title_auto: true } : {}) },
     aroll: { frames: 'work/frames/%05d.jpg' }, face, ...(faceTr ? { face_track: faceTr } : {}),
     caption_style: 'slate', captions: 'work/captions.json', ...(speech ? { speech } : {}),
     scenes: [
@@ -123,7 +129,7 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
       ...(pack === 'slate' ? [{ type: 'frame_grid', t0: 0, t1: dur, badge: false, ...(orient === 'horizontal' ? { card: { x: 120, y: 70, w: 1040, h: 585, r: 8 } } : {}) }] : []),
       { type: 'title_card', t0: dur, t1: +(dur + 2.5).toFixed(2), question: 'Bạn thấy sao?', ...(orient === 'horizontal' ? { y: 210 } : {}) },
     ],
-    audio: { voice: 'work/aroll.mp4', mix: 'work/mix.wav', music: [{ t0: 0, t1: +(dur + 2.5).toFixed(2), mood: 'tech', gain: -20 }], sfx: [] },
+    audio: defaultAudio(+(dur + 2.5).toFixed(2)),
   };
   // Brand kit chosen in the onboarding / "Video mới" dialog: applied here so the project does not ask for it again.
   if (kit) { const { brandFields } = await import('./batch.mjs'); tl.brand = { ...brandFields(kit, d), kit: kit.id }; }

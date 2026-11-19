@@ -19,6 +19,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { callClaude, parseJson } from './ai_edit.mjs';
 import { pyBin } from './platform.mjs';
+import { defaultAudio } from './audio_defaults.mjs';
 import { projectFix, fixArgs, fixWords } from './dict.mjs';
 import { videoArgs } from './encoder_cli.mjs';
 
@@ -303,7 +304,7 @@ export async function buildProject(src, h, dir, o, info, words, onStep = () => {
       { type: 'frame_grid', t0: 0, t1: dur, badge: { icon: 'si:claude' } },
       { type: 'title_card', t0: dur, t1: total, question: 'Bạn thấy sao?' },
     ],
-    audio: { voice: 'work/aroll.mp4', mix: 'work/mix.wav', music: [{ t0: 0, t1: total, mood: 'tech', gain: -20 }], sfx: [] },
+    audio: defaultAudio(total),
     _highlight: { source: path.resolve(src), t0: h.t0, t1: h.t1, title: h.title, hook: h.hook, score: h.score, reason: h.reason, mode },
   };
   fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(tl, null, 1));

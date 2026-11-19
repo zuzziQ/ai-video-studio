@@ -635,7 +635,8 @@ function applyRecipe(packId, title, replace = false) {
   if (r.caption_style != null) TL.caption_style = r.caption_style || undefined;
   TL.scenes = [...(replace ? [] : (TL.scenes || []).filter(s => !s._recipe)), ...(r.scenes || []).map(s => ({ ...s, _recipe: true }))];
   if (r.fx) TL.fx = [...(replace ? [] : (TL.fx || []).filter(f => !f._recipe)), ...r.fx.map(f => ({ ...f, _recipe: true }))];
-  if (r.music) { TL.audio = TL.audio || {}; TL.audio.music = [{ t0: 0, t1: TL.duration, mood: r.music, gain: -20 }]; }
+  if (r.music) { TL.audio = TL.audio || {}; TL.audio.music = [{ t0: 0, t1: TL.duration, mood: r.music, gain: -10 }];
+    if (TL.audio.duck == null || TL.audio.duck === true) TL.audio.duck = { on: true, amount_db: -10, attack: 60, release: 400, hold: 250 }; } // cùng số với scripts/audio_defaults.mjs (S26 M181)
   needInit = true; changed(true); toast(`Đã dựng theo gói ${p.name}: ${(r.scenes || []).length} thành phần`);
 }
 function applyField(f, v, el) {
@@ -989,7 +990,8 @@ document.addEventListener('mousedown', e => {
 
 // ---------- add text / graphics ----------
 // Graphic library = every pack registered in the engine (engine/packs/*.js); see library.js (Hiệu ứng).
-const packs = () => (win && win.PACKS) || [];
+// Chưa mở dự án thì `win` chưa có: lấy danh sách gói từ khung preview đã nạp sẵn ở trang chủ (cùng engine, S26 M181).
+const packs = () => (win && win.PACKS) || document.getElementById('frame')?.contentWindow?.PACKS || [];
 
 // ---------- stage interactions ----------
 // S17 M124: kéo dời (cả nhóm Shift), tay nắm góc phóng đều, tay nắm cạnh đổi riêng rộng / cao (cảnh StageCore.canResize),
@@ -1715,10 +1717,11 @@ async function openNewProject() {
   // Thương hiệu, gói style và khổ hình đã chọn ở hướng dẫn đầu / brand kit: lấy sẵn, không hỏi lại. Muốn khác thì mở "Đổi".
   const ls = { get: (k, d) => { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('avs.' + k, v); } catch {} } };
   const [onb, brands] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => [])]);
+  for (let i = 0; i < 20 && !packs().length; i++) await new Promise(r => setTimeout(r, 150)); // khung preview còn đang nạp engine
   const BR = Array.isArray(brands) ? brands : [], PK = packs().filter(p => p.recipe);
   const cur = TL ? META?.kho || null : null; // Kho của dự án đang mở (server đọc từ .kho.json / brand kit)
   const brand0 = (cur && (cur.brand === '' || BR.some(b => b.id === cur.brand)) ? cur.brand : null) ?? (BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : ''));
-  const packFor = id => { const b = BR.find(x => x.id === id); return [b?.pack, ls.get('newPack', '')].find(x => x && PK.some(p => p.id === x)) || PK[0]?.id || 'slate'; };
+  const packFor = id => window.PackPick.defaultPack({ brand: BR.find(x => x.id === id), purpose: onb?.purpose, last: ls.get('newPack', ''), packs: PK });
   const orient0 = { '16:9': 'horizontal', '9:16': 'vertical' }[onb?.aspect] || 'auto';
   const OR = [['auto', 'Theo video'], ['vertical', 'Dọc 9:16 (Reels, TikTok, Shorts)'], ['horizontal', 'Ngang 16:9 (YouTube)']];
   modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3>
@@ -1924,7 +1927,9 @@ async function boot() {
     if (TL._starter) {
       const st = TL._starter; delete TL._starter;
       const built = (TL.scenes || []).some(s => s._auto || s._ai || s._qc || s._recipe) || (TL.audio?.sfx || []).length > 0;
-      if (!built) { if (st.title) TL.title = st.title; pushUndo(); applyRecipe(st.pack, st.title, true); saveNow(); }
+      // S26 M181: tiêu đề chỉ là tên file (title_auto) thì thẻ tiêu đề của gói lấy câu đầu lời thoại, không hiện "video-goc"
+      const capTitle = () => { const w = CAP.slice(0, 3).flatMap(c => (c.words || []).map(x => x.w).concat(c.words ? [] : String(c.text || '').split(/\s+/))).filter(Boolean).slice(0, 7).join(' '); return w ? w[0].toUpperCase() + w.slice(1) : ''; };
+      if (!built) { if (st.title) { TL.title = st.title; if (st.title_auto) TL.title_auto = true; } pushUndo(); applyRecipe(st.pack, (st.title_auto && capTitle()) || st.title, true); saveNow(); }
     }
   };
   if (f.contentWindow?.renderFrame) ready(); else f.addEventListener('load', ready);
