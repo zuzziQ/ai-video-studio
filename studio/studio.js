@@ -96,7 +96,7 @@ const snapshot = () => JSON.stringify({ TL, CAP }, strip);
 let lastPush = { key: '', at: 0 };
 function pushUndo(key = '') {
   // S26 M185: AI dựng / áp gợi ý QC đang chạy sẽ ghi lại timeline lúc xong: chặn mọi sửa mới (thêm từ thư viện, lệnh…) trước khi nó đổi TL
-  if (window.Studio?.jobs?.locked()) { toast('Đang chạy ' + Studio.jobs.running() + ': chờ xong rồi sửa (xem khay việc)'); throw Object.assign(new Error('Đang có việc ghi lại timeline'), { avsLocked: true }); }
+  if (window.Studio?.jobs?.locked()) { toast('Đang chạy ' + Studio.jobs.running() + ': chờ xong rồi sửa (bấm chuông việc nền)'); throw Object.assign(new Error('Đang có việc ghi lại timeline'), { avsLocked: true }); }
   const now = Date.now();
   if (key && key === lastPush.key && now - lastPush.at < 900) { lastPush.at = now; return; }
   lastPush = { key, at: now };

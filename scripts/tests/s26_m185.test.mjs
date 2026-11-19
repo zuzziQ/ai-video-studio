@@ -55,8 +55,8 @@ test('locked: chỉ khoá khi còn thẻ đang chạy đặt lock (xuất video 
 });
 
 test('busyMessage + queueLine (Tự lái)', () => {
-  assert.equal(J.busyMessage('Xuất video'), 'Đang chạy: Xuất video (xem khay việc)');
-  assert.match(J.busyMessage(''), /^Đang chạy: .+ \(xem khay việc\)$/);
+  assert.equal(J.busyMessage('Xuất video'), 'Đang chạy: Xuất video (bấm chuông việc nền)');
+  assert.match(J.busyMessage(''), /^Đang chạy: .+ \((bấm chuông việc nền)\)$/);
   assert.equal(J.queueLine([]), ''); assert.equal(J.queueLine(undefined), '');
   assert.equal(J.queueLine([{ state: 'done' }]), '');
   assert.equal(J.queueLine([{ state: 'running', title: 'clip1', progress: 0.4 }, { state: 'queued' }, { state: 'queued' }]), 'Tự lái: đang chạy “clip1” 40% · 2 việc chờ');
