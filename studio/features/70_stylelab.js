@@ -33,6 +33,9 @@
   .sl-mine .tx { flex: 1; min-width: 0; } .sl-mine .tx b { display: block; font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sl-mine .tx small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
   .sl-warn { border-color: rgb(var(--color-danger)); } .sl-warn h4 { color: rgb(var(--color-danger-text)); } .sl-warn p { font-size: var(--text-xs); }
+  .sl-brand { border-top: 1px solid rgb(var(--color-line)); margin-top: var(--space-2); padding-top: var(--space-2); }
+  .sl-brand .sl-lg { flex: none; width: 32px; height: 32px; object-fit: contain; border-radius: var(--radius-xs); background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); }
+  .sl-brand .sl-sw i { height: 12px; } .sl-chk { display: flex; gap: var(--space-1); align-items: center; font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); margin: var(--space-2) 0 0; }
   .sl-imgs { display: flex; gap: var(--space-1); flex-wrap: wrap; margin: var(--space-1) 0; } .sl-imgs img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--radius-xs); }`;
   document.head.appendChild(css);
   // Data-driven values (progress width, swatches of the analysed video's palette) arrive as data-v="--w:40%" and are set with style.setProperty after insert.
@@ -41,10 +44,42 @@
   const FONTS = ['', 'Be Vietnam Pro', 'Montserrat', 'Inter', 'Playfair Display', 'DM Serif Display', 'Bungee', 'Lexend', 'Oswald', 'Nunito', 'Pacifico'];
   const STEPS = { clone: ['Phân tích video (cắt cảnh, màu, chữ, lời, nhạc)', 'Claude xem contact sheet + viết gói', 'Kiểm tra gói trong engine (sửa tối đa 2 vòng)', 'Cài gói, template, skill, video xem trước'],
     describe: ['Claude thiết kế style + viết gói', 'Kiểm tra gói trong engine (sửa tối đa 2 vòng)', 'Cài gói, template, skill, video xem trước'] };
-  const st = { tab: 'clone', w: null, an: null, sheet: 0, src: '', job: null, kind: null, result: null, styles: null, check: null, d: { desc: '', orient: 'vertical', industry: '', colors: '', font: '', images: [] }, name: '', model: 'default', timer: null };
+  const st = { tab: 'clone', w: null, an: null, sheet: 0, src: '', job: null, kind: null, result: null, styles: null, check: null, d: { desc: '', orient: 'vertical', industry: '', images: [] }, b: { brand: null, colors: '', font: '', voice: '', logo: true }, brands: null, name: '', model: 'default', timer: null };
   const $b = () => document.getElementById('libbody');
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const fileUrl = (w, f) => avsUrl(`/api/stylelab/file?w=${encodeURIComponent(w)}&f=${encodeURIComponent(f)}`);
+  // S27 M190: thương hiệu cho style. Cùng luật làm sạch với scripts/style_brand.mjs (máy chủ làm sạch lần nữa): màu chỉ #hex,
+  // font chỉ tên họ font không ngoặc (bài học ai-video-studio-053: ngoặc kép trong font làm chữ biến mất khỏi preview).
+  const cleanFont = s => { const f = String(s ?? '').split(',')[0]; return /var\(|[{}<>;:=]/.test(f) ? '' : f.replace(/["'`]/g, '').replace(/[^\p{L}\p{N} \-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40); };
+  const cleanColors = v => [...new Set([...String(Array.isArray(v) ? v.join(' ') : v ?? '').matchAll(/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3})(?![0-9a-f])/gi)].map(m => m[0].toUpperCase()))].slice(0, 6).join(', ');
+  const cleanText = (s, n) => String(s ?? '').replace(/["`“”]/g, "'").replace(/\s+/g, ' ').trim().slice(0, n);
+  const brandOf = id => (st.brands || []).find(x => x.id === id) || null;
+  const brandName = x => x ? x.title || x.name || x.id : '';
+  // chọn thương hiệu → điền sẵn màu chính/nhấn/nền, font tiêu đề, giọng văn, logo (người dùng vẫn sửa được sau đó)
+  function fillBrand(id) {
+    const x = brandOf(id);
+    st.bv = (st.bv || 0) + 1; // render() tự save() từ các ô: ô vẽ từ lần điền trước (data-bv cũ) không được đè lên giá trị mới
+    st.b = { brand: x ? x.id : '', colors: x ? cleanColors([x.primary, x.accent, x.dark, x.light]) : '', font: x ? cleanFont(x.disp) || cleanFont(x.font) : '', voice: x ? cleanText(x.voice, 300) : '', logo: !!x?.logoUrl };
+  }
+  async function loadBrands() {
+    const r = await S.api('/api/brands').catch(() => []);
+    st.brands = Array.isArray(r) ? r : [];
+    if (st.b.brand == null) fillBrand(brandOf(S.META?.kho?.brand) ? S.META.kho.brand : ''); // mặc định: thương hiệu của dự án đang mở
+    if (st.visible) render();
+  }
+  function brandBlock(running) {
+    const B = st.b, x = brandOf(B.brand), dis = running ? 'disabled' : '';
+    const sw = cleanColors(B.colors).split(', ').filter(Boolean);
+    return `<div class="sl-brand" data-bv="${st.bv || 0}">
+      <div class="sl-row"><select id="slbrand" aria-label="Thương hiệu của style" ${dis}><option value="">Không theo thương hiệu</option>${(st.brands || []).map(b => `<option value="${S.esc(b.id)}" ${b.id === B.brand ? 'selected' : ''}>Thương hiệu: ${S.esc(brandName(b))}</option>`).join('')}</select>
+        ${x?.logoUrl ? `<img class="sl-lg" src="${S.esc(avsUrl(x.logoUrl))}" alt="Logo ${S.esc(brandName(x))}">` : ''}</div>
+      <div class="sl-row"><input id="slcol" aria-label="Màu thương hiệu" placeholder="Màu: #111111, #C9A44C" value="${S.esc(B.colors)}" ${dis}><!-- design-token-ok: placeholder shows the hex format the user types -->
+        <input id="slfont" aria-label="Font" list="slfonts" placeholder="Font: để Claude chọn" value="${S.esc(B.font)}" ${dis}><datalist id="slfonts">${FONTS.filter(Boolean).map(f => `<option value="${f}">`).join('')}</datalist></div>
+      ${sw.length ? `<div class="sl-sw" title="Màu sẽ gửi cho Claude">${sw.map(c => `<i data-v="--sw:${c}" title="${c}"></i>`).join('')}</div>` : ''}
+      <input id="slvoice" class="sl-full" aria-label="Giọng văn" placeholder="Giọng văn (VD: sang trọng, ngắn gọn, xưng mình – bạn)" value="${S.esc(B.voice)}" ${dis}>
+      ${x?.logoUrl ? `<label class="sl-chk"><input type="checkbox" id="sllogo" ${B.logo ? 'checked' : ''} ${dis}> Dùng logo thương hiệu trong style</label>` : ''}
+      ${B.brand ? '<p class="muted sl-xs">Style tạo ra thuộc thương hiệu này (nhóm “Của …” trong thư viện mẫu).</p>' : ''}</div>`;
+  }
 
   async function loadStyles() { st.styles = await S.api('/api/stylelab/list').catch(() => []); if (st.visible) render(); }
   // M38: user packs run as plain JS (Studio preview + every render). Warn about packs that neither ship with the repo nor were
@@ -73,6 +108,7 @@
     if (!st.styles) loadStyles();
     if (!st.check) checkCli();
     if (!st.packs) loadPacks();
+    if (!st.brands) { st.brands = []; loadBrands(); }
     const running = st.job && st.job.state === 'running';
     b.innerHTML = `<div class="seg" id="sltab">${[['clone', 'ti-movie', 'Clone từ video'], ['describe', 'ti-writing', 'Từ mô tả']].map(([k, i, l]) => `<button data-t="${k}" class="${st.tab === k ? 'on' : ''}"><i class="ti ${i}"></i> ${l}</button>`).join('')}</div>
       ${warnCard()}
@@ -92,7 +128,7 @@
       <p class="muted sl-sm">Đưa vào video bất kỳ có style bạn thích. Máy phân tích cắt cảnh, màu, vị trí chữ, lời nói, nhạc; Claude xem contact sheet rồi viết một gói style mới tái tạo phong cách đó (không chép logo/nội dung).</p>
       <div class="sl-drop" id="sldrop"><i class="ti ti-upload"></i> Kéo thả hoặc bấm để chọn video<input type="file" id="slfile" accept="video/*" hidden></div>
       <div class="sl-row"><input id="slpath" placeholder="…hoặc đường dẫn: ~/Downloads/video.mp4" value="${S.esc(st.src)}" ${running ? 'disabled' : ''}><button id="slan" class="sl-nf" ${running ? 'disabled' : ''}><i class="ti ti-scan"></i> Phân tích</button></div>
-      ${an ? anCard(an) + opts(running) + `<button class="primary sl-full" id="slgo" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
+      ${an ? anCard(an) : ''}${brandBlock(running)}${an ? opts(running) + `<button class="primary sl-full" id="slgo" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
         <p class="muted sl-xs">Mất khoảng 2–8 phút (Claude CLI trên máy bạn, dùng gói Claude của bạn). Gói chỉ được cài khi qua kiểm tra trong engine.</p>` : ''}</div>`;
   }
   function anCard(an) {
@@ -111,12 +147,10 @@
     return `<div class="sl-card"><h4><i class="ti ti-writing"></i> Mô tả style bạn muốn</h4>
       <textarea id="sldesc" rows="5" placeholder="VD: Video bất động sản sang trọng tông đen – vàng gold, chữ serif, intro tên dự án, thẻ giá, bản đồ vị trí, CTA gọi điện" ${running ? 'disabled' : ''}>${S.esc(d.desc)}</textarea>
       <div class="seg sl-mt" id="slor">${[['vertical', 'Dọc 9:16'], ['horizontal', 'Ngang 16:9']].map(([k, l]) => `<button data-o="${k}" class="${d.orient === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <div class="sl-row"><input id="slind" placeholder="Ngành (BĐS, mỹ phẩm…)" value="${S.esc(d.industry)}"><input id="slcol" placeholder="Màu thương hiệu: #111111, #C9A44C" value="${S.esc(d.colors)}"></div><!-- design-token-ok: placeholder shows the hex format the user types -->
-
-      <div class="sl-row"><select id="slfont">${FONTS.map(f => `<option value="${f}" ${d.font === f ? 'selected' : ''}>${f || 'Font: để Claude chọn'}</option>`).join('')}</select>
+      <div class="sl-row"><input id="slind" placeholder="Ngành (BĐS, mỹ phẩm…)" value="${S.esc(d.industry)}">
         <button id="slimg" class="sl-nf"><i class="ti ti-photo-plus"></i> Ảnh tham khảo</button><input type="file" id="slimgf" accept="image/*" multiple hidden></div>
       ${d.images.length ? `<div class="sl-imgs">${d.images.map((f, i) => `<img src="${f.url}" title="Bấm để bỏ" data-rmimg="${i}">`).join('')}</div>` : ''}
-      ${opts(running)}<button class="primary sl-full" id="slgo" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
+      ${brandBlock(running)}${opts(running)}<button class="primary sl-full" id="slgo" ${running || st.check?.error ? 'disabled' : ''}><i class="ti ti-sparkles"></i> Tạo style bằng Claude</button>
       <p class="muted sl-xs">Claude viết gói style + template + skill; mất khoảng 2–8 phút (Sonnet nhanh hơn).</p></div>`;
   }
   function progCard() {
@@ -172,12 +206,15 @@
       q('#slimg').onclick = () => q('#slimgf').click();
       q('#slimgf').onchange = async () => { save(); for (const f of [...q('#slimgf').files].slice(0, 4 - st.d.images.length)) { const r = await put(f); if (r.path) st.d.images.push({ path: r.path, url: URL.createObjectURL(f) }); } render(); };
     }
+    q('#slbrand') && (q('#slbrand').onchange = e => { save(); fillBrand(e.target.value); render(); });
+    q('#slcol') && (q('#slcol').onchange = () => { save(); render(); }); // vẽ lại ô màu theo giá trị đã làm sạch
     q('#slgo') && (q('#slgo').onclick = generate);
   }
   function save() {
     const b = $b(), v = s => b.querySelector(s)?.value;
     if (v('#slname') != null) st.name = v('#slname').trim(); if (v('#slmodel')) st.model = v('#slmodel');
-    if (st.tab === 'describe' && b.querySelector('#sldesc')) Object.assign(st.d, { desc: v('#sldesc'), industry: v('#slind').trim(), colors: v('#slcol').trim(), font: v('#slfont') });
+    if (st.tab === 'describe' && b.querySelector('#sldesc')) Object.assign(st.d, { desc: v('#sldesc'), industry: v('#slind').trim() });
+    if (b.querySelector(`.sl-brand[data-bv="${st.bv || 0}"]`)) Object.assign(st.b, { colors: v('#slcol').trim(), font: v('#slfont').trim(), voice: v('#slvoice').trim(), logo: b.querySelector('#sllogo') ? b.querySelector('#sllogo').checked : st.b.logo });
     if (st.tab === 'clone' && b.querySelector('#slpath')) st.src = v('#slpath').trim();
   }
   const put = f => fetch('/api/stylelab/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f }).then(r => r.json());
@@ -196,11 +233,13 @@
       render();
     });
   }
+  // tham số thương hiệu gửi đi (đã làm sạch); logo:false chỉ khi thương hiệu có logo mà người dùng bỏ chọn
+  const brandBody = () => { const B = st.b, o = {}; if (B.brand) o.brand = B.brand; const c = cleanColors(B.colors), f = cleanFont(B.font), vo = cleanText(B.voice, 300); if (c) o.colors = c; if (f) o.font = f; if (vo) o.voice = vo; if (B.brand && brandOf(B.brand)?.logoUrl && !B.logo) o.logo = false; return o; };
   async function generate() {
     save();
-    const body = { mode: st.tab, name: st.name, model: st.model };
+    const body = { mode: st.tab, name: st.name, model: st.model, ...brandBody() };
     if (st.tab === 'clone') { if (!st.w || !st.an) return S.toast('Phân tích video trước'); body.w = st.w; }
-    else { if (!st.d.desc?.trim()) return S.toast('Hãy mô tả style bạn muốn'); Object.assign(body, { desc: st.d.desc, orient: st.d.orient, industry: st.d.industry, colors: st.d.colors, font: st.d.font, images: st.d.images.map(i => i.path) }); }
+    else { if (!st.d.desc?.trim()) return S.toast('Hãy mô tả style bạn muốn'); Object.assign(body, { desc: st.d.desc, orient: st.d.orient, industry: st.d.industry, images: st.d.images.map(i => i.path) }); }
     const r = await S.api('/api/stylelab/generate', body);
     if (!r.ok) return S.toast(r.error || 'Không chạy được');
     st.w = r.w; st.kind = st.tab; st.result = null;
