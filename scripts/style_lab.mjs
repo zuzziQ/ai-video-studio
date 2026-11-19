@@ -5,6 +5,8 @@
 //   node scripts/style_lab.mjs clone <video> [--name "…"] [--model sonnet|opus] [--work dir] [--skip-analyze] [--no-install]
 //   node scripts/style_lab.mjs describe "<mô tả>" [--orient vertical|horizontal] [--industry …] [--colors "#111,#C9A44C"] [--font "…"]
 //                                                [--images a.jpg,b.png] [--name …] [--model …] [--work dir] [--no-install]
+//   clone / describe thêm (S27 M190): [--brand <id>] (brand kit trong $AVS_HOME/brands.json: màu, font, giọng văn, logo; template ghi
+//     brand_id) · [--voice "…"] [--no-logo] (--colors/--font/--voice thắng brand kit) · [--dry] (chỉ ghi prompt.txt + result.json, không gọi Claude)
 //   node scripts/style_lab.mjs analyze <video> [--work dir]          (only the offline analysis: scripts/style_analyze.py)
 //   node scripts/style_lab.mjs validate <pack.js> [--id u_x]         (engine check of a pack file)
 //   node scripts/style_lab.mjs apply <id> <project_dir> [--title …]  (apply the style's template to timeline.json)
@@ -21,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, pyBin, claudeBin } from './platform.mjs';
 import { launchChrome } from './chrome_profile.mjs';
 import { runClaude } from './llm.mjs';
+import { loadBrand, brandHints, mergeBrand, brandPrompt, cleanText } from './style_brand.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -32,7 +35,7 @@ const UTPL = path.join(TPL, 'user'), UREF = path.join(SKILL, 'references/user');
 const PY = pyBin(SKILL);
 const CHROME = findChrome();
 const args = process.argv.slice(2);
-const VAL = ['--name', '--model', '--work', '--footage', '--orient', '--industry', '--colors', '--font', '--images', '--id', '--title', '--rounds', '--category', '--whisper', '--lang', '--desc'];
+const VAL = ['--name', '--model', '--work', '--footage', '--orient', '--industry', '--colors', '--font', '--images', '--id', '--title', '--rounds', '--category', '--whisper', '--lang', '--desc', '--brand', '--voice'];
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const pos = args.filter((a, i) => !a.startsWith('--') && !(i && VAL.includes(args[i - 1])));
 const say = (p, s) => console.log(`@@ ${Math.max(0, Math.min(1, p)).toFixed(2)} ${s}`);
@@ -118,13 +121,14 @@ Giải thích: cuts = thời điểm cắt cảnh (giây); text_zones y0/y1/x0/x
 Nhiệm vụ: tái tạo PHONG CÁCH dựng (bố cục, màu, kiểu phụ đề, loại graphic, nhịp, chuyển cảnh) để áp lên video người nói BẤT KỲ — không sao chép nội dung, logo, tên, handle, watermark hay thương hiệu của người làm video tham chiếu. Nếu video tham chiếu có biểu tượng thương hiệu, thay bằng hình trung tính hoặc slIcon(BR().logo) của người dùng.`
     : `# Mô tả của người dùng
 """${o.desc}"""
-Tuỳ chọn: khổ ${o.orient === 'horizontal' ? 'ngang 16:9 (thiết kế chính 1280×720, vẫn phải chạy được dọc)' : 'dọc 9:16 (thiết kế chính 720×1280, vẫn phải chạy được ngang)'}${o.industry ? `; ngành: ${o.industry}` : ''}${o.colors ? `; màu thương hiệu: ${o.colors}` : ''}${o.font ? `; font mong muốn: ${o.font}` : ''}.
+Tuỳ chọn: khổ ${o.orient === 'horizontal' ? 'ngang 16:9 (thiết kế chính 1280×720, vẫn phải chạy được dọc)' : 'dọc 9:16 (thiết kế chính 720×1280, vẫn phải chạy được ngang)'}${o.industry ? `; ngành: ${o.industry}` : ''} (màu, font: mục Thương hiệu bên dưới nếu có).
 ${imgs.length ? `Ảnh tham khảo của người dùng (dùng tool Read để xem từng ảnh trong thư mục hiện tại trước khi thiết kế): ${imgs.join(', ')}` : ''}
 Nhiệm vụ: thiết kế một style dựng video hoàn chỉnh đúng mô tả, áp được lên video người nói (talking head) bất kỳ.`;
+  const brand = brandPrompt(o.brand, kind);
   return `Bạn là motion designer kiêm lập trình viên engine video. Hãy tạo một GÓI STYLE mới cho engine AI Video Studio (HTML → MP4, mỗi khung là HTML render theo thời gian t).
 
 ${look}
-
+${brand}
 # Footage sẽ dùng style này
 Video người nói chính diện (talking head) ${o.vertical ? 'dọc 9:16 — mặt thường ở khoảng y 330–700 trong khung 720×1280' : 'ngang 16:9 — mặt ở khoảng giữa khung 1280×720'}. Video là một cú máy liền: nếu style gốc cắt cảnh nhanh, mô phỏng nhịp đó bằng fx (punch / zoom_in / whip / flash / glitch) và graphic xuất hiện theo nhịp. Graphic không được che mặt quá 2 giây liên tục (trừ khi là cảnh full-frame ngắn).
 
@@ -352,7 +356,7 @@ Nguồn: ${src}. Gói engine: \`${id}\` · template: \`${id}\` · spec: \`refere
 ${spec}
 ` };
 }
-export async function install(work, { id, code, spec, meta, kind, src, aspect, footageDir }) {
+export async function install(work, { id, code, spec, meta, kind, src, aspect, footageDir, brandId }) {
   for (const d of [UPACK, STORE, UTPL, UREF, path.join(TPL, 'previews')]) fs.mkdirSync(d, { recursive: true });
   const head = `// Style Lab: "${meta.name}" (${kind === 'clone' ? 'clone từ video ' + src : 'tạo từ mô tả'}) — ${new Date().toISOString().slice(0, 10)}. Spec: references/user/${id}.md\n`;
   const js = head + code.trim() + '\n';
@@ -362,7 +366,7 @@ export async function install(work, { id, code, spec, meta, kind, src, aspect, f
   const tpl = {
     id, name: String(meta.name || id).slice(0, 28), category: CATS.includes(meta.category) ? meta.category : 'khac', aspect, pack: id,
     desc: String(meta.desc || '').slice(0, 200), tags: [...(Array.isArray(meta.tags) ? meta.tags.slice(0, 6) : []), 'style của tôi'], title: String(meta.title || meta.name || 'Tiêu đề').slice(0, 60),
-    caption_style: id, music: MOODS.includes(String(meta.music).replace(/_2$/, '')) ? meta.music : undefined, use_recipe: true, base_dur: 20.2,
+    ...(brandId ? { brand_id: brandId } : {}), caption_style: id, music: MOODS.includes(String(meta.music).replace(/_2$/, '')) ? meta.music : undefined, use_recipe: true, base_dur: 20.2,
     needs: Array.isArray(meta.needs) ? meta.needs.slice(0, 5) : [], preview: { from: 0, to: 6, still: 2.2 },
     style_lab: { kind, src: String(src).slice(0, 300), created: new Date().toISOString(), seen: meta.seen || '', summary: meta.summary || '', skill: sk.name, skill_desc: String(meta.skill_description || '').slice(0, 800), work },
   };
@@ -486,9 +490,15 @@ async function generate(kind) {
       }
     }
     const model = opt('--model', 'default');
-    const o = { analysis: an, desc: src, orient: vertical ? 'vertical' : 'horizontal', industry: opt('--industry'), colors: opt('--colors'), font: opt('--font'), images, vertical, category: opt('--category') };
+    // S27 M190: thương hiệu (--brand) + giá trị người dùng sửa (--colors/--font/--voice), tất cả qua làm sạch (style_brand.mjs)
+    const kit = opt('--brand') ? loadBrand(HOME, opt('--brand')) : null;
+    if (opt('--brand') && !kit) throw new Error('Không thấy thương hiệu ' + opt('--brand'));
+    const brand = mergeBrand(brandHints(kit), { colors: opt('--colors'), font: opt('--font'), voice: opt('--voice'), logo: args.includes('--no-logo') ? false : undefined });
+    const o = { analysis: an, desc: src, orient: vertical ? 'vertical' : 'horizontal', industry: cleanText(opt('--industry') || '', 80), colors: brand.colors, font: brand.font, brand, images, vertical, category: opt('--category') };
     const prompt = buildPrompt(kind, o);
     fs.writeFileSync(path.join(work, 'prompt.txt'), prompt);
+    result.brand_id = brand.brand_id || undefined;
+    if (args.includes('--dry')) return finish({ ok: true, dry: true, installed: false, brand_id: brand.brand_id, colors: brand.colors, font: brand.font, voice: brand.voice, prompt: 'prompt.txt' });
     say(.25, `Claude đang ${kind === 'clone' ? 'xem contact sheet và ' : ''}thiết kế style + viết gói (2–8 phút)`);
     const tick = (p0, p1, label) => (s, act) => say(p0 + (p1 - p0) * (1 - Math.exp(-s / 180)), `${label}: ${act} · ${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`);
     let res = await callClaude(prompt, { cwd: work, model, onTick: tick(.25, .6, 'Claude đang thiết kế style và viết gói') });
@@ -527,7 +537,7 @@ async function generate(kind) {
     if (args.includes('--no-install')) return finish({ ...base, ok: true, installed: false });
     say(.88, 'Cài gói + tạo template, skill, video xem trước');
     const ft = footage();
-    const files = await install(work, { id, code, spec, meta, kind, src: kind === 'clone' ? path.basename(src) : src, aspect: vertical ? '9:16' : '16:9', footageDir: ft?.dir });
+    const files = await install(work, { id, code, spec, meta, kind, src: kind === 'clone' ? path.basename(src) : src, aspect: vertical ? '9:16' : '16:9', footageDir: ft?.dir, brandId: brand.brand_id });
     say(1, 'Xong');
     return finish({ ...base, ok: true, installed: true, files });
   } catch (e) {

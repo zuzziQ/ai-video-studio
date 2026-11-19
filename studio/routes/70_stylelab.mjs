@@ -5,7 +5,9 @@
 //   POST /api/stylelab/analyze {path}            → job "stylelab": scripts/style_analyze.py → { ok, w }
 //   GET  /api/stylelab/analysis?w=               → analysis.json
 //   GET  /api/stylelab/file?w=&f=                → a file inside the work folder (sheets, stills, compare.jpg)
-//   POST /api/stylelab/generate {w?, mode:'clone'|'describe', desc, orient, industry, colors, font, images[], name, model} → job → { ok, w }
+//   POST /api/stylelab/generate {w?, mode:'clone'|'describe', desc, orient, industry, colors, font, images[], name, model,
+//                                brand?, voice?, logo?, dry?} → job → { ok, w }   (S27 M190: brand = id trong brands.json; cả hai mode
+//                                nhận colors/font/voice/brand; dry = chỉ ghi prompt, không gọi Claude — scripts/style_lab.mjs --dry)
 //   GET  /api/stylelab/result?w=                 → result.json (also written when it failed)
 //   GET  /api/stylelab/list · POST /api/stylelab/delete {id}
 //   GET  /api/stylelab/packs                     → [{ id, file, name, origin: 'repo'|'stylelab'|'other', trusted }] (M38, engine/packs/user)
@@ -14,6 +16,21 @@ import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'
 import { rmSync } from '../../scripts/fs_rm.mjs';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { loadBrand, cleanColors, cleanFont, cleanText } from '../../scripts/style_brand.mjs';
+
+// S27 M190: phần tham số thương hiệu chung cho clone và describe (hàm thuần, test ở scripts/tests/s27_m190.test.mjs).
+// Thương hiệu lạ → { error }. Giá trị đã làm sạch ở đây (màu chỉ #hex, font không ngoặc), CLI làm sạch lần nữa.
+export function brandArgv(b, home) {
+  const out = [];
+  if (b.brand) { if (!loadBrand(home, String(b.brand))) return { error: 'Không thấy thương hiệu ' + String(b.brand).slice(0, 60) }; out.push('--brand', String(b.brand)); }
+  const colors = cleanColors(b.colors), font = cleanFont(b.font), voice = cleanText(b.voice, 300);
+  if (colors) out.push('--colors', colors);
+  if (font) out.push('--font', font);
+  if (voice) out.push('--voice', voice);
+  if (b.logo === false) out.push('--no-logo');
+  if (b.dry === true) out.push('--dry');
+  return { argv: out };
+}
 
 export default ctx => {
   const HOME = process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio');
@@ -118,6 +135,9 @@ export default ctx => {
       const extra = [];
       if (b.name) extra.push('--name', String(b.name).slice(0, 28));
       if (['sonnet', 'opus', 'haiku'].includes(b.model)) extra.push('--model', b.model);
+      const ba = brandArgv(b, HOME);
+      if (ba.error) return ctx.json(res, { error: ba.error }, 404), true;
+      extra.push(...ba.argv);
       let w = b.w, argv;
       if (mode === 'clone') {
         const d = wdir(w);
@@ -129,7 +149,7 @@ export default ctx => {
         w = newW('describe'); const d = wdir(w); fs.mkdirSync(d, { recursive: true });
         fs.writeFileSync(path.join(d, 'desc.txt'), String(b.desc).slice(0, 3000));
         argv = ['describe', '--work', d, '--orient', b.orient === 'horizontal' ? 'horizontal' : 'vertical', ...extra];
-        for (const k of ['industry', 'colors', 'font']) if (b[k]) argv.push('--' + k, String(b[k]).slice(0, 200));
+        if (b.industry) argv.push('--industry', cleanText(b.industry, 80));
         const imgs = (Array.isArray(b.images) ? b.images : []).filter(f => typeof f === 'string' && f.startsWith(ROOT) && fs.existsSync(f)).slice(0, 4);
         if (imgs.length) argv.push('--images', imgs.join(','));
       }

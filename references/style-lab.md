@@ -29,6 +29,16 @@ Claude Code CLI (`claude -p`) chạy trên máy người dùng ngay lúc bấm. 
 Như trên nhưng không có video: mô tả tiếng Việt + tuỳ chọn khổ (dọc/ngang), ngành, màu thương hiệu, font, tối đa 4 ảnh
 tham khảo (được chép vào thư mục làm việc `ref_N.jpg` để Claude đọc bằng Read).
 
+## 2b. Theo thương hiệu (S27 M190)
+Cả hai tab có ô **Thương hiệu** (từ `GET /api/brands`; mặc định thương hiệu của dự án đang mở, `META.kho.brand`). Chọn thương hiệu
+thì điền sẵn màu (chính, nhấn, tối, sáng), font tiêu đề (`disp`, không có thì `font`), giọng văn và logo (ô "Dùng logo thương hiệu"
+khi brand kit có logo); người dùng sửa tự do trước khi tạo. Prompt có thêm mục "Thương hiệu của người dùng" (tab Clone: thay bảng
+màu của video tham chiếu bằng màu thương hiệu, giữ bố cục và nhịp). Style tạo ra ghi `brand_id` vào `templates/user/<id>.json`
+(trường của M189), nên đứng trong nhóm "Của <thương hiệu>" của thư viện mẫu.
+Làm sạch (`scripts/style_brand.mjs`, panel làm lần nữa): màu chỉ còn `#hex` (tối đa 6), font chỉ còn tên họ font không ngoặc
+(`"Bungee", sans-serif` → `Bungee`; `var(--sans)` bị bỏ), chữ tự do không ngoặc kép. Engine chèn font / màu vào `style="…"`,
+ngoặc kép làm chữ biến mất khỏi preview (dev-memory `ai-video-studio-053`).
+
 ## 3. Dùng
 **Studio**: rail trái → **Tạo style** (icon DNA): tab *Clone từ video* (kéo thả / chọn file hoặc dán đường dẫn → Phân tích →
 xem contact sheet, bảng màu, nhịp cắt → *Tạo style bằng Claude*) và *Từ mô tả*. Trong lúc chạy hiện các bước, thời gian, nút
@@ -39,12 +49,13 @@ hoàn tác được), **Mở trong thư viện mẫu**, **Xoá style**. Danh sá
 ```bash
 node scripts/style_lab.mjs clone ~/Downloads/video.mp4 [--name "Tên"] [--model sonnet|opus]
 node scripts/style_lab.mjs describe "Video BĐS sang trọng đen–gold…" [--orient vertical|horizontal] [--industry "BĐS"] [--colors "#0B0B0B,#C9A44C"] [--font "Playfair Display"] [--images a.jpg,b.png]
+node scripts/style_lab.mjs describe "…" --brand <id> [--voice "…"] [--no-logo] [--dry]   # cả clone; --colors/--font/--voice thắng brand kit
 node scripts/style_lab.mjs apply <id> <thư mục dự án> [--title "…"]   # áp template của style vào timeline.json (có backup .studio/history)
 node scripts/style_lab.mjs list | sync | delete <id> | check            # check = thử gọi claude
 node scripts/style_lab.mjs validate pack.js [--id u_x] [--work dir]      # chỉ kiểm tra một gói
 ```
 Tuỳ chọn chung: `--work <dir>` (mặc định `~/.ai-video-studio/stylelab/<thời gian>_<loại>/`), `--footage <dự án>`,
-`--no-install`, `--rounds 2`. Env: `AVS_SKILLS_DIR` (mặc định `~/.claude/skills`), `AVS_HOME` (`~/.ai-video-studio`), `CLAUDE_BIN`.
+`--no-install`, `--rounds 2`, `--brand <id>` (thương hiệu lạ → lỗi), `--dry` (chỉ ghi `prompt.txt` + `result.json`, không gọi Claude: dùng khi thử). Env: `AVS_SKILLS_DIR` (mặc định `~/.claude/skills`), `AVS_HOME` (`~/.ai-video-studio`), `CLAUDE_BIN`.
 Tiến độ in dạng `@@ <0..1> <bước>`; kết quả ở `<work>/result.json`.
 
 ## 4. File được tạo (id = `u_<slug>`)
@@ -58,7 +69,7 @@ Tiến độ in dạng `@@ <0..1> <bước>`; kết quả ở `<work>/result.jso
 | `~/.claude/skills/video-style-<slug>/SKILL.md` | skill Claude Code: mô tả + cụm từ kích hoạt, cách dùng (`apply`, render), spec. Có dòng `avs-style-id` để Xoá biết đúng skill của mình |
 
 API server (`studio/routes/70_stylelab.mjs`): `GET /api/stylelab/check|list|analysis?w=|result?w=|file?w=&f=`,
-`POST /api/stylelab/upload?name=|analyze {path}|generate {w|desc…}|delete {id}`. Một tác vụ một lúc (job `stylelab`).
+`POST /api/stylelab/upload?name=|analyze {path}|generate {w|desc…, brand?, colors?, font?, voice?, logo?, dry?}|delete {id}`. Một tác vụ một lúc (job `stylelab`).
 
 ## 5. Giới hạn (nói thật)
 - Claude tái tạo **phong cách** từ ~40–48 khung hình tĩnh + số liệu đo, không xem chuyển động thật: hiệu ứng động, kiểu chuyển
