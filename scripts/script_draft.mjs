@@ -49,7 +49,7 @@ export function draftTimeline({ aspect = '9:16', est, title = '', brand = null, 
     aroll: { frames: 'work/placeholder.svg', count: 1, placeholder: true },
     face: W > H ? { x: 640, y: 300 } : { x: 360, y: 520 },
     caption_style: pack === 'slate' ? 'slate' : undefined, captions: 'work/captions.json',
-    draft: { mode: 'estimate', wps: clampWps(wps), aspect, at: new Date().toISOString() },
+    draft: { mode: 'estimate', wps: clampWps(wps), aspect, at: new Date().toISOString(), est: est.segments.map(x => [x.t0, x.t1]) }, // giờ ước của các mục (retimeDraft)
     scenes: [{ type: 'title_card', t0: sp, t1: D, question: 'Bạn thấy sao?', ...(brand?.name ? { title: brand.name } : {}), ...(W > H ? { y: 210 } : {}) }],
     audio: { music: [{ t0: 0, t1: D, mood: 'tech', gain: DEFAULT_MUSIC_GAIN }], sfx: [], duck: { ...DEFAULT_DUCK } },
     ...(brand ? { brand } : {}),

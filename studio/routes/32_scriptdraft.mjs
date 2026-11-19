@@ -25,13 +25,13 @@ const jobView = j => j && { id: j.id, state: j.state, step: j.step, progress: j.
 const varDir = (id, v) => { const k = +v; if (!Number.isInteger(k) || k < 1 || k > VARIANTS.length) throw bad('Phương án không hợp lệ'); return path.join(draftDir(id), `v${k}`); };
 
 /** Kiểm đầu vào của POST /api/draft (hàm thuần cho test). known = id các thương hiệu đang có. → { draft } | lỗi có status */
-export function checkDraftInput(b, known = []) {
+export function checkDraftInput(b, known = () => false) {
   const text = typeof b?.text === 'string' ? b.text : '';
   if (!text.trim()) throw bad('Dán kịch bản hoặc thả file .docx / Excel trước');
   if (text.length > MAX_TEXT) throw bad(`Kịch bản dài quá (${text.length} ký tự, tối đa ${MAX_TEXT})`);
   const segs = parseScript(text); if (!segs.length) throw bad('Kịch bản không có chữ để nói');
   const brand = typeof b.brand === 'string' ? b.brand : '';
-  if (brand && !known.includes(brand)) throw bad('Không thấy thương hiệu', 404);
+  if (brand && !(Array.isArray(known) ? known.includes(brand) : known(brand))) throw bad('Không thấy thương hiệu', 404);
   const aspect = ASPECTS[b.aspect] ? b.aspect : '9:16', wps = clampWps(b.wps);
   const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 80) || segs[0].say.split(/\s+/).slice(0, 8).join(' ');
   return { draft: { text, name, brand, aspect, wps }, est: estimateTimes(segs, { wps }) };
@@ -42,7 +42,6 @@ export default ctx => async (req, res, p) => {
   const J = (o, c) => (ctx.json(res, o, c), true);
   const q = new URL(req.url, 'http://x').searchParams;
   try {
-    const known = () => { try { return (JSON.parse(fs.readFileSync(path.join(path.dirname(draftsDir()), 'brands.json'), 'utf8')).brands || []).map(b => b.id); } catch { return []; } };
     if (req.method === 'GET') {
       if (p === '/api/draft/list') {
         let ids = []; try { ids = fs.readdirSync(draftsDir()).filter(f => DRAFT_ID.test(f)); } catch { /* chưa có bản nháp */ }
@@ -68,7 +67,8 @@ export default ctx => async (req, res, p) => {
     if (req.method !== 'POST') return false;
     const b = await ctx.body(req);
     if (p === '/api/draft') {
-      const { draft, est } = checkDraftInput(b, known());
+      const { loadBrand } = await import('../../scripts/batch.mjs'); // cùng nơi nạp với job (script_draft.mjs brandOf)
+      const { draft, est } = checkDraftInput(b, id => /^[a-z0-9][a-z0-9-]{0,39}$/.test(id) && !!loadBrand(id));
       const id = `d-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex')}`, dir = draftDir(id);
       wr(path.join(dir, 'draft.json'), { id, ...draft, created: new Date().toISOString() });
       const item = addItem({ kind: 'script_draft', input: dir, opts: {}, source: 'ui' });

@@ -333,7 +333,8 @@ export function estimateTimes(segments, { wps = WPS, gap = GAP, lead = LEAD, end
  * đoạn của nó; mục khác theo đoạn chứa thời điểm của nó (khoảng nghỉ sau đoạn thuộc đoạn đó); sau đoạn cuối dời bằng độ lệch cuối.
  * Trong đoạn, giờ co giãn tuyến tính. Sửa `tl` tại chỗ (25_transcribe lưu chính đối tượng này). → số mục đã dời.
  */
-export function retimeDraft(tl, from, to) {
+const estOf = tl => (Array.isArray(tl.draft?.est) && tl.draft.est.length ? tl.draft.est.map(([t0, t1]) => ({ t0, t1 })) : null);
+export function retimeDraft(tl, from, to, { shot = true } = {}) {
   const F = (from || []).map(s => [s.t0, s.t1]), T = (to || []).map(s => [s.t0, s.t1]);
   if (!F.length || F.length !== T.length || F.some(x => x[0] == null)) return 0;
   const map = (t, k = null) => {
@@ -344,6 +345,8 @@ export function retimeDraft(tl, from, to) {
     if (i < 0) return t;
     const [a, b] = F[i], [c, d] = T[i];
     if (t <= b) return r2(Math.max(0, c + (t - a) * ((d - c) / Math.max(.05, b - a))));
+    const n = F[i + 1], m = T[i + 1]; // khoảng nghỉ trước đoạn kế: co giãn tới đầu đoạn kế
+    if (n && m?.[0] != null && t <= n[0]) return r2(Math.max(0, d + (t - b) * ((m[0] - d) / Math.max(.05, n[0] - b))));
     return r2(Math.max(0, t + (d - b)));
   };
   let n = 0;
@@ -351,7 +354,9 @@ export function retimeDraft(tl, from, to) {
   for (const s of tl.scenes || []) { one(s, ['t0', 't1']); if (s.t1 <= s.t0) s.t1 = r2(s.t0 + .3); }
   for (const f of tl.fx || []) one(f, ['t']);
   for (const x of tl.audio?.sfx || []) one(x, ['t']);
-  if (tl.draft) tl.draft = { ...tl.draft, mode: 'shot', shot: new Date().toISOString() };
+  // nhạc theo đoạn (M195): khúc đầu giữ mốc 0, chỉ dời mốc cuối; nền phủ cả video (không _sheet) để nguyên
+  for (const m of tl.audio?.music || []) { if (m._sheet == null && m.t0 <= .05) continue; one(m, m.t0 <= .05 ? ['t1'] : ['t0', 't1']); }
+  if (tl.draft) tl.draft = { ...tl.draft, est: (to || []).map(x => [x.t0, x.t1]), ...(shot ? { mode: 'shot', shot: new Date().toISOString() } : {}) };
   return n;
 }
 
@@ -421,11 +426,15 @@ export function applyScript(dir, { tl, caps, heard, max = 4, fresh = false } = {
   const draft = tl.draft?.mode === 'estimate';
   if (draft && !fresh && !heard) {
     const est = estimateTimes(sc.segments, { wps: tl.draft.wps });
+    // giờ ước cũ của các mục nằm ở tl.draft.est (script.json vừa ghi lại không còn giờ): cùng số đoạn thì dời mục sang giờ ước mới
+    const old = estOf(tl);
+    if (old?.length === est.segments.length) retimeDraft(tl, old, est.segments, { shot: false });
+    else tl.draft = { ...tl.draft, est: est.segments.map(x => [x.t0, x.t1]) };
     Object.assign(sc, { segments: est.segments, align: est.align }); wr(scriptFile(dir), sc);
     if (est.duration > D) tl.duration = est.duration;
     return { tl, caps: captionsFrom(est.words, { max }), script: sc };
   }
-  const prevSegs = draft || sc.align?.mode === 'estimate' ? sc.segments : null;
+  const prevSegs = draft || sc.align?.mode === 'estimate' ? estOf(tl) || sc.segments : null;
   const H = mute ? [] : heard || heardOf(saved || caps);
   if (!mute && !H.length) return { tl, caps, script: sc, pending: true }; // chưa tách lời thoại: căn khi có (25_transcribe)
   if (caps.length && (fresh || (!sc.align && !fs.existsSync(backup)))) { wr(backup, caps); sc.heardDur = D; }

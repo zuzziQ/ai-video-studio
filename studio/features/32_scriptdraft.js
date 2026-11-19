@@ -36,7 +36,7 @@
 .sd-big{display:block;max-width:100%;max-height:78vh;margin:0 auto;border-radius:var(--radius-control)}`;
   document.head.appendChild(css);
 
-  const D = { text: '', name: '', brand: '', aspect: '9:16', wps: 2.6, id: null, timer: null, brands: null, last: null };
+  const D = { text: '', name: '', brand: '', aspect: '9:16', wps: 2.6, id: null, timer: null, brands: null, last: null, view: 0 }; // view: mỗi lần vẽ hộp tăng, phản hồi cũ bỏ
   const WPS_MIN = 2, WPS_MAX = 3.4;
   const s1 = v => (+v || 0).toFixed(1).replace('.', ',');
   const box = () => document.querySelector('#modalbox .sd');
@@ -52,7 +52,7 @@
     return D.brands;
   }
   async function open(o = {}) {
-    clearTimeout(D.timer);
+    clearTimeout(D.timer); D.view++;
     if (o.text != null) { D.text = o.text; D.name = o.name || ''; D.id = null; }
     if (o.brand != null) D.brand = o.brand;
     if (o.id) D.id = o.id;
@@ -131,14 +131,16 @@
         <button data-sd="tpl" data-v="${v.k}" title="Lưu vào thư viện mẫu, gắn với thương hiệu của bản nháp"><i class="ti ti-template"></i> Lưu thành mẫu</button></div></div>`;
   }
   async function showDraft() {
-    clearTimeout(D.timer);
+    clearTimeout(D.timer); const view = ++D.view;
     let r; try { r = await S.api(`/api/draft?id=${encodeURIComponent(D.id)}`); } catch (e) { r = { error: e.message }; }
+    if (view !== D.view) return; // người dùng đã sang màn khác trong lúc chờ
     if (r.error) { S.toast(r.error); D.id = null; return open(); }
     const res = r.result, j = r.job, asp = r.draft.aspect, vs = res?.variants || [];
     const running = j && ['queued', 'running'].includes(j.state);
-    const failed = !running && (j?.state === 'error' || res?.state === 'error') && !vs.some(v => !v.error);
+    // job lỗi / bị huỷ / không còn trong hàng đợi mà chưa có phương án nào: báo, không để hộp trống
+    const failed = !running && res?.state !== 'done' && !vs.some(v => !v.error);
     const prog = running ? `<div class="sd-prog"><i class="ti ti-loader-2 spin"></i><span>${esc(j.step || 'Đang chờ trong hàng đợi')}${j.progress ? ` · ${Math.round(j.progress * 100)}%` : ''}</span></div>`
-      : failed ? `<div class="sd-prog"><i class="ti ti-alert-triangle"></i><span>${esc(j?.error || 'Không dựng được')}</span></div>` : '';
+      : failed ? `<div class="sd-prog"><i class="ti ti-alert-triangle"></i><span>${esc(j?.state === 'cancelled' ? 'Đã huỷ việc dựng' : j?.error || 'Không dựng được phương án nào')} · bấm Bản nháp mới để dựng lại</span></div>` : '';
     const n = 3, cards = Array.from({ length: n }, (_, i) => vs[i] ? cardHtml(vs[i], asp, D.id) : running ? cardHtml(null) : '').join('');
     const est = res ? ` · ${res.segments} đoạn · ≈ ${Math.round(res.duration)} giây theo ${s1(res.wps)} từ/giây` : '';
     S.modal(`<div class="sd"><h3><i class="ti ti-layout-board-split"></i> ${esc(r.draft.name || 'Bản nháp')}</h3>
@@ -156,7 +158,7 @@
     const a = t.dataset.sd;
     if (a === 'shots') { const l = document.createElement('a'); l.href = window.avsUrl(`/api/draft/shots?id=${encodeURIComponent(D.id)}`); l.download = 'danh-sach-quay.txt'; document.body.appendChild(l); l.click(); l.remove(); return; }
     if (a === 'new') { D.id = null; clearTimeout(D.timer); return open(); }
-    if (a === 'zoom') { const back = D.id; clearTimeout(D.timer); S.modal(`<div class="sd"><img class="sd-big" src="${esc(t.src)}" alt="${esc(t.alt)}"><div class="sd-row"><span class="grow"></span><button data-sd="back"><i class="ti ti-arrow-left"></i> Về 3 phương án</button></div></div>`); box().querySelector('[data-sd="back"]').onclick = () => { D.id = back; showDraft(); }; return; }
+    if (a === 'zoom') { const back = D.id; clearTimeout(D.timer); D.view++; S.modal(`<div class="sd"><img class="sd-big" src="${esc(t.src)}" alt="${esc(t.alt)}"><div class="sd-row"><span class="grow"></span><button data-sd="back"><i class="ti ti-arrow-left"></i> Về 3 phương án</button></div></div>`); box().querySelector('[data-sd="back"]').onclick = () => { D.id = back; showDraft(); }; return; }
     if (a === 'use') {
       t.disabled = true;
       try {

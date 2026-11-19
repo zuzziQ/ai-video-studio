@@ -108,6 +108,10 @@ test('retimeDraft: mục theo đoạn (_sheet) co giãn theo giờ thật; mục
   assert.equal(tl.audio.sfx[0].t, 8); assert.equal(tl.fx[0].t, 4);
   assert.equal(tl.scenes[2].t0, 10.4); assert.equal(tl.draft.mode, 'shot');
   assert.equal(retimeDraft({ scenes: [] }, from, [to[0]]), 0, 'số đoạn lệch: không dời');
+  // nhạc: nền phủ cả video để nguyên, khúc theo đoạn (M195) dời; khúc đầu giữ mốc 0
+  const t3 = { audio: { music: [{ t0: 0, t1: 12, mood: 'a' }, { t0: 0, t1: 4.4, _sheet: 0 }, { t0: 4.4, t1: 12, _sheet: 1 }] } };
+  retimeDraft(t3, from, to);
+  assert.deepEqual(t3.audio.music.map(m => [m.t0, m.t1]), [[0, 12], [0, 8], [8, 14]]);
 });
 
 test('applyScript: mẫu chưa quay ước lại theo tốc độ đọc; có lời thật (Tạo lời thoại) thì căn rồi dời mọi mục', () => {
@@ -121,6 +125,11 @@ test('applyScript: mẫu chưa quay ước lại theo tốc độ đọc; có l�
   const r = applyScript(dir, { tl: JSON.parse(JSON.stringify(tl)) });
   assert.ok(!r.pending); assert.equal(readScript(dir).align.mode, 'estimate', 'chưa quay: vẫn giờ ước');
   assert.ok(r.caps.some(c => c.words.some(w => w.w === 'trọng')), 'phụ đề theo chữ mới');
+  // reviewer: sửa kịch bản trước khi quay → mục dời sang giờ ước mới, vị trí tương đối trong đoạn giữ nguyên ở cả hai bước
+  const rel = (t, sg) => (t.scenes.find(x => x._sheet === 1).t0 - sg.t0) / (sg.t1 - sg.t0);
+  const r0 = rel(tl, est.segments[1]), seg1 = readScript(dir).segments[1];
+  assert.ok(Math.abs(rel(r.tl, seg1) - r0) < .02, 'sửa kịch bản: mục theo giờ ước mới');
+  assert.deepEqual(r.tl.draft.est[1], [seg1.t0, seg1.t1]);
   // quay xong: lời thật chậm gấp đôi → mục của đoạn 1 dời theo
   const sc = readScript(dir), heard = sc.segments.flatMap(s => s.say.split(/\s+/).map(w => ({ w }))).map((h, i) => ({ ...h, s: 1 + i * .8, e: 1 + i * .8 + .6 }));
   const tl2 = JSON.parse(JSON.stringify(r.tl)), before = tl2.scenes.find(s => s._sheet === 1).t0;
@@ -129,11 +138,13 @@ test('applyScript: mẫu chưa quay ước lại theo tốc độ đọc; có l�
   assert.equal(after.align.mode, 'whisper'); assert.ok(after.retimed >= 1);
   assert.ok(r2.tl.scenes.find(s => s._sheet === 1).t0 > before + 3, 'graphic của đoạn 1 dời theo giờ thật');
   assert.equal(r2.tl.draft.mode, 'shot');
+  assert.ok(Math.abs(rel(r2.tl, after.segments[1]) - r0) < .03, 'quay xong: mục theo giờ thật, đúng chỗ trong đoạn');
 });
 
 test('checkDraftInput: kiểm chữ, thương hiệu, khổ, tốc độ; tên mặc định từ câu đầu', () => {
   assert.throws(() => checkDraftInput({ text: '  ' }), e => e.status === 400);
   assert.throws(() => checkDraftInput({ text: TEXT, brand: 'la' }, ['acme']), e => e.status === 404);
+  assert.throws(() => checkDraftInput({ text: TEXT, brand: 'la' }, id => id === 'acme'), e => e.status === 404, 'nhận cả hàm kiểm (loadBrand)');
   const { draft, est } = checkDraftInput({ text: TEXT, brand: 'acme', aspect: '4:3', wps: 9 }, ['acme']);
   assert.equal(draft.aspect, '9:16'); assert.equal(draft.wps, 3.4); assert.equal(draft.brand, 'acme');
   assert.match(draft.name, /^Bạn có biết/); assert.equal(est.segments.length, 3);
