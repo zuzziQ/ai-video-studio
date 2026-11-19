@@ -4,7 +4,7 @@
 //                                  job: việc `script_takes` mới nhất của dự án trong hàng đợi; plan: tóm tắt .studio/takes_plan.json
 //   GET  /api/aroll/plan         → { plan }  kế hoạch đầy đủ (clips, caps) để Studio áp một bước hoàn tác
 //   POST /api/aroll/takes {model} → { ok, item }  xếp job nền `script_takes` cho dự án đang mở (chỉ thư mục của dự án, không nhận đường dẫn)
-//   POST /api/aroll/applied      → { ok }  Studio đã áp kế hoạch: script.json nhận segments/align theo take, sao lưu lời nhận dạng của
+//   POST /api/aroll/applied {at} → { ok }  (at = plan.at đã áp; khác kế hoạch trên đĩa → 409)  Studio đã áp kế hoạch: script.json nhận segments/align theo take, sao lưu lời nhận dạng của
 //                                  các take (captions_noscript.json + heardDur) để sửa kịch bản lần sau căn đúng
 //   POST /api/aroll/realign      → { ok, offscript }  sau khi cắt (đã lưu): danh sách tính lại từ phụ đề đã cắt; không ghi script.json
 //                                  (⌘Z rồi lưu thì đoạn hiện lại; lưu kịch bản / Tạo lời thoại vẫn căn lại như cũ)
@@ -37,7 +37,7 @@ export default ctx => async (req, res, p) => {
   if (p !== '/api/aroll' && !p.startsWith('/api/aroll/')) return false;
   const J = (o, c) => (ctx.json(res, o, c), true);
   try {
-    const dir = ctx.project.dir;
+    const dir = ctx.project?.dir; if (!dir) return J({ error: 'Chưa mở dự án' }, 400);
     if (p === '/api/aroll' && req.method === 'GET') {
       const sc = readScript(dir), { timeline: tl, captions } = ctx.readProject();
       const offscript = liveOffscript(sc, tl, captions);
@@ -59,6 +59,7 @@ export default ctx => async (req, res, p) => {
     if (p === '/api/aroll/applied') {
       const plan = readTakesPlan(dir), sc = readScript(dir);
       if (!plan?.clips?.length || !sc) return J({ error: 'Chưa có kế hoạch A-roll' }, 400);
+      if (b.at !== plan.at) return J({ error: 'Kế hoạch A-roll vừa được dựng lại: mở lại rồi Áp' }, 409); // job mới ghi đè giữa lúc Áp
       const backup = path.join(dir, '.studio', 'captions_noscript.json');
       if (plan.raw?.length) wr(backup, plan.raw);
       wr(path.join(dir, '.studio', 'script.json'), { ...sc, segments: plan.segments, align: plan.align, heardDur: plan.duration });

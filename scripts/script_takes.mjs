@@ -13,7 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { alignScript, captionsFrom, fold, lcs, norm, readScript } from './script_doc.mjs';
+import { alignScript, arollText, captionsFrom, fold, lcs, norm, readScript } from './script_doc.mjs';
 import { pyBin } from './platform.mjs';
 import { rmSync } from './fs_rm.mjs';
 
@@ -22,7 +22,14 @@ const r2 = v => Math.round(v * 100) / 100;
 const toks = s => String(s ?? '').split(/\s+/).map(norm).filter(Boolean);
 export const PAD = .15;            // nới mép cắt / mép clip về phía khoảng lặng để không mất âm đầu / cuối từ
 export const MIN_RATIO = .3;       // đoạn không take nào khớp tới mức này = "chưa quay"
+export const MIN_DENSE = .5;       // chữ khớp / chữ nghe được trong khoảng: thấp hơn = khớp rời rạc vài từ chức năng ("của", "là"), không phải đoạn này
 export const FRAME_ZOOM = { can: 1.6, trung: 1.25, rong: 1 };
+/** Khoá của track chính (nguồn, in/out) để biết timeline đã đổi giữa lúc dựng và lúc Áp; cùng công thức ở studio/features/24_aroll.js. */
+export function clipsKey(clips) {
+  const t = JSON.stringify((clips || []).map(c => [c.src, c.audio || null, +c.in || 0, +c.out || 0]));
+  let h = 5381; for (let i = 0; i < t.length; i++) h = (h * 33 + t.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
 
 // ---------- 4.1 lời ngoài kịch bản ----------
 /** Mốc thời gian từ trông như Whisper bịa (bài học 041): từ dài > 3 s, nhiều từ dài 0, hoặc mật độ quá thấp. */
@@ -69,6 +76,7 @@ export function alignTakes(segments, takes) {
       const head = new Set(sw.slice(0, Math.min(n, 4))), any = new Set(sw), L = Math.ceil(n * 1.5) + 4;
       let starts = h.map((x, j) => (head.has(x.n) ? j : -1)).filter(j => j >= 0);
       if (!starts.length) starts = h.map((x, j) => (any.has(x.n) ? j : -1)).filter(j => j >= 0);
+      if (starts.length > 600) { const q = Math.ceil(starts.length / 600); starts = starts.filter((_, i) => i % q === 0); } // take rất dài: giới hạn thời gian căn
       let best = null;
       for (const j of starts) {
         const pairs = lcs(sw, h.slice(j, j + L).map(x => x.n));
@@ -78,7 +86,7 @@ export function alignTakes(segments, takes) {
         if (!best || cand.hits > best.hits || (cand.hits === best.hits && (cand.extra < best.extra || (cand.extra === best.extra && cand.j0 > best.j0)))) best = cand;
       }
       if (!best) return { ratio: 0, hits: 0, n };
-      return { ratio: r2(best.hits / n), hits: best.hits, n, t0: h[best.j0].s, t1: h[best.j1].e, j0: best.j0, j1: best.j1, extra: best.extra, head: best.head, tail: best.tail };
+      return { ratio: r2(best.hits / n), dense: r2(best.hits / (best.j1 - best.j0 + 1)), hits: best.hits, n, t0: h[best.j0].s, t1: h[best.j1].e, j0: best.j0, j1: best.j1, extra: best.extra, head: best.head, tail: best.tail };
     });
   });
 }
@@ -90,19 +98,22 @@ const baseName = f => fold(path.basename(String(f || ''))).replace(/\.\w{2,4}$/,
  * Dấu [A-ROLL: clip N | take N] (N đếm từ 1 theo thứ tự take) hoặc tên file thắng; không có thì điểm cao nhất, chênh ≤ .02 thì take sau.
  * Không take nào đạt MIN_RATIO → missing ("chưa quay").
  */
+const good = (r, min) => !!r?.hits && r.ratio >= min && (r.dense ?? 1) >= MIN_DENSE;
 export function pickTakes(segments, rows, takes = [], { min = MIN_RATIO } = {}) {
   return (segments || []).map((seg, k) => {
     const R = rows[k] || [], m = seg.aroll || {};
+    if (!R.some(Boolean)) return { seg: k, take: null, by: null, score: 0, ratio: 0, missing: false, skip: true }; // đoạn không có lời nói
     let want = null, why = '';
     if (m.take) { want = m.take - 1; if (!takes[want]) { why = `không có take ${m.take}`; want = null; } }
     else if (m.file) { const f = baseName(m.file); want = takes.findIndex(t => baseName(t.name || t.file) === f || baseName(t.name || t.file).includes(f)); if (want < 0) { why = `không thấy tệp ${m.file}`; want = null; } }
-    if (want != null && R[want]?.hits) return { seg: k, take: want, by: 'mark', score: takeScore(R[want]), ratio: R[want].ratio, missing: false };
+    if (want != null && good(R[want], min)) return { seg: k, take: want, by: 'mark', score: takeScore(R[want]), ratio: R[want].ratio, missing: false };
     if (want != null) why = `take ${want + 1} không có đoạn này`;
-    const sc = R.map(r => (r?.hits ? takeScore(r) : null)), top = Math.max(-1, ...sc.filter(v => v != null));
+    const sc = R.map(r => (good(r, min) ? takeScore(r) : null)), top = Math.max(-1, ...sc.filter(v => v != null));
     let bi = null; sc.forEach((v, i) => { if (v != null && v >= top - .02) bi = i; }); // hoà (chênh ≤ .02): take sau
     const bs = bi != null ? sc[bi] : 0;
-    const ok = bi != null && R[bi].ratio >= min;
-    return { seg: k, take: ok ? bi : null, by: ok ? 'score' : null, score: ok ? bs : 0, ratio: bi != null ? R[bi].ratio : 0, missing: !ok, ...(why ? { why } : {}) };
+    const ok = bi != null;
+    const best = Math.max(0, ...R.map(r => r?.ratio || 0));
+    return { seg: k, take: ok ? bi : null, by: ok ? 'score' : null, score: ok ? bs : 0, ratio: ok ? R[bi].ratio : best, missing: !ok, ...(why ? { why } : {}) };
   });
 }
 /** Cỡ khung → { zoom, ox, oy } quanh mặt của take (face: {x,y} theo % khung). Chưa dò mặt hoặc khung rộng: không phóng (cover). */
@@ -119,7 +130,7 @@ const SKIP = new Set(['in', 'out', 'speed', 'transition', 'zoom', 'ox', 'oy', 'c
  * còn lại mỗi đoạn một clip, mép nới PAD về phía lặng. Trả { clips, heard (lời theo giờ timeline mới), duration }.
  */
 export function takesToClips(segments, picks, rows, takes, { pad = PAD } = {}) {
-  const out = [], heard = [];
+  const out = [], heard = [], dropped = [];
   for (const p of picks || []) {
     if (p.take == null) continue;
     const r = rows[p.seg]?.[p.take], tk = takes[p.take]; if (!r?.hits || !tk) continue;
@@ -132,9 +143,11 @@ export function takesToClips(segments, picks, rows, takes, { pad = PAD } = {}) {
       const mid = r2((W[last._j1].e + W[r.j0].s) / 2);
       last.out = mid; a = mid;
     } else if (last && last._take === p.take + 1 && a < last.out) a = last.out; // cùng take quay ngược / chồng: không lặp lại
-    if (b - a < .2) continue;
+    if (b - a < .2) { dropped.push(p.seg); continue; } // cùng take nhưng quay ngược / trùng đoạn trước: báo, không bỏ im lặng
     const base = Object.fromEntries(Object.entries(tk.clip || {}).filter(([k2]) => !SKIP.has(k2) && !k2.startsWith('_')));
-    out.push({ ...base, in: r2(a), out: r2(b), ...frameFor(segments[p.seg]?.aroll?.frame, tk.face), _sheet: p.seg, _take: p.take + 1, _j1: r.j1 });
+    const mark = segments[p.seg]?.aroll, note = `take ${p.take + 1}${tk.name ? ` (${tk.name})` : ''} · khớp ${Math.round(r.ratio * 100)}%`;
+    out.push({ ...base, in: r2(a), out: r2(b), ...frameFor(mark?.frame, tk.face), _sheet: p.seg, _take: p.take + 1, _j1: r.j1,
+      _script: { id: `aroll-${p.seg}`, kind: 'A-ROLL', text: mark ? arollText(mark) : '', note: p.by === 'mark' ? `theo dấu, ${note}` : note } }); // ghi chú trên khối (23_scriptnotes.js)
   }
   let t = 0;
   for (const c of out) {
@@ -142,7 +155,7 @@ export function takesToClips(segments, picks, rows, takes, { pad = PAD } = {}) {
     for (const w of tk.words || []) if (w.s >= c.in - .01 && w.e <= c.out + .01) heard.push({ w: w.w, s: r2(t + w.s - c.in), e: r2(t + w.e - c.in) });
     t += c.out - c.in; delete c._j1;
   }
-  return { clips: out, heard, duration: r2(t) };
+  return { clips: out, heard, duration: r2(t), dropped };
 }
 
 // ---------- job: nhận dạng từng take, căn, chọn, ghi kế hoạch ----------
@@ -210,13 +223,14 @@ async function main() {
   }
   say(.92, 'Căn kịch bản với từng take');
   const segs = sc.segments, rows = alignTakes(segs, takes), picks = pickTakes(segs, rows, takes);
-  const { clips, heard, duration } = takesToClips(segs, picks, rows, takes);
+  const { clips, heard, duration, dropped } = takesToClips(segs, picks, rows, takes);
+  for (const k of dropped) Object.assign(picks[k], { take: null, missing: true, why: 'trùng đoạn trước trong cùng take' });
   if (!clips.length) throw new Error('Không take nào khớp kịch bản (dưới 30 % chữ mỗi đoạn)');
   const r = alignScript(segs, heard, { dur: duration });
   const caps = captionsFrom(r.words, { offWords: r.offWords || [] }), raw = captionsFrom(heard.map(w => ({ ...w, k: 0 })));
   const end = (tl.scenes || []).find(s => s.type === 'title_card' && s.t1 >= (tl.duration || 0) - .05);
   const tail = end ? r2(end.t1 - end.t0) : 0; // thẻ kết cuối giữ độ dài
-  const plan = { version: 1, at: new Date().toISOString(), model, duration: r2(duration + tail), speech: duration, clips, caps, raw,
+  const plan = { version: 1, at: new Date().toISOString(), model, clipsKey: clipsKey(tl.clips), duration: r2(duration + tail), speech: duration, clips, caps, raw,
     segments: r.segments, align: r.align, picks, missing: picks.filter(p => p.missing).map(p => p.seg),
     takes: takes.map((t, i) => ({ n: i + 1, name: t.name, file: t.file, words: t.words.length, dur: t.dur, face: !!t.face, used: picks.filter(p => p.take === i).length })),
     rows: rows.map(R => R.map(x => (x ? { ratio: x.ratio, score: takeScore(x), t0: x.t0 ?? null, t1: x.t1 ?? null } : null))), scriptAt: sc.updated || null };

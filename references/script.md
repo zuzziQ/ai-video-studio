@@ -162,9 +162,12 @@ dòng gọn trong hộp AI dựng. Không chạy trong Tự lái (chọn take v�
   đếm từ 1 theo thứ tự đó. Job `script_takes` (`scripts/queue.mjs`) nhận dạng lời từng take một lần (cache `.studio/takes/<hash>.json`, hash =
   cỡ + 1 MB đầu + 1 MB cuối + mô hình) và dò mặt trên khung của take; `alignTakes` căn mọi đoạn với mọi take theo cửa sổ (lần quay lại cùng câu
   trong một take là một ứng viên: khớp nhiều hơn, ít từ thừa hơn, rồi lần sau); `pickTakes`: dấu `[A-ROLL: clip N | take N | tệp]` thắng, không thì
-  `takeScore` = ratio − 0,02 × từ thừa (≤ 0,2) − 0,05 × từ đầu / cuối hụt (≤ 2 mỗi bên), chênh ≤ 0,02 thì take sau; dưới 30 % = "chưa quay".
+  `takeScore` = ratio − 0,02 × từ thừa (≤ 0,2) − 0,05 × từ đầu / cuối hụt (≤ 2 mỗi bên), chênh ≤ 0,02 thì take sau; dưới 30 % hoặc khớp rời rạc (chữ khớp / chữ nghe được trong khoảng < 0,5, vd chỉ trùng "của", "là") = "chưa quay"; dấu trỏ
+  take không đạt ngưỡng đó thì chọn theo điểm, ghi lý do. Đoạn chỉ có dấu (không lời) bỏ qua; đoạn trùng đoạn trước trong cùng take báo "chưa quay".
 - `takesToClips`: mỗi đoạn một clip `{…clip mẫu của take, in, out, zoom/ox/oy, _sheet, _take}` theo thứ tự kịch bản; hai đoạn liền nhau trong cùng
   take (ở giữa < 5 từ) nối ở giữa khoảng lặng (một take dài chứa cả kịch bản chỉ mất phần ngoài kịch bản). Cỡ khung: cận mặt zoom 1,6, trung 1,25
   quanh mặt của take (`ox/oy` %), rộng hoặc chưa dò mặt thì giữ cover. Kết quả `.studio/takes_plan.json` (clips, phụ đề theo giờ mới, segments /
   align, lựa chọn); **Áp** ở Studio thay `TL.clips` + phụ đề (thẻ kết cuối dời theo), `/api/aroll/applied` ghi align vào `script.json` và sao lưu
-  lời nhận dạng của các take vào `captions_noscript.json` (+ `heardDur`) để sửa kịch bản lần sau căn đúng. Graphic đã dựng giữ nguyên giờ: AI dựng lại.
+  lời nhận dạng của các take vào `captions_noscript.json` (+ `heardDur`) để sửa kịch bản lần sau căn đúng. Clip mang `_script` { kind: "A-ROLL", note: take · khớp } nên Thuộc tính hiện ghi chú + Sửa tay / Hỏi Claude (`23_scriptnotes.js`).
+  Áp hỏi lại khi track chính đã đổi từ lúc dựng (`clipsKey`), nền nhạc phủ cả video theo độ dài mới, `/applied` nhận `at` của kế hoạch đã áp (khác → 409).
+  Graphic đã dựng giữ nguyên giờ: AI dựng lại.

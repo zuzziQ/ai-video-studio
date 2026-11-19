@@ -7,7 +7,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseScript, writeScript, alignScript } from '../script_doc.mjs';
-import { brokenShape, offscriptCuts, alignTakes, pickTakes, takesToClips, frameFor, takeScore, takeHash, projectTakes, readTakesPlan, PAD } from '../script_takes.mjs';
+import { brokenShape, offscriptCuts, alignTakes, pickTakes, takesToClips, frameFor, takeScore, takeHash, projectTakes, readTakesPlan, clipsKey, PAD } from '../script_takes.mjs';
 import { KINDS, isKind, argsFor } from '../queue.mjs';
 import { rippleCut } from '../ripple.mjs';
 
@@ -173,4 +173,34 @@ test('liveOffscript: tính lại từ phụ đề hiện tại, không ghi scrip
   assert.equal(liveOffscript(sc, tl, cut).length, 0, 'đã cắt');
   assert.equal(liveOffscript(sc, tl, caps).length, 1, '⌘Z: phụ đề trở về thì đoạn hiện lại');
   assert.deepEqual(liveOffscript(sc, { duration: 30, speech: { none: true } }, caps), []);
+});
+
+test('pickTakes: đoạn chưa quay toàn từ phổ biến không khớp giả; dấu clip N trỏ take không có đoạn thì không ép (review M196)', () => {
+  const common = 'và là của một những cái này thì là và của';
+  const segs = parseScript(`${S1}\n\n${common}`);
+  const take = { name: 't.mp4', words: talk([[S1], ['nhưng mà thì cái chuyện này là của ai và một ngày những người kia sẽ biết là của ai']]) };
+  const rows = alignTakes(segs, [take]);
+  assert.ok(rows[1][0].dense < .5 || rows[1][0].ratio < .3, JSON.stringify(rows[1][0]));
+  const p = pickTakes(segs, rows, [take]);
+  assert.equal(p[0].take, 0); assert.equal(p[1].missing, true);
+  const t2 = { name: 'b.mp4', words: talk([['chỉ một từ đầu tiên thôi']]) };
+  const m = pickTakes(parseScript(`[A-ROLL: clip 2] ${S2}`), alignTakes(parseScript(S2), [{ words: talk([[S2]]) }, t2]), [{ name: 'a.mp4' }, t2]);
+  assert.equal(m[0].take, 0, 'dấu trỏ take chỉ khớp 1 từ: theo điểm'); assert.match(m[0].why, /take 2/);
+});
+
+test('takesToClips: đoạn trùng đoạn trước trong cùng take được báo (dropped), clip mang _script cho ghi chú; clipsKey hai bản giống nhau', () => {
+  const segs = parseScript(`${S1}\n\n${S1}`), tk = { words: talk([[S1]]), clip: { src: 'x', audio: 'a.mp4' }, dur: 10, name: 'a.mp4' };
+  const rows = alignTakes(segs, [tk]);
+  const r = takesToClips(segs, [{ seg: 0, take: 0, by: 'score' }, { seg: 1, take: 0, by: 'score' }], rows, [tk]);
+  assert.equal(r.clips.length, 1); assert.deepEqual(r.dropped, [1]);
+  assert.equal(r.clips[0]._script.kind, 'A-ROLL'); assert.match(r.clips[0]._script.note, /take 1 \(a\.mp4\) · khớp 100%/);
+  const feat = fs.readFileSync(path.join(ROOT, 'studio', 'features', '24_aroll.js'), 'utf8');
+  const body = feat.slice(feat.indexOf('  function clipsKey'), feat.indexOf('\n  }\n', feat.indexOf('  function clipsKey')) + 4);
+  const clientKey = new Function(`${body}; return clipsKey;`)();
+  const clips = [{ src: { seq: 'a/%05d.jpg', fps: 30, count: 9 }, audio: 'a.mp4', in: 1, out: 2.5, zoom: 2 }, { src: 'b.jpg', in: 0, out: 1 }];
+  assert.equal(clientKey(clips), clipsKey(clips));
+  assert.notEqual(clipsKey(clips), clipsKey([{ ...clips[0], out: 3 }, clips[1]]));
+  // đoạn không có lời (chỉ dấu) không bị coi là chưa quay
+  const empty = pickTakes([{ say: '' }], [[null]], [tk]);
+  assert.equal(empty[0].missing, false); assert.equal(empty[0].skip, true);
 });
