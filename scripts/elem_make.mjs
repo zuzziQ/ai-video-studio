@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
+import { rmSync } from './fs_rm.mjs';
 
 export const CELEM = createRequire(import.meta.url)('../engine/celem.js');
 export class MakeError extends Error {
@@ -41,7 +42,39 @@ export function checkMakeInput(raw) {
     if (!r.ok) throw bad('Element đang sửa không hợp lệ: ' + r.errors.slice(0, 3).join('; '));
     base = r.spec;
   }
-  return { ask, brand, frame, brand_id, style: str(raw.style, 80), text: str(raw.text, 120), base };
+  const elem_id = typeof raw.elem_id === 'string' && ELEM_ID.test(raw.elem_id) ? raw.elem_id : '';
+  return { ask, brand, frame, brand_id, style: str(raw.style, 80), text: str(raw.text, 120), base, refs: checkRefs(raw.refs), elem_id,
+    brandFirst: raw.brand_first !== false };
+}
+
+// ---------------------------------------------------------------- ảnh ví dụ (giống Style Lab "Từ mô tả": ref_N trong thư mục làm việc)
+// Giao diện gửi data URL đã thu nhỏ (cạnh dài ≤ 1024). Chỉ nhận JPEG / PNG / WebP, kiểm cả chữ ký đầu file, mỗi ảnh ≤ MAX_REF_BYTES.
+// Ảnh chỉ là dữ liệu: tên file trên đĩa do server đặt (ref_1…ref_4), không có đường dẫn nào từ người dùng.
+export const MAX_REFS = 4, MAX_REF_BYTES = 1_500_000;
+export const ELEM_ID = /^ce_[a-z0-9]{6,20}$/;
+const SIG = { jpg: b => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff, png: b => b.readUInt32BE(0) === 0x89504e47,
+  webp: b => b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP' };
+const MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+export function checkRefs(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw bad('Ảnh ví dụ phải là danh sách');
+  if (raw.length > MAX_REFS) throw bad(`Tối đa ${MAX_REFS} ảnh ví dụ`);
+  return raw.map((u, i) => {
+    const m = typeof u === 'string' && /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(u);
+    if (!m) throw bad(`Ảnh ví dụ ${i + 1}: chỉ nhận ảnh JPEG, PNG hoặc WebP`);
+    if (m[2].length * 0.75 > MAX_REF_BYTES + 4) throw bad(`Ảnh ví dụ ${i + 1} quá lớn (tối đa ${Math.round(MAX_REF_BYTES / 1e6 * 10) / 10} MB)`);
+    const buf = Buffer.from(m[2], 'base64'), ext = MIME[m[1]];
+    if (buf.length < 12 || !SIG[ext](buf)) throw bad(`Ảnh ví dụ ${i + 1}: nội dung không phải ảnh ${ext.toUpperCase()}`);
+    return { buf, ext };
+  });
+}
+// ghi ảnh vào thư mục làm việc → tên file tương đối (ref_1.jpg…); chỉ ghi trong dir
+export function writeRefs(dir, refs) {
+  return refs.slice(0, MAX_REFS).map((r, i) => {
+    const name = `ref_${i + 1}.${r.ext}`, f = path.join(dir, name);
+    if (path.dirname(path.resolve(f)) !== path.resolve(dir)) throw bad('Đường dẫn ảnh không hợp lệ');
+    fs.writeFileSync(f, r.buf); return name;
+  });
 }
 
 const SCHEMA = `Spec (JSON khai báo, KHÔNG phải mã; khoá lạ, CSS tự do, url, ngoặc kép trong màu / font đều bị loại cả phương án):
@@ -68,10 +101,19 @@ Khổ video ${ar} (${input.frame.w}×${input.frame.h}); element thường chiế
 ${brand}
 ${SCHEMA}
 ${input.base ? 'Element đang có (sửa theo yêu cầu, giữ những gì không được nhắc):\n' + JSON.stringify(input.base) + '\n' : ''}${dataBlock('Mô tả của người dùng', input.ask)}
-${input.text ? dataBlock('Chữ đang hiện trong element', input.text) + '\n' : ''}Đưa 3 PHƯƠNG ÁN khác nhau rõ (bố cục / hình nền / hoạt ảnh), mỗi phương án 2–6 lớp, chữ tiếng Việt có dấu. Lớp chữ chính dùng "{text}" và cho "text" mẫu ngắn.
+${input.text ? dataBlock('Chữ đang hiện trong element', input.text) + '\n' : ''}${refsNote(input)}Đưa 3 PHƯƠNG ÁN khác nhau rõ (bố cục / hình nền / hoạt ảnh), mỗi phương án 2–6 lớp, chữ tiếng Việt có dấu. Lớp chữ chính dùng "{text}" và cho "text" mẫu ngắn.
 Trả về DUY NHẤT JSON: {"variants":[{"name":"≤ 24 ký tự","why":"một câu","text":"chữ mẫu cho {text}","spec":{…}}, …3 mục]}`;
 }
 
+// đoạn prompt về ảnh ví dụ (input.files = tên file trong thư mục làm việc, route đặt)
+function refsNote(input) {
+  const files = input.files || [];
+  if (!files.length) return '';
+  return `ẢNH VÍ DỤ: mở bằng công cụ Read các file ${files.join(', ')} trong thư mục làm việc (ảnh chụp video khác, ảnh thiết kế hoặc logo người dùng đưa).
+Chỉ bắt chước HÌNH KHỐI, BỐ CỤC, MÀU, KIỂU CHỮ của element trong ảnh; không chép logo, tên, chữ, watermark của người khác vào spec (chữ mẫu tự viết theo mô tả).
+${input.brandFirst && Object.keys(input.brand).length ? 'Màu: ưu tiên màu thương hiệu ("@primary", "@accent"…), chỉ lấy màu từ ảnh khi thương hiệu không có màu hợp.' : 'Màu: lấy theo ảnh ví dụ (mã #hex), không cần theo thương hiệu.'}
+`;
+}
 const sameSpec = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 export function normMake(v, input) {
   const list = Array.isArray(v) ? v : v?.variants ?? v?.options ?? v?.items;
@@ -107,7 +149,7 @@ export function listLib(home, brand = '') {
   if (!brandOk(brand)) throw bad('Thương hiệu không hợp lệ');
   return readLib(home, brand).map(it => {
     const r = CELEM.check(it?.spec); if (!r.ok) return null;
-    return { ...it, spec: r.spec, thumb: thumbOk(it.thumb) ? it.thumb : '', name: str(it.name, 40), text: str(it.text, 120).replace(/[<>]/g, ''), ask: str(it.ask, 300) };
+    return { ...it, refs: Number.isInteger(it.refs) ? Math.min(MAX_REFS, Math.max(0, it.refs)) : 0, spec: r.spec, thumb: thumbOk(it.thumb) ? it.thumb : '', name: str(it.name, 40), text: str(it.text, 120).replace(/[<>]/g, ''), ask: str(it.ask, 300) };
   }).filter(Boolean);
 }
 export function saveLib(home, brand, raw) {
@@ -117,9 +159,18 @@ export function saveLib(home, brand, raw) {
   if (!r.ok) throw bad('Spec không hợp lệ: ' + r.errors.slice(0, 3).join('; '));
   const thumb = thumbOk(raw.thumb) ? raw.thumb : '';
   const items = readLib(home, brand);
-  const id = typeof raw.id === 'string' && /^ce_[a-z0-9]{6,20}$/.test(raw.id) && items.some(x => x.id === raw.id) ? raw.id : 'ce_' + crypto.randomBytes(5).toString('hex');
+  const id = typeof raw.id === 'string' && ELEM_ID.test(raw.id) && items.some(x => x.id === raw.id) ? raw.id : 'ce_' + crypto.randomBytes(5).toString('hex');
   const item = { id, name: str(raw.name, 40) || r.spec.name || 'Element riêng', ...(brand ? { brand_id: brand } : {}), spec: r.spec,
     text: str(raw.text, 120).replace(/[<>]/g, ''), thumb, ask: str(raw.ask, 300), created: new Date().toISOString() };
+  // ảnh ví dụ lưu cạnh element: elements/refs/<brand>/<id>/ref_N.<ext> (raw.refs có mặt = thay hết; không có = giữ ảnh cũ)
+  // refs_from: id element nguồn trong cùng thư viện (sửa element đã lưu mà không đưa ảnh mới → chép ảnh của element cũ)
+  const from = raw.refs == null && typeof raw.refs_from === 'string' && ELEM_ID.test(raw.refs_from) ? libRefs(home, brand, raw.refs_from) : null;
+  if (raw.refs != null || from?.length) {
+    const refs = from || checkRefs(raw.refs), d = refDir(home, brand, id);
+    rmSync(d, { recursive: true, force: true });
+    if (refs.length) { fs.mkdirSync(d, { recursive: true }); writeRefs(d, refs); }
+    item.refs = refs.length;
+  } else item.refs = items.find(x => x.id === id)?.refs || 0;
   const i = items.findIndex(x => x.id === id);
   if (i >= 0) items[i] = item; else items.unshift(item);
   if (items.length > MAX_ITEMS) items.length = MAX_ITEMS;
@@ -130,5 +181,17 @@ export function delLib(home, brand, id) {
   if (!brandOk(brand)) throw bad('Thương hiệu không hợp lệ');
   const items = readLib(home, brand), n = items.length, rest = items.filter(x => x.id !== id);
   if (rest.length === n) return false;
-  writeLib(home, brand, rest); return true;
+  writeLib(home, brand, rest); rmSync(refDir(home, brand, id), { recursive: true, force: true }); return true;
+}
+const refDir = (home, brand, id) => {
+  if (!ELEM_ID.test(id)) throw bad('Element không hợp lệ');
+  return path.join(home, 'elements', 'refs', brand || '_chung', id);
+};
+// ảnh ví dụ đã lưu của một element → [{buf, ext}] (đọc lại qua checkRefs: file sửa tay hỏng thì bỏ)
+export function libRefs(home, brand, id) {
+  if (!brandOk(brand) || !ELEM_ID.test(String(id || ''))) return [];
+  const d = refDir(home, brand, id);
+  let names = []; try { names = fs.readdirSync(d).filter(n => /^ref_[1-4]\.(jpg|png|webp)$/.test(n)).sort(); } catch { return []; }
+  const mime = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+  return names.flatMap(n => { try { const ext = n.split('.').pop(); return checkRefs([`data:${mime[ext]};base64,` + fs.readFileSync(path.join(d, n)).toString('base64')]); } catch { return []; } });
 }

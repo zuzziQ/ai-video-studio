@@ -485,14 +485,14 @@
       case 'answer': return setOut('reply', { reply: pick.reply || 'Chưa có việc nào khớp.', warnings: pick.warnings });
       case 'elem_create': { // S27 M199: dựng element riêng ở panel Element riêng (72_celem.js)
         if (!S.celem) return setOut('error', { err: 'Chưa có Element riêng' });
-        const ok = await S.celem.make(p.ask);
+        const ok = await S.celem.make(p.ask, { refs: S.celem.takeAskRefs?.() || [] });
         return setOut(ok ? 'idle' : 'error', ok ? { note: 'Claude đang dựng element: 3 phương án hiện ở panel Element riêng, bấm Nhận để chèn.' } : { err: 'Chưa gửi được (Claude đang dựng element khác?)' });
       }
       case 'elem_edit': case 'elem_variants': case 'elem_knobs': {
         if (!S.elemAi || !S.sel || S.sel.obj.cid !== sc.cid) return setOut('error', { err: 'Element đã bỏ chọn. Chọn lại rồi hỏi.' });
         if (S.sel.obj.type === 'celem' && S.celem) { // element riêng: Claude dựng lại spec (3 phương án), không vá trường
           if (pick.action === 'elem_knobs') return setOut('reply', { reply: 'Element riêng chưa có Gợi ý núm; dùng núm Cỡ / Thời lượng hoặc nhờ Claude sửa.' });
-          const ok = await S.celem.make(pick.action === 'elem_edit' ? p.ask : 'ba biến thể khác hẳn nhau của element này', { cid: sc.cid });
+          const ok = await S.celem.make(pick.action === 'elem_edit' ? p.ask : 'ba biến thể khác hẳn nhau của element này', { cid: sc.cid, refs: S.celem.takeAskRefs?.() || [] });
           return setOut(ok ? 'idle' : 'error', ok ? { note: 'Claude đang sửa element: 3 phương án hiện ở panel Element riêng.' } : { err: 'Chưa gửi được (Claude đang dựng element khác?)' });
         }
         setOut('idle', { note: 'Đề xuất hiện ngay bên dưới: xem trước trên khung rồi Nhận hoặc Bỏ.' });
