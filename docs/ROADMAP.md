@@ -318,6 +318,14 @@ Lập 2026-11-18, kế hoạch `docs/plans/S24-tab-claude-va-chu-thich.md` (ch�
 
 `S24` xong 2026-11-18: `M170`–`M175` `[x]` — AI ở một chỗ (tab Claude cột phải mọi khổ × chế độ, luồng hỏi đáp có lưu, chế độ chú thích Hỏi ngay / Để sau, phạm vi vùng), chỉnh tay ở một chỗ (Thuộc tính), bỏ tab Dự án; Cơ bản có cột phải như Chuyên nghiệp. Không lỗi lớn mở thêm mục.
 
+### **`S25`** Nền sáng và nền tối cho giao diện Studio, trang mẫu design system
+
+Lập 2026-11-19, kế hoạch `docs/plans/S25-nen-sang-toi.md` (chủ repo: có cả lựa chọn nền sáng tối, gom vào design token giống dashboard lychee, có trang `/ui` như lychee). Hướng: giữ 3 tầng token của Studio, vai trò `--color-*` có giá trị cho cả hai nền (khối `:root[data-theme="light"]` chỉ ghi đè vai trò), chọn Tối · Sáng · Theo hệ thống trong ⋯, nhớ theo máy, không chớp khi tải. `C38` chốt 2026-11-19: mặc định Theo hệ thống, có nút switch.
+
+- [x] **`M177`** (`area/infra`): nền — token nền sáng, `data-theme` trên `<html>` + script chống chớp trong `index.html`, `Studio.theme` + sự kiện `avs:theme`, mục Giao diện trong ⋯ và ⌘K, vai trò `--color-overlay` / `--color-shadow`, test token cả hai nền, `DESIGN.md`. Sau `C38`. Xong 2026-11-19: khối `:root[data-theme="light"]` chỉ ghi đè vai trò + bóng (giá trị hub/lychee nền sáng, `accent-soft` navy-300), `studio/theme/theme-boot.js` nạp đồng bộ trước CSS (`avs.theme` = system mặc định | light | dark, theo `prefers-color-scheme`, đồng bộ giữa tab), `00_theme.js` công tắc ☀/☾ trước ⋯ + dòng Giao diện Hệ thống · Sáng · Tối trong ⋯, 4 lệnh ⌘K; test `studio_tokens_defined` thêm 3 ca (khối sáng chỉ vai trò, boot trước CSS, logic chọn nền); `DESIGN.md` mục 4b.
+- [x] **`M178`** (`area/infra`): rà giả định nền tối — trắng/đen dùng làm lớp phủ (79 chỗ) sang vai trò, bỏ `color-scheme: dark` cứng ở feature, canvas đọc màu từ token; đo tương phản cả hai nền trên Studio thật. Khung xem trước, track, engine không đổi. Sau `M177`. Xong 2026-11-19: 79 chỗ rà, 7 chỗ trên bề mặt giao diện sang `--color-overlay` (vạch / nền track, hàng chính, swatch, lịch quá khứ), chữ huy hiệu cảnh báo và ghim nháp sang `--color-canvas`, chữ từ bị cắt ở transcript sang `--color-fg`, hover nút phát `--color-playhead-hover`; còn lại nằm trên video / khối track / khung xem trước nên giữ trắng/đen; bỏ 3 `color-scheme: dark`; thanh bước nền sáng: vòng điểm tách khỏi số đang chọn (chủ repo báo cùng màu khó nhìn) và hết răng cưa (điểm dừng gradient mềm 0,7px). Đo trên Studio thật (cổng tạm, `sample/clip-mau`, 1007 / 1440 px): nền sáng 0 chữ dưới ngưỡng, thanh đầu không chồng, không tràn ngang; canvas tự vẽ không có chỗ nào đổi theo nền nên chưa cần nghe `avs:theme`.
+- [x] **`M179`** (`area/docs`): trang mẫu design system `studio/ui.html` (file tĩnh, theo `/ui` của lychee) — ô màu từng tầng đọc từ token, mẫu thành phần `components.css`, hai nền cạnh nhau, tỉ lệ tương phản tính tại chỗ, lối vào ⌘K. Sau `M177`. Xong 2026-11-19: `/studio/ui.html` (không sửa `server.mjs`), 21 cặp tương phản đạt cả hai nền (thấp nhất 1,25× ngưỡng ở tối, 1,40× ở sáng), hai khung `?theme=light|dark&embed=1`, `window.AVS_UI_CONTRAST` cho đo tự động.
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -357,6 +365,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S24-tab-claude-va-chu-thich.md` (ch�
 - [x] **`C35`** (`area/infra`): **Cột phải của Cơ bản (`S24`).** Đề xuất: Cơ bản + video ngang có cột phải Claude; cửa sổ < 1280 px thì Claude thành ngăn trượt. Chốt 2026-11-18 (khác đề xuất): Cơ bản có cột phải giống hệt Chuyên nghiệp (cùng vị trí, cùng tab, cùng gấp `]`, cùng luật cửa sổ hẹp của `M168`) ở mọi khổ, chỉ ít mục chỉnh tay hơn (bảng mức của `01_level.core.js`); không ngăn trượt riêng. Thay `C31` và phần cột của `C30`.
 - [x] **`C36`** (`area/llm`): **AI trong Thuộc tính (`S24`).** Đề xuất: Thuộc tính chỉ chỉnh tay; mục Hỏi Claude của element và ✦ thanh nổi thành một nút "Hỏi Claude về mục này" mở tab Claude. Chốt 2026-11-18: theo đề xuất.
 - [x] **`C37`** (`area/llm`): **ghim và tab Dự án (`S24`).** Đề xuất: chế độ chú thích thay chế độ ghim (bấm element hoặc kéo vùng; Hỏi ngay gọi mô hình, Để sau lưu như ghim — giữ `C23`); danh sách chú thích trong tab Claude; bỏ tab Dự án, "Cài đặt dự án" sang bước Chuẩn bị. Chốt 2026-11-18: theo đề xuất.
+- [x] **`C38`** (`area/infra`): **nền mặc định khi có cả sáng và tối (`S25`).** `C14` chốt Studio tối. Đề xuất: mặc định Tối, Sáng / Theo hệ thống chọn trong menu ⋯. Chốt 2026-11-19: **mặc định Theo hệ thống, có nút switch** Sáng/Tối trên thanh đầu; khung xem trước luôn xám trung tính.
 
 ## 5. Ưu tiên tiếp theo
 
@@ -379,6 +388,7 @@ Lập 2026-11-18, kế hoạch `docs/plans/S24-tab-claude-va-chu-thich.md` (ch�
 17. **`S22`**: `C13`, `C24`–`C27` đã chốt 2026-11-18; song song `M151` ∥ `M152`; `M153` → `M154` sau `M152`; `M155`, `M156` sau `M151`. Không đụng `studio/server.mjs`.
 18. **`S23`**: `C29`–`C32` đã chốt 2026-11-18; đợt 1 song song `M157` ∥ `M158` ∥ `M161` ∥ `M164`; đợt 2 sau `M161`: `M162` ∥ `M159` → `M163` ∥ `M165` → `M160`; cuối `M166`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`. `M166` nghiệm thu `[~]`; `M167`–`M169` (1:1, Chuyên nghiệp cửa sổ hẹp, Lớp cảnh nền cũ) làm ở đợt sau.
 19. **`S24`**: `C34`–`C37` đã chốt 2026-11-18; đợt 1 `M170` một mình (nền bố cục + vỏ tab Claude); đợt 2 song song `M171` → `M173` (một session, hai PR) ∥ `M172` ∥ `M174`; cuối `M175`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`.
+20. **`S25`**: `C38` chốt 2026-11-19; `M177` → `M179` → `M178` cùng một session (trang mẫu dùng để đo cho `M178`); `M177` + `M178` gộp một PR nếu ≤ 800 dòng. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`.
 
 ## 6. Không làm
 

@@ -2,8 +2,14 @@
    AI Video Studio: design tokens, layer 1 of 3 (SINGLE SOURCE OF TRUTH, M81).
    Inherits the 82X / Lychee hub design system (D:/ai/templates/design-system/tokens.css):
    same role names, same navy/neutral/status scales, same motion. What differs (see DESIGN.md):
-   the Studio is DARK (C14: a video editor needs a dark frame so it does not skew how the video's
-   colours look), denser (smaller type, 28/32/40 controls) and has smaller radii.
+   the Studio is DARK by default (C14), with a LIGHT set of the same roles since S25 (C38: the choice follows the system
+   unless the user switches it; see the block :root[data-theme="light"] below), denser (smaller type, 28/32/40 controls)
+   and has smaller radii. The preview frame (--stage-*) and the timeline tracks (--track-*) do not change with the theme.
+
+   Theme (S25 M177, same idea as dashboard-lychee-main/server/ui.css: one set of ROLE names, only the values change):
+   studio/theme/theme-boot.js runs before this file, reads localStorage 'avs.theme' (light | dark | system, default
+   system), and always sets <html data-theme="light|dark">. Only ROLES are overridden for light; components and feature
+   CSS never test the theme.
 
    This is the ONLY file under studio/ allowed to hold raw colour values
    (scripts/check_studio_tokens.mjs counts the rest against a baseline that may only go down).
@@ -52,11 +58,17 @@
   /* --- Primitives: status, the light steps of the hub scales (light on dark) --- */
   --success-300: 110 231 183;
   --success-400: 52 211 153;
+  --success-700: 4 120 87;    /* light theme: status on white */
+  --success-800: 6 95 70;
   --warning-200: 253 230 138;
   --warning-400: 251 191 36;
+  --warning-700: 180 83 9;
+  --warning-800: 146 64 14;
   --danger-300: 253 164 175;
   --danger-400: 251 113 133;
   --danger-500: 244 63 94;
+  --danger-600: 225 29 72;
+  --danger-700: 190 18 60;
 
   /* --- Semantic: surfaces and lines (dark) --- */
   --color-canvas: var(--neutral-950);        /* app background, timeline gutter */
@@ -96,9 +108,15 @@
   --color-highlight: var(--warning-400);     /* highlighted word in the transcript */
   --color-audio: 45 212 191;                 /* waveform teal, kept from the old theme */
   --color-playhead: var(--neutral-100);
+  --color-playhead-hover: 255 255 255;      /* play button on hover */
   --color-scrim: 2 6 23;                     /* behind modals: rgb(var(--color-scrim) / 0.66) */
   --color-black: 0 0 0;
   --color-white: 255 255 255;
+  /* S25 M178: a faint layer that sets something apart from the surface it sits on (hover wash, grid line, track lane).
+     Use with alpha: rgb(var(--color-overlay) / .06). White on dark, ink on light. --color-white stays for real white
+     (text on a coloured block or on video). */
+  --color-overlay: 255 255 255;
+  --color-shadow: 0 0 0;                     /* colour of drop shadows: rgb(var(--color-shadow) / .4) */
 
   /* --- Preview frame: stays NEUTRAL grey (no blue tint) so the video's colours are judged right --- */
   --stage-bg: 17 17 19;
@@ -148,10 +166,10 @@
   --h-lg: 40px;
 
   /* --- Elevation (on dark, shadows are black, not neutral-900) --- */
-  --shadow-xs: 0 1px 2px rgb(var(--color-black) / 0.35);
-  --shadow-card: 0 2px 6px rgb(var(--color-black) / 0.4);
-  --shadow-raised: 0 10px 30px rgb(var(--color-black) / 0.5);
-  --shadow-overlay: 0 30px 80px rgb(var(--color-black) / 0.6);
+  --shadow-xs: 0 1px 2px rgb(var(--color-shadow) / 0.35);
+  --shadow-card: 0 2px 6px rgb(var(--color-shadow) / 0.4);
+  --shadow-raised: 0 10px 30px rgb(var(--color-shadow) / 0.5);
+  --shadow-overlay: 0 30px 80px rgb(var(--color-shadow) / 0.6);
   --shadow-accent: 0 6px 18px -4px rgb(var(--navy-600) / 0.55);
 
   /* --- Motion: identical to the hub (DESIGN.md hub section 8) --- */
@@ -197,6 +215,58 @@
   --mono: var(--font-mono);
   --r: var(--radius-control);
   --rs: var(--radius-control);
+}
+
+/* ==========================================================================
+   Light theme (S25 M177): the same roles, light values from the 82X hub / lychee light set.
+   Only ROLE tokens go here. Tested by scripts/tests/studio_tokens_defined.test.mjs: every role set here exists in the
+   dark :root block; the contrast pairs are in DESIGN.md (measured on studio/ui.html).
+   ========================================================================== */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-canvas: 241 244 250;
+  --color-surface: 255 255 255;
+  --color-surface-raised: 255 255 255;
+  --color-surface-muted: var(--neutral-100);
+  --color-surface-hover: var(--neutral-200);
+  --color-line: var(--neutral-200);
+  --color-line-strong: var(--neutral-300);
+  --color-line-hover: var(--neutral-400);
+  --color-line-control: var(--neutral-500);
+
+  --color-fg: var(--neutral-900);
+  --color-fg-muted: var(--neutral-700);
+  --color-fg-subtle: var(--neutral-600);
+
+  --color-accent: var(--navy-600);
+  --color-accent-hover: var(--navy-700);
+  --color-accent-fg: 255 255 255;
+  --color-accent-text: var(--navy-600);
+  --color-accent-text-strong: var(--navy-700);
+  --color-accent-soft: var(--navy-300);       /* used at .24 on white = pale blue (#E2E6FB); navy-500 made the active step look muddy */
+  --color-focus: var(--navy-500);
+  --color-drop: var(--navy-500);
+  --color-info: var(--navy-600);
+  --color-success: var(--success-700);
+  --color-success-text: var(--success-800);
+  --color-warning: var(--warning-700);
+  --color-warning-text: var(--warning-800);
+  --color-danger: var(--danger-600);
+  --color-danger-text: var(--danger-700);
+  --color-highlight: var(--warning-400);
+  --color-audio: 13 148 136;
+  --color-playhead: var(--navy-600);
+  --color-playhead-hover: var(--navy-700);
+  --color-scrim: var(--neutral-900);
+  --color-overlay: var(--neutral-900);
+  --color-shadow: var(--neutral-900);
+
+  --shadow-xs: 0 1px 2px rgb(var(--color-shadow) / 0.06);
+  --shadow-card: 0 1px 2px rgb(var(--color-shadow) / 0.04), 0 4px 12px -4px rgb(var(--color-shadow) / 0.08);
+  --shadow-raised: 0 8px 24px -8px rgb(var(--color-shadow) / 0.2);
+  --shadow-overlay: 0 24px 60px -12px rgb(var(--color-shadow) / 0.3);
+  --shadow-accent: 0 6px 18px -6px rgb(var(--navy-600) / 0.4);
 }
 
 /* Reduced motion: every transition that uses the duration tokens stops; a loading spinner still turns. */

@@ -61,7 +61,7 @@
   .tw.tw-hit { background: rgb(var(--color-warning) / .18); }
   .tw.tw-hitcur { background: rgb(var(--color-warning) / .4); color: rgb(var(--color-fg)); }
   .tw.sel { background: rgb(var(--color-accent-soft) / .5); color: rgb(var(--color-fg)); box-shadow: inset 0 0 0 1px rgb(var(--color-accent-text) / .6); }
-  .tw-wrap.is-cut .tw.sel { background: rgb(var(--color-danger) / .28); color: rgb(var(--color-white)); box-shadow: none; text-decoration: line-through; text-decoration-color: rgb(var(--color-white) / .5); }
+  .tw-wrap.is-cut .tw.sel { background: rgb(var(--color-danger) / .28); color: rgb(var(--color-fg)); box-shadow: none; text-decoration: line-through; text-decoration-color: rgb(var(--color-fg) / .5); }
   .tw.tx-off { display: none; }
   .tx-edit { height: var(--h-sm); max-width: 100%; padding: 0 var(--space-1); font: inherit; color: rgb(var(--color-fg)); background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-focus)); border-radius: var(--radius-xs); box-shadow: 0 0 0 3px rgb(var(--color-focus) / .25); outline: none; }
   .tx-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: var(--space-050); padding: var(--space-1); background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); box-shadow: var(--shadow-raised); }

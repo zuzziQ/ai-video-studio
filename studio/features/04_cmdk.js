@@ -27,6 +27,11 @@
     ['Gói đăng mạng xã hội', 'ti-send', 'publish dang tiktok youtube facebook caption hashtag', click('pub-btn'), () => !!document.getElementById('pub-btn')],
     ['Mô hình & giọng', 'ti-cpu', 'llm claude ollama giong doc voice model', click('eng-btn'), () => !!document.getElementById('eng-btn')],
     ['Vừa khung', 'ti-arrows-maximize', 'fit vua khung zoom', click('fitall'), () => !!document.getElementById('fitall')],
+    // S25 M177: nền giao diện (00_theme.js)
+    ['Nền sáng', 'ti-sun', 'theme light giao dien nen sang trang', () => S.theme.set('light'), () => !!S.theme && S.theme.pref !== 'light'],
+    ['Nền tối', 'ti-moon', 'theme dark giao dien nen toi den', () => S.theme.set('dark'), () => !!S.theme && S.theme.pref !== 'dark'],
+    ['Nền theo hệ thống', 'ti-device-desktop', 'theme system auto giao dien nen he thong tu dong', () => S.theme.set('system'), () => !!S.theme && S.theme.pref !== 'system'],
+    ['Mẫu giao diện (design system)', 'ti-color-swatch', 'ui design system token mau giao dien', () => window.open('/studio/ui.html', '_blank', 'noopener'), () => true],
     ['Mở menu thêm (⋯)', 'ti-dots', 'more menu lich su history', () => W()?.openMore(), () => !!W()],
     ['Trang chủ', 'ti-home', 'home trang chu du an gan day recent', () => S.openHome?.(), () => !!S.openHome],
     ['Xem lại hướng dẫn', 'ti-school', 'onboarding huong dan bat dau', () => S.openOnboarding?.(), () => !!S.openOnboarding],

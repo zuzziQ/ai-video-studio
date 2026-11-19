@@ -10,7 +10,7 @@
 | 2 | (không có) | Studio không dùng Tailwind; CSS cũ và CSS-in-JS của tính năng đọc biến trực tiếp |
 | 3 | `studio/theme/components.css` | Lớp dùng chung tiền tố `ui-` (nút, ô nhập, panel, mục thanh trái, tiêu đề nhóm, thẻ chọn, bảng, tab, chip, modal, toast, 5 trạng thái) |
 
-`studio/index.html` nạp theo thứ tự `studio.css` → `theme/tokens.css` → `theme/components.css`, nên bí danh ở tầng 1 đè bảng màu cũ trong `:root` của `studio.css` và mọi CSS cũ đổi theo mà không sửa từng file.
+`studio/index.html` chạy `theme/theme-boot.js` (đặt `data-theme`, mục 4b) rồi nạp theo thứ tự `studio.css` → `theme/tokens.css` → `theme/components.css`, nên bí danh ở tầng 1 đè bảng màu cũ trong `:root` của `studio.css` và mọi CSS cũ đổi theo mà không sửa từng file.
 
 ## 2. Điểm khác hub
 
@@ -77,10 +77,38 @@ Chữ trắng trên nút chính navy-600 11,1:1, trên hover navy-500 8,4:1. `--
 
 Đo trong trình duyệt (Studio cổng 5191, 1440×900, `sample/clip-mau`): 68 phần tử chữ ở thanh trên, thanh trái, thư viện, inspector, đầu timeline và 25 phần tử trong modal Xuất, **0** dưới 4,5:1; trang không tràn ngang.
 
+## 4b. Nền sáng và nền tối (`S25`, `C38`)
+
+Cách làm giống dashboard lychee (`server/ui.css`): **một bộ tên vai trò, chỉ giá trị đổi theo nền**. Studio giữ 3 tầng của mình (bảng màu → vai trò `--color-*` → bí danh cũ), thêm một khối `:root[data-theme="light"]` trong `tokens.css` chỉ ghi đè vai trò `--color-*` và bóng `--shadow-*` (test `studio_tokens_defined` chặn ghi đè thứ khác). CSS thành phần và feature không bao giờ hỏi đang ở nền nào.
+
+- **Đổi nền:** `studio/theme/theme-boot.js` nạp đồng bộ trong `<head>` trước mọi CSS, luôn đặt `<html data-theme="light|dark">` trước lần vẽ đầu (không chớp). Lựa chọn lưu `localStorage['avs.theme']` = `system` (mặc định, `C38`) | `light` | `dark`; `system` theo `prefers-color-scheme` và đổi ngay khi hệ điều hành đổi; tab khác đổi thì theo.
+- **Chỗ chọn:** công tắc ☀/☾ trên thanh đầu ngay trước ⋯ (bấm = sang nền kia, thành lựa chọn cố định); dòng "Giao diện" Hệ thống · Sáng · Tối trong menu ⋯; ba lệnh trong ⌘K. API `Studio.theme` / `AVSTheme` (`pref`, `mode`, `set`, `toggle`), sự kiện `avs:theme` cho phần tự vẽ canvas.
+- **Không đổi theo nền:** khung xem trước `--stage-*`, khối track `--track-*` (chữ trắng), chữ trên ảnh/video `--color-fg-on-media`, engine, ảnh thumbnail, trang khoá của `server.mjs`.
+- **Lớp phủ:** lớp "nhấn nhẹ" trên bề mặt giao diện (vạch track, nền hàng, swatch) dùng `rgb(var(--color-overlay) / a)` (trắng ở nền tối, mực ở nền sáng), không dùng `--color-white`. `--color-white` / `--color-black` chỉ cho trắng/đen thật: chữ trên khối màu, trên video, nhãn đè lên ảnh. Bóng dùng `--color-shadow`.
+- **Màu nhấn nền sáng:** chữ, viền đang chọn navy-600 (`--color-accent-text`), nền đặc navy-600 + chữ trắng; `--color-accent-soft` = navy-300 dùng ở .24 → xanh nhạt `#E2E6FB` (navy-500 làm bước đang chọn đục, khó nhìn). Vòng điểm quanh số bước đang chọn cách số 3px và số không có bóng: cung tiến độ cùng màu navy với nền số, sát nhau thì không thấy.
+- **Trang mẫu:** `studio/ui.html` (⌘K "Mẫu giao diện", theo `/ui` của lychee): ô màu hai tầng, mẫu thành phần `ui-*`, tỉ lệ tương phản tính tại chỗ, hai nền cạnh nhau (`?theme=light|dark`). Thành phần mới có mẫu ở đây trước khi feature dùng.
+
+Tương phản nền sáng (WCAG 2.1, tính từ token; trang mẫu đo lại tại chỗ, 2026-11-19 cả hai nền 0 cặp dưới ngưỡng):
+
+| Màu chữ / viền | canvas `#F1F4FA` | surface trắng | muted neutral-100 | hover neutral-200 |
+|---|---|---|---|---|
+| fg neutral-900 | 16,2 | 17,9 | 16,3 | 14,5 |
+| fg-muted neutral-700 | 9,4 | 10,4 | 9,5 | 8,4 |
+| fg-subtle neutral-600 | 6,9 | 7,6 | 6,9 | 6,1 |
+| line-control neutral-500 (viền) | 4,3 | 4,8 | 4,3 | 3,9 |
+| accent-text navy-600 | 10,1 | 11,1 | 10,1 | 9,0 |
+| accent-text-strong navy-700 | 12,9 | 14,3 | 13,0 | 11,6 |
+| success-text 800 | 7,0 | 7,7 | 7,0 | 6,2 |
+| warning-text 800 | 6,4 | 7,1 | 6,5 | 5,8 |
+| danger-text 700 | 5,7 | 6,3 | 5,7 | 5,1 |
+| focus navy-500 (viền) | 7,6 | 8,4 | 7,7 | 6,8 |
+
+Chữ trắng trên nút chính navy-600 11,1:1, hover navy-700 14,3:1; chữ canvas trên huy hiệu warning-700 4,6:1; nhãn bước đang chọn navy-700 trên `#E2E6FB` 11,5:1. Đo trên Studio thật (cổng tạm, `sample/clip-mau`, 1007 và 1440 px): nền sáng 0 phần tử chữ dưới ngưỡng; thanh đầu thêm công tắc không chồng, không tràn ngang. Nền tối còn huy hiệu số đỏ `#avs-ntbtn .nt-n` (trắng trên danger-400, 2,7:1) có từ trước.
+
 ## 5. Luật dùng
 
 1. **Màu chỉ lấy từ token.** Không viết hex, `rgb(số)`, `hsl(số)` ngoài `studio/theme/tokens.css`; không thêm `style="..."`. `scripts/check_studio_tokens.mjs` (job `gate` của CI) đếm từng file so với `scripts/studio_tokens_baseline.json`: tăng là đỏ; file mới được 0. Khi chuyển CSS cũ sang token, hạ mốc trong cùng PR (`node scripts/check_studio_tokens.mjs --write`). Một ngoại lệ hợp lý (vd ô xem trước màu người dùng chọn): thêm chú thích `design-token-ok` trên dòng đó.
-2. **Màu nhấn trên nền tối:** nền đặc dùng `--color-accent` + chữ `--color-accent-fg`; chữ, icon, viền đang chọn, focus dùng `--color-accent-text` / `--color-focus`. Không đặt chữ navy-600 trên nền tối.
+2. **Màu nhấn** (cả hai nền): nền đặc dùng `--color-accent` + chữ `--color-accent-fg`; chữ, icon, viền đang chọn, focus dùng `--color-accent-text` / `--color-focus`. Không đặt chữ navy-600 trên nền tối; trên nền sáng `--color-accent-text` đã là navy-600.
 3. **Không tím.** Bảng màu tím cũ (`#8B7BFF`, `#6C5CF0`) đã bỏ khỏi `studio.css` và `00_author.js`; CSS riêng của các tính năng còn vài chỗ, `M86`/`M87` chuyển hết. Từ `M85` khung (`studio.css`, `studio.js`, `library.js`, trang khoá của `server.mjs`, `00_author.js`) dùng thẳng tên token, không dùng bí danh cũ; bí danh còn đến khi `M86`/`M87` xong.
 4. **Đỏ thương hiệu không phải lỗi.** Lỗi, xoá, cảnh báo dùng `--color-danger*`.
 5. **Khung preview giữ xám trung tính** (`--stage-*`): không tô xanh, không gradient màu quanh video.

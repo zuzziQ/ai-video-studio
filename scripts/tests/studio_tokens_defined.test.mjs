@@ -52,3 +52,61 @@ test('the lock page of server.mjs copies its colours from tokens.css', () => {
   };
   for (const m of block.matchAll(/(--color-[\w-]+):\s*([\d ]+);/g)) assert.equal(m[2].trim(), tok(m[1]), m[1]);
 });
+
+// S25 M177: light theme = the same ROLE names with other values. Every name the light block sets must exist in the dark
+// :root block (a typo there would silently leave the dark value), and the block only overrides roles and shadows.
+test('the light theme only overrides roles that the dark :root block defines', () => {
+  const tokens = read('studio/theme/tokens.css');
+  const dark = tokens.match(/\n:root \{([\s\S]*?)\n\}/)?.[1];
+  const light = tokens.match(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(dark && light, 'dark :root or light block not found');
+  const names = t => [...t.matchAll(/\n\s*(--[\w-]+)\s*:/g)].map(m => m[1]);
+  const darkSet = new Set(names(dark)), bad = [];
+  for (const n of names(light)) {
+    if (!darkSet.has(n)) bad.push(`${n}: not in the dark block`);
+    else if (!/^--(color|shadow)-/.test(n)) bad.push(`${n}: not a role (palette, size and stage tokens do not change with the theme)`);
+  }
+  assert.deepEqual(bad, []);
+  assert.match(light, /color-scheme:\s*light/);
+  for (const keep of ['--stage-bg', '--track-1', '--color-fg-on-media']) assert.ok(!names(light).includes(keep), `${keep} must not change with the theme`);
+});
+
+test('index.html and ui.html run theme-boot.js before the first stylesheet (no flash of the wrong theme)', () => {
+  for (const f of ['studio/index.html', 'studio/ui.html']) {
+    const html = read(f), boot = html.indexOf('/studio/theme/theme-boot.js'), css = html.indexOf('rel="stylesheet"');
+    assert.ok(boot > 0 && boot < css, `${f}: theme-boot.js must come before the stylesheets`);
+    assert.doesNotMatch(html.slice(html.lastIndexOf('<script', boot), boot + 40), /\b(defer|async)\b/, `${f}: theme-boot.js must load synchronously`);
+  }
+});
+
+test('theme-boot.js: system by default, remembers light / dark, toggle switches the resolved mode', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const src = read('studio/theme/theme-boot.js');
+  const boot = (stored, systemDark) => {
+    const ls = new Map(stored ? [['avs.theme', stored]] : []), attrs = {}, events = [];
+    const ctx = {
+      localStorage: { getItem: k => ls.get(k) ?? null, setItem: (k, v) => ls.set(k, String(v)), removeItem: k => ls.delete(k) },
+      document: { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: k => attrs[k] ?? null }, dispatchEvent: e => events.push(e.type) },
+      CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o?.detail; } },
+      addEventListener() {},
+    };
+    ctx.window = ctx;
+    ctx.matchMedia = () => ({ matches: systemDark, addEventListener() {} });
+    runInNewContext(src, ctx);
+    return { T: ctx.AVSTheme, attrs, ls, events };
+  };
+  let b = boot(null, true);
+  assert.equal(b.T.pref, 'system'); assert.equal(b.attrs['data-theme'], 'dark');
+  b = boot(null, false);
+  assert.equal(b.attrs['data-theme'], 'light');
+  b = boot('dark', false);
+  assert.equal(b.attrs['data-theme'], 'dark');
+  b = boot('nonsense', true);
+  assert.equal(b.T.pref, 'system');
+  b = boot(null, true);
+  b.T.toggle();
+  assert.equal(b.T.pref, 'light'); assert.equal(b.attrs['data-theme'], 'light'); assert.equal(b.ls.get('avs.theme'), 'light');
+  assert.ok(b.events.includes('avs:theme'));
+  b.T.set('system');
+  assert.equal(b.ls.has('avs.theme'), false); assert.equal(b.attrs['data-theme'], 'dark');
+});
