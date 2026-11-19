@@ -114,3 +114,31 @@ hàm thuần ở `scripts/script_build.mjs` (`editCell`, `cleanCell`, `sheetToPl
   AI dựng → Áp bảng → AI dựng → Áp bảng (luôn một nền nhạc).
 - **QC** (`script_mark`, low): `[SFX]` không có trong thư viện / chưa có quanh đoạn; `[A-ROLL: bỏ]` mà b-roll phủ < 70 % đoạn; `[B-ROLL: … | nguồn]`
   có cảnh nhưng khác nguồn; `[MOOD]` không khớp mood nào / nhạc nền lúc đó khác mood; dấu chưa hiểu (`raw`).
+
+## 9. Kịch bản dạng bảng và chỉ dẫn dựng (S27 M197)
+Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 7. Mã: `scripts/script_table.mjs`, test `scripts/tests/s27_m197.test.mjs`
+(file mẫu `scripts/tests/fixtures/s27_m197_kich_ban.xlsx` / `.csv`).
+
+**Mở bảng** (nút "Mở .txt / .docx / .xlsx" ở ô Kịch bản): `POST /api/script/table` (thân = file, header `x-file-name`) đọc bằng
+`parseSheetBuf` của `scripts/batch.mjs` (sheet đầu, hàng đầu là tên cột). Vai trò cột (`roleOf`, tên không dấu):
+
+| Vai trò | Tên cột nhận ra (ví dụ) | Thành |
+|---|---|---|
+| `time` | Thời gian, Time, Timecode, Mốc, Giây | `[MỐC: 0:05–0:12]` (nhận `00:05–00:12`, `5-12`, `0:05`, `5s`, `5,5 - 8`, `1:02:03`, ô giờ của Excel) |
+| `start` / `end` | Bắt đầu / Kết thúc, Start / End, In / Out | như `time` (một mốc thì kết thúc = mốc của hàng sau) |
+| `say` | Lời thoại, Voice over, Kịch bản, Nội dung | chữ nói (không có cột tên lời: cột chữ dài nhất) |
+| `screen` | Chữ trên màn hình, Text on screen, Tiêu đề | `[CHỮ: …]` mỗi dòng |
+| `visual` | Hình ảnh / Source, B-roll, Cảnh quay | `[A-ROLL: cận mặt…]` khi nói về người nói, còn lại `[B-ROLL: …]` |
+| `transition`, `note` | Chuyển cảnh; Ghi chú, Chỉ dẫn, Notes | `[GHI CHÚ: …]` |
+| `mood`, `sfx`, `skip` | Nhạc / Mood; SFX / Âm thanh; STT, Mã cảnh | `[MOOD: …]`, `[SFX: …]`, bỏ |
+
+Cột có chữ mà chưa nhận ra (`unknown`) → ô Kịch bản hiện bảng chọn vai trò cột; `POST /api/script/table/text {columns, rows, roles}`
+dựng lại chữ. Chữ vào ô (chưa lưu), người dùng sửa rồi Lưu như kịch bản thường. `[MỐC]` / `[GHI CHÚ]` không giá trị là chữ thường;
+mốc không đọc được vào `raw[]`. Đoạn: `at {t0, t1}`, `note[]`; căn: `align.sheet` (số đoạn có mốc), `align.drift [{seg, sheet, heard, d}]`.
+
+**Chỉ dẫn → bảng dựng** (nút hiện khi kịch bản đã lưu có `[GHI CHÚ]`): `POST /api/script/directives {claude}` → ô đề xuất. `ruleCells`:
+chuyển cảnh (mờ dần / trượt / phóng / lia / nhiễu / cắt), focus / phóng vào sản phẩm hoặc người nói, cận / trung / toàn cảnh, tìm thêm
+source / video / cảnh (B-roll stock + từ khoá), thêm ví dụ (graphic ví dụ, chỉ dẫn mơ hồ thì lấy ý từ lời). Vế luật không hiểu gửi Claude
+một lần (`directivePrompt`, `checkClaudeCells`: chỉ 5 loại ô, đúng đoạn được hỏi, ≤ 3 ô mỗi đoạn). `POST /api/script/directives/accept
+{cells}` ghi ô đã tick vào bảng dựng (`acceptCells`): `aroll.frame`, `focus`, `transition`, `broll[]` (`miss: Cần tìm nguồn`), `screen[]`
+kind `vidu`, đều `from: claude`, `by: luat|claude`. Không bao giờ sửa lời.

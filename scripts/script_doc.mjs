@@ -29,17 +29,42 @@ export const norm = w => fold(w).replace(/[^a-z0-9]/g, '');
 // (vd "[cười]") vẫn là chữ nói như trước. Giá trị lạ: giữ chữ gốc trong `raw` (QC báo), không làm hỏng việc tách.
 const MARK = /\[\s*([^[\]:|\n]{1,24}?)\s*(?::\s*([^\]\n]*))?\]/gu;
 const NAMES = { hook: 'hook', cta: 'cta', chu: 'screen', text: 'screen', broll: 'broll', mood: 'mood', khongkhi: 'mood',
-  nhac: 'music', music: 'music', aroll: 'aroll', quay: 'aroll', sfx: 'sfx', am: 'sfx', hieuung: 'sfx' };
+  nhac: 'music', music: 'music', aroll: 'aroll', quay: 'aroll', sfx: 'sfx', am: 'sfx', hieuung: 'sfx',
+  moc: 'time', giay: 'time', time: 'time', timecode: 'time', ghichu: 'note', note: 'note', chidan: 'note' }; // S27 M197: kịch bản dạng bảng
 export const markName = k => NAMES[fold(k).replace(/[^a-z]/g, '')] || null;
-const NEED_VALUE = new Set(['mood', 'music', 'aroll', 'sfx']); // dấu mới không có giá trị = chữ thường (không nuốt "[âm]")
+const NEED_VALUE = new Set(['mood', 'music', 'aroll', 'sfx', 'time', 'note']); // dấu mới không có giá trị = chữ thường (không nuốt "[âm]")
 const key = s => fold(s).replace(/[^a-z0-9]+/g, ' ').trim();
 const MUSIC = { tat: 'tat', off: 'tat', bat: 'bat', on: 'bat', doi: 'doi', 'doi bai': 'doi', to: 'to', 'to len': 'to', nho: 'nho', 'nho lai': 'nho' };
 export const BROLL_SRC = { kho: 'kho', stock: 'stock', 'anh ai': 'ai', ai: 'ai', dong: 'dong', 'broll dong': 'dong' };
-export const SCREEN_KIND = { so: 'so', 'so lieu': 'so', 'danh sach': 'danhsach', 'trich dan': 'trichdan', 'tieu de': 'tieude', gia: 'gia' };
+export const SCREEN_KIND = { so: 'so', 'so lieu': 'so', 'danh sach': 'danhsach', 'trich dan': 'trichdan', 'tieu de': 'tieude', gia: 'gia', 'vi du': 'vidu' };
 const FRAME = { 'can mat': 'can', can: 'can', 'can canh': 'can', trung: 'trung', 'trung canh': 'trung', rong: 'rong', 'toan canh': 'rong' };
 const cut = (v, n = 200) => String(v).slice(0, n);
+// ---------- mốc giây (S27 M197) ----------
+const TOK = /\d{1,3}:\d{1,2}(?::\d{1,2})?(?:[.,]\d+)?|\d+(?:[.,]\d+)?/g;
+function secOf(t) {
+  t = t.replace(',', '.');
+  if (!t.includes(':')) return +t;
+  const p = t.split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
+}
+/**
+ * Chữ mốc giây của kịch bản bảng → { t0, t1 } (giây; t1 null khi chỉ có mốc đầu), null khi không đọc được.
+ * Nhận "00:05–00:12", "5-12", "0:05", "5s", "1:02:03", "5,5 - 8" và số Excel kiểu giờ (phân số của ngày, vd 0.0000578…).
+ */
+export function parseTimeRange(v) {
+  const s = String(v ?? '').trim(); if (!s) return null;
+  if (/^0?\.\d{4,}$/.test(s)) { const x = +s * 86400; return Number.isFinite(x) ? { t0: r2(x), t1: null } : null; } // ô Excel định dạng giờ
+  const t = s.match(TOK); if (!t?.length) return null;
+  const a = secOf(t[0]), b = t.length > 1 ? secOf(t[1]) : null;
+  if (!Number.isFinite(a) || a < 0 || a > 86400) return null;
+  return { t0: r2(a), t1: b != null && Number.isFinite(b) && b > a ? r2(b) : null };
+}
+const mmss = x => { const m = Math.floor(x / 60), s = x - m * 60; return `${m}:${s < 10 ? '0' : ''}${+s.toFixed(2)}`; };
+/** { t0, t1 } → chữ của dấu [MỐC: …] ("0:05–0:12"). */
+export const fmtTimeRange = at => mmss(at.t0) + (at.t1 != null ? '–' + mmss(at.t1) : '');
 /** Một dấu (không phải HOOK / CTA) → các trường của đoạn. Trả false khi giá trị lạ (dấu gốc vào raw). */
 function putMark(seg, k, v) {
+  if (k === 'note') { const n = v.replace(/\s+/g, ' ').trim(); if (!n) return false; seg.note.push(cut(n, 300)); return true; }
+  if (k === 'time') { const at = parseTimeRange(v); if (!at) return false; seg.at = spanAt(seg.at, at); return true; }
   const [main = '', ...opts] = v.split('|').map(x => x.replace(/\s+/g, ' ').trim()), opt = opts.join(' | ');
   if (k === 'screen') {
     if (!main) return true;
@@ -79,11 +104,18 @@ function putMark(seg, k, v) {
   }
   return false;
 }
-const blankSeg = kind => ({ kind, say: [], screen: [], broll: [], sfx: [], raw: [] });
-const hasAny = s => !!(s.say.length || s.screen.length || s.broll.length || s.sfx.length || s.raw.length || s.mood || s.music || s.aroll);
+// hai mốc giây gộp một đoạn: bắt đầu ở mốc sớm, kết thúc theo mốc muộn (null = tới đoạn sau)
+function spanAt(a, b) {
+  if (!a || !b) return a || b ? { ...(a || b) } : null;
+  const [x, y] = a.t0 <= b.t0 ? [a, b] : [b, a];
+  return { t0: x.t0, t1: y.t1 ?? (x.t1 != null && x.t1 > y.t0 ? x.t1 : null) };
+}
+const blankSeg = kind => ({ kind, say: [], screen: [], broll: [], sfx: [], raw: [], note: [] });
+const hasAny = s => !!(s.say.length || s.screen.length || s.broll.length || s.sfx.length || s.raw.length || s.note.length || s.mood || s.music || s.aroll || s.at);
 // gộp dấu của `from` vào `to`; front = dấu của `from` đứng trước (đoạn chỉ có dấu gắn vào đoạn có lời ngay sau nó)
 function mergeInto(to, from, front) {
-  for (const k of ['screen', 'broll', 'sfx', 'raw']) to[k] = front ? [...from[k], ...to[k]] : [...to[k], ...from[k]];
+  for (const k of ['screen', 'broll', 'sfx', 'raw', 'note']) to[k] = front ? [...from[k], ...to[k]] : [...to[k], ...from[k]];
+  if (from.at) to.at = spanAt(to.at, from.at); // hàng không lời của bảng gộp vào hàng kế bên: mốc giây trải ra cả hai
   for (const k of ['mood', 'music']) if (from[k] && (!to[k] || !front)) to[k] = from[k];
   if (from.aroll) to.aroll = front ? { ...from.aroll, ...(to.aroll || {}) } : { ...(to.aroll || {}), ...from.aroll };
   for (const k of ['moodN', 'arollN']) if (from[k]) to[k] = (to[k] || 0) + from[k];
@@ -98,6 +130,8 @@ function outSeg(s, stats) {
   if (s.sfx.length) o.sfx = s.sfx.map(x => ({ ...x }));
   if (s.screen.some(x => x.kind)) o.screenKind = s.screen.map(x => x.kind);
   if (s.raw.length) o.raw = [...s.raw];
+  if (s.note.length) o.note = [...s.note];
+  if (s.at) o.at = { ...s.at };
   if (stats) o.n = { mood: s.moodN || 0, aroll: s.arollN || 0 };
   return o;
 }
@@ -197,23 +231,37 @@ function lcsLong(a, b, cap = 4e6) {
 const toks = s => String(s).split(/\s+/).filter(Boolean);
 const clean = w => w.replace(/^["“'(]+/, '').replace(/[.,!?;:…"”')]+$/g, '');
 
+/** Đoạn → [t0, t1] khi không có lời nghe được: đoạn có mốc bảng giữ mốc, các đoạn không mốc chia đều khoảng trống giữa hai mốc. */
+function sheetSpans(segs, D) {
+  const n = segs.length, a = segs.map(s => s.at?.t0 ?? null), b = segs.map((s, k) => s.at ? s.at.t1 ?? segs.slice(k + 1).find(x => x.at)?.at.t0 ?? null : null);
+  const end = Math.max(D, ...a.filter(x => x != null).map(x => x + .5), ...b.filter(x => x != null));
+  for (let k = 0; k < n;) {
+    if (a[k] != null) { if (b[k] == null || b[k] <= a[k]) b[k] = k + 1 < n && a[k + 1] != null && a[k + 1] > a[k] ? a[k + 1] : a[k] + Math.max(.5, (end - a[k]) / Math.max(1, n - k)); k++; continue; }
+    let j = k; while (j < n && a[j] == null) j++;
+    const from = k ? b[k - 1] : 0, to = j < n ? a[j] : end, each = Math.max(.3, (to - from) / (j - k));
+    for (let q = k; q < j; q++) { a[q] = from + each * (q - k); b[q] = a[q] + each; }
+    k = j;
+  }
+  return a.map((x, k) => [x, Math.max(b[k], x + .3)]);
+}
 /**
  * Kịch bản + lời nghe được (whisper: [{w,s,e}], theo giờ timeline) → { segments (thêm t0/t1/spoken/ratio), words, align }.
  * Không có lời nghe được (video không lời) → chia đều thời lượng `dur` cho các đoạn, trong đoạn chia theo số ký tự.
  */
-export function alignScript(segments, heard, { dur = 0, minRatio = .3 } = {}) {
+export function alignScript(segments, heard, { dur = 0, minRatio = .3, driftMax = 2 } = {}) {
   const segs = segments.map(s => ({ ...s, screen: [...(s.screen || [])], broll: [...(s.broll || [])] }));
   const W = segs.flatMap((s, k) => toks(s.say).map(w => ({ w, k, s: null, e: null })));
   heard = (heard || []).filter(h => h && Number.isFinite(+h.s) && Number.isFinite(+h.e)).map(h => ({ w: String(h.w ?? ''), s: +h.s, e: +h.e }));
   const len = w => norm(w).length + 1;
-  if (!heard.length) { // ---- không lời: chia đều theo đoạn
-    const D = Math.max(1, dur || 0), each = D / Math.max(1, segs.length);
+  if (!heard.length) { // ---- không lời: chia đều theo đoạn; đoạn có mốc giây của bảng (M197) giữ mốc đó, phần còn lại chia đều
+    const span = sheetSpans(segs, Math.max(1, dur || 0));
     segs.forEach((s, k) => {
-      const ws = W.filter(x => x.k === k), tot = ws.reduce((a, x) => a + len(x.w), 0) || 1; let t = k * each;
-      for (const x of ws) { const d = each * len(x.w) / tot; x.s = r2(t); x.e = r2(t + d); t += d; }
-      Object.assign(s, { t0: r2(k * each), t1: r2((k + 1) * each), spoken: true, ratio: null });
+      const [a, b] = span[k], ws = W.filter(x => x.k === k), tot = ws.reduce((q, x) => q + len(x.w), 0) || 1; let t = a;
+      for (const x of ws) { const d = (b - a) * len(x.w) / tot; x.s = r2(t); x.e = r2(t + d); t += d; }
+      Object.assign(s, { t0: r2(a), t1: r2(b), spoken: true, ratio: null });
     });
-    return { segments: segs, words: W, align: { mode: 'even', at: new Date().toISOString(), words: W.length, matched: 0, offscript: [] } };
+    const sheet = segs.some(s => s.at) ? { sheet: segs.filter(s => s.at).length, drift: [] } : {};
+    return { segments: segs, words: W, align: { mode: 'even', at: new Date().toISOString(), words: W.length, matched: 0, offscript: [], ...sheet } };
   }
   heard.sort((a, b) => a.s - b.s);
   const pairs = lcsLong(W.map(x => norm(x.w)), heard.map(h => norm(h.w)));
@@ -244,7 +292,10 @@ export function alignScript(segments, heard, { dur = 0, minRatio = .3 } = {}) {
     if (q - j >= 5 && !live.some(x => !x.hit && x.s < t1 - .05 && x.e > t0 + .05)) offscript.push({ t0: r2(t0), t1: r2(t1), text: heard.slice(j, q).map(h => h.w).join(' ').trim(), words: heard.slice(j, q) });
     j = q;
   }
-  return { segments: segs, words: live, align: { mode: 'whisper', at: new Date().toISOString(), words: W.length, matched: pairs.length, offscript: offscript.map(({ words, ...o }) => o) }, offWords: offscript.flatMap(o => o.words) };
+  // mốc giây của bảng (M197): giờ theo lời nói thắng, chỉ báo đoạn lệch mốc quá `drift` giây
+  const drift = segs.flatMap((s, k) => s.at && s.t0 != null && Math.abs(s.t0 - s.at.t0) > driftMax ? [{ seg: k, sheet: s.at.t0, heard: s.t0, d: r2(s.t0 - s.at.t0) }] : []);
+  const sheet = segs.some(s => s.at) ? { sheet: segs.filter(s => s.at).length, drift } : {};
+  return { segments: segs, words: live, align: { mode: 'whisper', at: new Date().toISOString(), words: W.length, matched: pairs.length, offscript: offscript.map(({ words, ...o }) => o), ...sheet }, offWords: offscript.flatMap(o => o.words) };
 }
 
 /** Chữ đã căn → phụ đề kiểu captions.py ({t0,t1,words:[{w,s,e}]}): ≤ max từ, ngắt ở dấu câu, cuối đoạn và chỗ nghỉ > 0,7 s. */

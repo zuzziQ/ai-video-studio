@@ -212,3 +212,19 @@ Rủi ro:
 
 Verify mỗi mục: `node --check` file đổi, test `scripts/tests/s27_m19x.test.mjs` (hàm thuần: tách dấu, bảng, nhạc, take), `python -m unittest discover -s scripts/tests`
 khi đụng `auto_sfx.py`, `node .rag/sync.js --check`; mở Studio thử luồng trên `sample/` (kịch bản có đủ dấu, hai take), render một video mẫu ở `M195` / `M196`.
+
+## 7. Kịch bản dạng bảng (Excel / CSV) và chỉ dẫn dựng (`M197`)
+
+Chủ repo 2026-11-19: phần lớn kịch bản viết cho source là file Excel chia theo đoạn giây, mỗi đoạn có lời và chỉ dẫn chữ tự do
+("tìm thêm source này", "chuyển cảnh như này", "focus vào sản phẩm / người nói", "thêm ví dụ khi giới thiệu cái này").
+
+- **Bảng → chữ kịch bản** (`scripts/script_table.mjs`): chữ kịch bản vẫn là bản duy nhất người dùng sửa và lưu; bảng chỉ là cách nhập.
+  Mỗi hàng một đoạn (dòng trống tách); cột nhận theo tên không dấu, cột lạ hỏi người dùng gán. Mốc giây → `[MỐC: …]`, chỉ dẫn →
+  `[GHI CHÚ: …]` (hai dấu mới, không phải lời nói). Hình / source có chữ người nói + cỡ khung → `[A-ROLL]`, còn lại → `[B-ROLL]`
+  ("tìm …" → `| stock`, tên file → `| tệp`).
+- **Mốc giây**: segment có `at {t0, t1}`. Không lời nghe được (video không lời, mẫu trước khi quay): giờ của đoạn = mốc bảng, đoạn không mốc
+  chia khoảng trống. Có lời: giờ theo lời nói thắng, `align.drift` liệt kê đoạn lệch mốc > 2 s. Chưa căn: bảng dựng lấy `t0/t1` từ mốc.
+- **Chỉ dẫn → ô bảng dựng**: luật thuần trước, Claude chỉ nhận các vế luật chưa hiểu (một lần gọi cho cả kịch bản, chỉ gửi lời + chỉ dẫn).
+  Ô: `aroll.frame`, `focus {on: product|speaker, target}`, `transition {v}`, `broll[]` cần tìm (`miss`), `screen[]` kind `vidu`; mọi ô
+  `from: claude` (+ `by: luat|claude`). Người dùng tick Nhận; `mergeSheet` giữ ô chỉ dẫn (`from: claude` có `by`) như ô `user` khi lời của hàng không đổi.
+  `focus` / `transition` mới chỉ nằm trong bảng; áp lên timeline do panel Bảng dựng (`M194`) và mục sau quyết định.
