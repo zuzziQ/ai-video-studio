@@ -13,7 +13,7 @@
   if (!C) return console.error('03_nextstep: thiếu 02_score.core.js');
   const ORDER = C.STEPS;
   // dữ liệu ngoài timeline, đọc lại tối đa mỗi 8 s (focus cửa sổ, đổi bước, mở popover điểm)
-  const D = { qc: null, quick: null, src: null, fill: null, dir: null, ready: false };
+  const D = { qc: null, quick: null, src: null, fill: null, plan: null, dir: null, ready: false };
   let fetchedAt = 0, busy = null;
 
   // go(panel, selectors, at): mở panel bên trái + tô sáng (M113); at = giây cần tua tới (khoảng trống dài)
@@ -44,6 +44,7 @@
       gap: ['wf-aihelp', ['[data-ai="build"]']],
       broll: ['aibroll', []],
       music: ['audio', []],
+      script: ['wf-aihelp', ['.scn-sum']], // S27 M200: fix → mở panel AI dựng rồi Studio.scriptNotes.jump (tua + chọn mục cần xem)
     },
     check: {
       quick: ['wf-aihelp', ['[data-ai="qc"]', '.ai-card']],
@@ -77,12 +78,12 @@
     if (busy) return force ? busy.then(() => refresh(true)) : busy; // lần ép làm mới (vừa xuất xong) không nhận kết quả của lượt đang bay
     if (!S.TL || (!force && Date.now() - fetchedAt < 8000)) return Promise.resolve();
     const dir = S.META?.dir;
-    if (D.dir !== dir) { D.qc = D.quick = D.src = D.fill = null; D.ready = false; D.dir = dir; }
+    if (D.dir !== dir) { D.qc = D.quick = D.src = D.fill = D.plan = null; D.ready = false; D.dir = dir; }
     const get = u => S.api(u).catch(() => null);
-    busy = Promise.all([get('/api/qc'), get('/api/qc/quick'), get('/api/source'), get('/api/ai/fillers'),
+    busy = Promise.all([get('/api/qc'), get('/api/qc/quick'), get('/api/source'), get('/api/ai/fillers'), get('/api/ai/plan'), // S27 M200: tiêu chí script
       // làm mới vẽ lại panel Xuất nếu đang mở: hoãn khi panel đang tô sáng chỗ cần làm (Studio.workflow.focus) để không mất nó
       S.exports && !(S.exports.loaded() && $('#libbody .wf-flash')) ? S.exports.refresh().catch(() => null) : null])
-      .then(([q, k, src, fill]) => { if (S.META?.dir === dir) Object.assign(D, { qc: q, quick: k, src, fill, ready: true }); })
+      .then(([q, k, src, fill, plan]) => { if (S.META?.dir === dir) Object.assign(D, { qc: q, quick: k, src, fill, plan: plan && !plan.error ? plan : null, ready: true }); })
       .finally(() => { busy = null; fetchedAt = Date.now(); paint(); });
     return busy;
   }
@@ -92,7 +93,7 @@
     const pack = (S.win?.PACKS || []).find(p => p.id === S.TL.pack) || null;
     const f = D.fill;
     return { tl: S.TL, caps: (S.CAP || []).length, pack, burn: D.src?.burnin || null, fillers: !!f && !f.none && !f.error && Array.isArray(f.cuts),
-      quick: D.quick, qc: D.qc, latest: latest(), edited: S.exports?.edited?.() || null };
+      quick: D.quick, qc: D.qc, latest: latest(), edited: S.exports?.edited?.() || null, script: (D.plan && S.scriptNotes?.stat(D.plan)) || null };
   }
   const scores = () => C.score(input()).steps;
 
@@ -112,7 +113,7 @@
     return { step, score: sc[step].score, tasks, need: main.length, done: main.filter(t => t.done).length,
       next: main.find(t => !t.done) || tasks.find(t => !t.done) || null };
   }
-  const fix = t => (t.go[3] ? () => editBrand(t.go[3]) : go(t.go[0], t.go[1], t.at));
+  const fix = t => (t.go[3] ? () => editBrand(t.go[3]) : t.id === 'script' && S.scriptNotes ? () => { go(t.go[0], t.go[1])(); S.scriptNotes.jump(D.plan); } : go(t.go[0], t.go[1], t.at));
 
   // Nút "Sửa" của bước Chuẩn bị (tên, logo, màu): trước chỉ tô sáng panel Thương hiệu, nên khi biểu mẫu chưa mở hoặc dự án chưa
   // dùng thương hiệu nào thì không thấy gì xảy ra. Giờ: dự án đang dùng một thương hiệu → mở biểu mẫu sửa của nó; chưa có thương
