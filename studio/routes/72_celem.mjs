@@ -1,11 +1,14 @@
 // S27 M199: Claude dựng element riêng (spec khai báo, khối engine/celem.js; lõi scripts/elem_make.mjs, giao diện
 // studio/features/72_celem.js, thiết kế docs/plans/S27-element-claude.md). Chỉ gọi mô hình khi người dùng bấm / hỏi (C23).
-//   POST /api/elem/make        {ask, brand:{màu, font}, brand_id, frame:{w,h}, style?, text?, base?: spec đang sửa} → {ok, run}
+//   POST /api/elem/make        {ask, brand:{màu, font}, brand_id, frame:{w,h}, style?, text?, base?: spec đang sửa, refs?: ≤ 4 data URL ảnh ví dụ
+//                              (JPEG/PNG/WebP ≤ 1,5 MB), elem_id?: dùng lại ảnh ví dụ đã lưu, brand_first?: màu thương hiệu trước màu ảnh} → {ok, run}
+//                              Có ảnh: chép ref_N vào thư mục tạm, Claude chạy cwd đó với --allowedTools Read (như Style Lab "Từ mô tả")
 //                              400 dữ liệu sai · 409 đang có một lượt khác
 //   GET  /api/elem/make        → {state: idle|running|done|error|cancelled, run, step, variants: [{name, why, text, spec}], warnings, provider, ms | error, kind}
 //   POST /api/elem/make/cancel → {ok, cancelled}
 //   GET  /api/elem/lib?brand=  → {items}  thư viện element riêng của thương hiệu ('' = Chung), $AVS_HOME/elements/<id>.json
-//   POST /api/elem/lib         {brand, id?, name, spec, text?, thumb?: data URL JPEG, ask?} → {ok, item}  (spec qua CELEM.check)
+//   POST /api/elem/lib         {brand, id?, name, spec, text?, thumb?: data URL JPEG, ask?, refs?: ảnh ví dụ} → {ok, item}  (spec qua CELEM.check;
+//                              ảnh ví dụ lưu ở elements/refs/<brand>/<id>/ref_N, item.refs = số ảnh)
 //   POST /api/elem/lib/delete  {brand, id} → {ok, deleted}
 // Ảnh 3 phương án: giao diện gọi POST /api/elem/shots của 72_elem_ai.mjs (cùng engine headless) với timeline đã chèn cảnh celem.
 import fs from 'node:fs';
@@ -13,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { killTree } from '../../scripts/platform.mjs';
+import { rmSync } from '../../scripts/fs_rm.mjs';
 import { AVS_HOME } from '../security.mjs';
 
 const brandIds = home => { try { return (JSON.parse(fs.readFileSync(path.join(home, 'brands.json'), 'utf8')).brands || []).map(b => b.id); } catch { return []; } };
@@ -26,18 +30,27 @@ export default ctx => {
   const timeout = () => (+process.env.AVS_ASSIST_TIMEOUT_S > 0 ? +process.env.AVS_ASSIST_TIMEOUT_S : 180) * 1000;
 
   async function ask(input, me, rec) {
+    // ảnh ví dụ: mới gửi lên, hoặc ảnh đã lưu cạnh element đang sửa (elem_id) → thư mục làm việc tạm, Claude đọc bằng Read
+    const refs = input.refs.length ? input.refs : input.elem_id ? M.libRefs(AVS_HOME(), input.brand_id, input.elem_id) : [];
+    const dir = refs.length ? fs.mkdtempSync(path.join(os.tmpdir(), 'avs-celem-')) : null;
+    try {
+      input.files = dir ? M.writeRefs(dir, refs) : [];
+      return await askIn(input, me, rec, dir);
+    } finally { if (dir) rmSync(dir, { recursive: true, force: true }); }
+  }
+  async function askIn(input, me, rec, dir) {
     const prompt = A.assertCleanPrompt(M.makePrompt(input));
     let provider = 'claude';
     const t0 = Date.now(), ms = timeout();
     const out = await L.askJSON(prompt, {
-      shape: 'object', retries: 1, model: 'sonnet', task: 'text', cwd: os.tmpdir(), timeout: ms, timeoutMsg: `AI quá ${Math.round(ms / 1000)} giây chưa trả lời. Thử lại sau.`,
+      shape: 'object', retries: 1, model: 'sonnet', task: dir ? 'vision' : 'text', cwd: dir || os.tmpdir(), ...(dir ? { args: ['--allowedTools', 'Read'] } : {}), timeout: ms, timeoutMsg: `AI quá ${Math.round(ms / 1000)} giây chưa trả lời. Thử lại sau.`,
       onProc: pr => { me.proc = pr; if (me.cancelled) killTree(pr); },
       onTick: s => { if (rec.state === 'running') { rec.step = `Claude đang dựng element… ${Math.round(s)} s`; rec.progress = Math.min(0.9, 0.1 + 0.8 * (1 - Math.exp(-s / 30))); } },
       onAttempt: n => { if (n) rec.step = 'Spec chưa hợp lệ, đang hỏi lại…'; },
       run: async (p, o) => { const r = await (ctx.celemRun || L.runLLM)(p, o); provider = r?.provider || 'claude'; return r; },
       validate: v => M.normMake(v, input),
     });
-    return { ...out, provider, ms: Date.now() - t0 };
+    return { ...out, provider, ms: Date.now() - t0, refs: input.files.length };
   }
 
   return async (req, res, p, u) => {

@@ -52,10 +52,24 @@ Kết quả của mô hình qua `normMake`: phương án nào sai spec thì bị
 5. **Dùng lại**: thư viện của thương hiệu đang mở (`META.kho.brand`) hiện dưới ô mô tả. Bấm ảnh là chèn tại playhead (một bước hoàn tác). Có nút xoá khỏi thư viện (element đã chèn vẫn giữ).
 6. **Sửa**: tab Thuộc tính "Element riêng" có ô Chữ (khi spec có `{text}`), các màu biến `#hex`, và ô "Claude sửa". Núm chung `size` / `dur` và tay nắm khung chạy như element thường.
 
+## 4b. Ảnh ví dụ (bổ sung phạm vi, chủ repo 2026-11-19)
+
+Người dùng đưa ảnh để Claude dựng theo, làm giống Style Lab chế độ Từ mô tả (`references/style-lab.md` mục 2).
+
+- **Lối vào.** Ô ảnh ví dụ nằm dưới ô mô tả của panel Element riêng: kéo thả, chọn file, hoặc dán (⌘V) khi con trỏ ở ô mô tả. Ở tab Claude, dán hoặc thả ảnh vào ô hỏi để đính kèm câu hỏi; dải ảnh đính hiện dưới ô hỏi. Ảnh đính chỉ được dùng khi việc là `elem_create` hoặc sửa element riêng; dùng xong thì dải tự xoá. Tối đa 4 ảnh (ảnh chụp video khác, ảnh thiết kế, logo).
+- **Gửi lên.** Trình duyệt thu nhỏ ảnh (cạnh dài ≤ 1024 px, JPEG) rồi gửi `refs` dạng data URL.
+- **Kiểm ở server** (`checkRefs`). Chỉ nhận JPEG, PNG, WebP, và kiểm cả chữ ký đầu file (khai `image/jpeg` mà nội dung là PNG hay SVG thì bị từ chối). Mỗi ảnh ≤ 1,5 MB. Không nhận đường dẫn hay url. Lỗi trả 400.
+- **Chạy Claude.** Route tạo thư mục làm việc tạm `avs-celem-*`, ghi `ref_1.jpg`… (`writeRefs`: tên file do server đặt, chỉ ghi trong thư mục đó). Claude chạy với `cwd` là thư mục này và `--allowedTools Read` (`task: vision`). Xong lượt thì thư mục bị xoá.
+- **Prompt.** Bảo Claude mở các file bằng Read, chỉ bắt chước hình khối, bố cục, màu, kiểu chữ của element; không chép logo, tên, chữ, watermark của người khác vào spec.
+- **Màu.** Ô "Màu theo thương hiệu" bật sẵn khi có ảnh và thương hiệu có màu: Claude ưu tiên `@primary`/`@accent`, chỉ lấy màu ảnh khi thương hiệu không có màu hợp. Bỏ tick thì lấy màu theo ảnh (`brand_first: false`).
+- **Lưu.** Nhận phương án thì ảnh ví dụ lưu cạnh element: `$AVS_HOME/elements/refs/<brand | _chung>/<id>/ref_N.<ext>`, mục thư viện ghi `refs: N`. Xoá element khỏi thư viện thì xoá luôn ảnh.
+- **Dùng lại.** Sửa một element đã lưu (Claude sửa ở Thuộc tính hoặc ở tab Claude, ví dụ "làm giống ảnh này hơn") mà không đưa ảnh mới thì server đọc lại ảnh đã lưu theo `elem_id` (`libRefs`, kiểm lại qua `checkRefs`). Bản sửa lưu thành mục mới, chép ảnh của bản cũ (`refs_from`).
+
 ## 5. Chưa làm (lát sau)
 
 - **Bảng dựng gọi Claude tạo element** (`M194` / `M191`): khi ô `[CHỮ: … | kiểu]` hay ô graphic của bảng dựng không khớp mục nào trong kho element (`pickBroll`, mẫu chữ, Hình khối, thư viện element riêng của thương hiệu), bảng ghi ô `claude` kèm mô tả. Áp bảng sẽ gọi `checkMakeInput` + `makePrompt` (một lượt cho mọi ô thiếu, không gọi riêng từng ô) và lấy phương án đầu qua `CELEM.check`. Người dùng xem trong khay việc trước khi nhận. Thứ tự ưu tiên: thư viện riêng của thương hiệu trước, Claude dựng sau.
 - "3 biến thể" và "Gợi ý núm" (`M149`) cho cảnh `celem`: hiện chỉ có Claude sửa. Núm riêng theo `vars` (ví dụ một thanh trượt đổi độ bo mọi lớp `round`) cần thêm loại `celem` vào `71_knobs.core.js`.
+- Xem lại / đổi ảnh ví dụ đã lưu của một mục thư viện (hiện chỉ đếm số ảnh; muốn thay thì dựng lại kèm ảnh mới).
 - Sửa tên / ghi đè mục trong thư viện. Kéo element từ thư viện thả vào khung.
 - Lớp chữ thứ hai gắn trường riêng (`{text2}`). Lớp ảnh từ Kho của thương hiệu (đường dẫn trong Kho, không url).
 - Gói style (`references/packs.md`) khai báo sẵn vài spec `celem` mẫu, để AI dựng (`20_ai`) dùng như graphic của gói.

@@ -172,3 +172,69 @@ test('review: chữ giãn theo cạnh ngắn, "$&" trong chữ giữ nguyên, se
     assert.equal(M.listLib(home, '')[0].thumb, '');
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
+
+// ---------------------------------------------------------------- ảnh ví dụ (bổ sung phạm vi 2026-11-19)
+const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(60, 1)]);
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(60, 2)]);
+const durl = (mime, buf) => `data:${mime};base64,${buf.toString('base64')}`;
+
+test('ảnh ví dụ: chỉ JPEG / PNG / WebP thật, tối đa 4 ảnh, mỗi ảnh ≤ 1,5 MB', () => {
+  assert.deepEqual(M.checkRefs(undefined), []);
+  assert.equal(M.checkRefs([durl('image/jpeg', JPG), durl('image/png', PNG)]).map(r => r.ext).join(), 'jpg,png');
+  for (const bad of [
+    ['data:image/gif;base64,R0lGODlh'], ['data:image/svg+xml;base64,PHN2Zz4='], ['https://evil/x.jpg'], ['C:/Users/x/a.jpg'], ['../../etc/passwd'],
+    [{ path: '../x.jpg' }], [durl('image/jpeg', PNG)], [durl('image/png', Buffer.from('<svg onload=alert(1)>xxxxxxxx'))],
+    [durl('image/jpeg', Buffer.concat([JPG, Buffer.alloc(M.MAX_REF_BYTES)]))], Array(5).fill(durl('image/jpeg', JPG)), 'x',
+  ]) assert.throws(() => M.checkRefs(bad), e => e.status === 400, JSON.stringify(bad).slice(0, 60));
+  assert.throws(() => M.checkMakeInput({ ask: 'box', refs: ['data:image/gif;base64,R0lGODlh'] }), /JPEG, PNG hoặc WebP/);
+});
+
+test('ảnh ví dụ: tên file do server đặt, chỉ nằm trong thư mục làm việc; prompt bảo Read và không chép logo người khác', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-m199w-'));
+  try {
+    const names = M.writeRefs(dir, M.checkRefs([durl('image/jpeg', JPG), durl('image/png', PNG)]));
+    assert.deepEqual(names, ['ref_1.jpg', 'ref_2.png']);
+    assert.deepEqual(fs.readdirSync(dir).sort(), names);
+    for (const n of names) assert.equal(path.dirname(path.resolve(dir, n)), path.resolve(dir));
+    const input = { ...M.checkMakeInput({ ask: 'box giá giống ảnh', brand: { primary: '#FF5A36' } }), files: names };
+    const p = M.makePrompt(input);
+    assert.match(p, /Read các file ref_1\.jpg, ref_2\.png/); assert.match(p, /không chép logo, tên, chữ, watermark/); assert.match(p, /ưu tiên màu thương hiệu/);
+    assert.match(M.makePrompt({ ...input, brandFirst: false }), /lấy theo ảnh ví dụ/);
+    assert.ok(!M.makePrompt({ ...input, files: [] }).includes('ẢNH VÍ DỤ'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('ảnh ví dụ lưu cạnh element trong thư viện thương hiệu, dùng lại khi sửa, xoá cùng element', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-m199l-'));
+  try {
+    const it = M.saveLib(home, 'acme', { name: 'A', spec: SPEC(), refs: [durl('image/jpeg', JPG)] });
+    assert.equal(it.refs, 1);
+    const d = path.join(home, 'elements', 'refs', 'acme', it.id);
+    assert.deepEqual(fs.readdirSync(d), ['ref_1.jpg']);
+    assert.equal(M.listLib(home, 'acme')[0].refs, 1);
+    assert.equal(M.libRefs(home, 'acme', it.id)[0].buf.equals(JPG), true);
+    assert.deepEqual(M.libRefs(home, 'acme', '../../x'), []); assert.deepEqual(M.libRefs(home, '../x', it.id), []);
+    const b = M.saveLib(home, 'acme', { name: 'B', spec: SPEC(), refs_from: it.id }); // bản sửa giữ ảnh của bản cũ
+    assert.equal(b.refs, 1); assert.equal(M.libRefs(home, 'acme', b.id).length, 1);
+    assert.throws(() => M.saveLib(home, 'acme', { spec: SPEC(), refs: ['data:image/gif;base64,R0lGODlh'] }), /JPEG, PNG/);
+    assert.equal(M.delLib(home, 'acme', it.id), true); assert.ok(!fs.existsSync(d));
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('route: có ảnh thì Claude chạy trong thư mục tạm có ref_N với --allowedTools Read, xong thì xoá thư mục', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'avs-m199q-')), old = process.env.AVS_HOME;
+  process.env.AVS_HOME = home;
+  try {
+    let seen = null;
+    const { default: route } = await import('../../studio/routes/72_celem.mjs?refs');
+    const h = route({ SKILL: ROOT, json: (res, o, c = 200) => { res.code = c; res.out = o; }, body: async req => req.body,
+      celemRun: async (p, o) => { seen = { cwd: o.cwd, args: o.args, files: fs.readdirSync(o.cwd), read: /Read các file ref_1\.jpg/.test(p) }; return { text: JSON.stringify({ variants: [{ name: 'A', spec: SPEC() }] }) }; } });
+    const call = async (method, p, body) => { const res = {}; await h({ method, body }, res, p, new URL('http://x' + p)); return res; };
+    assert.equal((await call('POST', '/api/elem/make', { ask: 'box', refs: ['data:image/gif;base64,R0lGODlh'] })).code, 400);
+    assert.equal((await call('POST', '/api/elem/make', { ask: 'box giống ảnh', refs: [durl('image/jpeg', JPG)] })).out.ok, true);
+    let st; for (let i = 0; i < 50; i++) { st = (await call('GET', '/api/elem/make')).out; if (st.state !== 'running') break; await new Promise(f => setTimeout(f, 20)); }
+    assert.equal(st.state, 'done', st.error); assert.equal(st.refs, 1);
+    assert.deepEqual(seen.files, ['ref_1.jpg']); assert.deepEqual(seen.args, ['--allowedTools', 'Read']); assert.ok(seen.read);
+    assert.ok(path.basename(seen.cwd).startsWith('avs-celem-')); assert.ok(!fs.existsSync(seen.cwd));
+  } finally { if (old == null) delete process.env.AVS_HOME; else process.env.AVS_HOME = old; fs.rmSync(home, { recursive: true, force: true }); }
+});
