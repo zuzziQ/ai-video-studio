@@ -206,6 +206,11 @@
     S.changed(); S.select(comps.find(c => c.obj === it), false); render();
   }
 
+  function mixDone(j) {
+    S.META.mixed = j.out + '?' + Date.now(); rerender();
+    return { text: 'Đã trộn xong', toast: 'Đã trộn xong · nghe trong panel Âm thanh+', acts: [{ label: 'Nghe thử', icon: 'ti-headphones', primary: true, on: () => S.jobs.open('audioplus') }] };
+  }
+  S.jobs.resumable('mix', () => ({ onDone: mixDone }));
   document.addEventListener('click', async e => {
     const b = e.target.closest('#libbody .ap [data-cl],#libbody .ap [data-ab],#libbody .ap [data-tm],#libbody .ap [data-ts],#libbody .ap [data-tdel],#libbody .ap [data-tadd],#libbody .ap [data-tpick],#libbody .ap [data-tup],#libbody .ap [data-tnew],#libbody .ap [data-tsel],#libbody .ap [data-mix]');
     if (!b) return;
@@ -233,9 +238,8 @@
     if (d.tsel) { const [i, j] = d.tsel.split(':').map(Number), it = tracks()[i].items[j]; S.setTime(it.t0 || 0); return S.select(comps.find(c => c.obj === it), false); }
     if (d.mix) {
       if (!await S.saveNow()) return;
-      const r = await S.api('/api/audio/mix', {}); if (r.error) return S.toast(r.error);
-      S.modal(`<h3><i class="ti ti-adjustments-alt"></i> Trộn âm thanh</h3><div class="bar"><i></i></div><div id="jobstep" class="help">Bắt đầu…</div><pre id="joblog" class="help"></pre>`);
-      S.pollJob(j => { S.closeModal(); if (j.state === 'done') { S.META.mixed = j.out + '?' + Date.now(); S.toast('Đã trộn xong · nghe trong panel Âm thanh+'); } else S.toast('Lỗi trộn: ' + j.step); rerender(); });
+      // S26 M186: trộn chạy nền trong khay việc (không khoá: chỉ ghi file nghe thử, không ghi timeline). Xong thì thẻ có "Nghe thử"
+      S.jobs.start('/api/audio/mix', {}, { kind: 'mix', onDone: mixDone, onFail: j => { rerender(); return { text: 'Lỗi trộn: ' + (j.step || '') }; } });
     }
   });
   document.addEventListener('input', e => {

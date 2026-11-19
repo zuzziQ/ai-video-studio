@@ -120,35 +120,33 @@
   function opts(extra = {}) {
     return { goal: O.goal, variety: +O.variety, density: O.density, src: O.src.filter(x => x !== 'claude'), claude: O.src.includes('claude'), level: O.level, music: !!O.music, ...extra };
   }
-  const NAMES = { all: 'Đang thêm b-roll + âm thanh…', broll: 'Đang thêm b-roll…', sfx: 'Đang đặt âm thanh…', clear: 'Đang xoá phần tự động…' };
+  const NAMES = { all: 'Thêm b-roll + âm thanh', broll: 'Thêm b-roll', sfx: 'Đặt âm thanh', clear: 'Xoá phần tự động' };
   // run(mode, {noUndo}) -> Promise<summary|null>. noUndo: caller already pushed an undo step (AI dựng giúp).
+  // S26 M186: chạy nền trong khay việc. Server ghi lại timeline.json lúc xong → khoá sửa timeline tới khi xong; thẻ kết quả có Xem / Hoàn tác
   async function run(mode = 'all', o = {}) {
     if (busy) return null;
     if (mode !== 'sfx' && mode !== 'clear' && !(S.CAP || []).length) return S.needCaptions(() => run(mode, o), 'Tự thêm b-roll');
     busy = true; render();
     if (!await S.saveNow()) { busy = false; render(); return null; }
     if (!o.noUndo) S.pushUndo();
-    const r = await S.api('/api/autofill', { mode, ...opts(o.opts || {}) });
-    if (!r.ok) { busy = false; render(); S.toast(r.error || 'Đang có tác vụ khác chạy'); return null; }
-    S.modal(`<h3><i class="ti ti-bolt"></i> ${NAMES[mode]}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
-    return new Promise(ok => S.pollJob(async j => {
-      busy = false;
-      if (j.state !== 'done') {
-        S.modal(`<h3>Chưa tự thêm được</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').split('\n').filter(l => !l.startsWith('@@')).join('\n').slice(-1000))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-        render(); return ok(null);
-      }
-      S.closeModal();
-      await S.reload();
-      const out = j.out || {}, b = out.broll || {}, kinds = Object.entries(b.kinds || {}).map(([k, v]) => `${S.typeName ? S.typeName(k) : k} ×${v}`).join(', ');
-      prevLast = last;
-      last = [mode === 'clear' ? `Đã xoá ${b.removed ?? 0} cảnh tự động + SFX/nhạc tự động.` : '',
-        b.added != null && mode !== 'clear' ? `B-roll: +${b.added}${b.goal ? ` · mục tiêu <b>${esc(b.goal.name)}</b>${b.goal.why === 'chọn tay' ? '' : ` (tự nhận theo ${esc(b.goal.why)})`}` : ''}<br>Nguồn: ${esc(Object.entries(b.sources || {}).map(([k, v]) => `${(SRCS.find(x => x[0] === k) || [k, k])[1]} ×${v}`).join(', ') || kinds)}${b.alts ? ` · ${b.alts} cảnh có phương án thay thế (bấm cảnh → tab “Phương án khác”)` : ''}${b.removed ? ` · thay ${b.removed} cảnh cũ` : ''}${b.claude ? ` · ${esc(b.claude)}` : ''}` : '',
-        out.sfx && mode !== 'clear' ? 'Âm thanh: ' + esc(String(out.sfx).replace(/^level \d: /, '')) : ''].filter(Boolean).join('<br>');
-      render();
-      S.toast(mode === 'clear' ? 'Đã xoá phần tự động' : 'Xong — ⌘Z để hoàn tác');
-      ok(out);
-    }));
+    const t = await S.jobs.start('/api/autofill', { mode, ...opts(o.opts || {}) }, { kind: 'autofill', title: NAMES[mode] || NAMES.all,
+      onDone: j => done(j, mode), onFail: j => ({ text: 'Chưa tự thêm được: ' + (j.step || '') }) });
+    busy = false; render();
+    return t.ok ? t.result?.out || {} : null;
   }
+  async function done(j, mode) {
+    await S.reload();
+    const out = j.out || {}, b = out.broll || {}, kinds = Object.entries(b.kinds || {}).map(([k, v]) => `${S.typeName ? S.typeName(k) : k} ×${v}`).join(', ');
+    prevLast = last;
+    last = [mode === 'clear' ? `Đã xoá ${b.removed ?? 0} cảnh tự động + SFX/nhạc tự động.` : '',
+      b.added != null && mode !== 'clear' ? `B-roll: +${b.added}${b.goal ? ` · mục tiêu <b>${esc(b.goal.name)}</b>${b.goal.why === 'chọn tay' ? '' : ` (tự nhận theo ${esc(b.goal.why)})`}` : ''}<br>Nguồn: ${esc(Object.entries(b.sources || {}).map(([k, v]) => `${(SRCS.find(x => x[0] === k) || [k, k])[1]} ×${v}`).join(', ') || kinds)}${b.alts ? ` · ${b.alts} cảnh có phương án thay thế (bấm cảnh → tab “Phương án khác”)` : ''}${b.removed ? ` · thay ${b.removed} cảnh cũ` : ''}${b.claude ? ` · ${esc(b.claude)}` : ''}` : '',
+      out.sfx && mode !== 'clear' ? 'Âm thanh: ' + esc(String(out.sfx).replace(/^level \d: /, '')) : ''].filter(Boolean).join('<br>');
+    render();
+    const text = mode === 'clear' ? `Đã xoá ${b.removed ?? 0} cảnh tự động + SFX/nhạc tự động` : `B-roll: +${b.added ?? 0}${out.sfx ? ' · đã đặt âm thanh' : ''}`;
+    return { out, text, toast: mode === 'clear' ? 'Đã xoá phần tự động' : 'Xong — ⌘Z để hoàn tác',
+      acts: [{ label: 'Xem', icon: 'ti-bolt', primary: true, on: () => S.jobs.open('autofill') }, { label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác'); return 'close'; } }] };
+  }
+  S.jobs.resumable('autofill', () => ({ onDone: j => done(j, 'all') }));
   document.addEventListener('click', e => {
     const t = e.target.closest('.af [data-af],.af [data-afd],.af [data-afs],.af [data-afl],.af [data-afg],.af [data-afu],.af [data-aft],.af [data-afr],.af [data-afx]');
     if (!t) return;
@@ -172,9 +170,9 @@
     await loadLib(); S.toast('Đã thêm vào thư viện — bấm “Claude gắn thẻ” hoặc tự gõ thẻ');
   }
   async function tagLib() {
-    const r = await S.api('/api/brolllib/tag', {}); if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
-    S.modal(`<h3><i class="ti ti-sparkles"></i> Claude đang gắn thẻ thư viện…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>`);
-    S.pollJob(async j => { S.closeModal(); await loadLib(); S.toast(j.state === 'done' ? (j.step || 'Xong') : 'Chưa gắn thẻ được: ' + j.step); });
+    // S26 M186: chạy nền trong khay việc (không khoá: chỉ ghi thẻ của thư viện b-roll)
+    S.jobs.start('/api/brolllib/tag', {}, { kind: 'brolltag', onDone: async j => { await loadLib(); return { text: j.step && j.step !== 'Xong' ? j.step : 'Đã gắn thẻ thư viện' }; },
+      onFail: async j => { await loadLib(); return { text: 'Chưa gắn thẻ được: ' + (j.step || '') }; } });
   }
   document.addEventListener('change', e => {
     if (e.target.id === 'afup' && e.target.files.length) { uploadLib([...e.target.files]); e.target.value = ''; }

@@ -80,33 +80,29 @@
     if (t.dataset.mbgi != null) return set(o => { o.bg = { ...(o.bg || {}), type: 'image', src: t.value || undefined }; });
   });
 
-  const jobModal = title => Studio.modal(`<h3>${title}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="jcancel">Dừng</button></div>`);
-  const fail = j => Studio.modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-  async function startJob(path, body, title, done) {
-    const r = await Studio.api(path, body);
-    if (!r.ok) return Studio.toast(r.error || 'Đang có tác vụ khác chạy');
-    jobModal(title); $('#jcancel').onclick = () => Studio.api('/api/job/cancel', {});
-    Studio.pollJob(j => (j.state === 'done' ? (Studio.closeModal(), done(j.out)) : fail(j)));
-  }
+  // S26 M186: việc nền chạy trong khay việc (features/05_jobs.js), không hộp chờ giữa màn hình. done(out) → câu kết quả (thẻ + toast) hoặc {text, acts}
+  const asRes = v => (typeof v === 'string' ? { text: v, toast: v } : v || { text: 'Xong' });
+  // không khoá: kết quả (ảnh tách nền, sticker) áp vào timeline lúc xong, sửa tiếp trong lúc chờ vẫn giữ
+  const startJob = (path, body, kind, done) => Studio.jobs.start(path, body, { kind, onDone: async j => asRes(await done(j.out)) });
   function segment(c) {
     const o = c.obj;
-    startJob('/api/segment', { src: o.src, in: +o.in || 0, out: +(o.out ?? 3), fps: o.src?.fps || 30 }, '<i class="ti ti-user-scan"></i> Đang tách nền…', out => {
+    startJob('/api/segment', { src: o.src, in: +o.in || 0, out: +(o.out ?? 3), fps: o.src?.fps || 30 }, 'segment', out => {
       const tgt = Studio.TL.clips.includes(o) ? o : Studio.TL.clips.find(x => JSON.stringify(x.src) === JSON.stringify(o.src) && x.in === o.in);
-      if (!tgt) return Studio.toast('Clip đã bị xoá');
+      if (!tgt) return { error: true, text: 'Clip đã bị xoá trong lúc tách nền' };
       Studio.pushUndo(); tgt.cutouts = out.cutouts; if (out.still) tgt.cutout_img = out.cutouts;
       if (!tgt.bg?.type) tgt.bg = { type: 'blur' };
-      Studio.changed(true); Studio.toast(out.still ? 'Đã tách nền ảnh' : `Đã tách nền ${out.n || ''} khung · chọn nền ở bên phải`);
+      Studio.changed(true); return out.still ? 'Đã tách nền ảnh' : `Đã tách nền ${out.n || ''} khung · chọn nền ở bên phải`;
     });
   }
   function sticker(c) {
     const o = c.obj, L = clipLayout(), k = L.find(x => x.c === o); if (!k) return;
     const T = Studio.T, t = T >= k.t0 && T < k.t1 ? T : (k.t0 + k.t1) / 2;
     const frame = clipFrameUrl(o, srcAt(k, t)).replace(/^\/project\//, '');
-    startJob('/api/sticker', { frame }, '<i class="ti ti-sticker"></i> Đang tạo sticker người…', out => {
+    startJob('/api/sticker', { frame }, 'sticker', out => {
       Studio.pushUndo();
       const s = { type: 'sticker', t0: Math.round(T * 100) / 100, t1: Math.round(Math.min(Studio.TL.duration, T + 2.5) * 100) / 100, src: out.path, from: 'pop', size: Math.round(Math.min(DW(), DH()) * .5), x: Math.round(DW() / 2), y: Math.round(DH() * .72), outline: 0 };
       Studio.TL.scenes.push(s); Studio.changed(); Studio.select(compOf(s)); if (typeof MEDIA_LOAD === 'function') MEDIA_LOAD();
-      Studio.toast('Đã thêm sticker người tại playhead');
+      return 'Đã thêm sticker người tại playhead';
     });
   }
 

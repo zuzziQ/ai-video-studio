@@ -116,19 +116,21 @@
       const files = pick('f'), projects = pick('p');
       if (!files.length && !projects.length) return toast('Chưa chọn mục nào');
       e.currentTarget.disabled = true;
-      const s = await api('/api/kho-migrate', { brand, files, projects }).catch(err => ({ error: err.message }));
-      if (s.error) { e.currentTarget.disabled = false; return toast(s.error); }
-      S.modal('<h3><i class="ti ti-transfer-in"></i> Đang chuyển file cũ vào Kho…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>');
-      S.pollJob(async j => {
-        S.closeModal();
-        const r = j.out;
-        if (j.state !== 'done' || !r) return toast(j.step || 'Chưa chuyển xong');
-        const msg = [r.moved.length && `đã chuyển ${r.moved.length} video`, r.linked && `ghi ${r.linked} dự án`].filter(Boolean).join(', ');
-        toast((msg ? msg[0].toUpperCase() + msg.slice(1) : 'Không có gì thay đổi') + (r.failed.length ? ` · ${r.failed.length} file chưa chuyển được: ${r.failed[0].error}` : '') + (r.warn?.length ? ` · ${r.warn[0]}` : ''));
-        MIG = null; await load();
-      });
+      const btn = e.currentTarget; btn.disabled = true;
+      // S26 M186: chạy nền trong khay việc; hộp chọn file đóng ngay, Kho tự tải lại khi xong
+      const t = await S.jobs.start('/api/kho-migrate', { brand, files, projects }, { kind: 'kho-migrate', onStart: () => S.closeModal(), onDone: migDone });
+      if (t.refused) btn.disabled = false;
     };
   }
+  async function migDone(j) {
+    const r = j.out; MIG = null;
+    if (!r) return { text: j.step || 'Xong' };
+    const msg = [r.moved.length && `đã chuyển ${r.moved.length} video`, r.linked && `ghi ${r.linked} dự án`].filter(Boolean).join(', ');
+    const text = (msg ? msg[0].toUpperCase() + msg.slice(1) : 'Không có gì thay đổi') + (r.failed.length ? ` · ${r.failed.length} file chưa chuyển được: ${r.failed[0].error}` : '') + (r.warn?.length ? ` · ${r.warn[0]}` : '');
+    await load();
+    return { text, toast: text, acts: [{ label: 'Mở Kho', icon: 'ti-folders', primary: true, on: () => S.jobs.open('kho') }] };
+  }
+  S.jobs.resumable('kho-migrate', () => ({ onDone: migDone }));
 
   function render() {
     $('#libact').innerHTML = '<button class="icon" id="kho-reload" title="Tải lại danh sách"><i class="ti ti-refresh"></i></button>';

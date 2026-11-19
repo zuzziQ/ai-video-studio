@@ -99,14 +99,10 @@
 
   async function exportAll() {
     if (S.TL && S.dirty) { await S.saveNow(); if (S.dirty) return toast('Chưa lưu được clip đang sửa'); }
-    const r = await api('/api/longform/export', { dir: SET.dir });
-    if (!r.ok) return toast(r.error || 'Không xuất được');
     close();
-    S.modal(`<h3><i class="ti ti-loader-2 spin"></i> Đang xuất ${SET.n} clip…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div>`);
-    S.pollJob(j => {
-      if (j.state === 'done') { S.closeModal(); toast(`Đã xuất ${j.out?.outputs?.length || 0} clip`); refresh(); }
-      else S.modal(`<h3>Xuất chưa xong</h3><p>${esc(j.step || '')}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-    });
+    // S26 M186: chạy nền trong khay việc (không khoá: xuất đọc bản đã lưu của từng clip)
+    S.jobs.start('/api/longform/export', { dir: SET.dir }, { kind: 'longform-export', title: `Xuất ${SET.n} clip cùng bộ`,
+      onDone: j => { refresh(); return { text: `Đã xuất ${j.out?.outputs?.length || 0} clip` }; } });
   }
 
   // ---------- S19 M135: áp cho các clip còn lại ----------
