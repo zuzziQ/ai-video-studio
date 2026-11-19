@@ -327,6 +327,16 @@ Lập 2026-11-19, kế hoạch `docs/plans/S25-nen-sang-toi.md` (chủ repo: có
 - [x] **`M179`** (`area/docs`): trang mẫu design system `studio/ui.html` (file tĩnh, theo `/ui` của lychee) — ô màu từng tầng đọc từ token, mẫu thành phần `components.css`, hai nền cạnh nhau, tỉ lệ tương phản tính tại chỗ, lối vào ⌘K. Sau `M177`. Xong 2026-11-19: `/studio/ui.html` (không sửa `server.mjs`), 21 cặp tương phản đạt cả hai nền (thấp nhất 1,25× ngưỡng ở tối, 1,40× ở sáng), hai khung `?theme=light|dark&embed=1`, `window.AVS_UI_CONTRAST` cho đo tự động.
 - [x] **`M180`** (`area/infra`): nền sáng / tối phần còn lại (chủ repo: chạy hết, không để lỗi nhỏ). Xong 2026-11-19: vai trò `--color-danger-fg` / `--color-warning-fg` cho chữ trên nền đặc trạng thái (huy hiệu số đỏ nền tối 2,7 → 7,5:1); trang khoá `server.mjs` có nền sáng (`LOCKED_LIGHT`, theo `avs.theme` hoặc hệ thống, test so với `tokens.css`); mẫu chữ thư viện nằm trên nền khung xem trước (nền sáng làm chữ trắng / vàng của video mất); tắt transition hai khung hình lúc đổi nền (màu không chạy qua màu nền kia). Quét trên Studio thật cả hai nền: 35 panel, 5 bước + Cài đặt, modal Xuất, Trang chủ, ⋯, ⌘K, trang mẫu 22 cặp: 0 chữ dưới ngưỡng.
 
+### **`S26`** Người mới đi hết luồng dự án không vướng: tạo → thành phẩm, mở lại → sửa → thành phẩm
+
+Lập 2026-11-19, báo cáo `docs/plans/S26-luong-du-an-nguoi-moi.md` (chủ repo: kiểm luồng tạo dự án mới → thành phẩm, mở lại → sửa → thành phẩm để người dùng không vướng). Chạy thật trên Studio với thư mục người dùng tạm, render 720p: xuất lại không đè bản cũ, lịch sử xuất rõ, mở lại / hoàn tác / khoá 2 tab đều đúng; 15 chỗ vướng (1 chặn, 7 khó hiểu, 7 nhỏ). Chủ repo duyệt sửa 2026-11-19, thêm `M185`.
+
+- [ ] **`M181`** (`area/infra`): người mới đi hết hướng dẫn và có bản khởi đầu đạt QC — logo không bắt buộc ở hướng dẫn đầu, có danh sách gói khi chưa mở dự án và gói mặc định theo lĩnh vực, nhạc mặc định nghe được (gain −20 bị QC báo quá nhỏ), hook không lấy tên file, AI dựng chọn sẵn lĩnh vực. Báo cáo #1, #6, #7, #9, #15.
+- [ ] **`M182`** (`area/llm`): AI dựng giữ nhạc người dùng đã chỉnh (`ai_edit.mjs` đang thay mọi nhạc phủ cả video), kiểm Claude ngay khi mở hộp, lỗi in một lần. Báo cáo #2, #5.
+- [ ] **`M183`** (`area/infra`): Tự lái mặc định Kho của thương hiệu ở hướng dẫn / thương hiệu duy nhất, thẻ việc báo bước bị bỏ qua (AI, Đăng), ẩn mục macOS trên Windows. Báo cáo #3, #4, #13.
+- [ ] **`M184`** (`area/infra`): tự lưu khi ngừng thao tác, tên file xuất theo giờ máy, tên thành phẩm / dự án clip đọc được, clip không vượt độ dài đã chọn. Có `studio/server.mjs` (`stamp`): một phiên. Báo cáo #8, #10, #11, #14.
+- [ ] **`M185`** (`area/infra`): việc dài không chặn màn hình (chủ repo 2026-11-19: xuất hay dựng video, Tự lái nên nằm trong thông báo / khay việc, không popup giữa màn hình để làm việc khác trong lúc chờ). Xuất, AI dựng, Kiểm tra & sửa, tạo dự án mới chạy trong khay việc góc màn hình (tiến độ, Dừng, log một dòng thay tqdm / "@@"), xong thì báo kèm nút Xem / Mở; chỗ phải chờ thật (đóng dự án khi tạo mới) chỉ khoá phần cần khoá. Báo cáo #12. Sau `M182`, `M184` (cùng `20_ai.js`, `studio.js`).
+
 ## 4. Bị chặn: cần quyết định
 
 - [x] **`C01`** (`area/docs`): **giấy phép của AI Video Factory.** Repo không có LICENSE nên mặc định giữ mọi quyền. Một dòng trong `looks.py` gợi ý cùng tác giả với Studio nhưng không nói Factory là MIT. Cần: xác nhận bạn là tác giả hoặc đã được phép, hoặc xin phép tác giả. Ảnh hưởng tới `C02` và mọi mã chuyển từ Factory (hiện là `scripts/ad_gates.py`). Chốt 2026-11-13: chủ repo cho dùng mã Factory, không hạn chế.
@@ -390,6 +400,7 @@ Lập 2026-11-19, kế hoạch `docs/plans/S25-nen-sang-toi.md` (chủ repo: có
 18. **`S23`**: `C29`–`C32` đã chốt 2026-11-18; đợt 1 song song `M157` ∥ `M158` ∥ `M161` ∥ `M164`; đợt 2 sau `M161`: `M162` ∥ `M159` → `M163` ∥ `M165` → `M160`; cuối `M166`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`. `M166` nghiệm thu `[~]`; `M167`–`M169` (1:1, Chuyên nghiệp cửa sổ hẹp, Lớp cảnh nền cũ) làm ở đợt sau.
 19. **`S24`**: `C34`–`C37` đã chốt 2026-11-18; đợt 1 `M170` một mình (nền bố cục + vỏ tab Claude); đợt 2 song song `M171` → `M173` (một session, hai PR) ∥ `M172` ∥ `M174`; cuối `M175`. Không đụng `studio/server.mjs`, `scripts/queue.mjs`, `scripts/ai_qc.mjs`.
 20. **`S25`**: `C38` chốt 2026-11-19; `M180` dọn phần còn lại sau `#223` (có sửa trang khoá trong `studio/server.mjs`: chỉ HTML/CSS của `sendLocked`, một phiên, không PR khác đụng tệp này); `M177` → `M179` → `M178` cùng một session (trang mẫu dùng để đo cho `M178`); `M177` + `M178` gộp một PR nếu ≤ 800 dòng. Không đụng `scripts/queue.mjs`, `scripts/ai_qc.mjs`; `studio/server.mjs` chỉ ở `M180`.
+21. **`S26`**: duyệt 2026-11-19; `M181` ∥ `M182` ∥ `M183` ∥ `M184` (khác vùng file; `M184` sửa `studio/server.mjs` một mình), rồi `M185` sau `M182` + `M184`.
 
 ## 6. Không làm
 
