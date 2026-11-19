@@ -440,6 +440,7 @@
       // data-ai="build" (không phải "open"): thẻ QC của 16_qc.js chỉ chèn vào bước Kiểm tra
       $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng</button>
         ${afterOpts('aip')}<div id="aip-hab"></div>
+        ${S.aroll?.line() || '' /* S27 M196: lời ngoài kịch bản · nhiều take (24_aroll.js) */}
         <div class="help">Claude dựng từ lời thoại: style, graphic, nhạc, SFX. ${S.tip('Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX; rồi thêm b-roll, âm thanh nếu bạn chọn. Xong có QC nhanh 3 khung. Cần Claude Code (lệnh claude) trên máy.')}${S.autofill ? ' <button class="ai-lnk" data-ai="af">Tuỳ chỉnh b-roll, âm thanh</button>' : ''}</div>
         ${S.scriptNotes?.line(lastPlan) || '' /* S27 M194: Theo kịch bản x/y (23_scriptnotes.js) */}${lastPlan ? planCard(lastPlan, true) : ''}
         <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}${nAuto ? `, ${nAuto} b-roll tự động` : ''}.</p>
