@@ -3,7 +3,7 @@
 // trong Studio, không rời trang), Hiện trong thư mục / Finder, Mở Thành phẩm, Giao vào Thành phẩm, Chép đường dẫn.
 // Hộp "Xuất xong" (studio.js gọi Studio.exports.done khi job xuất xong) ghi lịch sử rồi hiện cùng các nút đó; giữ h3 "Xuất xong",
 // .path và .actions để 16_qc / 52_publish vẫn chèn được thẻ QC và nút Đăng.
-// Studio.exports: { render(), done(job, {quality, from, to}), refresh(), latest(), list(), loaded(), edited() } — M113 dùng latest()/edited() cho cột phải.
+// Studio.exports: { render(), done(job, {quality, from, to}) (hộp), finish(job, o) (kết quả cho thẻ khay việc, S26 M185), refresh(), latest(), list(), loaded(), edited() } — M113 dùng latest()/edited() cho cột phải.
 (() => {
   const S = window.Studio, esc = S.esc, $ = S.$;
   const st = document.createElement('style');
@@ -160,5 +160,19 @@
     S.nextStep?.refresh?.(); // S16 M118: điểm Xuất và "Bản xuất gần nhất" ở cột phải đổi ngay, không chờ đổi tab
     return true;
   }
-  S.exports = { render, done, refresh, latest: () => DATA?.items?.[0] || null, list: () => DATA?.items || [], loaded: () => DATA != null, edited: () => DATA?.edited || null };
+  // S26 M185: xuất xong không bật hộp giữa màn hình: ghi lịch sử rồi trả kết quả cho thẻ ở khay việc (features/05_jobs.js):
+  // Xem · Hiện trong thư mục · Mở Thành phẩm · Chi tiết (hộp "Xuất xong" cũ, nơi 16_qc / 52_publish chèn thẻ QC và nút Đăng).
+  async function finish(j, o = {}) {
+    const r = await S.api('/api/exports/record', { quality: o.quality, from: o.from, to: o.to }).catch(() => null);
+    await load();
+    const x = (r?.item && find(r.item.id)) || r?.item;
+    if (!x) return null;
+    if ($('#libbody [data-exp]')) render();
+    S.nextStep?.refresh?.();
+    const f = x.files[0], kh = x.deliveredNow || x.delivered.length;
+    return { text: `${base(f)} · ${meta(x)}${x.deliveredNow ? ' · đã giao Thành phẩm' : x.deliverError ? ' · chưa giao được Thành phẩm' : ''}`, toast: 'Xuất xong: ' + base(f),
+      acts: [{ label: 'Xem', icon: 'ti-player-play', primary: true, on: () => play(x, 0) }, { label: revealLabel(), icon: 'ti-folder', on: () => reveal(x, 0) },
+        ...(kh ? [{ label: 'Mở Thành phẩm', icon: 'ti-package', on: () => kho(x) }] : []), { label: 'Chi tiết', icon: 'ti-list-details', on: () => showDone(x, j) }] };
+  }
+  S.exports = { render, done, finish, refresh, latest: () => DATA?.items?.[0] || null, list: () => DATA?.items || [], loaded: () => DATA != null, edited: () => DATA?.edited || null };
 })();

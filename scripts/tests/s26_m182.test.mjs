@@ -39,7 +39,7 @@ test('ai_edit ghi "Giữ nhạc bạn chọn" vào tóm tắt; hộp AI dựng k
   assert.match(fs.readFileSync(path.join(ROOT, 'scripts/ai_edit.mjs'), 'utf8'), /Giữ nhạc bạn chọn\./);
   const ui = fs.readFileSync(path.join(ROOT, 'studio/features/20_ai.js'), 'utf8');
   assert.match(ui, /presetGoal\(\); checkClaude\(\);/); assert.match(ui, /i\.id === 'claude'/); assert.match(ui, /S\.openSetup/);
-  assert.match(ui, /\/api\/onboarding'/); assert.match(ui, /\$\{rest \? `<pre>/);
+  assert.match(ui, /\/api\/onboarding'/); assert.match(ui, /norm\(l\.trim\(\)\) === step/); // S26 M185: lỗi in một lần ở thẻ khay việc, log đã lọc dòng lặp
 });
 
 // S26 M182: AI dựng giữ nhạc người dùng nhưng bước "b-roll + âm thanh" (auto_sfx --music auto) lại thay nền _auto đã chỉnh tay

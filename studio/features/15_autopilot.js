@@ -58,6 +58,7 @@
     const first = !S.st; S.st = st;
     if (S.brand == null) { S.brand = st.settings.brand || ''; S.product = st.settings.product || ''; } // S16 M121: lựa chọn gần nhất
     topBadge();
+    Studio.jobs?.autopilot(st); // S26 M185: dòng tóm tắt hàng đợi trong khay việc (bấm mở panel này)
     if (!active()) return;
     if (first || force) return render();
     if (sig !== S.sig) { S.sig = sig; renderLive(); }

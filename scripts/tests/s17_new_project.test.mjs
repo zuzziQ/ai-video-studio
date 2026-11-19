@@ -106,7 +106,7 @@ test('hộp Video mới: lưu dự án đang mở rồi che trình chỉnh sửa
   assert.match(f, /META\?\.kho/, 'thương hiệu mặc định theo dự án đang mở');
   assert.match(s, /async function saveOnce\(force(, quiet)?\) \{\n(  if \(readOnly\)[^\n]*\n)? {2}if \(newBusy\) return false;/);
   assert.match(s, /\$\('#pkho'\)/); assert.match(read('studio/index.html'), /id="pkho"/);
-  assert.match(read('studio/studio.css'), /body\.np-busy > \*:not\(#modal\)/);
+  assert.match(read('studio/studio.css'), /body\.np-busy #center > :not\(#np-wait\)/); // S26 M185: che trình chỉnh sửa bằng chỗ chờ, thanh trái và trang chủ dùng được
 });
 
 test('Tự lái: nhắc khi Kho khác dự án đang mở; trang chủ lưu dự án đang mở trước khi đổi', () => {
