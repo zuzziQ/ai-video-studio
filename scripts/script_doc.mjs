@@ -3,6 +3,8 @@
 //   [HOOK] …            đoạn mở đầu           [CTA] …               đoạn kêu gọi (cuối video)
 //   [CHỮ: …]            chữ trên màn hình của đoạn đang viết (cũng nhận [CHU: …], [TEXT: …])
 //   [B-ROLL: …]         hình minh hoạ của đoạn đang viết (cũng nhận [BROLL: …])
+//   S27 M193: [MOOD: …] [NHẠC: tắt|bật|đổi|to|nhỏ|kho …] [A-ROLL: cận mặt|rộng|clip N|bỏ] [SFX: … | đầu|cuối|@từ],
+//   [B-ROLL: … | kho|stock|ảnh AI|động|tệp …], [CHỮ: … | số|danh sách|trích dẫn|tiêu đề|giá]. Bảng dựng: script_build.mjs.
 // Không dấu vẫn dùng được: dòng trống tách đoạn; chữ không có dòng trống nào thì mỗi dòng là một đoạn.
 // Lưu ở <dự án>/.studio/script.json: { version, text, name, updated, segments: [{ kind, say, screen[], broll[], t0, t1, spoken, ratio }],
 //   align: { mode: whisper|even, at, words, matched, offscript: [{ t0, t1, text }] } }.
@@ -22,39 +24,127 @@ export const fold = s => String(s ?? '').toLowerCase().replace(/đ/g, 'd').norma
 export const norm = w => fold(w).replace(/[^a-z0-9]/g, '');
 
 // ---------- tách dấu ----------
-const MARK = /\[\s*(hook|cta|chữ|chu|text|b-?roll)\s*(?::\s*([^\]]*))?\]/giu;
-const kindOf = k => { const f = fold(k).replace('-', ''); return f === 'hook' ? 'hook' : f === 'cta' ? 'cta' : f === 'broll' ? 'broll' : 'screen'; };
+// S27 M193 (docs/plans/S27-dung-theo-kich-ban.md mục 1): thêm [MOOD: …] [NHẠC: …] [A-ROLL: …] [SFX: …], tuỳ chọn sau "|" của
+// [B-ROLL: … | nguồn] và [CHỮ: … | kiểu]. Tên dấu không phân biệt hoa / thường, nhận cả không dấu. Ngoặc vuông không phải dấu
+// (vd "[cười]") vẫn là chữ nói như trước. Giá trị lạ: giữ chữ gốc trong `raw` (QC báo), không làm hỏng việc tách.
+const MARK = /\[\s*([^[\]:|\n]{1,24}?)\s*(?::\s*([^\]\n]*))?\]/gu;
+const NAMES = { hook: 'hook', cta: 'cta', chu: 'screen', text: 'screen', broll: 'broll', mood: 'mood', khongkhi: 'mood',
+  nhac: 'music', music: 'music', aroll: 'aroll', quay: 'aroll', sfx: 'sfx', am: 'sfx', hieuung: 'sfx' };
+export const markName = k => NAMES[fold(k).replace(/[^a-z]/g, '')] || null;
+const NEED_VALUE = new Set(['mood', 'music', 'aroll', 'sfx']); // dấu mới không có giá trị = chữ thường (không nuốt "[âm]")
+const key = s => fold(s).replace(/[^a-z0-9]+/g, ' ').trim();
+const MUSIC = { tat: 'tat', off: 'tat', bat: 'bat', on: 'bat', doi: 'doi', 'doi bai': 'doi', to: 'to', 'to len': 'to', nho: 'nho', 'nho lai': 'nho' };
+export const BROLL_SRC = { kho: 'kho', stock: 'stock', 'anh ai': 'ai', ai: 'ai', dong: 'dong', 'broll dong': 'dong' };
+export const SCREEN_KIND = { so: 'so', 'so lieu': 'so', 'danh sach': 'danhsach', 'trich dan': 'trichdan', 'tieu de': 'tieude', gia: 'gia' };
+const FRAME = { 'can mat': 'can', can: 'can', 'can canh': 'can', trung: 'trung', 'trung canh': 'trung', rong: 'rong', 'toan canh': 'rong' };
+const cut = (v, n = 200) => String(v).slice(0, n);
+/** Một dấu (không phải HOOK / CTA) → các trường của đoạn. Trả false khi giá trị lạ (dấu gốc vào raw). */
+function putMark(seg, k, v) {
+  const [main = '', ...opts] = v.split('|').map(x => x.replace(/\s+/g, ' ').trim()), opt = opts.join(' | ');
+  if (k === 'screen') {
+    if (!main) return true;
+    const kind = opt ? SCREEN_KIND[key(opt)] || null : null;
+    seg.screen.push({ text: cut(main), kind }); return !opt || !!kind;
+  }
+  if (k === 'broll') {
+    if (!main) return true;
+    const o = key(opt), src = !opt ? null : BROLL_SRC[o] || (/^(tep|file) \S/.test(o) ? 'tep:' + opt.replace(/^\S+\s+/, '').slice(0, 120) : null);
+    seg.broll.push({ q: cut(main), src }); return !opt || !!src;
+  }
+  if (k === 'mood') { if (!main) return false; seg.mood = cut(main, 60); seg.moodN = (seg.moodN || 0) + 1; return true; }
+  if (k === 'music') {
+    const m = key(main);
+    if (MUSIC[m]) { seg.music = MUSIC[m]; return true; }
+    if (/^kho( |$)/.test(m)) { const name = main.replace(/^\S+\s*/, '').trim(); seg.music = name ? 'kho:' + name.slice(0, 120) : 'kho'; return true; }
+    return false;
+  }
+  if (k === 'aroll') {
+    const a = { ...(seg.aroll || {}) }; let ok = true;
+    for (const part of [main, ...opts].filter(Boolean)) {
+      const p = key(part), n = /^(?:clip|take) ?(\d{1,3})$/.exec(p);
+      if (p === 'bo' || p === 'tat') a.off = true;
+      else if (FRAME[p]) a.frame = FRAME[p];
+      else if (n) a.take = +n[1];
+      else if (/\.\w{2,4}$/.test(part)) a.file = part.slice(0, 160);
+      else ok = false;
+    }
+    if (!Object.keys(a).length) return false;
+    seg.aroll = a; seg.arollN = (seg.arollN || 0) + 1; return ok;
+  }
+  if (k === 'sfx') {
+    if (!main) return false;
+    const o = key(opt), t = opt.trim();
+    const at = !opt ? 'dau' : o === 'dau' || o === 'cuoi' ? o : t.startsWith('@') && t.length > 1 ? '@' + t.slice(1).trim().slice(0, 40) : null;
+    seg.sfx.push({ name: cut(main, 80), at: at || 'dau' }); return !opt || !!at;
+  }
+  return false;
+}
+const blankSeg = kind => ({ kind, say: [], screen: [], broll: [], sfx: [], raw: [] });
+const hasAny = s => !!(s.say.length || s.screen.length || s.broll.length || s.sfx.length || s.raw.length || s.mood || s.music || s.aroll);
+// gộp dấu của `from` vào `to`; front = dấu của `from` đứng trước (đoạn chỉ có dấu gắn vào đoạn có lời ngay sau nó)
+function mergeInto(to, from, front) {
+  for (const k of ['screen', 'broll', 'sfx', 'raw']) to[k] = front ? [...from[k], ...to[k]] : [...to[k], ...from[k]];
+  for (const k of ['mood', 'music']) if (from[k] && (!to[k] || !front)) to[k] = from[k];
+  if (from.aroll) to.aroll = front ? { ...from.aroll, ...(to.aroll || {}) } : { ...(to.aroll || {}), ...from.aroll };
+  for (const k of ['moodN', 'arollN']) if (from[k]) to[k] = (to[k] || 0) + from[k];
+}
+// đoạn nội bộ → dạng lưu: trường cũ y như trước; trường mới chỉ có khi có dấu (tpl_fit, gateShape, QC cũ chạy như cũ)
+function outSeg(s, stats) {
+  const o = { kind: s.kind, say: s.say.join(' ').trim(), screen: s.screen.map(x => x.text), broll: s.broll.map(x => x.q) };
+  if (s.mood) o.mood = s.mood;
+  if (s.music) o.music = s.music;
+  if (s.aroll) o.aroll = { ...s.aroll };
+  if (s.broll.some(x => x.src)) o.brollSrc = s.broll.map(x => x.src);
+  if (s.sfx.length) o.sfx = s.sfx.map(x => ({ ...x }));
+  if (s.screen.some(x => x.kind)) o.screenKind = s.screen.map(x => x.kind);
+  if (s.raw.length) o.raw = [...s.raw];
+  if (stats) o.n = { mood: s.moodN || 0, aroll: s.arollN || 0 };
+  return o;
+}
 
-/** Chữ kịch bản → các đoạn { kind: hook|body|cta, say, screen[], broll[] }. Không có chữ nói thì trả []. */
-export function parseScript(text) {
+/**
+ * Chữ kịch bản → các đoạn { kind: hook|body|cta, say, screen[], broll[] } (+ khi có dấu mới: mood, music, aroll {frame, take,
+ * file, off}, brollSrc[] song song broll, sfx[{name, at: dau|cuoi|@từ}], screenKind[] song song screen, raw[] dấu lạ).
+ * Không có chữ nói thì trả []. `stats`: thêm n = { mood, aroll } số dấu MOOD / A-ROLL của đoạn (checkSuggested).
+ */
+export function parseScript(text, { stats = false } = {}) {
   const src = String(text ?? '').normalize('NFC').replace(/\r\n?/g, '\n').replace(/^[\t ]*(?:[-*•–]|\d+[.)])[\t ]+/gm, '');
   const lines = src.split('\n');
   const blank = /\S[^\n]*\n[ \t]*\n\s*\S/.test(src); // có dòng trống giữa hai dòng chữ
-  const segs = []; let cur = null, pend = { screen: [], broll: [] };
-  const open = kind => { close(); cur = { kind, say: [], screen: [...pend.screen], broll: [...pend.broll] }; pend = { screen: [], broll: [] }; };
-  const close = () => { if (cur && (cur.say.length || cur.screen.length || cur.broll.length)) segs.push(cur); cur = null; };
+  const segs = []; let cur = null, pend = blankSeg('body');
+  const close = () => { if (cur && hasAny(cur)) segs.push(cur); cur = null; };
+  const open = kind => { close(); cur = blankSeg(kind); mergeInto(cur, pend, true); pend = blankSeg('body'); };
   for (const line of lines) {
     if (!line.trim()) { if (blank) close(); continue; }
     if (!blank && cur && cur.say.length) close(); // không có dòng trống: mỗi dòng một đoạn ([HOOK] đứng riêng một dòng thì nhận dòng sau)
     let last = 0, m; MARK.lastIndex = 0;
     const put = s => { s = s.replace(/\s+/g, ' ').trim(); if (!s) return; if (!cur) open('body'); cur.say.push(s); };
     while ((m = MARK.exec(line))) {
+      const k = markName(m[1]);
+      if (!k || (NEED_VALUE.has(k) && m[2] == null)) continue; // không phải dấu: giữ là chữ nói
       put(line.slice(last, m.index)); last = MARK.lastIndex;
-      const k = kindOf(m[1]), v = String(m[2] || '').replace(/\s+/g, ' ').trim();
-      if (k === 'hook' || k === 'cta') { open(k); if (v) cur.say.push(v); }
-      else if (v) (cur ? cur : pend)[k].push(v.slice(0, 200));
+      const v = String(m[2] ?? '').replace(/\s+/g, ' ').trim();
+      if (k === 'hook' || k === 'cta') { open(k); if (v) cur.say.push(v); continue; }
+      const to = cur || pend;
+      if (!putMark(to, k, v)) to.raw.push(cut(m[0].replace(/\s+/g, ' '), 120));
     }
     put(line.slice(last));
   }
   close();
-  if (pend.screen.length || pend.broll.length) { const L = segs[segs.length - 1]; if (L) { L.screen.push(...pend.screen); L.broll.push(...pend.broll); } }
-  const out = segs.map(s => ({ kind: s.kind, say: s.say.join(' ').trim(), screen: s.screen, broll: s.broll }));
+  if (hasAny(pend)) { const L = segs[segs.length - 1]; if (L) mergeInto(L, pend, false); }
   // đoạn chỉ có dấu (không lời) gắn vào đoạn có lời kế bên
-  for (let i = 0; i < out.length; i++) if (!out[i].say) {
-    const to = out[i + 1] && out[i + 1].say ? out[i + 1] : out.slice(0, i).reverse().find(x => x.say);
-    if (to) { to.screen.unshift(...out[i].screen); to.broll.unshift(...out[i].broll); if (to.kind === 'body' && out[i].kind !== 'body') to.kind = out[i].kind; }
+  for (let i = 0; i < segs.length; i++) if (!segs[i].say.length) {
+    const next = segs[i + 1] && segs[i + 1].say.length ? segs[i + 1] : null, to = next || segs.slice(0, i).reverse().find(x => x.say.length);
+    if (to) { mergeInto(to, segs[i], to === next); if (to.kind === 'body' && segs[i].kind !== 'body') to.kind = segs[i].kind; }
   }
-  return out.filter(s => s.say);
+  return segs.filter(s => s.say.length).map(s => outSeg(s, stats));
+}
+/** Bỏ mọi dấu (cũ và mới) khỏi chữ kịch bản; giữ chữ của [HOOK: …] / [CTA: …] vì đó là lời nói. */
+export function stripMarks(text) {
+  return String(text ?? '').normalize('NFC').replace(MARK, (m0, k, v) => {
+    const n = markName(k); if (!n || (NEED_VALUE.has(n) && v == null)) return m0;
+    return n === 'hook' || n === 'cta' ? ` ${v || ''} ` : ' ';
+  });
 }
 
 // ---------- .docx (zip + word/document.xml), không cần thư viện ----------
@@ -265,7 +355,11 @@ export function loadScriptArg(v) {
 }
 
 // ---------- dấu cho AI dựng / Bám lời thoại / QC ----------
-/** Danh sách dấu có thời điểm: [{ kind: hook|screen|broll|cta, text, t0, t1, seg }] (đoạn chưa nói thì bỏ). */
+const FRAME_VI = { can: 'cận mặt', trung: 'trung', rong: 'rộng' }, MUSIC_VI = { tat: 'tắt', bat: 'bật lại', doi: 'đổi bài', to: 'to hơn', nho: 'nhỏ hơn' };
+export const arollText = a => [a?.off ? 'bỏ hình người nói' : '', FRAME_VI[a?.frame] || '', a?.take ? `take ${a.take}` : '', a?.file || ''].filter(Boolean).join(' · ');
+export const musicText = v => MUSIC_VI[v] || (v === 'kho' ? 'bài trong Kho' : String(v).startsWith('kho:') ? `Kho: ${String(v).slice(4)}` : String(v));
+/** Danh sách dấu có thời điểm: [{ kind: hook|screen|broll|cta|mood|music|aroll|sfx, text, t0, t1, seg }] (đoạn chưa nói thì bỏ).
+ *  screen có thể kèm `style` (kiểu khối), broll kèm `src` (nguồn ép), sfx kèm `pos` (dau|cuoi|@từ), aroll kèm `aroll`. */
 export function scriptMarks(sc) {
   const out = [];
   (sc?.segments || []).forEach((s, k) => {
@@ -273,8 +367,13 @@ export function scriptMarks(sc) {
     const at = { t0: s.t0, t1: s.t1, seg: k };
     if (s.kind === 'hook') out.push({ kind: 'hook', text: s.screen[0] || s.say, ...at });
     if (s.kind === 'cta') out.push({ kind: 'cta', text: s.screen[0] || s.say, ...at });
-    for (const t of s.screen.slice(s.kind === 'body' ? 0 : 1)) out.push({ kind: 'screen', text: t, ...at });
-    for (const t of s.broll) out.push({ kind: 'broll', text: t, ...at });
+    s.screen.forEach((t, i) => { if (s.kind === 'body' || i) out.push({ kind: 'screen', text: t, ...(s.screenKind?.[i] ? { style: s.screenKind[i] } : {}), ...at }); });
+    s.broll.forEach((t, i) => out.push({ kind: 'broll', text: t, ...(s.brollSrc?.[i] ? { src: s.brollSrc[i] } : {}), ...at }));
+    // S27 M193: dấu dựng (không phải chữ trên màn hình: markMissing bỏ qua; QC dấu mới thuộc M194)
+    if (s.mood) out.push({ kind: 'mood', text: s.mood, ...at });
+    if (s.music) out.push({ kind: 'music', text: s.music, ...at });
+    if (s.aroll) out.push({ kind: 'aroll', text: arollText(s.aroll), aroll: { ...s.aroll }, ...at });
+    for (const x of s.sfx || []) out.push({ kind: 'sfx', text: x.name, pos: x.at, ...at });
   });
   return out;
 }
@@ -295,7 +394,10 @@ export function scriptPrompt(sc) {
   if (!sc?.segments?.length) return '';
   const f = t => (t == null ? '?' : (+t).toFixed(2));
   return sc.segments.map((s, k) => `Đ${k + 1}${s.kind !== 'body' ? ` [${s.kind.toUpperCase()}]` : ''} ${s.spoken === false ? '(CHƯA NÓI — bỏ qua)' : `[${f(s.t0)}–${f(s.t1)}s]`}: "${s.say.slice(0, 300)}"`
-    + s.screen.map(t => `\n   · CHỮ: "${t}"`).join('') + s.broll.map(t => `\n   · B-ROLL: "${t}"`).join('')).join('\n');
+    + (s.mood ? `\n   · MOOD: "${s.mood}"` : '') + (s.music ? `\n   · NHẠC: ${musicText(s.music)}` : '') + (s.aroll ? `\n   · A-ROLL: ${arollText(s.aroll)}` : '')
+    + s.screen.map((t, i) => `\n   · CHỮ: "${t}"${s.screenKind?.[i] ? ` (kiểu ${s.screenKind[i]})` : ''}`).join('')
+    + s.broll.map((t, i) => `\n   · B-ROLL: "${t}"${s.brollSrc?.[i] ? ` (nguồn ${s.brollSrc[i]})` : ''}`).join('')
+    + (s.sfx || []).map(x => `\n   · SFX: "${x.name}" (${x.at === 'cuoi' ? 'cuối đoạn' : String(x.at).startsWith('@') ? `lúc nói "${x.at.slice(1)}"` : 'đầu đoạn'})`).join('')).join('\n');
 }
 
 /** Dấu chưa được đặt trên timeline: chữ (hook / CHỮ / CTA) không thấy trong cảnh nào quanh đoạn đó, B-ROLL không có cảnh hình nào.
@@ -305,6 +407,7 @@ export function markMissing(marks, scenes, { strings = () => [], title = '' } = 
   const covers = (have, want) => { if (have.includes(want)) return true; const w = want.split(' '), h = new Set(have.split(' ')); return w.length >= 2 && w.filter(x => h.has(x)).length / w.length >= .6; };
   const isPic = s => !!(s.broll || s.screen?.broll || s.media || s.image || s.images || /broll|media|photo|image|kinetic_broll/.test(String(s.type)));
   return (marks || []).filter(m => {
+    if (!['hook', 'screen', 'broll', 'cta'].includes(m.kind)) return false; // dấu dựng (MOOD, NHẠC, A-ROLL, SFX): không có cảnh chữ / hình để soát
     const win = (scenes || []).filter(s => !s.hidden && s.t0 < m.t1 + 1.5 && s.t1 > m.t0 - 1.5);
     if (m.kind === 'broll') return !win.some(isPic);
     const want = key(m.text); if (!want) return false;

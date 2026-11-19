@@ -56,3 +56,34 @@ Thẻ Chuẩn bị có ô Kịch bản "cho video kế tiếp": khi thêm video 
 kịch bản chờ `$AVS_HOME/scripts/<id>.json` (`POST /api/script/stage`), job mang `opts.script = <id>` (route kiểm id `s-[a-z0-9]{6,40}`),
 `argsFor` → `--script <id>` (chỉ id, chuỗi khác bị bỏ), rồi ô tự xoá. Kịch bản chờ cũ hơn 30 ngày được dọn khi lưu kịch bản chờ mới. Bước `script` (sau `fillers`, trước `ai`) ghi `.studio/script.json` và thay phụ đề.
 Gọi tay `autopilot.mjs`: `--script` nhận cả đường dẫn `.txt` / `.docx` / `.json` (`{text}`).
+
+## 7. Dấu dựng và bảng dựng (S27 M193)
+Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 1, 1.1, 2.1, 2.2. Mã: `scripts/script_doc.mjs` (tách dấu), `scripts/script_build.mjs`
+(bảng dựng, gợi ý dấu), test `scripts/tests/s27_m193.test.mjs`. Panel Bảng dựng và Áp lên timeline: `M194`.
+
+| Dấu | Tên khác | Trường của đoạn |
+|---|---|---|
+| `[MOOD: hồi hộp]` | `[KHÔNG KHÍ: …]` | `mood` (chữ gốc; kế thừa cho các đoạn sau khi dựng bảng, không chép vào `script.json`) |
+| `[NHẠC: tắt\|bật\|đổi\|to\|nhỏ\|kho <tên>]` | `[NHAC]`, `[MUSIC]` | `music`: `tat`, `bat`, `doi`, `to`, `nho`, `kho` / `kho:<tên>` |
+| `[A-ROLL: cận mặt\|trung\|rộng\|clip N\|take N\|<tệp>\|bỏ]` | `[AROLL]`, `[QUAY]` | `aroll: { frame: can\|trung\|rong, take, file, off }` |
+| `[B-ROLL: … \| kho\|stock\|ảnh AI\|động\|tệp <tên>]` | như cũ | `broll[]` + `brollSrc[]` song song (`kho`, `stock`, `ai`, `dong`, `tep:<tên>`, null) |
+| `[SFX: … \| đầu\|cuối\|@từ]` | `[ÂM]`, `[HIỆU ỨNG]` | `sfx: [{ name, at: dau\|cuoi\|@từ }]` |
+| `[CHỮ: … \| số\|danh sách\|trích dẫn\|tiêu đề\|giá]` | như cũ | `screen[]` + `screenKind[]` song song (`so`, `danhsach`, `trichdan`, `tieude`, `gia`) |
+
+Trường mới chỉ có khi có dấu (trường cũ không đổi). Giá trị lạ: dấu gốc vào `raw[]`, ô Kịch bản báo "Dấu chưa hiểu". Dấu mới không có
+giá trị (`[âm]`) và ngoặc khác (`[cười]`) vẫn là lời nói. `stripMarks` bỏ mọi dấu. `scriptMarks` thêm kind `mood|music|aroll|sfx`
+(`markMissing` bỏ qua các kind này); `scriptPrompt` thêm dòng `· MOOD`, `· NHẠC`, `· A-ROLL`, `· SFX`.
+
+**Bảng dựng** `<dự án>/.studio/build_sheet.json` `{ version: 1, script_updated, at, rows: [{ seg, t0, t1, kind, say, mood {v, text, from,
+inherit?}, music {v, from}, aroll {frame, take, file?, off?, from}, broll [{q, src, pick, alts, miss?, pending?, from}], sfx [{name, q, at
+(giây), pos, miss?, from}], screen [{text, kind, from}], lock }] }`. `from`: `mark|claude|auto|user`. Tự dựng lại mỗi lần lưu kịch bản
+(`POST /api/script`), `POST /api/script/sheet {stock}` dựng lại tay; Bỏ kịch bản xoá bảng. Dựng lại giữ ô `user` khi lời của hàng không
+đổi (so `norm(say)`), giữ nguyên hàng `lock`. B-roll: Kho (`searchKho`, bỏ file đã vào `media/`) → thư viện (`broll_lib.search`) → stock
+(chỉ khi `stock: true`) → b-roll động `assets/broll/catalog.json` (luôn có); nguồn ép ở dấu chỉ dùng nguồn đó (không có thì `miss`).
+Ảnh AI không tự sinh khi dựng bảng (`pending`). `pick` của Kho là đường dẫn tương đối trong Kho; chỉ liên kết vào `media/kho_*` lúc Áp.
+
+**Gợi ý dấu** (nút ở ô Kịch bản, chỉ khi có Claude Code): `POST /api/script/suggest {text}` gửi chữ (không gửi video) + tên thương hiệu
++ khổ; Claude trả chính chữ đó kèm dấu. `checkSuggested` kiểm: bỏ dấu ở hai bản phải trùng chữ nói (lệch → "Claude đã sửa lời, không
+áp"), mỗi đoạn ≤ 1 MOOD, 2 CHỮ, 2 B-ROLL, 2 SFX (không tính dấu người dùng đã có), MOOD đổi cách nhau ≥ ~10 s đọc (2,6 từ/giây),
+không A-ROLL clip / take / tệp. Sai luật thì hỏi lại một lần. Kết quả hiện dạng so sánh (dấu thêm tô màu): **Nhận hết** đưa vào ô chữ
+(chưa lưu), **Bỏ** giữ bản cũ.
