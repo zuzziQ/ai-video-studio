@@ -110,6 +110,13 @@
   // '__none' = không thương hiệu (Kho Chung, phong cách Chung); gửi kèm mỗi video (enqueue / upload), nhớ ở autopilot.json.
   // S19 M133: thương hiệu quyết định luôn phong cách dựng; '' (cách cũ "theo hồ sơ") → thương hiệu của phong cách mặc định.
   let PREP = null;
+  const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent || ''); // S26 M183: mục macOS chỉ hiện trên Mac
+  // bước 'warn' của việc đã xong (autopilot.mjs ghi lý do vào result.steps): "Xong · bỏ qua: AI dựng (lý do), Đăng (lý do)"
+  const skipOf = it => {
+    if (it.state !== 'done' || !it.result?.steps) return '';
+    const lab = Object.fromEntries((S.st?.steps || []).map(s => [s.id, s.label]));
+    return Studio.apDefaults?.skipText(Object.fromEntries(Object.entries(it.result.steps).map(([k, v]) => [k, { ...v, label: lab[k] || k }]))) || '';
+  };
   // S17 M126: video Tự lái vào Kho khác dự án đang mở → nhắc trước, cho đổi lại về thương hiệu của dự án đang mở
   function offKho(kit, name) {
     const cur = Studio.TL ? Studio.META?.kho : null;
@@ -124,11 +131,15 @@
     const box = $('#ap-prep'); if (!box) return;
     if (!PREP) {
       PREP = { brands: [], products: [], loading: true };
-      Promise.all([api('/api/brands').catch(() => []), api('/api/products').catch(() => [])])
-        .then(([b, p]) => { PREP = { brands: Array.isArray(b) ? b : [], products: Array.isArray(p) ? p : [] }; renderPrep(); });
+      Promise.all([api('/api/brands').catch(() => []), api('/api/products').catch(() => []), api('/api/onboarding').catch(() => null)])
+        .then(([b, p, ob]) => { PREP = { brands: Array.isArray(b) ? b : [], products: Array.isArray(p) ? p : [], onboard: ob && !ob.error ? ob.brand || '' : '' }; renderPrep(); });
     }
     const def = defProfile(), defBrand = def && def !== 'chung' && PREP.brands.some(b => b.id === def) ? def : '__none';
-    if (!PREP.loading && (!S.brand || (S.brand !== '__none' && !PREP.brands.some(b => b.id === S.brand)))) S.brand = defBrand; // chưa chọn / thương hiệu đã xoá
+    if (!PREP.loading && (!S.brand || (S.brand !== '__none' && !PREP.brands.some(b => b.id === S.brand)))) { // chưa chọn / thương hiệu đã xoá
+      // S26 M183: mặc định = thương hiệu của hướng dẫn đầu / thương hiệu duy nhất (Studio.apDefaults, 02_onboarding.js), rồi mới tới hồ sơ
+      S.brand = Studio.apDefaults?.pickBrand({ saved: '', onboard: PREP.onboard, brands: PREP.brands }) || defBrand;
+      if (S.brand !== '__none') api('/api/autopilot/settings', { brand: S.brand }).catch(() => {});
+    }
     if (S.product && !PREP.loading && !PREP.products.some(p => p.id === S.product)) S.product = '';
     const kit = S.brand && S.brand !== '__none' ? PREP.brands.find(b => b.id === S.brand) : null;
     const sty = profiles().find(p => p.id === (kit ? kit.id : 'chung')), learn = S.st?.learn, proj = S.st?.project;
@@ -202,7 +213,7 @@
       ${runnerNote ? `<div class="help ap-mb">${esc(runnerNote)}</div>` : ''}
       ${!items.length ? '<div class="help ap-m0">Chưa có việc nào. Thả video ở trên hoặc vào thư mục tự động.</div>' : items.map((it, k) => `<div class="ap-it"><i class="ti ${ICON[it.state] || ''}"></i>
         <div class="ap-min"><span class="nm" title="${esc(it.input)}">${esc(it.title)}</span>
-          <span class="st ${it.state === 'error' ? 'err' : ['cancelled', 'paused'].includes(it.state) ? 'stop' : ''}" title="${esc(it.error || it.step || '')}">${esc(KNAME[it.kind] || it.kind)} · ${esc(SRC[it.source] || '')}${it.state === 'error' ? ' — ' + esc(it.error || '') : it.state === 'running' ? ` · ${Math.round((it.progress || 0) * 100)}%` : it.state === 'done' && it.result?.seconds ? ` · xong trong ${it.result.seconds}s` : (it.state === 'queued' && it.attempt) || ['cancelled', 'paused'].includes(it.state) ? ' · ' + esc(it.step || (it.state === 'paused' ? 'Tạm dừng' : 'Đã huỷ')) : ''}</span></div>
+          <span class="st ${it.state === 'error' ? 'err' : ['cancelled', 'paused'].includes(it.state) ? 'stop' : ''}" title="${esc(it.error || it.step || '')}">${esc(KNAME[it.kind] || it.kind)} · ${esc(SRC[it.source] || '')}${it.state === 'error' ? ' — ' + esc(it.error || '') : it.state === 'running' ? ` · ${Math.round((it.progress || 0) * 100)}%` : it.state === 'done' && it.result?.seconds ? ` · ${skipOf(it) ? '' : 'xong trong '}${it.result.seconds}s` : (it.state === 'queued' && it.attempt) || ['cancelled', 'paused'].includes(it.state) ? ' · ' + esc(it.step || (it.state === 'paused' ? 'Tạm dừng' : 'Đã huỷ')) : ''}</span>${skipOf(it) ? `<span class="st ap-warn" title="${esc(skipOf(it))}"><i class="ti ti-alert-triangle"></i> ${esc(skipOf(it))}. <button class="wf-lnk" data-fixsetup>Kiểm tra máy</button></span>` : ''}</div>
         <div class="b">
           ${it.state === 'queued' ? `<button class="icon" title="Lên" data-act="up" data-id="${it.id}" ${k === 0 ? 'disabled' : ''}><i class="ti ti-arrow-up"></i></button><button class="icon" title="Xuống" data-act="down" data-id="${it.id}"><i class="ti ti-arrow-down"></i></button>` : ''}
           ${it.state === 'done' && it.project ? `<button class="icon" title="Mở dự án trong Studio để chỉnh" data-act="open" data-id="${it.id}"><i class="ti ti-edit"></i></button>` : ''}
@@ -214,6 +225,7 @@
       ${items.some(i => ['done', 'cancelled', 'error'].includes(i.state)) ? `<div class="acts">${items.some(i => ['done', 'cancelled'].includes(i.state)) ? '<button id="ap-clear"><i class="ti ti-clear-all"></i> Xoá việc đã xong</button>' : ''}${items.some(i => i.state === 'error') ? `<button class="danger" id="ap-clear-err"><i class="ti ti-trash-x"></i> Xoá mục lỗi (${items.filter(i => i.state === 'error').length})</button>` : ''}</div>` : ''}</div>`;
     applyVars(box);
     box.querySelectorAll('[data-act]').forEach(b => (b.onclick = () => itemAct(b.dataset.id, b.dataset.act)));
+    box.querySelectorAll('[data-fixsetup]').forEach(b => (b.onclick = () => Studio.openSetup?.()));
     box.querySelectorAll('[data-play]').forEach(b => (b.onclick = () => b.dataset.play && api('/api/autopilot/reveal', { path: b.dataset.play })));
     if ($('#ap-clear')) $('#ap-clear').onclick = async () => { await api('/api/autopilot/clear', {}); refresh(true); };
     if ($('#ap-clear-err')) $('#ap-clear-err').onclick = async () => { if (!confirm('Xoá mọi mục lỗi khỏi hàng đợi? (không xoá file đã tạo)')) return; await api('/api/autopilot/clear-failed', {}); refresh(true); };
@@ -232,9 +244,9 @@
           <button class="icon" title="Bỏ thư mục này" data-wdel="${i}"><i class="ti ti-trash"></i></button></div></div>`).join('')}
       <div class="acts"><button id="ap-wadd"><i class="ti ti-folder-plus"></i> Thêm thư mục (cho thương hiệu khác)</button><button class="primary" id="ap-wsave"><i class="ti ti-device-floppy"></i> Lưu</button></div>
       ${st.runner.watchError ? `<div class="help ap-bad">${esc(st.runner.watchError)}</div>` : ''}
-      <label class="ap-tog ap-t3"><input type="checkbox" id="ap-agent" ${st.settings.agent || ag.installed ? 'checked' : ''}><span>Chạy cả khi tắt app<small>Cài một tác vụ nền macOS (LaunchAgent ${ag.installed ? '— đã cài' : ''}). Bỏ chọn để gỡ.</small></span></label>
+      ${IS_MAC ? `<label class="ap-tog ap-t3"><input type="checkbox" id="ap-agent" ${st.settings.agent || ag.installed ? 'checked' : ''}><span>Chạy cả khi tắt app<small>Cài một tác vụ nền macOS (LaunchAgent ${ag.installed ? '— đã cài' : ''}). Bỏ chọn để gỡ.</small></span></label>
       <label class="ap-tog"><input type="checkbox" id="ap-notify" ${st.settings.notify ? 'checked' : ''}><span>Thông báo macOS khi xong / lỗi</span></label>
-      <label class="ap-tog"><input type="checkbox" id="ap-appdrop" ${st.settings.appDrop ? 'checked' : ''}><span>Thả vào app = tự lái<small>Thả video vào biểu tượng AI Video Studio → đưa thẳng vào hàng đợi Tự lái (thay vì chỉ tạo dự án).</small></span></label>
+      <label class="ap-tog"><input type="checkbox" id="ap-appdrop" ${st.settings.appDrop ? 'checked' : ''}><span>Thả vào app = tự lái<small>Thả video vào biểu tượng AI Video Studio → đưa thẳng vào hàng đợi Tự lái (thay vì chỉ tạo dự án).</small></span></label>` : ''}
       ${st.runner.due ? `<div class="help ap-mt1">Lịch đăng: ${st.runner.due.skipped ? esc(st.runner.due.skipped) : `kiểm tra lúc ${new Date(st.runner.due.at).toLocaleTimeString('vi-VN')}${st.runner.due.msg ? ' — ' + esc(st.runner.due.msg) : ''}`}</div>` : ''}</div>`;
     const W = $('#ap-watch');
     const folders = () => { const f = JSON.parse(JSON.stringify(S.st.settings.watch.folders)); W.querySelectorAll('[data-wf]').forEach(el => (f[+el.dataset.wf][el.dataset.k] = el.value.trim())); return f; };
@@ -246,6 +258,7 @@
       if (!/[\\/]/.test(base) || /^[A-Za-z]:$/.test(base)) return Studio.toast('Chưa biết đặt thư mục ở đâu: tạo Kho ở bước Chuẩn bị trước'); f.push({ in: base + `/Thả video ${f.length + 1}`, done: f[0]?.done || base + '/Đã xong', processed: f[0]?.processed || base + '/Đã xử lý', profile: '' }); await saveW({ watch: { folders: f } }); renderWatch(); };
     W.querySelectorAll('[data-wdel]').forEach(b => (b.onclick = async () => { const f = folders(); f.splice(+b.dataset.wdel, 1); await saveW({ watch: { folders: f } }); renderWatch(); }));
     W.querySelectorAll('[data-wopen]').forEach(b => (b.onclick = async () => { const r = await api('/api/autopilot/reveal', { path: b.previousElementSibling.value, create: true }); if (r.error) Studio.toast(r.error); }));
+    if (IS_MAC) {
     $('#ap-notify').onchange = e => saveW({ notify: e.target.checked });
     $('#ap-appdrop').onchange = e => saveW({ appDrop: e.target.checked });
     $('#ap-agent').onchange = async e => {
@@ -254,6 +267,7 @@
       Studio.toast(r.ok === false || r.error ? 'Lỗi: ' + (r.error || '') : e.target.checked ? 'Đã cài chạy nền' : 'Đã gỡ chạy nền');
       await refresh(); renderWatch();
     };
+    }
   }
   // ---------- actions ----------
   async function itemAct(id, action) {
