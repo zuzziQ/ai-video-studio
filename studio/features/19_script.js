@@ -177,6 +177,7 @@
     if (P.table) return renderTable(el);
     const { ta, pick } = frame(el, { text, status: (P.data ? srcHtml() + statusOf(P.data) : ''),
       extra: `${P.ai ? `<button data-sc="suggest" title="Claude chèn dấu MOOD, B-ROLL, SFX, CHỮ… vào chính chữ này, không sửa lời" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === 'suggest' ? 'ti-loader-2 spin' : 'ti-sparkles'}"></i>Gợi ý dấu</button>` : ''}
+        ${P.data && !P.data.caps && !P.data.mute && Studio.scriptDraft ? '<button data-sc="draft" title="Chưa quay: Claude dựng sẵn 3 phương án theo kịch bản này, kèm danh sách cảnh cần quay"><i class="ti ti-layout-board-split"></i>Dựng trước khi quay</button>' : ''}
         ${sc ? '<button data-sc="clear" title="Bỏ kịch bản, lấy lại phụ đề nhận dạng tự động"><i class="ti ti-trash"></i>Bỏ</button>' : ''}
         <button class="primary" data-sc="save" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === true ? 'ti-loader-2 spin' : 'ti-device-floppy'}"></i>${sc ? 'Lưu lại' : 'Dùng kịch bản'}</button>` });
     ta.oninput = () => { P.draft = ta.value; };
@@ -192,6 +193,8 @@
         P.draft = await fileText(f); P.name = f.name; renderCard();
       } catch (e) { Studio.toast(e.message); }
     };
+    const dr = el.querySelector('[data-sc="draft"]'); // S27 M191: dự án chưa có lời thoại → mẫu dựng sẵn trước khi quay
+    if (dr) dr.onclick = () => Studio.scriptDraft.open({ text: P.draft ?? ta.value, name: P.name || sc?.name || '' });
     el.querySelector('[data-sc="save"]').onclick = async () => {
       const t = (P.draft ?? ta.value).trim(); if (!t) return Studio.toast('Kịch bản đang trống');
       P.busy = true; renderCard();
@@ -258,6 +261,7 @@
       renderCard();
     }).catch(() => {});
   }
+  Studio.scriptFileText = fileText; // S27 M191: hộp Dựng trước khi quay (32_scriptdraft.js) đọc .docx / Excel / .txt cùng một cách
   Studio.scriptCard = {
     mount(el) {
       const dir = Studio.META?.dir || '';

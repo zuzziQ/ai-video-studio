@@ -298,6 +298,68 @@ export function alignScript(segments, heard, { dur = 0, minRatio = .3, driftMax 
   return { segments: segs, words: live, align: { mode: 'whisper', at: new Date().toISOString(), words: W.length, matched: pairs.length, offscript: offscript.map(({ words, ...o }) => o), ...sheet }, offWords: offscript.flatMap(o => o.words) };
 }
 
+// ---------- S27 M191: giờ dự kiến trước khi quay (scripts/script_draft.mjs) ----------
+export const WPS = 2.6, WPS_MIN = 2.0, WPS_MAX = 3.4, GAP = .4, LEAD = .3, END_CARD = 2.5;
+export const clampWps = v => (Number.isFinite(+v) && +v > 0 ? Math.min(WPS_MAX, Math.max(WPS_MIN, +v)) : WPS);
+const estToks = s => String(s || '').split(/\s+/).filter(w => norm(w));
+/**
+ * Đoạn của parseScript → giờ dự kiến theo tốc độ đọc. Đoạn có mốc giây của bảng (M197, `at`) giữ mốc đó (không lùi trước đoạn trước);
+ * đoạn không mốc đọc liền sau đoạn trước, nghỉ `gap`. Chữ chia theo số ký tự trong đoạn (như alignScript chế độ 'even').
+ * → { segments (thêm t0/t1/spoken/ratio), words [{w,k,s,e}], speech (giây cuối lời), duration (+ thẻ kết), align {mode:'estimate', wps…} }
+ */
+export function estimateTimes(segments, { wps = WPS, gap = GAP, lead = LEAD, end = END_CARD } = {}) {
+  wps = clampWps(wps);
+  const segs = (segments || []).map(s => ({ ...s, screen: [...(s.screen || [])], broll: [...(s.broll || [])] }));
+  const W = []; let cur = lead;
+  const len = w => norm(w).length + 1;
+  segs.forEach((s, k) => {
+    const ws = estToks(s.say), read = Math.max(.8, ws.length / wps);
+    const num = v => (v == null || v === '' ? null : Number.isFinite(+v) ? +v : null), at0 = num(s.at?.t0), at1 = num(s.at?.t1); // +null = 0: mốc trống không phải giây 0
+    const t0 = at0 != null ? Math.max(cur, at0) : cur;
+    const t1 = at1 != null && at1 > t0 + .3 ? at1 : t0 + read;
+    const tot = ws.reduce((q, w) => q + len(w), 0) || 1; let t = t0;
+    for (const w of ws) { const d = (t1 - t0) * len(w) / tot; W.push({ w, k, s: r2(t), e: r2(t + d) }); t += d; }
+    Object.assign(s, { t0: r2(t0), t1: r2(t1), spoken: true, ratio: null });
+    cur = t1 + gap;
+  });
+  const speech = r2(segs.length ? segs[segs.length - 1].t1 : 0);
+  const timed = segs.filter(s => s.at).length;
+  return { segments: segs, words: W, speech, duration: r2(speech + .4 + end),
+    align: { mode: 'estimate', wps, at: new Date().toISOString(), words: W.length, matched: 0, offscript: [], ...(timed ? { sheet: timed, drift: [] } : {}) } };
+}
+
+/**
+ * Quay xong (kịch bản từng là 'estimate', giờ căn theo giọng thật): dời mọi mục của timeline theo đoạn. Mục mang `_sheet` dời theo
+ * đoạn của nó; mục khác theo đoạn chứa thời điểm của nó (khoảng nghỉ sau đoạn thuộc đoạn đó); sau đoạn cuối dời bằng độ lệch cuối.
+ * Trong đoạn, giờ co giãn tuyến tính. Sửa `tl` tại chỗ (25_transcribe lưu chính đối tượng này). → số mục đã dời.
+ */
+const estOf = tl => (Array.isArray(tl.draft?.est) && tl.draft.est.length ? tl.draft.est.map(([t0, t1]) => ({ t0, t1 })) : null);
+export function retimeDraft(tl, from, to, { shot = true } = {}) {
+  const F = (from || []).map(s => [s.t0, s.t1]), T = (to || []).map(s => [s.t0, s.t1]);
+  if (!F.length || F.length !== T.length || F.some(x => x[0] == null)) return 0;
+  const map = (t, k = null) => {
+    if (!Number.isFinite(t)) return t;
+    let i = k != null && F[k] ? k : F.findIndex((f, j) => t < (F[j + 1]?.[0] ?? Infinity));
+    if (i < 0) i = F.length - 1;
+    while (i >= 0 && (T[i][0] == null || T[i][1] == null)) i--; // đoạn chưa nói: theo đoạn đã nói trước nó
+    if (i < 0) return t;
+    const [a, b] = F[i], [c, d] = T[i];
+    if (t <= b) return r2(Math.max(0, c + (t - a) * ((d - c) / Math.max(.05, b - a))));
+    const n = F[i + 1], m = T[i + 1]; // khoảng nghỉ trước đoạn kế: co giãn tới đầu đoạn kế
+    if (n && m?.[0] != null && t <= n[0]) return r2(Math.max(0, d + (t - b) * ((m[0] - d) / Math.max(.05, n[0] - b))));
+    return r2(Math.max(0, t + (d - b)));
+  };
+  let n = 0;
+  const one = (x, keys) => { if (!x || typeof x !== 'object') return; const k = Number.isInteger(x._sheet) ? x._sheet : null; for (const key of keys) if (Number.isFinite(x[key])) x[key] = map(x[key], k); n++; };
+  for (const s of tl.scenes || []) { one(s, ['t0', 't1']); if (s.t1 <= s.t0) s.t1 = r2(s.t0 + .3); }
+  for (const f of tl.fx || []) one(f, ['t']);
+  for (const x of tl.audio?.sfx || []) one(x, ['t']);
+  // nhạc theo đoạn (M195): khúc đầu giữ mốc 0, chỉ dời mốc cuối; nền phủ cả video (không _sheet) để nguyên
+  for (const m of tl.audio?.music || []) { if (m._sheet == null && m.t0 <= .05) continue; one(m, m.t0 <= .05 ? ['t1'] : ['t0', 't1']); }
+  if (tl.draft) tl.draft = { ...tl.draft, est: (to || []).map(x => [x.t0, x.t1]), ...(shot ? { mode: 'shot', shot: new Date().toISOString() } : {}) };
+  return n;
+}
+
 /** Chữ đã căn → phụ đề kiểu captions.py ({t0,t1,words:[{w,s,e}]}): ≤ max từ, ngắt ở dấu câu, cuối đoạn và chỗ nghỉ > 0,7 s. */
 export function captionsFrom(words, { max = 4, offWords = [] } = {}) {
   const all = [...words.map(x => ({ w: x.w, s: x.s, e: x.e, k: x.k })), ...offWords.map(h => ({ w: h.w, s: h.s, e: h.e, k: 'off', off: true }))].sort((a, b) => a.s - b.s);
@@ -359,12 +421,28 @@ export function applyScript(dir, { tl, caps, heard, max = 4, fresh = false } = {
   // chưa đổi độ dài kể từ lúc sao lưu (cắt / tốc độ làm lệch giờ của bản sao lưu → dùng phụ đề hiện có)
   let saved = null;
   if (!heard && !fresh && sc.heardDur != null && Math.abs(sc.heardDur - D) < .01) try { saved = JSON.parse(fs.readFileSync(backup, 'utf8')); } catch { /* không có bản sao lưu */ }
+  // S27 M191: mẫu dựng sẵn chưa quay (timeline.draft.mode 'estimate'): phụ đề hiện có là chữ kịch bản theo giờ ước, không phải lời
+  // nghe được → sửa kịch bản thì ước lại giờ theo tốc độ đọc. Có lời thật (fresh: Tạo lời thoại, heard) thì căn rồi dời mọi mục (retimeDraft).
+  const draft = tl.draft?.mode === 'estimate';
+  if (draft && !fresh && !heard) {
+    const est = estimateTimes(sc.segments, { wps: tl.draft.wps });
+    // giờ ước cũ của các mục nằm ở tl.draft.est (script.json vừa ghi lại không còn giờ): cùng số đoạn thì dời mục sang giờ ước mới
+    const old = estOf(tl);
+    if (old?.length === est.segments.length) retimeDraft(tl, old, est.segments, { shot: false });
+    else tl.draft = { ...tl.draft, est: est.segments.map(x => [x.t0, x.t1]) };
+    Object.assign(sc, { segments: est.segments, align: est.align }); wr(scriptFile(dir), sc);
+    if (est.duration > D) tl.duration = est.duration;
+    return { tl, caps: captionsFrom(est.words, { max }), script: sc };
+  }
+  const prevSegs = draft || sc.align?.mode === 'estimate' ? estOf(tl) || sc.segments : null;
   const H = mute ? [] : heard || heardOf(saved || caps);
   if (!mute && !H.length) return { tl, caps, script: sc, pending: true }; // chưa tách lời thoại: căn khi có (25_transcribe)
   if (caps.length && (fresh || (!sc.align && !fs.existsSync(backup)))) { wr(backup, caps); sc.heardDur = D; }
   const r = alignScript(sc.segments, H, { dur: speechSpan(tl) });
   const out = captionsFrom(r.words, { max, offWords: r.offWords || [] });
   Object.assign(sc, { segments: r.segments, align: r.align });
+  // S27 M191: mẫu dựng sẵn trước khi quay (giờ ước theo tốc độ đọc) vừa có giọng thật: dời mọi mục theo giờ thật (tại chỗ)
+  if (prevSegs && r.align.mode !== 'estimate') sc.retimed = retimeDraft(tl, prevSegs, r.segments);
   wr(scriptFile(dir), sc);
   return { tl, caps: out, script: sc };
 }

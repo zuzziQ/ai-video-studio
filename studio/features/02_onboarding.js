@@ -79,7 +79,7 @@
   #onb-home .card .ic .ti { font-size: 22px; } #onb-home .card b { display: block; font-size: 15px; margin-bottom: 4px; color: var(--tx); }
   #onb-home .card span { font-size: 12px; color: var(--tx2); line-height: 1.5; display: block; } #onb-home .card small { display: block; margin-top: 8px; font-size: 11px; color: var(--tx3); }
   #onb-home h3 { margin: 32px 0 8px; font-size: 13px; color: var(--tx2); font-weight: 600; }
-  #onb-home .cards.sm { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; } #onb-home .cards.sm .card { padding: 16px; gap: 12px; }
+  #onb-home .cards.sm { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 12px; } @media (max-width: 1100px) { #onb-home .cards.sm { grid-template-columns: repeat(2, minmax(0, 1fr)); } } #onb-home .cards.sm .card { padding: 16px; gap: 12px; }
   #onb-home .cards.sm .card .ic { width: 40px; height: 40px; }
   /* S19 M132: Tự lái bắt đầu ở đây (thả nhiều video + chọn thương hiệu), không còn nút trên thanh trên */
   #onb-home .card.ap { cursor: default; flex-direction: column; align-items: stretch; gap: 12px; } #onb-home .card.ap:hover { border-color: var(--line); background: var(--bg2); }
@@ -624,6 +624,7 @@
       <div class="cards">${card('new', 'ti-video-plus', 'Video mới', 'Chọn video quay sẵn rồi tự tay dựng: cắt, phụ đề, hiệu ứng, nhạc, xuất.', 'Trình chỉnh sửa')}
         ${apCard(Array.isArray(brands) ? brands : [])}</div>
       <div class="cards sm">${card('tpl', 'ti-layout-grid', 'Dựng theo mẫu', 'Chọn mẫu đẹp sẵn rồi thay chữ, ảnh, video.', p ? `Gợi ý cho ${p[2]}` : 'Gần 90 mẫu theo lĩnh vực')}
+        ${card('draft', 'ti-layout-board-split', 'Dựng trước khi quay', 'Có kịch bản, chưa quay: Claude dựng sẵn 3 phương án kèm danh sách cảnh cần quay.', 'Kịch bản')}
         ${card('long', 'ti-scissors', 'Cắt clip từ video dài', 'Livestream, podcast, buổi học: AI chọn đoạn hay.', 'Cắt clip')}
         ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ file Excel hoặc CSV, nhiều video cùng mẫu.', 'Hàng loạt')}</div>
       ${bl.length ? `<div class="rhd"><h3>Thương hiệu</h3></div><div class="brs">${bl.map(brandCard).join('')}
@@ -665,6 +666,7 @@
     if (a === 'close') return hideHome();
     if (a === 'new') { hideHome(); return document.getElementById('newproj')?.click(); }
     if (a === 'wiz' || a === 'prep') return openWizard(0);
+    if (a === 'draft') return Studio.scriptDraft?.open(); // S27 M191: hộp nổi trên trang chủ; Dùng cho video mới thì trang tải lại
     if (a === 'bnew') return openWizard(0, { fresh: true });
     if (a === 'bedit') return openWizard(0, { brand: b.dataset.bid });
     if (a === 'bvid') { hideHome(); return Studio.newProject ? Studio.newProject({ brand: b.dataset.bid }) : document.getElementById('newproj')?.click(); }

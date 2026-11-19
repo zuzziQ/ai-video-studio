@@ -192,3 +192,22 @@ Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 8. Mã: `scripts/scri
   dài tới 5 s.
 - **Báo cáo**: `plan.sources` = `sourceReport` { total, used, unused, items }; ghi chú trên khối "Đã dùng: <tên file>"; `Studio.scriptNotes.stat`
   thêm `unused` (tính trên timeline hiện tại), dòng "Theo kịch bản" (panel AI dựng và tiêu chí `script` của bước Dựng) thêm "· n nguồn bạn đưa chưa dùng".
+
+## 12. Trước khi quay: mẫu dựng sẵn (S27 M191)
+
+Có kịch bản, chưa có video: thẻ **Dựng trước khi quay** ở trang chủ (hoặc nút cùng tên trong ô Kịch bản khi dự án chưa có lời thoại).
+Một hộp gọn, không bảng cài đặt: ô chữ (dán, hoặc thả .docx / Excel có mốc giây của mục 9), thương hiệu, khổ 9:16 / 16:9 / 1:1, tốc độ đọc.
+
+- **Giờ dự kiến**: `estimateTimes` (`scripts/script_doc.mjs`) ước mỗi đoạn theo 2,6 từ/giây (đổi 2,0–3,4), nghỉ 0,4 s; mốc giây của bảng thắng.
+  Kịch bản ghi `align.mode: 'estimate'`, phụ đề dự kiến lấy từ chính chữ kịch bản, nên bảng dựng (mục 7), AI dựng theo dấu (mục 8) và nguồn
+  người dùng (mục 11) chạy như kịch bản đã căn.
+- **3 phương án** (job hàng đợi `script_draft`, `scripts/script_draft.mjs`): mỗi phương án là một thư mục dự án không video (`v1..v3` trong
+  `~/.ai-video-studio/drafts/<id>/`, ô chờ quay `work/placeholder.svg`), AI dựng một lần (`ai_edit.mjs --apply`): gói của thương hiệu nhịp vừa /
+  gói khác nhịp dày / gói khác thoáng. Mỗi phương án qua kiểm engine (`engineIssues`: cảnh 0 giây, ngoài video, fx ngoài video) + QC tĩnh
+  (`staticIssues`), rồi chụp 5 khung ảnh tĩnh.
+- **Chọn một**: **Dùng cho video mới** chép phương án vào `Du an/` của Kho thương hiệu kèm `Danh sach quay.txt` rồi mở; chỉnh tiếp ở tab Claude
+  (Xem / Hoàn tác), mỗi khối mang ghi chú kịch bản (mục 8). **Lưu thành mẫu** ghi `templates/user/u-*.json` có `brand_id` (đứng đầu thư viện Mẫu
+  khi mở thương hiệu đó). **Danh sách quay**: mỗi đoạn lời, cỡ khung (dấu A-ROLL), B-roll cần tự quay (dấu chưa tìm được cảnh, hoặc chỉ có b-roll động).
+- **Sửa kịch bản trước khi quay**: lưu ở ô Kịch bản thì giờ được ước lại (timeline `draft.mode: 'estimate'`), không căn với phụ đề dự kiến.
+- **Quay xong**: thả video lên track chính, bấm **Tạo lời thoại**: `applyScript` căn theo giọng thật rồi `retimeDraft` dời mọi mục (mục `_sheet` theo
+  đoạn của nó, mục khác theo đoạn chứa nó, co giãn trong đoạn); timeline đổi `draft.mode: 'shot'`. Bám lời thoại (`27_tplfit`) dùng như cũ.
