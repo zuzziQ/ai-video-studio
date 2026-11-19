@@ -24,6 +24,7 @@ import { saidNumbers, inventedNumbers, hasFlag, stripFlags, sceneStrings } from 
 import { txCheckEdit } from './assist.mjs';
 import { burnBand, burnIssues } from './burnin.mjs'; // S13 M110: phụ đề mới chồng phụ đề cháy sẵn của video gốc
 import { readScript, scriptMarks, markMissing, gateScript } from './script_doc.mjs'; // S17 M123: kịch bản có sẵn
+import { moodOf, sfxOf } from './script_build.mjs'; // S27 M194: dấu dựng (MOOD, SFX) ánh xạ về catalog
 const TC = createRequire(import.meta.url)('../studio/features/21_transcript.core.js');
 
 export const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -434,6 +435,56 @@ export function scriptIssues(tl, dir) {
   const name = { hook: 'HOOK', screen: 'CHỮ', broll: 'B-ROLL', cta: 'CTA' };
   for (const m of markMissing(scriptMarks(sc), tl.scenes || [], { strings: sceneStrings, title: tl.title || '' }))
     out.push({ t: r2(m.t0), kind: 'script_mark', severity: 'low', target: null, msg: `Dấu [${name[m.kind]}${m.kind === 'hook' || m.kind === 'cta' ? '' : ': ' + cut(m.text, 40)}] của kịch bản chưa có cảnh quanh ${m.t0.toFixed(1)}s` });
+  const cat = f => { try { return JSON.parse(fs.readFileSync(path.join(SKILL, 'assets', f), 'utf8')); } catch { return []; } };
+  out.push(...buildMarkIssues(sc, tl, { sfx: cat('sfx/catalog.json'), moods: [...new Set(cat('music/catalog.json').map(x => x.mood))] }));
+  return out;
+}
+// S27 M194: dấu dựng của kịch bản (docs/plans/S27-dung-theo-kich-ban.md mục 1) so với timeline. Chỉ báo (script_mark, low), không tự sửa:
+//  - [SFX: …] không có trong thư viện / chưa có SFX đó quanh đoạn; [A-ROLL: bỏ] mà đoạn còn hiện người nói (b-roll phủ < 70 %);
+//  - [B-ROLL: … | nguồn] có cảnh nhưng lấy từ nguồn khác; [MOOD: …] không khớp mood nào / nhạc nền lúc đó là mood khác; dấu chưa hiểu (raw).
+// Hàm thuần: sfx = catalog SFX [{name, tags}], moods = mood của catalog nhạc.
+export function buildMarkIssues(sc, tl, { sfx = [], moods = [] } = {}) {
+  if (!sc?.segments) return [];
+  const out = [], cut = (s, n) => (String(s).length > n ? String(s).slice(0, n) + '…' : String(s)), A = tl?.audio || {};
+  const scenes = (tl?.scenes || []).filter(s => !s.hidden);
+  const push = (t, msg) => out.push({ t: r2(t ?? 0), kind: 'script_mark', severity: 'low', target: null, msg });
+  const isPic = s => !!(s.broll || s.screen?.broll || s.media || s.image || s.images || /broll|media|photo|image|kinetic_broll/.test(String(s.type)));
+  const full = s => s.mode === 'full' || s.layout === 'full' || (s.type === 'broll' && !s.layout) || s.type === 'kinetic_broll';
+  const srcOf = s => {
+    if (s.screen?.broll || (s.type === 'broll' && !s.media) || s.broll) return 'dong';
+    const m = String(typeof s.media === 'string' ? s.media : s.media?.seq || s.src || '');
+    if (/(^|\/)kho_/.test(m) || s.credit === 'Kho') return 'kho';
+    if (/(^|\/)stock_/.test(m) || s.credit === 'Stock') return 'stock';
+    if (/(^|\/)ai_/.test(m) || s.credit === 'Ảnh AI') return 'ai';
+    if (/(^|\/)lib_/.test(m)) return 'lib';
+    return 'khác';
+  };
+  const SRC = { kho: 'Kho', stock: 'stock', ai: 'ảnh AI', dong: 'b-roll động', lib: 'thư viện', khác: 'nguồn khác' };
+  const cover = (t0, t1) => { // phần [t0, t1] có hình phủ toàn khung
+    const iv = scenes.filter(s => isPic(s) && full(s) && s.t0 < t1 && s.t1 > t0).map(s => [Math.max(t0, s.t0), Math.min(t1, s.t1)]).sort((a, b) => a[0] - b[0]);
+    let got = 0, end = t0; for (const [a, b] of iv) { if (b <= end) continue; got += b - Math.max(a, end); end = b; }
+    return t1 > t0 ? got / (t1 - t0) : 1;
+  };
+  for (const m of scriptMarks(sc)) {
+    const t1 = m.t1 ?? m.t0;
+    if (m.kind === 'sfx') {
+      const want = sfxOf(m.text, sfx);
+      if (!want) { push(m.t0, `Dấu [SFX: ${cut(m.text, 30)}] không có trong thư viện SFX: đổi tên ở kịch bản hoặc chọn ở Bảng dựng`); continue; }
+      if (!(A.sfx || []).some(x => !x.hidden && x.name === want && x.t >= m.t0 - 1 && x.t <= t1 + 1)) push(m.t0, `Dấu [SFX: ${cut(m.text, 30)}] chưa có tiếng “${want}” quanh ${m.t0.toFixed(1)}s (Bảng dựng → Áp lên timeline)`);
+    } else if (m.kind === 'aroll' && m.aroll?.off) {
+      const k = cover(m.t0, t1);
+      if (k < .7) push(m.t0, `Dấu [A-ROLL: bỏ] nhưng đoạn ${m.t0.toFixed(1)}–${t1.toFixed(1)}s còn hiện người nói (b-roll phủ ${Math.round(k * 100)}%)`);
+    } else if (m.kind === 'broll' && m.src) {
+      const want = m.src.startsWith('tep:') ? 'kho' : m.src, pics = scenes.filter(s => isPic(s) && s.t0 < t1 + 1.5 && s.t1 > m.t0 - 1.5);
+      if (pics.length && !pics.some(s => srcOf(s) === want)) push(m.t0, `Dấu [B-ROLL: ${cut(m.text, 30)} | ${SRC[want] || want}] nhưng cảnh quanh ${m.t0.toFixed(1)}s lấy từ ${[...new Set(pics.map(s => SRC[srcOf(s)]))].join(', ')}`);
+    } else if (m.kind === 'mood') {
+      const want = moodOf(m.text, moods);
+      if (!want) { push(m.t0, `Dấu [MOOD: ${cut(m.text, 30)}] chưa khớp mood nhạc nào: chọn mood ở Bảng dựng`); continue; }
+      const bed = (A.music || []).find(x => !x.hidden && x.t0 <= m.t0 + .05 && (x.t1 ?? Infinity) > m.t0);
+      if (bed && bed.mood && !bed.file && !bed.kho && bed.mood !== want) push(m.t0, `Dấu [MOOD: ${cut(m.text, 30)}] (≈ ${want}) nhưng nhạc nền lúc ${m.t0.toFixed(1)}s là “${bed.mood}”`);
+    }
+  }
+  sc.segments.forEach((s, k) => { if (s.raw?.length) push(s.t0 ?? 0, `Đoạn ${k + 1}: dấu chưa hiểu ${cut(s.raw.slice(0, 3).join(' '), 80)} (bị bỏ qua khi dựng)`); });
   return out;
 }
 

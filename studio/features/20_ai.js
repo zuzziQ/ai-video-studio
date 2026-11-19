@@ -228,9 +228,33 @@
     const b = out.broll || {}, parts = [b.added != null ? `+${b.added} b-roll` : '', out.sfx ? 'âm thanh: ' + String(out.sfx).replace(/^level \d: /, '') : ''].filter(Boolean);
     return parts.length ? `<p class="muted"><i class="ti ti-bolt"></i> ${esc(parts.join(' · '))}.</p>` : '';
   }
-  function applyPlan(plan, o = {}) {
+  // S26 M182: như isUserMusic của scripts/ai_edit.mjs: nhạc bạn chọn/chỉnh (_orig, file, Kho, mood khác 'tech') được giữ, nhạc khởi đầu chưa ai đụng thì AI thay
+  const userM = m => !!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech')));
+  const bedOf = (f, m) => f(m) && m.t0 <= .05 && m.t1 >= TL.duration - .1;
+  // S27 M194: như applyPlan / applySheet của scripts/ai_edit.mjs (scripts/tests/s27_m194.test.mjs so hai bản trên cùng đầu vào).
+  // Mục của bảng dựng (_sheet) AI dựng giữ; kế hoạch bảng dựng (plan.sheet) không đổi gói / phụ đề / tiêu đề, chỉ thay mục _sheet cũ
+  // chưa sửa tay và cảnh AI / Tự động chồng giờ cảnh mới; plan.music undefined = giữ nhạc.
+  function applySheet(plan, o = {}) {
     if (!o.noUndo) S.pushUndo();
-    const mine = s => (s._ai || s._recipe) && !s._orig;
+    const span = (plan.scenes || []).filter(s => !s._base);
+    const old = s => s._sheet != null && !s._orig;
+    const hit = s => (s._ai || s._auto) && !s._orig && !s._base && !s._recipe && s._sheet == null && span.some(x => x.t0 < s.t1 - .05 && x.t1 > s.t0 + .05);
+    const mineS = new Set((TL.scenes || []).filter(s => s._sheet != null && s._orig).map(s => `${s._sheet}|${s.type}`));
+    const mineX = new Set((TL.audio?.sfx || []).filter(x => x._sheet != null && x._orig).map(x => `${x._sheet}|${x.name}`));
+    TL.scenes = [...(TL.scenes || []).filter(s => !old(s) && !hit(s)), ...JSON.parse(JSON.stringify(plan.scenes || [])).filter(s => !mineS.has(`${s._sheet}|${s.type}`))];
+    TL.audio = TL.audio || {};
+    if (plan.music !== undefined) {
+      const keepM = (TL.audio.music || []).some(m => bedOf(userM, m));
+      TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [{ ...plan.music, t1: TL.duration }] : [])];
+    }
+    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !(x._sheet != null && !x._orig)), ...(plan.sfx || []).filter(x => !mineX.has(`${x._sheet}|${x.name}`)).map(x => ({ ...x }))];
+    plan._applied = 0;
+    S.changed(true);
+  }
+  function applyPlan(plan, o = {}) {
+    if (plan.sheet) return applySheet(plan, o);
+    if (!o.noUndo) S.pushUndo();
+    const mine = s => (s._ai || s._recipe) && !s._orig && s._sheet == null;
     if (plan.pack !== TL.pack && TL.fx) TL.fx = TL.fx.filter(f => !f._recipe || f._orig);
     TL.pack = plan.pack; TL.caption_style = plan.caption_style || undefined;
     if (plan.hook) TL.title = plan.hook;
@@ -238,11 +262,10 @@
     TL.audio = TL.audio || {};
     // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
     // S19 M134: plan.music null = thói quen "không nhạc": bỏ nhạc _ai/_auto, không thêm (nhạc file / tay giữ nguyên, bài học ai-video-studio-020)
-    // S26 M182: như isUserMusic của scripts/ai_edit.mjs: nhạc bạn chọn/chỉnh (_orig, file, Kho, mood khác 'tech') được giữ, nhạc khởi đầu chưa ai đụng thì AI thay
-    const userM = m => !!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech')));
-    const keepM = (TL.audio.music || []).some(m => userM(m) && m.t0 <= .05 && m.t1 >= TL.duration - .1);
-    TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || !(m._ai || m._auto || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [{ ...plan.music, t1: TL.duration }] : [])];
-    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai), ...plan.sfx.map(x => ({ ...x }))];
+    // S27 M194: nền nhạc của bảng dựng (_sheet) giữ như nhạc người dùng chọn
+    const keepM = (TL.audio.music || []).some(m => bedOf(userM, m) || bedOf(x => x._sheet != null, m));
+    TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || m._sheet != null || !(m._ai || m._auto || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [{ ...plan.music, t1: TL.duration }] : [])];
+    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || x._sheet != null), ...plan.sfx.map(x => ({ ...x }))];
     let n = 0;
     for (const e of plan.captions) {
       const c = CAP.find(x => Math.abs(x.t0 - e.t0) < .02 && x.words.length === e.n);
