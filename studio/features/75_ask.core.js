@@ -84,6 +84,9 @@
       params: { ask: { t: 'str', max: 200 } } },
     elem_variants: { what: 'Đưa 3 biến thể của element đang chọn để người dùng xem và chọn.', params: {} },
     elem_knobs: { what: 'Gợi ý 2–3 núm điều chỉnh mới cho element đang chọn.', params: {} },
+    // S27 M199: Claude dựng element riêng (box, nền box chữ, khung, nhãn…) khi thư viện không có cái hợp (72_celem.js)
+    elem_create: { what: 'Dựng MỚI một element đồ hoạ riêng theo thương hiệu (box chữ, nền chữ, khung, nhãn giá, thẻ…) rồi chèn tại playhead; 3 phương án xem bằng ảnh. ask = mô tả element bằng tiếng Việt.',
+      params: { ask: { t: 'str', max: 300 } } },
     clip_transition: { what: 'Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ).', params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: 0.1, max: 1.5 } } },
     // ---- M154: Chuẩn bị ----
     brand_ai: { what: 'Dựng bộ thương hiệu (vai trò 4 màu, cặp font, giọng văn, slogan, CTA) từ logo đã tải, tên và website. website = link nếu người dùng đưa.',
@@ -118,7 +121,7 @@
   };
   function actionsOf(scope) {
     if (!scope) return [];
-    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions']
+    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
         : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'open_panel'] : ['open_panel'])
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
@@ -187,7 +190,7 @@
     if (!act) { if (id && id !== 'answer') warnings.push(`việc "${clip(id, 24)}" không có trong phạm vi này`); id = 'answer'; act = list.find(a => a.id === 'answer'); }
     const params = act ? cleanParams(act.params, pickKey(o, ['params', 'args', 'parameters', 'arguments']), warnings) : {};
     // thiếu tham số bắt buộc → về trả lời bằng chữ, không đoán
-    const need = { elem_edit: ['ask'], transitions: ['type'], clip_transition: ['type'], open_panel: ['panel'] }[id] || [];
+    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], clip_transition: ['type'], open_panel: ['panel'] }[id] || [];
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
