@@ -538,6 +538,8 @@ async function main() {
     try { sheet = await sheetFor(dir, { tl, captions: caps, stock: !args.includes('--no-stock') }); } catch (e) { console.log('Bảng dựng: ' + String(e.message || e).slice(0, 200)); sheet = readSheet(dir); }
     if (!sheet?.rows?.length) sheet = null;
   }
+  // S27 M198: nguồn người dùng đưa ở ô Kịch bản: đoạn ghi file đã có ô (sheetFor); file chưa gắn đoạn → Claude xem khung ảnh rồi chọn đoạn
+  const sources = sheet ? await userSources(dir, tl, sheet, opt('--model', o.model || 'sonnet')) : [];
   const ctx = { tl, caps, cat, lib, o: { ...o, merge: !!sheet }, script, sheet };
   const prompt = buildPrompt(ctx);
   fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
@@ -601,6 +603,11 @@ async function main() {
     plan.script = scriptReport(scriptRequests(sheet), plan, sp.miss);
     plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + `Theo kịch bản: ${plan.script.done}/${plan.script.total} yêu cầu đã dựng.`;
   }
+  if (sources.length) { // S27 M198: nguồn bạn đưa đã dùng / chưa dùng (dòng tóm tắt của bước Dựng nhắc phần chưa dùng)
+    const { sourceReport } = await import('./script_sources.mjs');
+    plan.sources = sourceReport(sources, plan.scenes);
+    if (plan.sources.unused.length) plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + `${plan.sources.unused.length} nguồn bạn đưa chưa dùng.`;
+  }
   const out = path.resolve(dir, opt('--out', '.studio/ai_plan.json'));
   fs.writeFileSync(out, JSON.stringify(plan, null, 1));
   console.log(`plan: ${plan.pack} · ${plan.scenes.length} cảnh · ${plan.captions.length} dòng phụ đề sửa · ${plan.sfx.length} sfx · nhạc ${plan.music === undefined ? 'giữ' : musicLabel(plan.music)} · bỏ ${plan.dropped.length}`);
@@ -613,16 +620,37 @@ async function main() {
   }
   say(1, 'Xong');
 }
+// S27 M198: nguồn người dùng đưa (.studio/script_sources.json) còn trong Kho. Đánh dấu ô `mine`, gán file chưa có đoạn (Claude xem khung
+// ảnh qua Read, tối đa MAX_IMAGES ảnh; lỗi / --no-ai-sources → khớp tên với lời), ghi lại bảng dựng. Sửa `sheet` tại chỗ. → [nguồn]
+export async function userSources(dir, tl, sheet, model = 'sonnet') {
+  let SS, K; try { SS = await import('./script_sources.mjs'); K = await import('./kho_media.mjs'); } catch { return []; }
+  const ws = K.khoOf(dir, tl), abs = rel => { try { return K.resolveRel(ws, rel); } catch { return null; } };
+  const sources = SS.readSources(dir).filter(s => abs(s.rel));
+  if (!sources.length) return [];
+  SS.markMine(sheet, sources);
+  say(.1, `Xem ${sources.length} nguồn bạn đưa`);
+  const ask = args.includes('--no-ai-sources') ? null : (p, { cwd }) => askJSON(p, { model, args: ['--allowedTools', 'Read'], cwd, shape: 'object', retries: 1, timeout: 240000, timeoutMsg: 'Claude quá 4 phút chưa chọn đoạn cho nguồn bạn đưa' });
+  const r = await SS.assignSources(sheet, sources, { abs, ask, score: K.scoreRel, onP: t => say(.11, t) });
+  if (r.error) console.log('Nguồn bạn đưa: Claude chưa chọn được đoạn (' + r.error + '), khớp theo tên file');
+  if (r.assigned.length) console.log(`Nguồn bạn đưa: ${r.assigned.length}/${sources.length} file gắn vào đoạn (${r.by})`);
+  try { const { writeSheet } = await import('./script_build.mjs'); writeSheet(dir, sheet); } catch { /* bảng chỉ nhớ trong lần dựng này */ }
+  return sources;
+}
 // S27 M194: đưa media của các ô B-roll theo kịch bản vào dự án (Kho: useFromKho, thư viện, stock tải về, ảnh AI khi dấu ghi
 // `| ảnh AI` và có khoá). Ô lỗi (tải stock 429, file Kho mất…) thử lần lượt phương án kế (`alts`, không tự tạo ảnh AI) rồi b-roll động
 // khớp chữ nhất; ô có nguồn ép từ dấu (`want`) chỉ thử nguồn đó. Ô đổi nguồn được sửa trong `sheet` đang nhớ (không ghi file).
 // Lỗi không chặn lần dựng: ô đó vào báo cáo "cần xem". → { media: { [mediaKey]: {seq}|{path} }, err: { [mediaKey gốc]: lý do } }
 export async function sheetMedia(dir, tl, sheet, onP = () => {}, dynCat = []) {
   const cells = [];
-  for (const r of sheet.rows || []) if (r.t0 != null && r.spoken !== false) for (const b of r.broll || []) if (mediaKey(b)) cells.push(b);
+  const lens = new Map(); // S27 M198: độ dài đoạn của ô (cắt đoạn con của video bạn đưa)
+  for (const r of sheet.rows || []) if (r.t0 != null && r.spoken !== false) for (const b of r.broll || []) if (mediaKey(b)) { cells.push(b); lens.set(b, Math.max(1, (r.t1 ?? r.t0 + 3) - r.t0)); }
   const media = {}, err = {}, done = new Map(), vertical = (tl.height || 1920) > (tl.width || 1080);
-  let K = null, L = null, A = null, i = 0;
-  const fetchOne = async (c, q) => {
+  let K = null, L = null, A = null, SS = null, i = 0;
+  const fetchOne = async (c, q, b = {}) => {
+    if (c.src === 'kho' && b.mine && c.pick === b.pick) { // file bạn đưa: không giới hạn 30 s, video dài cắt đoạn con hợp với đoạn kịch bản
+      K ||= await import('./kho_media.mjs'); SS ||= await import('./script_sources.mjs');
+      return SS.useSource(dir, K.khoOf(dir, tl), K, c.pick, { clip: b.clip || 0, len: lens.get(b) || 4 });
+    }
     if (c.src === 'kho') { K ||= await import('./kho_media.mjs'); const it = await K.useFromKho(dir, K.khoOf(dir, tl), c.pick, { credit: 'Kho · kịch bản', maxDur: 30, why: 'kịch bản' }); return it.seq ? { seq: it.seq } : { path: it.path }; }
     if (c.src === 'lib') { L ||= await import('./broll_lib.mjs'); const it = L.load().find(x => x.id === c.pick); if (!it) throw new Error('không còn trong thư viện'); const r = L.useIn(it, dir); return typeof r === 'string' ? { path: r } : { seq: r }; }
     if (c.src === 'stock') { A ||= await import('./ai_broll.mjs'); const kind = /\.(jpe?g|png|webp)(\?|$)/i.test(c.pick) ? 'photo' : 'video'; const r = await A.fetchMedia(c.pick, dir, { kind, name: q || 'broll', dur: 3, vertical, meta: { provider: 'stock · kịch bản', url: c.pick } }); return r.seq ? { seq: r.seq } : { path: r.path }; }
@@ -645,7 +673,7 @@ export async function sheetMedia(dir, tl, sheet, onP = () => {}, dynCat = []) {
       if (c.src === 'dong') { Object.assign(b, c); ok = true; break; } // b-roll động: không cần đưa file vào dự án
       const k = mediaKey({ ...c, q: b.q });
       if (!k) continue;
-      if (!done.has(k)) try { done.set(k, { m: await fetchOne(c, b.q) }); } catch (e) { done.set(k, { err: String(e.message || e).slice(0, 120) }); }
+      if (!done.has(k)) try { done.set(k, { m: await fetchOne(c, b.q, b) }); } catch (e) { done.set(k, { err: String(e.message || e).slice(0, 120) }); }
       const d = done.get(k);
       if (d.m) { media[k] = d.m; Object.assign(b, c); ok = true; break; }
       first ||= d.err; console.log(`B-roll ${k.slice(0, 80)}: ${d.err}`);

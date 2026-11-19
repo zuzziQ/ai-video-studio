@@ -80,11 +80,14 @@ export function dynamicFor(q, catalog = [], n = 3) {
  * src: { kho(q, exclude) → [{rel, score}], lib(q, exclude) → [{id, score}], stock(q) → Promise<[{url}]>|null, dyn(q) → [{id}], ai: bool }
  */
 export async function pickBroll(q, want, src, taken = new Set()) {
-  const order = want ? [want.startsWith('tep:') ? 'tep' : want] : ['kho', 'lib', ...(src.stock ? ['stock'] : []), 'dong'];
+  // S27 M198: nguồn người dùng đưa (ô Kịch bản) trước Kho chung; `tệp <tên>` tìm trong nguồn rồi Kho (findSource, tên an toàn)
+  const order = want ? [want.startsWith('tep:') ? 'tep' : want] : ['mine', 'kho', 'lib', ...(src.stock ? ['stock'] : []), 'dong'];
   const hits = [];
   for (const s of order) {
     let got = [];
-    if (s === 'kho') got = (src.kho?.(q, taken) || []).map(x => ({ src: 'kho', id: x.rel }));
+    if (s === 'mine') got = (src.mine?.(q, taken) || []).map(x => ({ src: 'kho', id: x.rel }));
+    else if (s === 'kho') got = (src.kho?.(q, taken) || []).map(x => ({ src: 'kho', id: x.rel }));
+    else if (s === 'tep' && src.find?.(want.slice(4))) got = [{ src: 'kho', id: src.find(want.slice(4)).rel }];
     else if (s === 'tep') { const name = key(want.slice(4)); got = (src.files?.() || []).filter(x => key(x.name) === name || key(x.rel) === name || key(x.name.replace(/\.\w+$/, '')) === name).map(x => ({ src: 'kho', id: x.rel })); }
     else if (s === 'lib') got = (src.lib?.(q, taken) || []).map(x => ({ src: 'lib', id: x.id }));
     else if (s === 'stock' && src.stock) { try { got = ((await src.stock(q)) || []).filter(x => x?.url).map(x => ({ src: 'stock', id: x.url })); } catch { got = []; } }
@@ -216,11 +219,22 @@ export async function sheetSources(dir, tl = {}, o = {}) {
   let K = null, items = [];
   try { K = await import('./kho_media.mjs'); items = K.khoItems(dir, K.khoOf(dir, tl)).filter(it => ['broll', 'image'].includes(it.group) && it.kind !== 'audio'); } catch { /* chưa có Kho */ }
   const unused = items.filter(it => !it.used); // file Kho đã vào video thì không chọn lại
+  // S27 M198: nguồn người dùng đưa (.studio/script_sources.json, thường ở Nguon/ của Kho): ưu tiên trước Kho chung; dấu `| tệp …` /
+  // cột source Excel tìm trong nguồn rồi mọi video / ảnh của Kho (findSource chặn tên không an toàn)
+  let all = [], mine = [], find = null;
+  try {
+    const SS = await import('./script_sources.mjs'), list = SS.readSources(dir);
+    all = K ? K.khoItems(dir, K.khoOf(dir, tl)).filter(it => ['video', 'image'].includes(it.kind)) : [];
+    mine = list.map(s => all.find(it => it.rel === s.rel)).filter(Boolean).map(it => ({ ...it, group: 'broll' }));
+    find = name => SS.findSource(name, { sources: list, items: all });
+  } catch { /* chưa có Kho / danh sách nguồn */ }
   let L = null; try { L = await import('./broll_lib.mjs'); } catch { /* không có thư viện */ }
   let S = null; if (o.stock) try { S = await import('./ai_broll.mjs'); } catch { /* không có module stock */ }
   const src = {
     kho: (q, taken) => (K ? K.searchKho(unused, q, { n: 4, exclude: new Set([...taken].filter(x => x.startsWith('kho:')).map(x => x.slice(4))) }) : []),
-    files: () => items,
+    mine: (q, taken) => (K && mine.length ? K.searchKho(mine, q, { n: 4, exclude: new Set([...taken].filter(x => x.startsWith('kho:')).map(x => x.slice(4))) }) : []),
+    find: name => find?.(name) || null,
+    files: () => (all.length ? all : items),
     lib: (q, taken) => (L ? L.search(q, { n: 4, exclude: new Set([...taken].filter(x => x.startsWith('lib:')).map(x => x.slice(4))) }) : []),
     stock: S ? async q => (await S.search(q, { kind: 'video', n: 4 })).items : null,
     dyn: q => dynamicFor(q, dyn),
@@ -428,10 +442,14 @@ export function sheetToPlan(sheet, tl = {}, o = {}) {
       }
       const m = media[mediaKey(b)];
       if (!m) { fail(`${r.seg}:${id}`, `B-ROLL “${cut(b.q || b.pick, 40)}”`, o.mediaErr?.[mediaKey(b)] || 'chưa đưa được cảnh vào dự án', at); return; }
-      const credit = { kho: 'Kho', lib: 'Thư viện của tôi', stock: 'Stock', ai: 'Ảnh AI' }[b.src];
-      const note = b.src === 'ai' ? `ảnh AI tạo theo mô tả${full}` : `${b.src === 'stock' ? 'video stock' : `cảnh ${credit}`} “${cut(base(b.pick), 40)}”${full}`;
-      out.photos.push({ type: 'photo', mode: 'full', t0: r2(a), t1: r2(Math.min(dur, a + d)), media: m.seq ? { ...m.seq, t0: r2(a) } : m.path, kb: m.seq ? .04 : .12, kb_dir: k % 2 ? -1 : 1, credit, _ai: true,
-        ...tag(id, 'B-ROLL', b.q || b.pick, note, b.from) });
+      const credit = b.mine ? 'Nguồn bạn đưa' : { kho: 'Kho', lib: 'Thư viện của tôi', stock: 'Stock', ai: 'Ảnh AI' }[b.src];
+      const off = m.off || 0; // S27 M198: video bạn đưa dùng từ giây `off` (đoạn con Claude chọn)
+      const note = b.src === 'ai' ? `ảnh AI tạo theo mô tả${full}` : b.mine ? `file bạn đưa “${cut(base(b.pick), 40)}”${off ? ` từ giây ${r2(off)}` : ''}${full}`
+        : `${b.src === 'stock' ? 'video stock' : `cảnh ${credit}`} “${cut(base(b.pick), 40)}”${full}`;
+      const d2 = b.mine && !cover ? Math.min(Math.max(1, step - .15), 5) : d; // file bạn đưa giữ lâu hơn (≤ 5 s)
+      const t = tag(id, 'B-ROLL', b.q || b.pick, note, b.from);
+      if (b.mine) Object.assign(t._script, { mine: b.pick, file: base(b.pick) });
+      out.photos.push({ type: 'photo', mode: 'full', t0: r2(a), t1: r2(Math.min(dur, a + d2)), media: m.seq ? { ...m.seq, t0: r2(a - off) } : m.path, kb: m.seq ? .04 : .12, kb_dir: k % 2 ? -1 : 1, credit, _ai: true, ...t });
     });
     if (cover && !br.length && r.aroll.from !== 'auto') fail(`${r.seg}:aroll`, 'A-ROLL bỏ', 'không có cảnh minh hoạ để phủ đoạn', at);
     (r.sfx || []).forEach((x, i) => {
