@@ -63,8 +63,12 @@
   #wf-steps button { height: 32px; padding: 0 12px 0 8px; gap: 8px; background: transparent; border-color: transparent; color: var(--tx2); font-size: 12px; font-weight: 600; }
   #wf-steps button b { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--bg3); border: 1px solid var(--line2); color: var(--tx2); }
   #wf-steps button:hover { background: var(--bg3); color: var(--tx); }
-  #wf-steps button.on { background: var(--acc-soft); color: var(--tx); border-color: var(--acc-line); }
-  #wf-steps button.on b { background: var(--acc); border-color: var(--acc); color: var(--bg0); }
+  /* bước đang chọn theo DESIGN.md quy tắc 2: số là nền đặc --color-accent + chữ --color-accent-fg (trước là navy-300 + chữ tối,
+     trùng màu với vòng điểm nên vòng biến mất); nhãn và viền dùng --color-accent-text */
+  #wf-steps button.on { background: rgb(var(--color-accent-soft) / 0.24); color: rgb(var(--color-fg)); border-color: rgb(var(--color-accent-text) / 0.55); }
+  #wf-steps button.on span { color: rgb(var(--color-accent-text-strong)); }
+  #wf-steps button.on b { background: rgb(var(--color-accent)); border-color: rgb(var(--color-accent-text)); color: rgb(var(--color-accent-fg)); font-weight: 700; box-shadow: var(--shadow-accent); }
+  #wf-steps button:focus-visible { outline: 2px solid rgb(var(--color-focus)); outline-offset: 2px; }
   #wf-steps .ln { width: 12px; height: 1px; background: var(--line3); flex: none; }
   #wf-morebtn.on { background: var(--bg3); color: var(--tx); }
   #ap-topbtn.on { background: var(--acc-soft); border-color: var(--acc-line); color: var(--tx); }
@@ -232,7 +236,7 @@
       const m = document.createElement('button'); m.dataset.wf = 'more'; m.title = 'Công cụ khác của bước này';
       m.innerHTML = `<i class="ti ti-dots-circle-horizontal"></i><span>Thêm…</span>`; rail.appendChild(m);
     }
-    for (const b of nav.querySelectorAll('[data-step]')) b.classList.toggle('on', b.dataset.step === step);
+    for (const b of nav.querySelectorAll('[data-step]')) { const on = b.dataset.step === step; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); }
     $('#ap-topbtn')?.classList.toggle('on', step === 'queue');
     renderTabs();
   }
