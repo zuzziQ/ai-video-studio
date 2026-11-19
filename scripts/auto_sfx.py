@@ -624,6 +624,9 @@ def music_auto(caps, words, audio):
     except Exception:
         mcat = {}
     music = audio.get("music", []) or []
+    # S27 M195: nền nhạc theo kịch bản (khúc _sheet của bảng dựng) giữ nguyên, không chia lại theo lời nghe được
+    if any(m.get("_sheet") is not None and not m.get("hidden") for m in music):
+        return "giữ nhạc theo kịch bản"
     if any(m.get("file") for m in music if not m.get("_auto")):
         return "bỏ qua nhạc tự động (đã có nhạc riêng của bạn)"
     # S26 M182: nền nhạc người dùng đã chỉnh tay (_orig do Studio ghi khi sửa mood / gain, kể cả trên nền _auto cũ): giữ nguyên

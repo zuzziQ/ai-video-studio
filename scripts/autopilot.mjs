@@ -366,7 +366,10 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
         notes.push(`SFX mức ${prof.sound}${musicAuto ? ' + nhạc theo đoạn' : aiBed && prof.music === 'auto' ? ' + nhạc AI chọn' : ''}`);
       }
       const { tl, caps, capFile } = loadTL(dir); tl.audio = tl.audio || {};
-      if (prof.music === 'off') { tl.audio.music = []; notes.push('không nhạc'); }
+      // S27 M195: nền nhạc theo kịch bản (_sheet) là nguồn tự sinh duy nhất được giữ: không chồng nhạc của phong cách lên (bài học ai-video-studio-020)
+      const sheetBed = prof.music !== 'off' && (tl.audio.music || []).some(m => m._sheet != null && !m.hidden);
+      if (sheetBed) notes.push('giữ nhạc theo kịch bản');
+      else if (prof.music === 'off') { tl.audio.music = []; notes.push('không nhạc'); }
       else if (own) { tl.audio.music = [...(tl.audio.music || []).filter(m => !m._ai && !m._auto), { t0: 0, t1: tl.duration, file: own.file, kho: own.kho, title: own.title, gain: -20, _auto: true }]; notes.push('nhạc thương hiệu: ' + own.title); }
       else if (isKhoMusic(prof.music)) { /* Kho chưa có nhạc: giữ nhạc tự chọn ở trên */ }
       else if (prof.music && prof.music !== 'auto') { tl.audio.music = [{ t0: 0, t1: tl.duration, mood: prof.music, gain: -20, _auto: true }]; notes.push('nhạc ' + prof.music); }
