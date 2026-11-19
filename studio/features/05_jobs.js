@@ -1,18 +1,43 @@
-// Khay việc (S26 M185): xuất, AI dựng, kiểm tra & áp gợi ý, tạo dự án mới chạy nền trong thẻ nổi ở góc dưới phải, không còn hộp
-// giữa màn hình chặn thao tác. Mỗi việc một thẻ: tên, một dòng bước (log đã làm sạch, tải mô hình ghi "Đang tải mô hình (176 MB, lần đầu) 14%"),
-// thanh %, Dừng. Xong thì thẻ đổi thành kết quả có nút + toast; lỗi thì thẻ đỏ có "Xem log". Thu gọn thành chip. Lõi thuần: 05_jobs.core.js.
+// Khay việc (S26 M185): xuất, AI dựng, kiểm tra & áp gợi ý, tạo dự án mới chạy nền, không còn hộp giữa màn hình chặn thao tác.
+// S26 M187: nút chuông trên thanh đầu (số việc, vòng %, đỏ khi lỗi), bấm thì xổ danh sách thẻ; không còn khay nổi che timeline / cột phải.
+// Mỗi việc một thẻ: tên, một dòng bước (log đã làm sạch, tải mô hình ghi "Đang tải mô hình (176 MB, lần đầu) 14%"), thanh %, Dừng.
+// Xong thì thẻ đổi thành kết quả có nút + toast; lỗi thì thẻ đỏ có "Xem log" và danh sách tự xổ một lần. Lõi thuần: 05_jobs.core.js.
 // Server chỉ chạy một việc một lúc (GET /api/job, POST /api/job/cancel): theo dõi bằng bộ đếm riêng, không giành Studio.pollJob dùng chung.
 // Việc đặt lock (AI dựng, áp gợi ý QC ghi lại timeline.json lúc xong): trong lúc chạy khoá phần sửa timeline (body.jobs-lock + dải báo
 // trên khung), tạm dừng tự lưu (studio.js autoBusy); thanh trái / thư viện / trang chủ / panel khác vẫn dùng được.
 // Studio.jobs: { track({kind, title, lock, note, onDone(j) → {text, acts, toast}, onFail(j) → {text, acts}}) → Promise<{ok, job}>,
-//   refuse(r) (toast "Đang chạy: … (xem khay việc)"), locked(), running(), autopilot(state), show(), log(job) }
+//   refuse(r) (toast "Đang chạy: … (bấm chuông việc nền)"), locked(), running(), autopilot(state), show(), log(job) }
 (() => {
   const S = window.Studio, J = window.JobsCore, esc = S.esc;
   const st = document.createElement('style');
-  st.textContent = `#avs-jobs { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 44; /* dưới #modal (50) */
-      width: min(340px, calc(100vw - 2 * var(--space-4))); display: flex; flex-direction: column; gap: var(--space-2); align-items: stretch; }
+  st.textContent = `#avs-jobs { position: relative; flex: none; display: inline-flex; }
     #avs-jobs[hidden] { display: none; }
-    .jt-card, .jt-q, .jt-chip { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); color: rgb(var(--color-fg)); }
+    /* S26 M187: trang chủ (#onb-home, z 40) che thanh đầu: nút nổi ở góc trên phải, trên trang chủ, dưới #modal (50) */
+    #avs-jobs.jt-float { position: fixed; top: var(--space-2); right: var(--space-4); z-index: 45; }
+    .jt-bell { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); height: var(--h-md); padding: 0 var(--space-2); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+    .jt-float .jt-bell { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-pill); box-shadow: var(--shadow-raised); }
+    .jt-ic { position: relative; display: inline-flex; align-items: center; justify-content: center; width: var(--space-6); height: var(--space-6); flex: none; }
+    .jt-ic > .ti { font-size: var(--text-md); }
+    .jt-bell.is-run .jt-ic > .ti { color: rgb(var(--color-accent-text)); }
+    .jt-bell.is-err { color: rgb(var(--color-danger-text)); border-color: rgb(var(--color-danger) / .6); background: rgb(var(--color-danger) / .1); }
+    .jt-bell.is-ok .jt-ic > .ti { color: rgb(var(--color-success-text)); }
+    .jt-ring { position: absolute; inset: 0; border-radius: var(--radius-pill); pointer-events: none;
+      background: conic-gradient(rgb(var(--color-accent-text)) var(--w, 0%), rgb(var(--color-line)) 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0); mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0); } /* design-token-ok: mặt nạ, không phải màu */
+    .jt-bell:not(.is-run) .jt-ring, .jt-bell:not(.is-run) .jt-bp { display: none; }
+    .jt-bp { font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-accent-text)); }
+    .jt-badge { position: absolute; top: 0; right: 0; min-width: var(--space-4); height: var(--space-4); padding: 0 var(--space-1); border-radius: var(--radius-pill); display: inline-flex; align-items: center; justify-content: center;
+      font-size: var(--text-2xs); font-weight: 600; line-height: 1; background: rgb(var(--color-accent)); color: rgb(var(--color-accent-fg)); transform: translate(30%, -20%); }
+    .jt-bell.is-err .jt-badge { background: rgb(var(--color-danger)); }
+    .jt-bell.jt-ping { animation: jt-ping .6s 2; } @keyframes jt-ping { 50% { transform: scale(1.12); } }
+    @media (prefers-reduced-motion: reduce) { .jt-bell.jt-ping { animation: none; } }
+    @media (max-width: 1280px) { .jt-bp { display: none !important; } }
+    /* #top đã kín ở 1280 px (scrollWidth = 1280 khi chưa có chuông): chuông hiện thì công tắc mức chỉ còn biểu tượng (01_workflow làm vậy ở ≤ 1180) */
+    @media (max-width: 1400px) { #top:has(> #avs-jobs:not([hidden])) #wf-lvbar button span { display: none; } }
+    .jt-pop { position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 46; width: min(360px, calc(100vw - 2 * var(--space-4))); max-height: min(70vh, 560px); overflow-y: auto;
+      display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
+    .jt-pop[hidden] { display: none; }
+    .jt-empty { padding: var(--space-3); font-size: var(--text-xs); color: rgb(var(--color-fg-muted)); text-align: center; }
+    .jt-card, .jt-q { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-card); color: rgb(var(--color-fg)); }
     .jt-card { padding: var(--space-2) var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
     .jt-card.is-ok { border-color: rgb(var(--color-success) / .5); }
     .jt-card.is-err { border-color: rgb(var(--color-danger) / .6); background: rgb(var(--color-danger) / .1); }
@@ -33,10 +58,6 @@
     .jt-q { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-2) var(--space-3); font-size: var(--text-2xs); text-align: left; cursor: pointer; min-width: 0; }
     .jt-q:hover { background: rgb(var(--color-surface-hover)); } .jt-q > .ti { flex: none; color: rgb(var(--color-accent-text)); }
     .jt-q span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .jt-chip { display: inline-flex; align-items: center; gap: var(--space-2); align-self: flex-end; max-width: 100%; height: var(--h-sm); padding: 0 var(--space-3); font-size: var(--text-xs); border-radius: var(--radius-pill); cursor: pointer; }
-    .jt-chip > .ti { color: rgb(var(--color-accent-text)); } .jt-chip.is-ok > .ti { color: rgb(var(--color-success-text)); } .jt-chip.is-err > .ti { color: rgb(var(--color-danger-text)); }
-    .jt-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .jt-min { align-self: flex-end; height: var(--space-5); padding: 0 var(--space-2); font-size: var(--text-2xs); gap: var(--space-1); background: transparent; border-color: transparent; color: rgb(var(--color-fg-subtle)); }
     .jt-lock { display: flex; align-items: center; gap: var(--space-2); flex: none; padding: var(--space-1) var(--space-3); font-size: var(--text-xs); color: rgb(var(--color-warning-text)); background: rgb(var(--color-warning) / .08); border-bottom: 1px solid rgb(var(--color-warning) / .4); }
     .jt-lock[hidden] { display: none; }
     .jt-lock span { min-width: 0; overflow-wrap: anywhere; }
@@ -51,18 +72,45 @@
   document.head.appendChild(st);
 
   const cards = [], LOCK_SEL = '#tracks, #tllabels, #tlhead .tools, #overlay, #right, #undo, #redo, #save';
-  let seq = 0, mini = false, ap = { items: [], line: '' }, host = null, lockEl = null, wasLocked = false;
+  // S26 M187: khay nổi che timeline và cột phải → nút chuông trên thanh đầu (#top, trước Lưu); bấm thì xổ danh sách thẻ. Trang chủ
+  // (#onb-home, chưa mở dự án hoặc bấm về trang chủ) che cả thanh đầu: nút chuyển ra nổi ở góc trên phải (jt-float) tới khi trang chủ đóng.
+  let seq = 0, isOpen = false, ap = { items: [], line: '' }, host = null, btn = null, pop = null, lockEl = null, wasLocked = false;
   const cl = n => document.getElementById(n);
   const root = () => {
-    if (!host) { host = document.createElement('div'); host.id = 'avs-jobs'; host.setAttribute('role', 'region'); host.setAttribute('aria-label', 'Khay việc'); host.hidden = true; document.body.appendChild(host); host.addEventListener('click', onClick); }
+    if (!host) {
+      host = document.createElement('span'); host.id = 'avs-jobs'; host.hidden = true;
+      host.innerHTML = `<button type="button" class="ghost jt-bell" aria-haspopup="true" aria-expanded="false" aria-controls="avs-jobs-pop" title="Việc nền">`
+        + '<span class="jt-ic"><i class="ti ti-bell"></i><span class="jt-ring"></span></span><span class="jt-bp"></span><span class="jt-badge"></span></button>'
+        + '<div class="jt-pop" id="avs-jobs-pop" role="region" aria-label="Việc nền" hidden></div>';
+      btn = host.firstElementChild; pop = host.lastElementChild;
+      btn.addEventListener('click', () => setOpen(!isOpen));
+      pop.addEventListener('click', onClick);
+      place(); new MutationObserver(place).observe(document.body, { childList: true });
+    }
     return host;
   };
+  function place() {
+    const top = cl('top'), float = !!cl('onb-home') || !top;
+    if (float) { host.classList.add('jt-float'); if (host.parentNode !== document.body) document.body.appendChild(host); return; }
+    host.classList.remove('jt-float');
+    if (host.parentNode !== top) { const ref = [cl('save'), cl('export')].find(x => x?.parentNode === top); top.insertBefore(host, ref || null); }
+  }
+  function setOpen(v) {
+    root(); isOpen = !!v && !host.hidden;
+    pop.hidden = !isOpen; btn.setAttribute('aria-expanded', String(isOpen));
+    if (isOpen) renderPop();
+  }
+  // bấm ra ngoài hoặc Esc: đóng danh sách
+  document.addEventListener('pointerdown', e => { if (isOpen && !host.contains(e.target)) setOpen(false); }, true);
+  document.addEventListener('keydown', e => { if (isOpen && e.key === 'Escape') { e.stopPropagation(); setOpen(false); btn.focus(); } }, true);
+  const ping = () => { if (!btn || host.hidden) return; btn.classList.remove('jt-ping'); void btn.offsetWidth; btn.classList.add('jt-ping'); };
   const phase = c => c.phase || J.phaseOf(c.job?.state);
   const running = () => cards.find(c => phase(c) === 'run') || null;
   const locked = () => J.locked(cards);
   const ICON = { run: 'ti-loader-2 spin', ok: 'ti-circle-check', err: 'ti-alert-triangle', stop: 'ti-player-stop' };
   const setW = (el, p) => el?.style.setProperty('--w', p + '%');
   const openAp = () => document.querySelector('#rail [data-p="autopilot"]')?.click();
+  const BELL_IC = { run: 'ti-bell-ringing', err: 'ti-bell-exclamation' };
 
   function syncLock() {
     const on = locked();
@@ -92,34 +140,33 @@
     const pc = el.querySelector('.jt-pct'); if (pc) pc.textContent = v.pct + '%';
     setW(el.querySelector('.jt-bar i'), v.pct);
   }
-  function chipLine() {
-    const r = running(), n = cards.length + (ap.line ? 1 : 0);
-    if (r) { const v = J.view(r); return [`ti ${ICON.run}`, `${r.title} ${v.pct}%${n > 1 ? ` · +${n - 1}` : ''}`, '']; }
-    const bad = cards.find(c => phase(c) === 'err');
-    if (bad) return ['ti ti-alert-triangle', bad.title + ': lỗi', 'is-err'];
-    if (cards.length) return ['ti ti-circle-check', `${cards[cards.length - 1].title}: xong`, 'is-ok'];
-    return ['ti ti-rocket', ap.line, ''];
+  // nút chuông: số việc, vòng % + "42%" khi đang chạy, đỏ khi có việc lỗi (JobsCore.bell). Không dựng lại danh sách: nút Dừng không bị nuốt
+  function paintBell() {
+    const v = J.bell(cards, ap.line);
+    root().hidden = !v.n; if (!v.n) { if (isOpen) setOpen(false); return v; }
+    for (const t of ['run', 'err', 'ok']) btn.classList.toggle('is-' + t, v.tone === t);
+    btn.title = v.label; btn.setAttribute('aria-label', v.label);
+    btn.querySelector('.jt-ic > .ti').className = `ti ${BELL_IC[v.tone] || 'ti-bell'}`;
+    btn.querySelector('.jt-badge').textContent = v.n;
+    btn.querySelector('.jt-bp').textContent = v.tone === 'run' ? v.pct + '%' : '';
+    setW(btn.querySelector('.jt-ring'), v.pct);
+    return v;
   }
-  function render() {
-    const h = root(), n = cards.length + (ap.line ? 1 : 0);
-    h.hidden = !n; if (!n) return;
-    if (mini) {
-      const [ic, tx, tone] = chipLine();
-      h.innerHTML = `<button class="jt-chip ${tone}" data-a="max" title="Mở khay việc" aria-label="Mở khay việc: ${esc(tx)}"><i class="${ic}"></i><span>${esc(tx)}</span></button>`;
-      return;
-    }
-    h.innerHTML = `<button class="ui-btn ui-btn--ghost ui-btn--sm jt-min" data-a="min" title="Thu gọn khay việc"><i class="ti ti-chevron-down"></i> Thu gọn</button>`
-      + cards.map(cardHtml).join('')
-      + (ap.line ? `<button class="jt-q" data-a="ap" title="Mở panel Tự lái"><i class="ti ti-rocket"></i><span>${esc(ap.line)}</span><i class="ti ti-chevron-right"></i></button>` : '');
+  function renderPop() {
+    pop.innerHTML = (cards.map(cardHtml).join('')
+      + (ap.line ? `<button class="jt-q" data-a="ap" title="Mở panel Tự lái"><i class="ti ti-rocket"></i><span>${esc(ap.line)}</span><i class="ti ti-chevron-right"></i></button>` : ''))
+      || '<div class="jt-empty">Không có việc nào</div>';
     for (const c of cards) patch(c);
   }
+  function render() { paintBell(); if (isOpen) renderPop(); }
   function onClick(e) {
     const b = e.target.closest('[data-a]'); if (!b) return;
     const a = b.dataset.a, id = b.closest('[data-id]')?.dataset.id, c = cards.find(x => x.id === id);
-    if (a === 'min') { mini = true; render(); } else if (a === 'max') { mini = false; render(); } else if (a === 'ap') openAp();
+    if (a === 'ap') { setOpen(false); openAp(); }
     else if (a === 'stop') { b.disabled = true; b.textContent = 'Đang dừng…'; S.api('/api/job/cancel', {}).catch(() => {}); }
     else if (a === 'close' && c) { cards.splice(cards.indexOf(c), 1); render(); }
-    else if (a === 'act' && c) { const k = c.acts?.[+b.dataset.k]; if (k) Promise.resolve(k.on?.(c)).then(r => { if (r === 'close') { cards.splice(cards.indexOf(c), 1); render(); } }); }
+    // nút kết quả: đóng danh sách trước để chỗ được mở (panel, hộp) không bị che
+    else if (a === 'act' && c) { const k = c.acts?.[+b.dataset.k]; if (k) { setOpen(false); Promise.resolve(k.on?.(c)).then(r => { if (r === 'close') { cards.splice(cards.indexOf(c), 1); render(); } }); } }
   }
   // "Xem log": hộp do người dùng bấm mới mở, log đã làm sạch
   function showLog(j) {
@@ -131,11 +178,11 @@
   function track(o = {}) {
     const c = { id: 'j' + (++seq), kind: o.kind || 'job', title: o.title || 'Việc nền', lock: !!o.lock, note: o.note || '', phase: 'run', job: { state: 'running', step: 'Bắt đầu', progress: 0, log: '' }, acts: [], result: null };
     const fin = cards.filter(x => phase(x) !== 'run'); while (fin.length >= 3) cards.splice(cards.indexOf(fin.shift()), 1); // giữ tối đa 3 thẻ đã xong
-    cards.push(c); mini = false; syncLock(); render();
+    cards.push(c); syncLock(); render(); ping(); // bắt đầu việc: không tự xổ danh sách, chỉ nút đổi trạng thái
     return new Promise(done => {
       const tick = async () => {
         let j = null; try { j = await S.api('/api/job'); } catch { /* mất kết nối thoáng qua: thử lại */ }
-        if (!j || j.state === 'running') { if (j) { c.job = j; patch(c); if (mini) render(); } return setTimeout(tick, 700); }
+        if (!j || j.state === 'running') { if (j) { c.job = j; patch(c); paintBell(); } return setTimeout(tick, 700); }
         c.job = j; c.phase = J.phaseOf(j.state); syncLock(); // mở khoá trước onDone: onDone còn gọi saveNow()
         let res = null;
         try {
@@ -149,8 +196,7 @@
         if (c.phase === 'ok') S.toast(res?.toast || `${c.title}: xong`);
         else if (c.phase === 'err') S.toast(`${c.title}: chưa xong`);
         else S.toast(`${c.title}: ${J.view(c).line.toLowerCase()}`);
-        // không còn việc chạy: 8 s sau thu khay thành chip để không che timeline (chuột đang ở trên khay hay việc lỗi thì giữ)
-        if (c.phase !== 'err') setTimeout(() => { if (!running() && !mini && !host?.matches(':hover') && !cards.some(x => phase(x) === 'err')) { mini = true; render(); } }, 8000);
+        if (c.phase === 'err') setOpen(true); // việc lỗi: tự xổ danh sách một lần (thẻ đỏ + Xem log); xong thì chỉ toast
         done({ ok: c.phase === 'ok', job: j, result: res });
       };
       setTimeout(tick, 700);
@@ -160,7 +206,7 @@
   function refuse(r) {
     const run = running();
     S.toast(J.busyMessage(run?.title || J.queueRunning(ap.items) || ''));
-    if (mini) { mini = false; render(); }
+    ping();
     return r;
   }
   // 15_autopilot.js gọi mỗi lần đọc /api/autopilot/state: dòng tóm tắt hàng đợi trong khay
@@ -197,10 +243,20 @@
   // chạy cả khi chưa mở dự án (boot không gọi onReady): tạo dự án từ video kéo vào app, hay tạo dự án mới rồi tải lại trang
   if (document.readyState === 'complete') setTimeout(resume, 900); else addEventListener('load', () => setTimeout(resume, 900), { once: true });
 
-  // nút kết quả "Xem …" của thẻ: mở panel theo id (S.addPanel), qua bước quy trình nếu panel không nằm trên thanh trái
-  const open = id => (typeof window.openPanel === 'function' ? window.openPanel(id) : S.workflow?.focus?.(id));
+  // nút kết quả "Xem …" của thẻ: mở panel theo id (S.addPanel). S26 M187: đi qua Studio.workflow.focus (đổi bước quy trình, nhóm có tab
+  // thì mở đúng tab, 78_cols bọc để mở ngăn thư viện). openPanel trần chỉ đổi panel: ở Cơ bản thư viện là ngăn trượt đang đóng
+  // (body[data-lib="flyout"] #lib visibility: hidden), ở Chuyên nghiệp có thể đang gấp ([), nên bấm "Xem lời thoại" trông như không chạy.
+  // Panel chỉ có ở Chuyên nghiệp (vd. Làm sạch lời nói) mà đang ở Cơ bản: focus sẽ đổi cả giao diện sang Chuyên nghiệp; thanh trái vẫn
+  // hiện panel đang mở ở Cơ bản nên mở thẳng rồi mở ngăn, giữ mức người dùng đã chọn.
+  const open = id => {
+    const wf = S.workflow;
+    if (wf?.focus && !wf.hidden?.(id)) return wf.focus(id);
+    if (typeof window.openPanel === 'function') window.openPanel(id);
+    S.cols?.open();
+    if (S.layout?.get().foldLib) S.layout.set('foldLib', false);
+  };
 
-  S.jobs = { exportNote: J.exportNote, track, start, refuse, resumable, open, locked, running: () => running()?.title || '', autopilot, show: () => { mini = false; render(); }, log: showLog, cards: () => cards.slice() };
+  S.jobs = { exportNote: J.exportNote, track, start, refuse, resumable, open, locked, running: () => running()?.title || '', autopilot, show: () => setOpen(true), log: showLog, cards: () => cards.slice() };
   // tạo dự án mới (studio.js): trình chỉnh sửa hiện chỗ chờ, trang chủ và Tự lái vẫn dùng được
   if (!cl('np-wait')) { const w = document.createElement('div'); w.id = 'np-wait'; w.setAttribute('role', 'status'); w.innerHTML = '<i class="ti ti-loader-2 spin"></i><b>Đang tạo dự án mới…</b><span>Xong sẽ tự mở. Trang chủ và Tự lái vẫn dùng được trong lúc chờ.</span>'; (cl('center') || document.body).appendChild(w); }
 })();

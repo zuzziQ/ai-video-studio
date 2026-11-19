@@ -123,7 +123,7 @@
   }
   // S26 M186: việc dài (tìm khoảnh khắc hay, video từ chủ đề) chạy nền trong khay việc, không hộp giữa màn hình. Không khoá timeline:
   // kết quả là các dự án mới nằm cạnh, dự án đang mở không bị ghi. Xong thì thẻ có "Xem các clip" (mở lại panel này).
-  const view = () => { if (document.querySelector('#rail .on')?.dataset.p !== 'longform') Studio.jobs.open('longform'); else render(); };
+  const view = () => Studio.jobs.open('longform'); // M187: luôn qua jobs.open (mở cả ngăn thư viện); panel tự vẽ lại theo S.tab
   async function highlightsDone(j, dir) {
     S.dir = j.out?.dir || dir || S.dir; LSset('dir', S.dir);
     await refresh(); const n = S.list?.length || 0;

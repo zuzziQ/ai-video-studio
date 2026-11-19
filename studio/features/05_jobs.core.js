@@ -79,7 +79,7 @@
   const locked = cards => cards.some(c => c.lock && (c.phase || phaseOf(c.job?.state)) === 'run');
   const lockTitle = cards => (cards.find(c => c.lock && (c.phase || phaseOf(c.job?.state)) === 'run') || {}).title || '';
   // Việc thứ hai khi đang có việc → toast thay hộp lỗi
-  const busyMessage = name => `Đang chạy: ${name || 'một việc khác'} (xem khay việc)`;
+  const busyMessage = name => `Đang chạy: ${name || 'một việc khác'} (bấm chuông việc nền)`;
   const exportNote = 'Đang xuất bản lúc bấm Xuất: sửa tiếp sẽ vào lần xuất sau';
 
   // Dòng tóm tắt hàng đợi Tự lái từ /api/autopilot/state (items: {state, title, progress}); rỗng nếu hàng đợi trống
@@ -106,7 +106,19 @@
   // Lúc khởi động (GET /api/job): việc đang chạy mà khay chưa có thẻ thì nhận lại; loại có màn riêng hay đã xong thì thôi
   const resumeOf = j => (j && j.state === 'running' ? kindInfo(j.kind) : null);
 
-  const T = { cleanLog, download, lastDownload, stepLine, pct, sizeLabel, phaseOf, view, locked, lockTitle, busyMessage, exportNote, queueLine, queueRunning, isNoise, KINDS, kindInfo, resumeOf };
+  // S26 M187: nút chuông trên thanh đầu. → { n: số việc (thẻ + dòng Tự lái), tone: run | err | ok | '', pct: % việc đang chạy, label }
+  // Đang chạy thắng lỗi (vòng % vẫn hiện), lỗi thắng xong; n = 0 thì giấu nút.
+  function bell(cards, apLine) {
+    const list = Array.isArray(cards) ? cards : [], ph = c => c.phase || phaseOf(c.job?.state);
+    const run = list.find(c => ph(c) === 'run'), bad = list.find(c => ph(c) === 'err'), last = list[list.length - 1];
+    const n = list.length + (apLine ? 1 : 0);
+    const tone = run ? 'run' : bad ? 'err' : last && ph(last) === 'ok' ? 'ok' : '';
+    const p = run ? pct(run.job) : 0;
+    const what = run ? `${run.title} ${p}%` : bad ? `${bad.title}: lỗi` : last ? `${last.title}: ${view(last).line}` : apLine || '';
+    return { n, tone, pct: p, label: n ? `Việc nền (${n}) · ${what}` : 'Việc nền' };
+  }
+
+  const T = { bell, cleanLog, download, lastDownload, stepLine, pct, sizeLabel, phaseOf, view, locked, lockTitle, busyMessage, exportNote, queueLine, queueRunning, isNoise, KINDS, kindInfo, resumeOf };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.JobsCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

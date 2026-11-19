@@ -187,7 +187,7 @@
     try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này, không chặn */ }
     if (panel === 'wf-aihelp') renderAi();
     const n = (plan.scenes || plan.graphics || []).length;
-    return { text: 'Đã dựng xong' + (n ? ` · ${n} graphic` : '') + '. Sửa được trên timeline; Hoàn tác trả về bản trước.', toast: 'AI dựng xong: bấm “Xem kết quả” ở khay việc',
+    return { text: 'Đã dựng xong' + (n ? ` · ${n} graphic` : '') + '. Sửa được trên timeline; Hoàn tác trả về bản trước.', toast: 'AI dựng xong: bấm “Xem kết quả” ở chuông việc nền',
       acts: [{ label: 'Xem kết quả', icon: 'ti-eye', primary: true, on: () => showResult(plan, af ? (out || { error: true }) : null) },
         { label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác bản dựng AI'); if (panel === 'wf-aihelp') renderAi(); return 'close'; } }] };
   }
@@ -389,8 +389,8 @@
     if (res.error) { fl = null; renderAi(); return { error: true, text: 'Lỗi dò: ' + res.error }; }
     fl = res; flSel = new Set(res.cuts.map((c, i) => (c.conf >= .6 ? i : -1)).filter(i => i >= 0)); renderAi();
     const n = res.cuts.length;
-    return { text: n ? `Tìm thấy ${n} chỗ nên cắt` : 'Không thấy lỗi nói nào', toast: n ? `Dò lỗi nói xong: ${n} chỗ · bấm “Xem chỗ cắt” ở khay việc` : 'Dò lỗi nói xong: không thấy lỗi nói nào',
-      acts: n ? [{ label: 'Xem chỗ cắt', icon: 'ti-scissors', primary: true, on: () => { if (panel !== 'ai') openPanel('ai'); else renderAi(); } }] : [] };
+    return { text: n ? `Tìm thấy ${n} chỗ nên cắt` : 'Không thấy lỗi nói nào', toast: n ? `Dò lỗi nói xong: ${n} chỗ · bấm chuông việc nền ở thanh trên` : 'Dò lỗi nói xong: không thấy lỗi nói nào',
+      acts: n ? [{ label: 'Xem chỗ cắt', icon: 'ti-scissors', primary: true, on: () => S.jobs.open('ai') }] : [] };
   }
   S.jobs.resumable('fillers', () => { flBusy = true; return { title: 'Dò lỗi nói (Claude)', onDone: fillersDone, onFail: fillersFail }; });
   function cutSelected() {
