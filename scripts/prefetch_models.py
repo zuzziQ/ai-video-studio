@@ -1,8 +1,8 @@
 """Tải sẵn mô hình nặng để lần đầu dùng tính năng không phải chờ (ROADMAP S15 M117).
 
 usage: python -I scripts/prefetch_models.py [--model large-v3] [--only whisper|rembg] [--list]
-  Không tham số: tải mọi mô hình trong scripts/models.json (whisper qua faster_whisper.download_model, cache Hugging Face
-  mặc định; rembg qua rembg.new_session, thư mục của rembg). Đã có thì bỏ qua nhanh. In "▸ …" cho từng bước
+  Không tham số: tải mọi mô hình trong scripts/models.json (whisper qua faster_whisper.download_model, cache
+  model_cache.hf_cache(): AVS_MODEL_CACHE, không theo HOME giả; rembg qua rembg.new_session, thư mục của rembg). Đã có thì bỏ qua nhanh. In "▸ …" cho từng bước
   (Studio đưa lên thanh tiến trình). Gọi bởi install.ps1 / scripts/setup.sh và nút "Cài" của màn Kiểm tra máy.
   --list: in danh sách (JSON), không tải, không import thư viện nặng.
 Mã thoát: 0 khi tải đủ, 1 khi có mô hình lỗi (mạng…): tính năng vẫn tự tải khi dùng lần đầu.
@@ -31,7 +31,9 @@ def pick(models, name=None, only=None):
 def fetch(m):
     if m["kind"] == "whisper":
         from faster_whisper import download_model
-        download_model(m["name"])
+        sys.path.insert(0, HERE)
+        from model_cache import hf_cache
+        download_model(m["name"], cache_dir=hf_cache())
     else:
         from rembg import new_session
         new_session(m["name"])
