@@ -231,41 +231,25 @@
   // S26 M182: như isUserMusic của scripts/ai_edit.mjs: nhạc bạn chọn/chỉnh (_orig, file, Kho, mood khác 'tech') được giữ, nhạc khởi đầu chưa ai đụng thì AI thay
   const userM = m => !!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech')));
   const bedOf = (f, m) => f(m) && m.t0 <= .05 && m.t1 >= TL.duration - .1;
-  // S27 M194: như applyPlan / applySheet của scripts/ai_edit.mjs (scripts/tests/s27_m194.test.mjs so hai bản trên cùng đầu vào).
-  // Mục của bảng dựng (_sheet) AI dựng giữ; kế hoạch bảng dựng (plan.sheet) không đổi gói / phụ đề / tiêu đề, chỉ thay mục _sheet cũ
-  // chưa sửa tay và cảnh AI / Tự động chồng giờ cảnh mới; plan.music undefined = giữ nhạc.
-  function applySheet(plan, o = {}) {
-    if (!o.noUndo) S.pushUndo();
-    const span = (plan.scenes || []).filter(s => !s._base);
-    const old = s => s._sheet != null && !s._orig;
-    const hit = s => (s._ai || s._auto) && !s._orig && !s._base && !s._recipe && s._sheet == null && span.some(x => x.t0 < s.t1 - .05 && x.t1 > s.t0 + .05);
-    const mineS = new Set((TL.scenes || []).filter(s => s._sheet != null && s._orig).map(s => `${s._sheet}|${s.type}`));
-    const mineX = new Set((TL.audio?.sfx || []).filter(x => x._sheet != null && x._orig).map(x => `${x._sheet}|${x.name}`));
-    TL.scenes = [...(TL.scenes || []).filter(s => !old(s) && !hit(s)), ...JSON.parse(JSON.stringify(plan.scenes || [])).filter(s => !mineS.has(`${s._sheet}|${s.type}`))];
-    TL.audio = TL.audio || {};
-    if (plan.music !== undefined) {
-      const keepM = (TL.audio.music || []).some(m => bedOf(userM, m));
-      TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [{ ...plan.music, t1: TL.duration }] : [])];
-    }
-    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !(x._sheet != null && !x._orig)), ...(plan.sfx || []).filter(x => !mineX.has(`${x._sheet}|${x.name}`)).map(x => ({ ...x }))];
-    plan._applied = 0;
-    S.changed(true);
-  }
+  // S27 M194: như applyPlan của scripts/ai_edit.mjs (scripts/tests/s27_m194.test.mjs so hai bản trên cùng đầu vào). Kế hoạch theo
+  // kịch bản (plan.script) thay cả mục _sheet cũ chưa sửa tay; mục _sheet bạn sửa tay giữ, mục mới cùng đoạn cùng loại không thêm lần nữa.
+  // Kế hoạch không kèm kịch bản giữ mục _sheet và nền nhạc của nó.
   function applyPlan(plan, o = {}) {
-    if (plan.sheet) return applySheet(plan, o);
     if (!o.noUndo) S.pushUndo();
-    const mine = s => (s._ai || s._recipe) && !s._orig && s._sheet == null;
+    const merged = !!plan.script, key = x => `${x._sheet}|${x.type || x.name}`;
+    const mine = s => (s._ai || s._recipe) && !s._orig && (merged || s._sheet == null);
+    const mineS = new Set(merged ? (TL.scenes || []).filter(s => s._sheet != null && s._orig).map(key) : []);
+    const mineX = new Set(merged ? (TL.audio?.sfx || []).filter(x => x._sheet != null && x._orig).map(key) : []);
     if (plan.pack !== TL.pack && TL.fx) TL.fx = TL.fx.filter(f => !f._recipe || f._orig);
     TL.pack = plan.pack; TL.caption_style = plan.caption_style || undefined;
     if (plan.hook) TL.title = plan.hook;
-    TL.scenes = [...(TL.scenes || []).filter(s => !mine(s)), ...JSON.parse(JSON.stringify(plan.scenes))];
+    TL.scenes = [...(TL.scenes || []).filter(s => !mine(s)), ...JSON.parse(JSON.stringify(plan.scenes)).filter(s => s._sheet == null || !mineS.has(key(s)))];
     TL.audio = TL.audio || {};
     // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
     // S19 M134: plan.music null = thói quen "không nhạc": bỏ nhạc _ai/_auto, không thêm (nhạc file / tay giữ nguyên, bài học ai-video-studio-020)
-    // S27 M194: nền nhạc của bảng dựng (_sheet) giữ như nhạc người dùng chọn
-    const keepM = (TL.audio.music || []).some(m => bedOf(userM, m) || bedOf(x => x._sheet != null, m));
-    TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || m._sheet != null || !(m._ai || m._auto || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [{ ...plan.music, t1: TL.duration }] : [])];
-    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || x._sheet != null), ...plan.sfx.map(x => ({ ...x }))];
+    const keepM = (TL.audio.music || []).some(m => bedOf(userM, m) || (!merged && bedOf(x => x._sheet != null, m)));
+    TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [JSON.parse(JSON.stringify({ ...plan.music, t1: TL.duration }))] : [])];
+    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x))).map(x => JSON.parse(JSON.stringify(x)))];
     let n = 0;
     for (const e of plan.captions) {
       const c = CAP.find(x => Math.abs(x.t0 - e.t0) < .02 && x.words.length === e.n);
@@ -432,7 +416,7 @@
       $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng</button>
         ${afterOpts('aip')}<div id="aip-hab"></div>
         <div class="help">Claude dựng từ lời thoại: style, graphic, nhạc, SFX. ${S.tip('Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX; rồi thêm b-roll, âm thanh nếu bạn chọn. Xong có QC nhanh 3 khung. Cần Claude Code (lệnh claude) trên máy.')}${S.autofill ? ' <button class="ai-lnk" data-ai="af">Tuỳ chỉnh b-roll, âm thanh</button>' : ''}</div>
-        ${lastPlan ? planCard(lastPlan, true) : ''}
+        ${S.scriptNotes?.line(lastPlan) || '' /* S27 M194: Theo kịch bản x/y (23_scriptnotes.js) */}${lastPlan ? planCard(lastPlan, true) : ''}
         <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}${nAuto ? `, ${nAuto} b-roll tự động` : ''}.</p>
         <div class="acts"><button class="mini" data-ai="qc" ${nAi + nAuto ? '' : 'disabled'}><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="mini danger" data-ai="clear" ${nAi ? '' : 'disabled'}><i class="ti ti-trash"></i> Xoá cảnh AI</button></div></div>`;
       // S19 M134: "Đang áp n thói quen của <thương hiệu>" (tắt từng điều trong hộp AI dựng, quản lý ở trang Thương hiệu)
