@@ -509,7 +509,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
   }
   st.state = 'done'; st.progress = 1; st.finished = new Date().toISOString(); st.finishedMs = Date.now(); delete st.pid; delete st.error; save();
   const outputs = [...(res.delivered?.length ? res.delivered : [...(res.videos || []).map(v => P(v.out)), res.cover && P(res.cover)])].filter(Boolean);
-  const result = { project: dir, summary: res.summary, outputs, seconds: Math.round((Date.now() - t00) / 1000), steps: Object.fromEntries(Object.entries(st.steps).map(([k, v]) => [k, { state: v.state, sec: v.sec }])) };
+  const result = { project: dir, summary: res.summary, outputs, seconds: Math.round((Date.now() - t00) / 1000), steps: Object.fromEntries(Object.entries(st.steps).map(([k, v]) => [k, { state: v.state, sec: v.sec, ...(v.state === 'warn' && v.msg ? { msg: String(v.msg).slice(0, 160) } : {}) }])) };
   console.log('@@ 1.000 Xong');
   console.log('RESULT ' + JSON.stringify(result));
   return result;

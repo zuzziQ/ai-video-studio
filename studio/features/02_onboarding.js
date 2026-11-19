@@ -501,6 +501,24 @@
       pollThumbs(left - 1);
     }, 2500);
   }
+  // S26 M183: thương hiệu mặc định của Tự lái (hàm thuần, 15_autopilot.js dùng chung qua Studio.apDefaults; scripts/tests/s26_m183.test.mjs)
+  // <pure:apdefaults>
+  const apPickBrand = ({ saved, onboard, brands }) => {
+    const ids = (brands || []).map(b => b.id);
+    if (saved === '__none' || (saved && ids.includes(saved))) return saved; // người dùng đã tự chọn: giữ
+    if (onboard && ids.includes(onboard)) return onboard; // thương hiệu chọn ở hướng dẫn đầu
+    return ids.length === 1 ? ids[0] : ''; // chỉ có một thương hiệu
+  };
+  const apKhoText = (brand, brands) => {
+    const b = brand && brand !== '__none' ? (brands || []).find(x => x.id === brand) : null;
+    return b ? `Video và thành phẩm vào Kho ${b.title || b.name || b.id}.` : brand === '__none' ? 'Video và thành phẩm vào Kho Chung (không thương hiệu).' : 'Video và thành phẩm vào Kho theo hồ sơ Tự lái.';
+  };
+  const apSkipText = steps => {
+    const w = Object.entries(steps || {}).filter(([, s]) => s && s.state === 'warn').map(([id, s]) => `${s.label || id}${s.msg ? ` (${s.msg})` : ''}`);
+    return w.length ? `Xong · bỏ qua: ${w.join(', ')}` : '';
+  };
+  // </pure:apdefaults>
+  Studio.apDefaults = { pickBrand: apPickBrand, khoText: apKhoText, skipText: apSkipText };
   // S19 M132: thẻ Tự lái của trang chủ: thả nhiều video, chọn thương hiệu (cùng lựa chọn với panel Tự lái: /api/autopilot/settings)
   let AP = null;
   const apOpt = (v, l) => `<option value="${esc(v)}" ${v === AP?.brand ? 'selected' : ''}>${esc(l)}</option>`;
@@ -526,6 +544,7 @@
     <input type="file" id="onb-apfile" accept="video/*,.mkv" multiple hidden>
     <div class="aprow"><label for="onb-apbrand">Thương hiệu</label><select id="onb-apbrand">${apOpt('', 'Theo hồ sơ Tự lái')}${apOpt('__none', 'Không thương hiệu · Kho Chung')}${brands.map(b => apOpt(b.id, b.title || b.name || b.id)).join('')}</select>
       <button class="ghost" data-h="auto" title="Mở panel Tự lái: hàng đợi, thư mục tự động, hồ sơ"><i class="ti ti-list-details"></i> Hàng đợi</button></div>
+    <span class="apq" id="onb-apkho">${esc(apKhoText(AP?.brand, brands))}</span>
     <span class="apq" id="onb-apq">${esc(apQueue(AP?.st))}</span></div>`;
   async function apUpload(files) {
     const dz = HOME?.querySelector('#onb-apdrop'), q = HOME?.querySelector('#onb-apq');
@@ -554,13 +573,15 @@
     dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
     dz.addEventListener('dragleave', () => dz.classList.remove('over'));
     dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); apUpload([...e.dataTransfer.files]); });
-    HOME.querySelector('#onb-apbrand').addEventListener('change', e => { AP.brand = e.target.value; api('/api/autopilot/settings', { brand: AP.brand }).catch(() => {}); });
+    HOME.querySelector('#onb-apbrand').addEventListener('change', e => { AP.brand = e.target.value; HOME.querySelector('#onb-apkho').textContent = apKhoText(AP.brand, AP.brands); api('/api/autopilot/settings', { brand: AP.brand }).catch(() => {}); });
   }
   async function openHome() {
     await loadState();
     const [brands, st] = await Promise.all([api('/api/brands').catch(() => null), api('/api/autopilot/state').catch(() => null)]);
     const nb = Array.isArray(brands) ? brands.length : -1;
-    AP = { st: st && !st.error ? st : null, brand: st?.settings?.brand || '' };
+    const bl = Array.isArray(brands) ? brands : [], saved = st?.settings?.brand || '';
+    AP = { st: st && !st.error ? st : null, brand: apPickBrand({ saved, onboard: ST?.brand, brands: bl }), brands: bl }; // S26 M183
+    if (AP.brand && AP.brand !== saved) api('/api/autopilot/settings', { brand: AP.brand }).catch(() => {}); // nhớ mặc định để hàng đợi và thư mục tự động cùng dùng
     hideHome();
     HOME = document.createElement('div'); HOME.id = 'onb-home';
     const p = purpose(ST?.purpose), rec = groupRecent(ST?.recent || []);
