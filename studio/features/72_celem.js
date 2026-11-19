@@ -210,16 +210,67 @@
     const o = c.obj, vars = Object.entries(o.spec?.vars || {}).filter(([, v]) => HEX6.test(v));
     let h = '';
     if (hasText(o.spec)) h += sect('Chữ', `<input data-cetext value="${esc(o.text || '')}" maxlength="120" placeholder="Chữ trong element">`, 'ti-typography');
-    if (vars.length) h += sect('Màu', `<div class="ce-vrow">${vars.map(([n, v]) => `<label><input type="color" data-cevar="${esc(n)}" value="${esc(v)}"><small>${esc(n)}</small></label>`).join('')}</div>`, 'ti-palette');
+    if (vars.length) h += sect('Màu chung', `<div class="ce-vrow">${vars.map(([n, v]) => `<label><input type="color" data-cevar="${esc(n)}" value="${esc(v)}"><small>${esc(n)}</small></label>`).join('')}</div>`, 'ti-palette');
+    h += sect('Các lớp', layersHTML(o), 'ti-stack-2');
     h += sect('Claude sửa', `<div class="row"><input data-ceask maxlength="300" placeholder="Ví dụ: nền đỏ, chữ to hơn"><button data-ce="edit"><i class="ti ti-sparkles"></i> Sửa</button></div>
       <div class="help">Ra 3 phương án ở panel Element riêng, Nhận thì thay element này (⌘Z được).${o.elem_id ? ' ' + S.tip('Claude dùng lại ảnh ví dụ đã lưu cùng element trong thư viện (nếu có). Đính ảnh mới ở tab Claude để thay.') : ''}</div>`, 'ti-message-chatbot');
     return ['celem', 'Element riêng', `<div id="cepanel">${h}</div>`];
   }
   S.addInspectorTab(tab);
+
+  // ---------- sửa từng lớp (chủ repo 2026-11-19: element Claude dựng phải tách rõ khối / chữ để sửa ở Thuộc tính) ----------
+  // Mỗi ô ghi thẳng vào o.spec.layers[i] bằng giá trị trong biên của CELEM.check (màu #hex từ ô màu, số từ thanh trượt),
+  // engine kiểm lại lúc vẽ. Màu '@primary' / '$biến' hiện màu đã giải; đổi màu thì lớp đó thành #hex riêng.
+  const KIND_VI = { rect: 'Khối vuông', round: 'Khối bo góc', pill: 'Khối viên thuốc', line: 'Đường', text: 'Chữ', image: 'Logo' };
+  const DFILL = '#FFD84A'; // design-token-ok: màu nền mặc định của lớp trong video (dữ liệu render)
+  const SHAPES = [['rect', 'Vuông', 'ti-square'], ['round', 'Bo góc', 'ti-square-rounded'], ['pill', 'Viên thuốc', 'ti-pill']];
+  function hexOf(v, spec, d = '#FFFFFF') { // design-token-ok: màu mặc định của lớp trong video (dữ liệu render)
+    if (typeof v !== 'string') return d;
+    if (v.startsWith('$')) v = spec.vars?.[v.slice(1)] ?? '';
+    if (v.startsWith('@')) v = (S.TL.brand || {})[v.slice(1)] || '';
+    if (/^#[0-9a-f]{3}$/i.test(v)) v = '#' + [...v.slice(1)].map(c => c + c).join('');
+    return HEX6.test(v) ? v : d;
+  }
+  const rngL = (i, f, v, a, b, st, l, u = '') => `<div class="slrow"><span>${l}</span><input type="range" data-cel="${i}" data-f="${f}" min="${a}" max="${b}" step="${st}" value="${v}"><b>${v}${u}</b></div>`;
+  const colL = (i, f, v, l) => `<label class="ce-col"><input type="color" data-cel="${i}" data-f="${f}" value="${v}"><small>${l}</small></label>`;
+  function layersHTML(o) {
+    const spec = o.spec || {}, sm = Math.min((o.card?.w || spec.w) / spec.w, (o.card?.h || spec.h) / spec.h) || 1;
+    return (spec.layers || []).map((L, i) => {
+      let b = '';
+      if (L.k === 'rect' || L.k === 'round' || L.k === 'pill') {
+        b += `<div class="ce-seg">${SHAPES.map(([k, l, ic]) => `<button data-celk="${i}" data-k="${k}" class="${L.k === k ? 'on' : ''}" title="${l}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div>`;
+        if (L.k === 'round') b += rngL(i, 'r', Math.round(L.r ?? 24), 0, Math.round(Math.min(spec.w, spec.h) / 2), 1, 'Bo góc', 'px');
+        b += `<div class="ce-cols">${typeof L.fill === 'object' && L.fill ? colL(i, 'fill.from', hexOf(L.fill.from, spec), 'Nền (đầu)') + colL(i, 'fill.to', hexOf(L.fill.to, spec), 'Nền (cuối)')
+          : colL(i, 'fill', hexOf(L.fill, spec, DFILL), 'Nền')}${colL(i, 'stroke', hexOf(L.stroke, spec), 'Viền')}</div>`;
+        b += rngL(i, 'sw', L.sw || 0, 0, 30, 1, 'Độ dày viền', 'px');
+      } else if (L.k === 'text') {
+        if (!String(L.text).includes('{text}')) b += `<input data-celt="${i}" value="${esc(L.text)}" maxlength="200" placeholder="Chữ">`;
+        else b += '<div class="help">Chữ chính: sửa ở ô Chữ phía trên.</div>';
+        b += `<div class="ce-cols">${colL(i, 'color', hexOf(L.color, spec), 'Màu chữ')}</div>`;
+        b += rngL(i, 'size', Math.round(L.size || 40), 8, Math.max(200, Math.round(L.size || 40)), 1, 'Cỡ chữ', '');
+        b += rngL(i, 'weight', L.weight || 800, 300, 900, 100, 'Độ đậm', '');
+      } else if (L.k === 'line') {
+        b += `<div class="ce-cols">${colL(i, 'stroke', hexOf(L.stroke || L.fill, spec), 'Màu')}</div>` + rngL(i, 'sw', L.sw || 4, 1, 30, 1, 'Độ dày', 'px');
+      }
+      b += rngL(i, 'opacity', Math.round((L.opacity ?? 1) * 100), 0, 100, 1, 'Độ mờ', '%');
+      const title = L.k === 'text' ? `Chữ «${esc(String(L.text).replace('{text}', o.text || '…').slice(0, 24))}»` : KIND_VI[L.k];
+      return `<details class="ce-layer"${i === 0 ? ' open' : ''}><summary>${i + 1}. ${title}</summary>${b}</details>`;
+    }).join('') + (sm ? '' : '');
+  }
+  // ghi một trường của lớp i (f có thể là 'fill.from')
+  function setLayer(o, i, f, v) {
+    const L = o.spec?.layers?.[i]; if (!L) return;
+    if (f === 'fill.from' || f === 'fill.to') { if (typeof L.fill === 'object' && L.fill) L.fill[f.slice(5)] = v; return; }
+    if (f === 'opacity') { L.opacity = v / 100; return; }
+    if (f === 'sw' && v > 0 && L.k !== 'line' && !L.stroke) L.stroke = '#FFFFFF'; // design-token-ok: màu viền mặc định của lớp trong video
+    L[f] = v;
+  }
   const cur = () => (isCe(S.sel) ? S.sel : null);
   const set = (fn, key) => { const c = cur(); if (!c) return; S.pushUndo(key); fn(c.obj); S.changed(!key); };
 
   document.addEventListener('click', e => {
+    const k = e.target.closest('#cepanel [data-celk]');
+    if (k) return set(o => { const L = o.spec.layers[+k.dataset.celk]; if (!L) return; L.k = k.dataset.k; if (L.k === 'round' && L.r == null) L.r = 24; if (L.k !== 'round') delete L.r; });
     const b = e.target.closest('#libbody [data-ce], #cepanel [data-ce]'); if (!b) return;
     const a = b.dataset.ce;
     if (a === 'make') return make($('#ce-ask')?.value);
@@ -240,6 +291,13 @@
     const t = e.target; if (!t.closest?.('#cepanel')) return;
     if (t.dataset.cetext != null) return set(o => { o.text = t.value.replace(/[<>]/g, ''); }, 'cetext');
     if (t.dataset.cevar && HEX6.test(t.value)) return set(o => { o.spec.vars[t.dataset.cevar] = t.value; }, 'cevar' + t.dataset.cevar);
+    if (t.dataset.cel != null) {
+      const i = +t.dataset.cel, f = t.dataset.f, v = t.type === 'color' ? t.value : +t.value;
+      if (t.type === 'color' && !HEX6.test(v)) return;
+      const lab = t.nextElementSibling; if (t.type === 'range' && lab) lab.textContent = v + (f === 'opacity' ? '%' : f === 'r' || f === 'sw' ? 'px' : '');
+      return set(o => setLayer(o, i, f, v), `cel${i}${f}`);
+    }
+    if (t.dataset.celt != null) return set(o => { const L = o.spec.layers[+t.dataset.celt]; if (L) L.text = t.value.replace(/[<>]/g, '').slice(0, 200) || ' '; }, 'celt' + t.dataset.celt);
   });
 
   // nhận ảnh: chọn file, kéo thả vào ô, dán khi con trỏ ở ô mô tả của panel
@@ -312,6 +370,15 @@
 .ce-it .ce-tx { flex-direction:row; align-items:center; justify-content:space-between; }
 .ce-it .ce-tx b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
 .ce-it .ce-del { min-height:0; padding:0 var(--space-050); border:0; background:none; color:rgb(var(--color-fg-muted)); }
+#cepanel .ce-layer { border:1px solid rgb(var(--color-line)); border-radius:var(--radius-control); padding:var(--space-1) var(--space-2); margin-bottom:var(--space-1); }
+#cepanel .ce-layer summary { cursor:pointer; font-size:var(--text-xs); padding:var(--space-050) 0; }
+#cepanel .ce-layer[open] summary { margin-bottom:var(--space-1); }
+#cepanel .ce-layer > input { width:100%; margin-bottom:var(--space-1); }
+#cepanel .ce-seg { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-1); margin-bottom:var(--space-1); }
+#cepanel .ce-seg button { flex-direction:column; gap:var(--space-050); padding:var(--space-1) var(--space-050); font-size:var(--text-2xs); }
+#cepanel .ce-seg button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); }
+#cepanel .ce-cols { display:flex; flex-wrap:wrap; gap:var(--space-2); margin-bottom:var(--space-1); }
+#cepanel .ce-col { display:flex; flex-direction:column; align-items:center; gap:var(--space-050); font-size:var(--text-2xs); color:rgb(var(--color-fg-muted)); }
 #cepanel .ce-vrow { display:flex; flex-wrap:wrap; gap:var(--space-2); }
 #cepanel .ce-vrow label { display:flex; flex-direction:column; align-items:center; gap:var(--space-050); font-size:var(--text-2xs); color:rgb(var(--color-fg-muted)); }
 #cepanel input[type=color] { width:44px; height:var(--h-md); padding:var(--space-050); }
