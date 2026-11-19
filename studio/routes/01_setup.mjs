@@ -117,12 +117,22 @@ export function loadModels(skill) {
   } catch { return []; }
 }
 const homeOf = env => env.USERPROFILE || env.HOME || os.homedir();
-// Cache Hugging Face mà faster_whisper.download_model dùng (mặc định của huggingface_hub)
-export const hfCache = env => env.HF_HUB_CACHE || (env.HF_HOME ? path.join(env.HF_HOME, 'hub') : path.join(env.XDG_CACHE_HOME || path.join(homeOf(env), '.cache'), 'huggingface', 'hub'));
-/** Mô hình đã có trên máy chưa (chỉ xem file, không import thư viện). */
-export function modelPresent(m, env = process.env) {
+// Home của tài khoản (không theo USERPROFILE/HOME: lượt kiểm "người dùng mới" đặt chúng vào thư mục tạm)
+export const realHome = () => { try { return os.userInfo().homedir || os.homedir(); } catch { return os.homedir(); } };
+const isAbs = v => (process.platform === 'win32' ? /^([A-Za-z]:[\\/]|[\\/]{2})/ : /^\//).test(v || '');
+// Cache whisper dùng chung mọi checkout, cùng quy tắc với scripts/model_cache.py (hf_cache): AVS_MODEL_CACHE > HF_HUB_CACHE
+// > HF_HOME/hub > XDG_CACHE_HOME/huggingface/hub > <home thật>/.cache/huggingface/hub; giá trị tương đối bị bỏ qua.
+export function hfCache(env, home = realHome()) {
+  for (const [k, sub] of [['AVS_MODEL_CACHE', []], ['HF_HUB_CACHE', []], ['HF_HOME', ['hub']], ['XDG_CACHE_HOME', ['huggingface', 'hub']]]) {
+    const v = String(env[k] || '').trim();
+    if (isAbs(v)) return path.join(v, ...sub);
+  }
+  return path.join(home, '.cache', 'huggingface', 'hub');
+}
+/** Mô hình đã có trên máy chưa (chỉ xem file, không import thư viện). home: thử nghiệm thay home thật. */
+export function modelPresent(m, env = process.env, home = realHome()) {
   if (m.kind === 'whisper') {
-    const snaps = path.join(hfCache(env), `models--${String(m.repo || '').replace(/\//g, '--')}`, 'snapshots');
+    const snaps = path.join(hfCache(env, home), `models--${String(m.repo || '').replace(/\//g, '--')}`, 'snapshots');
     try { return fs.readdirSync(snaps).some(d => fs.existsSync(path.join(snaps, d, 'model.bin'))); } catch { return false; }
   }
   // rembg: bản cũ ~/.u2net/<tên>.onnx (U2NET_HOME), bản mới <REMBG_HOME | XDG_DATA_HOME/rembg | ~/.rembg>/models/<tên>…

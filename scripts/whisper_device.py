@@ -13,6 +13,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I không thêm thư mục script
+from model_cache import hf_cache  # noqa: E402  cache dùng chung mọi checkout, không theo HOME giả
+
 DEVICE_ENV = "AVS_WHISPER_DEVICE"
 COMPUTE_ENV = "AVS_WHISPER_COMPUTE"
 CUDA_COMPUTE = "int8_float16"
@@ -148,10 +151,11 @@ def _warmup(model):
     list(segs)
 
 
-def load_model(factory, name, env=None, warn=None, cuda=None, missing=None, cores=None, warmup=_warmup):
+def load_model(factory, name, env=None, warn=None, cuda=None, missing=None, cores=None, warmup=_warmup, cache=None):
     """Tạo WhisperModel trên thiết bị tốt nhất chạy được. Trả (model, cfg).
 
     factory: WhisperModel (hoặc hàm giả khi test). cuda/missing/cores: tiêm khi test.
+    cache: thư mục cache (mặc định model_cache.hf_cache(env)), truyền vào WhisperModel(download_root=...).
     Lỗi CPU (ví dụ không tải được model) được ném ra nguyên vẹn, không in cảnh báo GPU gây hiểu lầm.
     """
     env = os.environ if env is None else env
@@ -167,6 +171,7 @@ def load_model(factory, name, env=None, warn=None, cuda=None, missing=None, core
     if mode == "cuda" and count == 0:
         gpu_err = f"{DEVICE_ENV}=cuda nhưng không thấy GPU CUDA"
     cfgs = plan(mode, count, types, env.get(COMPUTE_ENV))
+    root = cache or hf_cache(env)
     if cfgs[0]["device"] == "cuda":
         lack = missing_cuda_libs() if missing is None else missing
         if lack:
@@ -178,7 +183,7 @@ def load_model(factory, name, env=None, warn=None, cuda=None, missing=None, core
         if cfg["device"] == "cpu":
             kw["cpu_threads"] = physical_cores() if cores is None else cores
         try:
-            model = factory(name, **kw)
+            model = factory(name, download_root=root, **kw)
             if cfg["device"] == "cuda" and warmup:
                 warmup(model)
         except Exception as e:

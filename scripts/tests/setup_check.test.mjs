@@ -202,17 +202,29 @@ test('mô hình có / chưa có: đọc cache Hugging Face và thư mục rembg,
   const env = { HOME: home, USERPROFILE: home, PATH: BIN };
   const v3 = M.loadModels(SKILL).find(m => m.name === 'large-v3'), seg = M.loadModels(SKILL).find(m => m.kind === 'rembg');
   try {
-    assert.equal(M.modelPresent(v3, env), false);
+    assert.equal(M.modelPresent(v3, env, home), false);
     const snap = path.join(home, '.cache/huggingface/hub/models--Systran--faster-whisper-large-v3/snapshots/abc');
     fs.mkdirSync(snap, { recursive: true });
-    assert.equal(M.modelPresent(v3, env), false, 'chưa có model.bin (tải dở) → chưa có');
+    assert.equal(M.modelPresent(v3, env, home), false, 'chưa có model.bin (tải dở) → chưa có');
     fs.writeFileSync(path.join(snap, 'model.bin'), 'x');
-    assert.equal(M.modelPresent(v3, env), true);
-    assert.equal(M.modelPresent(v3, { ...env, HF_HUB_CACHE: path.join(home, 'khac') }), false, 'HF_HUB_CACHE thắng mặc định');
+    assert.equal(M.modelPresent(v3, env, home), true);
+    assert.equal(M.modelPresent(v3, { ...env, HF_HUB_CACHE: path.join(home, 'khac') }, home), false, 'HF_HUB_CACHE thắng mặc định');
+    assert.equal(M.modelPresent(v3, { ...env, AVS_MODEL_CACHE: path.join(home, '.cache/huggingface/hub'), HF_HUB_CACHE: path.join(home, 'khac') }, '/x'), true, 'AVS_MODEL_CACHE thắng HF_HUB_CACHE');
     assert.equal(M.modelPresent(seg, env), false);
     fs.mkdirSync(path.join(home, '.u2net')); fs.writeFileSync(path.join(home, '.u2net', 'u2net_human_seg.onnx'), 'x');
     assert.equal(M.modelPresent(seg, env), true);
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('cache whisper không theo USERPROFILE/HOME giả, bỏ qua đường dẫn tương đối', () => {
+  const fake = path.join(os.tmpdir(), 'avs-fake-home');
+  const def = path.join(M.realHome(), '.cache', 'huggingface', 'hub');
+  assert.equal(M.hfCache({ HOME: fake, USERPROFILE: fake }), def, 'home giả của lượt kiểm người dùng mới');
+  assert.notEqual(M.realHome(), fake);
+  assert.equal(M.hfCache({ AVS_MODEL_CACHE: 'models', HF_HOME: '.hf' }), def, 'giá trị tương đối phụ thuộc cwd');
+  const abs = path.join(os.tmpdir(), 'avs-models');
+  assert.equal(M.hfCache({ AVS_MODEL_CACHE: abs, HF_HUB_CACHE: fake }), abs);
+  assert.equal(M.hfCache({ HF_HOME: abs }), path.join(abs, 'hub'));
 });
 
 test('fixPlan mô hình: tải bằng prefetch_models.py trong .venv khi đã có thư viện của nó', () => {
