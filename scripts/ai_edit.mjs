@@ -396,6 +396,11 @@ export function applyLearned(plan, L) {
   plan.learned = (Array.isArray(L.notes) ? L.notes : []).slice(0, 30);
   return plan;
 }
+// S26 M182: nhạc nào là của người dùng. Studio ghi _orig khi người dùng sửa một phần tử (đổi mood, gain…); nhạc có file/Kho (tự tải, tự chọn) cũng là
+// của họ. Nhạc khởi đầu (new_project / highlights: mood 'tech', không file, không _orig) và nhạc _ai/_auto chưa ai đụng thì AI được thay.
+// Không xét gain để đổi gain mặc định không làm hỏng nhận diện.
+export const isUserMusic = m => !!m && (!!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech'))));
+export const hasUserBed = (music, dur) => (music || []).some(m => isUserMusic(m) && m.t0 <= .05 && m.t1 >= dur - .1);
 // Apply a plan: earlier AI items (and untouched recipe items) are replaced; anything the user edited (_orig) or added stays.
 export function applyPlan(tl, caps, plan) {
   const starter = !!tl._starter; delete tl._starter; // never-opened "Video mới" project: its starter scenes are placeholders
@@ -405,7 +410,9 @@ export function applyPlan(tl, caps, plan) {
   tl.scenes = [...(tl.scenes || []).filter(s => !mine(s)), ...plan.scenes];
   tl.audio = tl.audio || {};
   // plan.music null (thói quen "không nhạc", M134): bỏ nhạc _ai cũ, không thêm nhạc mới
-  tl.audio.music = [...(tl.audio.music || []).filter(m => !m._ai && !(plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1)), ...(plan.music ? [plan.music] : [])];
+  // S26 M182: nhạc người dùng đã chọn / chỉnh (isUserMusic) được giữ và thắng nhạc AI; chỉ nhạc _ai/_auto hoặc nhạc khởi đầu chưa ai đụng bị thay
+  const keep = hasUserBed(tl.audio.music, tl.duration);
+  tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || !(m._ai || m._auto || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
   tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !x._ai), ...plan.sfx];
   let n = 0;
   for (const e of plan.captions) {
@@ -448,6 +455,8 @@ async function main() {
     const n = await shortenCuts(plan, p => askJSON(p, { task: 'text', model, cwd: os.tmpdir(), shape: 'object', retries: 0 }));
     console.log(`chữ quá dài: ${plan.cuts.length} · Claude viết ngắn lại ${n}`);
   }
+  // S26 M182: đã có nhạc phủ cả video do người dùng chọn/chỉnh → giữ, không đề xuất nhạc mới
+  if (plan.music && hasUserBed(tl.audio?.music, tl.duration)) { plan.music = null; plan.keptMusic = true; plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + 'Giữ nhạc bạn chọn.'; }
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
   // S19 M138: phong cách thương hiệu chọn nhạc riêng (opts.music_pick = 'kho' | 'kho:<rel>') → bài đó thắng bài hợp mood
   if (plan.music) try { const K = await import('./kho_media.mjs'); const k = (o.music_pick && await K.khoMusicPick(dir, tl, o.music_pick)) || await K.khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
