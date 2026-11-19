@@ -31,7 +31,7 @@
     background: rgb(var(--color-accent)); color: rgb(var(--color-accent-fg)); font-size: var(--text-2xs); font-weight: 700; line-height: 1; box-shadow: var(--shadow-raised); cursor: pointer; }
   .pinlayer .pin:hover, .pinlayer .pin.open { outline: 2px solid rgb(var(--color-focus)); outline-offset: 1px; }
   .pinlayer .pin.done { background: rgb(var(--color-surface-muted)); color: rgb(var(--color-fg-muted)); }
-  .pinlayer .pin.draft { background: rgb(var(--color-warning)); color: rgb(var(--color-canvas)); }
+  .pinlayer .pin.draft { background: rgb(var(--color-warning)); color: rgb(var(--color-warning-fg)); }
   .pinlayer.drag .pin { pointer-events: none; }
   .pinlayer .pinrect { position: absolute; pointer-events: none; border: 2px solid rgb(var(--color-accent)); border-radius: var(--radius-xs); background: rgb(var(--color-accent) / .08); box-shadow: 0 0 0 1px rgb(var(--color-black) / .35); }
   .pinlayer .pinrect.done { border-color: rgb(var(--color-fg-muted)); background: none; }

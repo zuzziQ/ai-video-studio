@@ -13,6 +13,11 @@
   function resolve(p) { return p === 'system' ? (mq && mq.matches ? 'dark' : 'light') : p; }
   function apply(fire) {
     var mode = resolve(pref), root = document.documentElement, old = root.getAttribute('data-theme');
+    // đổi nền lúc đang dùng: tắt transition một nhịp để mọi màu đổi cùng lúc (không chạy qua màu trung gian của nền kia)
+    if (fire && old && old !== mode && window.requestAnimationFrame) {
+      root.classList.add('avs-theme-sw');
+      requestAnimationFrame(function () { requestAnimationFrame(function () { root.classList.remove('avs-theme-sw'); }); });
+    }
     root.setAttribute('data-theme', mode);
     if (fire && old !== mode) {
       try { document.dispatchEvent(new CustomEvent('avs:theme', { detail: { pref: pref, mode: mode } })); } catch (e) { /* trình duyệt cũ */ }

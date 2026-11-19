@@ -83,7 +83,10 @@ Cách làm giống dashboard lychee (`server/ui.css`): **một bộ tên vai tr�
 
 - **Đổi nền:** `studio/theme/theme-boot.js` nạp đồng bộ trong `<head>` trước mọi CSS, luôn đặt `<html data-theme="light|dark">` trước lần vẽ đầu (không chớp). Lựa chọn lưu `localStorage['avs.theme']` = `system` (mặc định, `C38`) | `light` | `dark`; `system` theo `prefers-color-scheme` và đổi ngay khi hệ điều hành đổi; tab khác đổi thì theo.
 - **Chỗ chọn:** công tắc ☀/☾ trên thanh đầu ngay trước ⋯ (bấm = sang nền kia, thành lựa chọn cố định); dòng "Giao diện" Hệ thống · Sáng · Tối trong menu ⋯; ba lệnh trong ⌘K. API `Studio.theme` / `AVSTheme` (`pref`, `mode`, `set`, `toggle`), sự kiện `avs:theme` cho phần tự vẽ canvas.
-- **Không đổi theo nền:** khung xem trước `--stage-*`, khối track `--track-*` (chữ trắng), chữ trên ảnh/video `--color-fg-on-media`, engine, ảnh thumbnail, trang khoá của `server.mjs`.
+- **Không đổi theo nền:** khung xem trước `--stage-*`, khối track `--track-*` (chữ trắng), chữ trên ảnh/video `--color-fg-on-media`, engine, ảnh thumbnail. Ô xem trước **kiểu chữ của video** (mẫu chữ ở thư viện, `.txgrid .tx`) cũng nằm trên nền `--stage-*`: chữ mẫu là màu của video (trắng, vàng có bóng), đặt trên bề mặt sáng sẽ mất.
+- **Trang khoá** (`server.mjs`, không nạp CSS): tự mang 4 giá trị mỗi nền (`LOCKED_LIGHT` chép khối sáng; test so với `tokens.css`), theo `avs.theme` đã lưu hoặc `prefers-color-scheme`.
+- **Chữ trên nền đặc trạng thái:** `--color-danger-fg`, `--color-warning-fg` (tối: neutral-950, sáng: trắng) cho huy hiệu số, nhãn vùng an toàn, ghim nháp; không dùng `--color-white` hay `--color-canvas` trên nền đỏ / vàng.
+- **Lúc đổi nền** `theme-boot.js` gắn `.avs-theme-sw` hai khung hình (tắt transition) để mọi màu đổi cùng lúc, không chạy qua màu trung gian.
 - **Lớp phủ:** lớp "nhấn nhẹ" trên bề mặt giao diện (vạch track, nền hàng, swatch) dùng `rgb(var(--color-overlay) / a)` (trắng ở nền tối, mực ở nền sáng), không dùng `--color-white`. `--color-white` / `--color-black` chỉ cho trắng/đen thật: chữ trên khối màu, trên video, nhãn đè lên ảnh. Bóng dùng `--color-shadow`.
 - **Màu nhấn nền sáng:** chữ, viền đang chọn navy-600 (`--color-accent-text`), nền đặc navy-600 + chữ trắng; `--color-accent-soft` = navy-300 dùng ở .24 → xanh nhạt `#E2E6FB` (navy-500 làm bước đang chọn đục, khó nhìn). Vòng điểm quanh số bước đang chọn cách số 3px và số không có bóng: cung tiến độ cùng màu navy với nền số, sát nhau thì không thấy.
 - **Trang mẫu:** `studio/ui.html` (⌘K "Mẫu giao diện", theo `/ui` của lychee): ô màu hai tầng, mẫu thành phần `ui-*`, tỉ lệ tương phản tính tại chỗ, hai nền cạnh nhau (`?theme=light|dark`). Thành phần mới có mẫu ở đây trước khi feature dùng.
@@ -103,7 +106,7 @@ Tương phản nền sáng (WCAG 2.1, tính từ token; trang mẫu đo lại t�
 | danger-text 700 | 5,7 | 6,3 | 5,7 | 5,1 |
 | focus navy-500 (viền) | 7,6 | 8,4 | 7,7 | 6,8 |
 
-Chữ trắng trên nút chính navy-600 11,1:1, hover navy-700 14,3:1; chữ canvas trên huy hiệu warning-700 4,6:1; nhãn bước đang chọn navy-700 trên `#E2E6FB` 11,5:1. Đo trên Studio thật (cổng tạm, `sample/clip-mau`, 1007 và 1440 px): nền sáng 0 phần tử chữ dưới ngưỡng; thanh đầu thêm công tắc không chồng, không tràn ngang. Nền tối còn huy hiệu số đỏ `#avs-ntbtn .nt-n` (trắng trên danger-400, 2,7:1) có từ trước.
+Chữ trắng trên nút chính navy-600 11,1:1, hover navy-700 14,3:1; chữ canvas trên huy hiệu warning-700 4,6:1; nhãn bước đang chọn navy-700 trên `#E2E6FB` 11,5:1. Đo trên Studio thật (cổng tạm, `sample/clip-mau`, 1007 và 1440 px): nền sáng 0 phần tử chữ dưới ngưỡng; thanh đầu thêm công tắc không chồng, không tràn ngang. Rà hết (`M180`, 2026-11-19): 35 panel thanh trái, 5 bước + Cài đặt, modal Xuất, Trang chủ, menu ⋯, ⌘K, trang khoá, ở cả hai nền khi màu đã ổn định: 0 chữ dưới ngưỡng (tab đang tắt không tính). Huy hiệu số đỏ trên nền tối 7,5:1 (trước 2,7:1), trên nền sáng 4,7:1.
 
 ## 5. Luật dùng
 

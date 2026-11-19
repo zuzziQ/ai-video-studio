@@ -81,9 +81,9 @@
   /* S23 M161: chuông thông báo trên thanh đầu + ô bật ra (không chiếm chỗ của khung xem) */
   #avs-ntbtn { position: relative; flex: none; }
   #avs-ntbtn[hidden] { display: none; }
-  #avs-ntbtn .nt-n { position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 var(--space-1); border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 700; line-height: 16px; text-align: center; background: rgb(var(--color-accent)); color: rgb(var(--color-white)); pointer-events: none; }
-  #avs-ntbtn[data-tone="warn"] .nt-n { background: rgb(var(--color-warning)); color: rgb(var(--color-canvas)); }
-  #avs-ntbtn[data-tone="err"] .nt-n { background: rgb(var(--color-danger)); }
+  #avs-ntbtn .nt-n { position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 var(--space-1); border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 700; line-height: 16px; text-align: center; background: rgb(var(--color-accent)); color: rgb(var(--color-accent-fg)); pointer-events: none; }
+  #avs-ntbtn[data-tone="warn"] .nt-n { background: rgb(var(--color-warning)); color: rgb(var(--color-warning-fg)); }
+  #avs-ntbtn[data-tone="err"] .nt-n { background: rgb(var(--color-danger)); color: rgb(var(--color-danger-fg)); }
   #avs-ntbtn[aria-expanded="true"] { background: rgb(var(--color-surface-muted)); color: rgb(var(--color-fg)); }
   #avs-ntbtn.ping .ti { animation: nt-ping var(--duration-slow) var(--ease-spring) 3; transform-origin: 50% 0; }
   @keyframes nt-ping { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-16deg); } 70% { transform: rotate(16deg); } }
