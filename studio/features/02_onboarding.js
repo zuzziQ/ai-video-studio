@@ -611,7 +611,7 @@
       const t = b.title || b.name || b.id, live = rec.filter(r => !r.gone && r.brand === b.id), col = /^#[0-9a-f]{3,8}$/i.test(b.primary || '') ? b.primary : '';
       const last = live.reduce((m, r) => Math.max(m, +new Date(r.edited || r.t) || 0), 0);
       const info = [live.length ? `${live.length} dự án` : 'Chưa có dự án', last ? fmtAgo(last) : '', b.ws && !b.ws.exists ? 'Kho chưa tạo' : ''].filter(Boolean).join(' · ');
-      return `<div class="bc"><div class="bt"><span class="lg"${col && !b.logoUrl ? ` style="background:${col}"` : ''}>${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}" alt="">` : esc(t.trim().charAt(0).toUpperCase() || '?')}</span>
+      return `<div class="bc"><div class="bt"><span class="lg"${col && !b.logoUrl ? ` data-col="${col}"` : ''}>${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}" alt="">` : esc(t.trim().charAt(0).toUpperCase() || '?')}</span>
         <div><b title="${esc(t)}">${esc(t)}</b><small>${esc(info)}</small></div></div>
         <div class="ba"><button class="primary" data-h="bvid" data-bid="${esc(b.id)}"><i class="ti ti-video-plus"></i> Video mới</button>
           ${live.length ? `<button data-h="bproj" data-bid="${esc(b.id)}"><i class="ti ti-folders"></i> Dự án</button>` : ''}<span class="grow"></span>
@@ -634,6 +634,7 @@
         : '<div class="empty">Chưa có dự án nào. Bắt đầu bằng một trong các cách ở trên.</div>'}
       <div class="links"><button class="ghost" data-h="wiz"><i class="ti ti-route"></i> Xem lại hướng dẫn</button>
         <button class="ghost" data-h="sample" title="Mở một video mẫu có sẵn để xem Studio làm được gì"><i class="ti ti-player-play"></i> Xem thử dự án mẫu</button></div></div>`;
+    HOME.querySelectorAll('.bc .lg[data-col]').forEach(e => { e.style.background = e.dataset.col; }); // màu chủ đạo của thương hiệu (giá trị người dùng, đã kiểm dạng #hex)
     HOME.addEventListener('click', onHome);
     HOME.addEventListener('input', e => e.target.id === 'onb-q' && filterRec());
     HOME.addEventListener('change', e => e.target.id === 'onb-kb' && filterRec());
