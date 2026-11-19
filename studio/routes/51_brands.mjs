@@ -22,6 +22,8 @@ const notFound = () => Object.assign(new Error('không thấy brand'), { status:
 const newId = name => (String(name || 'brand').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'brand') + '-' + crypto.randomBytes(2).toString('hex');
 // M91: trợ lý Thương hiệu đề xuất thêm slogan, CTA và giọng văn (dòng riêng để không đụng dòng KEYS ở trên)
 KEYS.push('slogan', 'cta', 'voice');
+// S27 M189: mẫu mặc định của thương hiệu (id trong templates/ hoặc templates/user/); hộp Video mới đề nghị áp mẫu này
+KEYS.push('tpl');
 const kho = b => { try { const ws = W.workspaceFor(b.id); return { root: ws.root, custom: ws.custom, exists: ws.exists, warning: ws.warning }; } catch { return null; } };
 const pub = b => ({ ...b, ws: kho(b), logoUrl: b.logo && fs.existsSync(path.join(DIR, b.id, b.logo)) ? `/api/brands/logo/${b.id}?v=${Math.round(fs.statSync(path.join(DIR, b.id, b.logo)).mtimeMs)}` : null });
 // Bản gốc logo vào <Kho>/Thuong hieu/ (chỗ đọc logo của brand kit giữ nguyên). File cùng tên, cùng cỡ đã có thì thôi. Lỗi → câu cảnh báo.
@@ -71,6 +73,7 @@ export default ctx => async (req, res, p, u) => {
       if ((!src.id || 'title' in src) && !String(src.title || src.name || '').trim()) return J({ error: 'Đặt tên thương hiệu trước khi lưu' }, 400);
       // Pack ids are registered by the engine in the browser (window.PACKS); the server can only check the shape. The editor checks it exists.
       if (src.pack && !/^[A-Za-z0-9_-]{1,60}$/.test(String(src.pack))) return J({ error: 'Gói style không hợp lệ' }, 400);
+      if (src.tpl && !/^[A-Za-z0-9_-]{1,80}$/.test(String(src.tpl))) return J({ error: 'Mẫu không hợp lệ' }, 400);
       // chỉ khoá trong KEYS (+ dict) đổi được ở đây; `workspace` do /api/kho/set ghi nên bản gửi lên không đổi hay xoá được nó
       const b = mutate(list => {
         let b = src.id && list.find(x => x.id === src.id);

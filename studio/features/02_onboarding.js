@@ -10,7 +10,7 @@
 //   chỉ báo việc nền (15_autopilot.js). S19 M136: dự án gần đây là lưới thẻ có ảnh bìa (/api/onboarding/thumb?i=, tạo nền ở
 //   scripts/home_cards.mjs), thời lượng, Kho, sửa lần cuối, đã xuất, dấu đang mở trên thanh tab; tìm theo tên, lọc theo thương hiệu.
 // - S26 M188: đã có thương hiệu thì hướng dẫn không tự mở nữa; trang chủ có mục Thương hiệu: mỗi thương hiệu một thẻ (Video mới chọn
-//   sẵn thương hiệu đó, Dự án lọc dự án gần đây, Sửa), thẻ "Thương hiệu mới" mở hướng dẫn trống. Tạo / sửa từ thẻ chỉ có 2 bước (Thương hiệu, Kho).
+//   sẵn thương hiệu đó, Dự án lọc dự án gần đây, Mẫu mở thư viện mẫu của thương hiệu (S27 M189), Sửa), thẻ "Thương hiệu mới" mở hướng dẫn trống. Tạo / sửa từ thẻ chỉ có 2 bước (Thương hiệu, Kho).
 // - S17 M125: Studio mở không kèm dự án (không còn dự án mẫu tự tạo). Chưa có thương hiệu: trang chủ nhắc bước Chuẩn bị và tự mở
 //   hướng dẫn ở bước Thương hiệu (một lần mỗi phiên trình duyệt); "Xem thử dự án mẫu" chép sample/clip-mau rồi mở (/api/onboarding/sample).
 'use strict';
@@ -596,7 +596,8 @@
   }
   async function openHome() {
     await loadState();
-    const [brands, st] = await Promise.all([api('/api/brands').catch(() => null), api('/api/autopilot/state').catch(() => null)]);
+    const [brands, st, tpls] = await Promise.all([api('/api/brands').catch(() => null), api('/api/autopilot/state').catch(() => null), api('/api/templates').catch(() => [])]);
+    const tplN = id => (Array.isArray(tpls) ? tpls : []).filter(t => t.brand_id === id).length; // S27 M189: mẫu của thương hiệu
     const nb = Array.isArray(brands) ? brands.length : -1;
     const bl = Array.isArray(brands) ? brands : [], saved = st?.settings?.brand || '';
     AP = { st: st && !st.error ? st : null, brand: apPickBrand({ saved, onboard: ST?.brand, brands: bl }), brands: bl }; // S26 M183
@@ -614,7 +615,8 @@
       return `<div class="bc"><div class="bt"><span class="lg"${col && !b.logoUrl ? ` data-col="${col}"` : ''}>${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}" alt="">` : esc(t.trim().charAt(0).toUpperCase() || '?')}</span>
         <div><b title="${esc(t)}">${esc(t)}</b><small>${esc(info)}</small></div></div>
         <div class="ba"><button class="primary" data-h="bvid" data-bid="${esc(b.id)}"><i class="ti ti-video-plus"></i> Video mới</button>
-          ${live.length ? `<button data-h="bproj" data-bid="${esc(b.id)}"><i class="ti ti-folders"></i> Dự án</button>` : ''}<span class="grow"></span>
+          ${live.length ? `<button data-h="bproj" data-bid="${esc(b.id)}"><i class="ti ti-folders"></i> Dự án</button>` : ''}
+          <button data-h="btpl" data-bid="${esc(b.id)}" title="Thư viện mẫu, mẫu của thương hiệu này đứng đầu"><i class="ti ti-layout-grid"></i> Mẫu${tplN(b.id) ? ` (${tplN(b.id)})` : ''}</button><span class="grow"></span>
           <button class="ghost" data-h="bedit" data-bid="${esc(b.id)}" title="Sửa thương hiệu ${esc(t)}" aria-label="Sửa thương hiệu ${esc(t)}"><i class="ti ti-pencil"></i></button></div></div>`;
     };
     HOME.innerHTML = `<div class="in"><div class="hd"><div class="grow"><h1>Bạn muốn làm video gì hôm nay?</h1><p class="sub">Chọn một cách bắt đầu. Studio dẫn bạn từng bước.</p></div>
@@ -666,6 +668,7 @@
     if (a === 'bnew') return openWizard(0, { fresh: true });
     if (a === 'bedit') return openWizard(0, { brand: b.dataset.bid });
     if (a === 'bvid') { hideHome(); return Studio.newProject ? Studio.newProject({ brand: b.dataset.bid }) : document.getElementById('newproj')?.click(); }
+    if (a === 'btpl') return Studio.openTemplates?.({ brand: b.dataset.bid }); // thư viện nổi trên trang chủ; Dùng mẫu thì trang chủ đóng
     if (a === 'bproj') {
       const sel = HOME.querySelector('#onb-kb');
       if (sel && [...sel.options].some(o => o.value === b.dataset.bid)) { sel.value = b.dataset.bid; filterRec(); }
@@ -695,7 +698,7 @@
   Studio.openOnboarding = () => openWizard(0);
   Studio.logoColors = logoColors; // M91: ô Gợi ý bằng AI của panel Thương hiệu đo màu logo cùng một cách
   Studio.onboardingPurpose = async () => purpose((await loadState())?.purpose)?.[2] || '';
-  Studio.openHome = openHome;
+  Studio.openHome = openHome; Studio.hideHome = hideHome;
   // Home button first in the header (logo removed to save space) (not addTopButton: 01_workflow moves step-less header buttons into the ⋯ menu).
   { const b = document.createElement('button'); b.id = 'onb-btn'; b.className = 'icon'; b.title = 'Trang chủ: cách bắt đầu nhanh, dự án gần đây, hướng dẫn';
     b.setAttribute('aria-label', 'Trang chủ'); b.innerHTML = '<i class="ti ti-home"></i>'; b.addEventListener('click', openHome);
