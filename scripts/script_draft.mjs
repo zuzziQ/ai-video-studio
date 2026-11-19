@@ -62,9 +62,11 @@ export const VARIANTS = [
   { id: 'fast', name: 'Nhịp nhanh', pack: 'auto', density: 'day', tone: 'năng lượng, cuốn, nhiều điểm nhấn', note: 'Nhiều graphic, đổi cảnh nhanh' },
   { id: 'calm', name: 'Thoáng, kể chuyện', pack: 'auto', density: 'thua', tone: 'kể chuyện, cảm xúc, ít chữ trên màn hình', note: 'Ít graphic, để lời dẫn dắt' },
 ];
-/** Tham số ai_edit.mjs của phương án k; `used` = gói các phương án trước đã chọn (Claude chọn gói khác). */
-export function variantArgs(v, used = []) {
-  const A = ['--pack', v.pack, '--density', v.density, '--tone', v.tone, '--goal', 'mẫu dựng sẵn trước khi quay (chưa có video, A-roll là ô chờ quay)'];
+/** Tham số ai_edit.mjs của phương án k; `used` = gói các phương án trước đã chọn (Claude chọn gói khác).
+ *  S27 M192: `taste` = { brand, pace } gu của thương hiệu: ai_edit đọc gu (--taste), phương án "Theo thương hiệu" theo nhịp hay chọn. */
+export function variantArgs(v, used = [], taste = null) {
+  const dens = v.id === 'brand' && ['thua', 'vua', 'day'].includes(taste?.pace) ? taste.pace : v.density;
+  const A = ['--pack', v.pack, '--density', dens, ...(taste?.brand ? ['--taste', taste.brand] : []), '--tone', v.tone, '--goal', 'mẫu dựng sẵn trước khi quay (chưa có video, A-roll là ô chờ quay)'];
   const extra = ['Video chưa quay: hình người nói là ô chờ, giờ mỗi đoạn là giờ dự kiến theo tốc độ đọc.',
     v.pack === 'auto' && used.length ? `Chọn gói khác ${used.map(p => `“${p}”`).join(', ')} để phương án khác rõ.` : ''].filter(Boolean).join(' ');
   return [...A, '--extra', extra, '--no-shorten'];
@@ -170,6 +172,10 @@ async function brandOf(id) {
   const tpl = typeof kit.tpl === 'string' && /^[a-z0-9][a-z0-9_-]{0,80}$/.test(kit.tpl) ? readJSON(path.join(SKILL, 'templates', 'user', kit.tpl + '.json')) || readJSON(path.join(SKILL, 'templates', kit.tpl + '.json')) : null;
   return { kit, pack: tpl?.pack || kit.pack || null, fieldsFor: d => ({ ...brandFields(kit, d), kit: kit.id }) };
 }
+/** S27 M192: gu của thương hiệu cho 3 phương án (lỗi đọc phong cách: dựng không gu). */
+async function tasteOf(id) {
+  try { const P = await import('./profile.mjs'), h = P.habitsFor(id || P.CHUNG); return { brand: id || P.CHUNG, pace: h.active ? h.adjust.pace || '' : '' }; } catch { return null; }
+}
 /** Một phương án: dựng thư mục dự án, AI dựng, kiểm, chụp khung. → tóm tắt cho thẻ phương án. */
 async function buildVariant(root, k, v, ctx, used, P) {
   const vd = path.join(root, `v${k + 1}`);
@@ -181,8 +187,8 @@ async function buildVariant(root, k, v, ctx, used, P) {
   wr(path.join(vd, 'timeline.json'), tl);
   wr(path.join(vd, '.studio', 'script.json'), { version: 1, text: ctx.text, name: ctx.name, updated: ctx.updated, segments: ctx.est.segments, align: ctx.est.align });
   if (ctx.sources) wr(path.join(vd, '.studio', 'script_sources.json'), ctx.sources);
-  const out = { k: k + 1, id: v.id, name: v.name, note: v.note, density: v.density };
-  await runNode([path.join(SKILL, 'scripts', 'ai_edit.mjs'), vd, ...variantArgs(v, used), '--apply'], l => {
+  const A = variantArgs(v, used, ctx.taste), out = { k: k + 1, id: v.id, name: v.name, note: v.note, density: A[A.indexOf('--density') + 1] };
+  await runNode([path.join(SKILL, 'scripts', 'ai_edit.mjs'), vd, ...A, '--apply'], l => {
     const m = /^@@ ([\d.]+) (.*)$/.exec(l); if (m) say(P(+m[1] * .8), `Phương án ${k + 1}/${VARIANTS.length} · ${m[2]}`);
   });
   const done = readJSON(path.join(vd, 'timeline.json')) || tl, caps = readJSON(path.join(vd, 'work', 'captions.json')) || ctx.caps;
@@ -218,7 +224,7 @@ async function main() {
   const wps = clampWps(d.wps), est = estimateTimes(segs, { wps }), aspect = ASPECTS[d.aspect] ? d.aspect : '9:16';
   const caps = captionsFrom(est.words, { max: 4 });
   const brand = await brandOf(d.brand || '');
-  const ctx = { text: d.text, name: String(d.name || '').slice(0, 80) || 'Bản nháp', updated: d.created || new Date().toISOString(), est, caps, aspect, wps, brand, sources: Array.isArray(d.sources) ? d.sources : null };
+  const ctx = { text: d.text, name: String(d.name || '').slice(0, 80) || 'Bản nháp', updated: d.created || new Date().toISOString(), est, caps, aspect, wps, brand, sources: Array.isArray(d.sources) ? d.sources : null, taste: await tasteOf(d.brand || '') };
   const res = { id: path.basename(root), at: new Date().toISOString(), state: 'running', wps, aspect, duration: est.duration, segments: est.segments.length, variants: [] };
   wr(resultFile(root), res);
   say(.02, `Ước giờ ${est.segments.length} đoạn theo ${wps} từ/giây (${Math.round(est.speech)} giây lời)`);

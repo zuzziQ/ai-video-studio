@@ -249,8 +249,73 @@ export function observe(before, after, extra = {}) {
   if (cb.length) o.claims = [cb.length, cb.filter(t => ca.has(t)).length, cb.filter(t => !ca.has(t)).slice(0, 3)];
   const fx = captionFixes(extra.capsBefore, extra.capsAfter);
   if (fx.length) o.words = fx;
+  Object.assign(o, tasteDiff(before, after)); // S27 M192: khối / SFX / nhạc / element bị xoá, khối sửa tay
   o.edited = !!fx.length || JSON.stringify({ s: after.scenes, a: after.audio, c: after.caption_style, p: after.pack, b: ctaOf(after) }) !== JSON.stringify({ s: before.scenes, a: before.audio, c: before.caption_style, p: before.pack, b: ctaOf(before) });
   return o;
+}
+// ---------- S27 M192: gu của thương hiệu ----------
+// Khối AI / tự động / theo kịch bản (_script) đặt, kể cả element do Claude dựng (celem); emoji / chữ / ảnh đã có luật drop_* riêng.
+const TASTE = s => (s._ai || s._auto || s._script) && !s._base;
+const OWN_RULE = new Set(['emoji_pop', 'text', 'photo']);
+const tasteName = v => String(v || '').normalize('NFC').replace(/[^\p{L}\p{N}_ .-]/gu, '').trim().slice(0, 40);
+const sfxName = x => tasteName(String(x?.name || (x?.file ? path.basename(String(x.file)).replace(/\.[a-z0-9]{2,4}$/i, '') : '')).replace(/_\d+$/, ''));
+const tally = (list, nameOf) => { const m = new Map(); for (const x of list) { const k = nameOf(x); if (k) m.set(k, (m.get(k) || 0) + 1); } return m; };
+const pairs = (b, a, max = 30) => Object.fromEntries([...b.entries()].slice(0, max).map(([k, n]) => [k, [n, a.get(k) || 0]]));
+/** Một bản AI giao so với bản người dùng lưu: số khối theo loại / SFX theo tên (trước, sau), mood nhạc AI bị bỏ, khối bị sửa tay. */
+export function tasteDiff(before = {}, after = {}) {
+  const sc = tl => (tl.scenes || []).filter(s => TASTE(s) && !s.hidden);
+  const sx = tl => (tl.audio?.sfx || []).filter(x => (x._ai || x._auto || x._script) && !x.hidden && !x.mute);
+  const moods = tl => (tl.audio?.music || []).filter(m => (m._ai || m._auto || m._script) && !m.hidden && !m.mute).map(m => tasteName(m.mood)).filter(Boolean);
+  const out = {}, nm = s => tasteName(s.type);
+  const tb = tally(sc(before), nm), ta = tally(sc(after), nm);
+  if (tb.size) out.types = pairs(tb, ta);
+  const fb = tally(sx(before), sfxName), fa = tally(sx(after), sfxName);
+  if (fb.size) out.sfxs = pairs(fb, fa);
+  const ma = new Set(moods(after)), mb = [...new Set(moods(before))];
+  if (mb.length) out.moods = [mb.slice(0, 4), mb.filter(m => !ma.has(m)).slice(0, 4)];
+  const touched = sc(after).filter(s => s._orig).length;
+  if (touched) out.touched = touched;
+  return out;
+}
+const PACE = { thua: 'thưa (ít graphic, để lời dẫn dắt)', vua: 'vừa', day: 'dày (nhiều graphic, đổi cảnh nhanh)' };
+// luật gu (gọi trong deriveRules): khối / SFX / mood bị xoá, phương án mẫu dựng sẵn được chọn / bỏ, element Claude dựng được giữ
+function tasteRules(learned, all, add, forgot) {
+  const pct = x => Math.round(x * 100) + '%';
+  const after = key => o => !forgot[key] || (o.t || '') > forgot[key];
+  const avoid = (field, prefix, label, adjKey, max) => {
+    const names = new Set(all.flatMap(o => Object.keys(o[field] || {})));
+    const found = [];
+    for (const n of names) {
+      if (field === 'types' && OWN_RULE.has(n)) continue;
+      const key = `${prefix}:${n}`, obs = all.filter(after(key)).filter(o => o[field]?.[n]?.[0]);
+      const b = obs.reduce((a, o) => a + o[field][n][0], 0), k = obs.reduce((a, o) => a + Math.min(o[field][n][0], o[field][n][1]), 0);
+      const del = obs.filter(o => o[field][n][1] < o[field][n][0]).length, r = b ? (b - k) / b : 0;
+      if (del >= 2 && b >= 2 && r >= .6) found.push({ key, n, r, del });
+    }
+    for (const f of found.sort((x, y) => y.del - x.del || y.r - x.r).slice(0, max))
+      add(f.key, `Bạn hay xoá ${label} “${f.n}” Claude đặt (${pct(f.r)}, ${f.del} video) → không dùng nữa`, { [adjKey]: [f.n] });
+  };
+  avoid('types', 'avoid', 'khối', 'avoid', 8);
+  avoid('sfxs', 'avoid_sfx', 'SFX', 'avoid_sfx', 6);
+  { const cnt = new Map();
+    for (const o of all) for (const m of o.moods?.[1] || []) if (after('avoid_mood:' + m)(o)) cnt.set(m, (cnt.get(m) || 0) + 1);
+    for (const [m, n] of [...cnt].filter(([, n]) => n >= 2).slice(0, 3)) add('avoid_mood:' + m, `Bạn bỏ nhạc mood “${m}” Claude chọn ở ${n} video → chọn mood khác`, { avoid_mood: [m] }); }
+  // element do Claude dựng (celem) trên timeline được giữ, hoặc Nhận ở panel Element (learned.elems)
+  { const obs = all.filter(after('elem_keep')).filter(o => o.types?.celem?.[0]), kept = obs.filter(o => o.types.celem[1] > 0).length;
+    const lib = (Array.isArray(learned?.elems) ? learned.elems : []).filter(after('elem_keep'));
+    if (kept + lib.length >= 2 && kept >= obs.length - kept) {
+      const ex = [...new Set(lib.map(e => e.name).filter(Boolean))].slice(-3).reverse();
+      add('elem_keep', `Bạn giữ element Claude dựng riêng (${kept + lib.length} lần${ex.length ? `, vd “${ex.join('”, “')}”` : ''}) → khi kho thiếu, dựng element riêng cùng kiểu`, { elem_like: ex.length ? ex : ['element riêng'] });
+    } }
+  // phương án mẫu dựng sẵn (M191) được dùng / lưu thành mẫu: learned.picks [{t, draft, id, pack, density, skipped:[{id, pack, density}]}]
+  const picks = (Array.isArray(learned?.picks) ? learned.picks : []).filter(p => p && typeof p === 'object');
+  { const P = picks.filter(after('pick_pace')).slice(-3), c = tally(P, p => PACE[p.density] ? p.density : ''), [d, n] = [...c].sort((x, y) => y[1] - x[1])[0] || [];
+    if (n >= 2) add('pick_pace', `Bạn hay chọn phương án nhịp ${PACE[d]} ở mẫu dựng sẵn (${n}/${P.length} lần gần nhất) → dựng nhịp này`, { pace: d }); }
+  { const P = picks.filter(after('pick_pack')).slice(-3), c = tally(P, p => tasteName(p.pack)), [k, n] = [...c].sort((x, y) => y[1] - x[1])[0] || [];
+    if (n >= 2) add('pick_pack', `Bạn hay chọn phương án gói “${k}” ở mẫu dựng sẵn (${n}/${P.length} lần gần nhất) → ưu tiên gói này`, { pick_pack: k }); }
+  { const chosen = new Set(picks.map(p => tasteName(p.pack))), cnt = new Map();
+    for (const p of picks) for (const x of Array.isArray(p.skipped) ? p.skipped : []) { const k = tasteName(x?.pack); if (k && !chosen.has(k) && after('skip_pack:' + k)(p)) cnt.set(k, (cnt.get(k) || 0) + 1); }
+    for (const [k, n] of [...cnt].filter(([, n]) => n >= 3).sort((x, y) => y[1] - x[1]).slice(0, 3)) add('skip_pack:' + k, `Bạn bỏ qua phương án gói “${k}” ${n} lần, chưa chọn lần nào → ít dùng gói này`, { avoid_pack: [k] }); }
 }
 // Aggregate the newest ≤ 10 observations into small, explainable adjustments.
 // S19 M134: mỗi điều là một "thói quen" có khoá (items[]) — learned.off[] tắt hẳn, learned.forgot{khoá: thời điểm} quên các
@@ -259,7 +324,7 @@ export function deriveRules(learned, { skip = [] } = {}) {
   const all = Object.values(learned?.projects || {}).filter(o => o && o.edited).sort((a, b) => (b.t || '').localeCompare(a.t || '')).slice(0, 10);
   const off = new Set([...(Array.isArray(learned?.off) ? learned.off : []), ...skip]), forgot = learned?.forgot && typeof learned.forgot === 'object' ? learned.forgot : {};
   const rules = { n: all.length, adjust: {}, notes: [], items: [] };
-  if (!all.length) return rules;
+  // S27 M192: không còn trả sớm khi chưa có video sửa: phương án mẫu dựng sẵn / element đã giữ vẫn là gu (mọi luật dưới cần ≥ 2 quan sát)
   const use = key => all.filter(o => !forgot[key] || (o.t || '') > forgot[key]);
   const add = (key, note, adj) => {
     const it = { key, note, off: off.has(key) }; rules.items.push(it);
@@ -305,6 +370,7 @@ export function deriveRules(learned, { skip = [] } = {}) {
     for (const c of cnt.values()) if (c.n >= 2 && (!best.has(c.key) || best.get(c.key).n < c.n)) best.set(c.key, c);
     for (const c of [...best.values()].sort((a, b) => b.n - a.n).slice(0, 12)) add(c.key, `Bạn sửa chữ phụ đề “${c.f}” thành “${c.t}” ở ${c.n} video → thêm vào từ điển chính tả của thương hiệu`, { dict: [{ from: c.f, to: c.t }] });
   }
+  tasteRules(learned, all, add, forgot);
   const moved = all.reduce((a, o) => a + (o.moved || 0), 0);
   if (moved) rules.notes.push(`(Thống kê) ${moved} cảnh tự động đã bị bạn chỉnh vị trí/nội dung — chưa tự áp, chỉ ghi nhận`);
   return rules;
@@ -357,8 +423,57 @@ export function habitsFor(ref, { skip = [] } = {}) {
   if (!p.learn || !p.learned) return empty;
   const r = deriveRules(p.learned, { skip }), a = r.adjust;
   const extra = [a.drop_src?.length ? `Không chèn ${a.drop_src.map(k => NO_SRC[k]).filter(Boolean).join(', ')} (người dùng hay xoá).` : '', a.no_claims ? CLAIM_RULE : '',
-    a.cta ? `Lời kêu gọi (CTA) người dùng hay dùng: "${a.cta}".` : '', a.dict?.length ? `Chính tả người dùng hay sửa: ${a.dict.map(e => `"${e.from}" → "${e.to}"`).join(', ')}.` : ''].filter(Boolean).join(' ');
-  return { ...empty, items: r.items, active: r.items.filter(i => !i.off && !skip.includes(i.key)).length, adjust: a, dict: a.dict || [], extra };
+    a.cta ? `Lời kêu gọi (CTA) người dùng hay dùng: "${a.cta}".` : '', ...tasteLines(a),
+    a.dict?.length ? `Chính tả người dùng hay sửa: ${a.dict.map(e => `"${e.from}" → "${e.to}"`).join(', ')}.` : ''];
+  return { ...empty, items: r.items, active: r.items.filter(i => !i.off && !skip.includes(i.key)).length, adjust: a, dict: a.dict || [], extra: capText(extra) };
+}
+// S27 M192: gu đưa vào prompt (AI dựng, mẫu dựng sẵn, element riêng) có giới hạn độ dài: ghép từng câu tới TASTE_MAX ký tự
+export const TASTE_MAX = 700;
+export function capText(parts, max = TASTE_MAX) {
+  let out = '';
+  for (const p of parts.filter(Boolean)) { const t = out ? out + ' ' + p : p; if (t.length > max) break; out = t; }
+  return out;
+}
+const q = list => list.map(x => `“${x}”`).join(', ');
+function tasteLines(a) {
+  return [a.avoid?.length ? `Không dùng khối người dùng hay xoá: ${q(a.avoid)}.` : '', a.avoid_sfx?.length ? `Không dùng SFX: ${q(a.avoid_sfx)}.` : '',
+    a.avoid_mood?.length ? `Không chọn nhạc mood: ${q(a.avoid_mood)}.` : '', a.pace ? `Nhịp người dùng hay chọn: ${PACE[a.pace] || a.pace}.` : '',
+    a.pick_pack ? `Gói người dùng hay chọn: “${a.pick_pack}”.` : '', a.avoid_pack?.length ? `Hạn chế gói: ${q(a.avoid_pack)}.` : '',
+    a.elem_like?.length ? `Người dùng giữ element riêng Claude dựng (${q(a.elem_like)}): khi kho thiếu khối hợp, dựng element riêng cùng kiểu.` : ''];
+}
+/** Gu cho riêng prompt element (M199): chỉ phần về element / khối không thích, có giới hạn độ dài. */
+export function elemTaste(ref) {
+  try { const h = habitsFor(ref || CHUNG), a = h.adjust; return capText([a.elem_like?.length ? `Element người dùng đã giữ: ${q(a.elem_like)} (dựng cùng kiểu).` : '', a.avoid?.length ? `Tránh kiểu khối người dùng hay xoá: ${q(a.avoid)}.` : ''], 300); } catch { return ''; }
+}
+/** opts.learned cho ai_edit.mjs (20_ai.mjs và ai_edit --taste <thương hiệu> của mẫu dựng sẵn). null = không có gì để áp. */
+export function learnedOf(h, skip = []) {
+  if (!h?.active) return null;
+  const a = h.adjust;
+  return { brand: h.name, notes: h.items.filter(i => !i.off && !skip.includes(i.key)).map(i => i.note), extra: h.extra, drop: a.drop_src || [],
+    music: a.music === 'off' ? 'off' : '', music_gain: a.music_gain || 0, caption_style: a.caption_style || '', dict: h.dict,
+    avoid: a.avoid || [], avoid_sfx: a.avoid_sfx || [], avoid_mood: a.avoid_mood || [] };
+}
+const learnOn = ref => { try { return !!getProfile(ref || CHUNG).learn; } catch { return false; } };
+/** Phương án mẫu dựng sẵn được dùng / lưu thành mẫu (M191): ghi một lần mỗi bản nháp (chọn lại thì thay). */
+export function recordPick(ref, { draft = '', pick = {}, others = [] } = {}) {
+  if (!learnOn(ref)) return null;
+  const one = v => ({ id: tasteName(v?.id), pack: tasteName(v?.pack), density: PACE[v?.density] ? v.density : '' });
+  const o = { t: new Date().toISOString(), draft: String(draft).slice(0, 60), ...one(pick), name: tasteName(pick?.name), skipped: (Array.isArray(others) ? others : []).slice(0, 4).map(one) };
+  return patchStyle(ref || CHUNG, st => {
+    st.learned = st.learned || { projects: {} };
+    st.learned.picks = [...(Array.isArray(st.learned.picks) ? st.learned.picks : []).filter(p => !o.draft || p.draft !== o.draft), o].slice(-20);
+    st.learned.updated = o.t;
+  });
+}
+/** Element do Claude dựng được Nhận vào thư viện (M199). */
+export function recordElem(ref, name = '') {
+  if (!learnOn(ref)) return null;
+  const o = { t: new Date().toISOString(), name: tasteName(name) };
+  return patchStyle(ref || CHUNG, st => {
+    st.learned = st.learned || { projects: {} };
+    st.learned.elems = [...(Array.isArray(st.learned.elems) ? st.learned.elems : []), o].slice(-30);
+    st.learned.updated = o.t;
+  });
 }
 // Từ điển chính tả đã học của một thương hiệu (dict.mjs gộp vào --fix của captions.py; không bao giờ ném lỗi)
 export function learnedDict(ref) { try { return habitsFor(ref).dict; } catch { return []; } }
