@@ -92,7 +92,21 @@
   // Tên việc đang chạy ở phía Tự lái (cho toast "Đang chạy: …" khi server báo bận mà khay không có thẻ nào)
   const queueRunning = items => (Array.isArray(items) ? items : []).find(i => i.state === 'running')?.title || '';
 
-  const T = { cleanLog, download, lastDownload, stepLine, pct, sizeLabel, phaseOf, view, locked, lockTitle, busyMessage, exportNote, queueLine, queueRunning, isNoise };
+  // S26 M186: loại việc server (job.kind, ctx.startJob) → tên trong khay + có khoá timeline không. lock = route ghi lại timeline.json /
+  // captions lúc xong (Studio tải lại dự án sau đó): sửa giữa chừng sẽ mất nên khoá. Tải lại trang giữa chừng: khay tự nhận lại theo bảng này.
+  // Không có trong bảng = việc có màn theo dõi riêng (setup, perf-bench, batch, publish, frames, stylelab): khay không nhận.
+  const KINDS = {
+    export: ['Xuất video'], new: ['Tạo dự án mới'], ai: ['AI dựng giúp', 1], qc: ['Kiểm tra chất lượng', 1], qc_quick: ['Sửa vị trí graphic', 1],
+    variants: ['Tạo 3 phiên bản'], fillers: ['Dò lỗi nói'], transcribe: ['Tạo lời thoại', 1], tplfit: ['Mẫu khớp lời thoại', 1],
+    autofill: ['Tự thêm b-roll / âm thanh', 1], dub: ['Dịch & lồng tiếng', 1], mix: ['Trộn âm thanh'], reframe: ['Dò mặt'], segment: ['Tách nền'],
+    sticker: ['Tạo sticker người'], broll_suggest: ['Claude gợi ý b-roll'], genimage: ['Tạo ảnh AI'], brolltag: ['Claude gắn thẻ thư viện'],
+    'kho-migrate': ['Chuyển file cũ vào Kho'], highlights: ['Cắt clip từ video dài'], topic: ['Tạo video từ chủ đề'], 'longform-export': ['Xuất các clip'],
+  };
+  const kindInfo = kind => (Object.hasOwn(KINDS, kind) ? { kind, title: KINDS[kind][0], lock: !!KINDS[kind][1] } : null);
+  // Lúc khởi động (GET /api/job): việc đang chạy mà khay chưa có thẻ thì nhận lại; loại có màn riêng hay đã xong thì thôi
+  const resumeOf = j => (j && j.state === 'running' ? kindInfo(j.kind) : null);
+
+  const T = { cleanLog, download, lastDownload, stepLine, pct, sizeLabel, phaseOf, view, locked, lockTitle, busyMessage, exportNote, queueLine, queueRunning, isNoise, KINDS, kindInfo, resumeOf };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.JobsCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);

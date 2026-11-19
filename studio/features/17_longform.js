@@ -121,18 +121,26 @@
     document.querySelectorAll('#lf-body [data-open]').forEach(b => b.onclick = () => openProject(S.list[+b.dataset.open].dir));
     document.querySelectorAll('#lf-body [data-play]').forEach(b => b.onclick = () => play(S.list[+b.dataset.play]));
   }
-  function progress(title, onDone) {
-    const t0 = Date.now();
-    Studio.modal(`<h3><i class="ti ti-loader-2 spin"></i> ${esc(title)}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>
-      <div class="muted lf-el" id="lf-el"></div><div class="actions"><button id="lf-cancel">Dừng</button></div>`);
-    const tick = setInterval(() => { const el = $('#lf-el'); if (el) el.textContent = `Đã chạy ${mmss((Date.now() - t0) / 1000)}`; else clearInterval(tick); }, 1000);
-    $('#lf-cancel').onclick = () => api('/api/job/cancel', {});
-    Studio.pollJob(j => {
-      clearInterval(tick);
-      if (j.state !== 'done') return Studio.modal(`<h3>Chưa xong</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').split('\n').filter(l => !l.startsWith('@@')).slice(-12).join('\n'))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      onDone(j);
-    });
+  // S26 M186: việc dài (tìm khoảnh khắc hay, video từ chủ đề) chạy nền trong khay việc, không hộp giữa màn hình. Không khoá timeline:
+  // kết quả là các dự án mới nằm cạnh, dự án đang mở không bị ghi. Xong thì thẻ có "Xem các clip" (mở lại panel này).
+  const view = () => { if (document.querySelector('#rail .on')?.dataset.p !== 'longform') Studio.jobs.open('longform'); else render(); };
+  async function highlightsDone(j, dir) {
+    S.dir = j.out?.dir || dir || S.dir; LSset('dir', S.dir);
+    await refresh(); const n = S.list?.length || 0;
+    return { text: `Đã dựng ${n} dự án clip ngắn`, acts: [{ label: 'Xem các clip', icon: 'ti-scissors', primary: true, on: () => { S.tab = 'long'; LSset('tab', 'long'); view(); } }] };
   }
+  async function topicDone(j) {
+    S.topicOut = j.out; await refresh();
+    return { text: 'Đã tạo video' + (j.out?.title ? ` “${j.out.title}”` : ''), acts: [{ label: 'Xem video', icon: 'ti-eye', primary: true, on: () => { S.tab = 'topic'; LSset('tab', 'topic'); view(); } },
+      ...(j.out?.dir ? [{ label: 'Mở dự án', icon: 'ti-folder-open', on: () => openProject(j.out.dir) }] : [])] };
+  }
+  async function exportDone(j) {
+    await refresh(); const n = j.out?.outputs?.length || 0;
+    return { text: `Đã xuất ${n} clip`, acts: [{ label: 'Xem các clip', icon: 'ti-scissors', primary: true, on: () => { S.tab = 'long'; LSset('tab', 'long'); view(); } }] };
+  }
+  Studio.jobs.resumable('longform-export', () => ({ onDone: exportDone }));
+  Studio.jobs.resumable('highlights', () => ({ onDone: j => highlightsDone(j) }));
+  Studio.jobs.resumable('topic', () => ({ onDone: topicDone }));
   async function startLong() {
     const video = (S.picker?.value || S.video).trim();
     if (!video) return Studio.toast('Chọn video dài trước');
@@ -142,17 +150,11 @@
     if (!(b.min > 3 && b.max > b.min)) return Studio.toast('Độ dài tối đa phải lớn hơn tối thiểu');
     for (const [k, v] of [['video', video], ['n', b.n], ['min', b.min], ['max', b.max], ['or', b.orient], ['model', b.model]]) LSset(k, v);
     S.video = video;
-    const r = await api('/api/longform/highlights', b);
-    if (!r.ok) return Studio.toast(r.error || 'Không chạy được');
-    progress('Đang tìm khoảnh khắc hay…', async j => {
-      Studio.closeModal(); S.dir = j.out?.dir || r.dir; LSset('dir', S.dir);
-      await refresh(); Studio.toast(`Đã dựng ${S.list?.length || 0} dự án clip ngắn`);
-    });
+    Studio.jobs.start('/api/longform/highlights', b, { kind: 'highlights', title: 'Tìm khoảnh khắc hay', note: 'Mỗi clip là một dự án riêng; dự án đang mở không bị ghi',
+      onDone: (j, r) => highlightsDone(j, r?.dir) });
   }
   async function exportAll() {
-    const r = await api('/api/longform/export', { dir: S.dir });
-    if (!r.ok) return Studio.toast(r.error || 'Không xuất được');
-    progress(`Đang xuất ${S.list.length} video…`, async () => { Studio.closeModal(); await refresh(); Studio.toast('Đã xuất tất cả'); });
+    Studio.jobs.start('/api/longform/export', { dir: S.dir }, { kind: 'longform-export', title: `Xuất ${S.list.length} clip`, onDone: exportDone });
   }
   async function autopilotAll() {
     let n = 0, err = '';
@@ -207,9 +209,7 @@
     if (topic.length < 4) return Studio.toast('Nhập chủ đề trước');
     const b = { topic, brand: S.brand || '', dur: +$('#lf-dur').value, orient: $('#lf-tor').value, voice: $('#lf-voice').value, handle: $('#lf-handle').value.trim(), export: $('#lf-texp').checked };
     for (const [k, v] of [['topic', topic], ['dur', b.dur], ['tor', b.orient], ['voice', b.voice], ['handle', b.handle], ['texp', b.export ? '1' : '0']]) LSset(k, v);
-    const r = await api('/api/longform/topic', b);
-    if (!r.ok) return Studio.toast(r.error || 'Không chạy được');
-    progress('Đang tạo video từ chủ đề…', async j => { Studio.closeModal(); S.topicOut = j.out; await refresh(); Studio.toast('Đã tạo video'); });
+    Studio.jobs.start('/api/longform/topic', b, { kind: 'topic', onDone: topicDone });
   }
 
   // S22 M154: "Tìm đoạn hay" của thanh Hỏi Claude — mở tab Cắt clip, điền hướng dẫn / số clip rồi bấm Tìm khoảnh khắc hay (chưa chọn

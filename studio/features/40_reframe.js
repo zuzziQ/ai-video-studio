@@ -6,14 +6,10 @@
   const LANGS = [['en', 'Tiếng Anh'], ['zh', 'Tiếng Trung'], ['ja', 'Tiếng Nhật'], ['ko', 'Tiếng Hàn'], ['th', 'Tiếng Thái'], ['vi', 'Tiếng Việt'], ['fr', 'Tiếng Pháp'],
     ['de', 'Tiếng Đức'], ['es', 'Tiếng Tây Ban Nha'], ['id', 'Tiếng Indonesia'], ['ru', 'Tiếng Nga'], ['it', 'Tiếng Ý'], ['pt', 'Tiếng Bồ Đào Nha']];
   const opt = (list, cur) => list.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`).join('');
-  const jobModal = title => Studio.modal(`<h3>${title}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="jcancel">Dừng</button></div>`);
-  const fail = j => Studio.modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-  async function startJob(path, body, title, done) {
-    const r = await Studio.api(path, body);
-    if (!r.ok) return Studio.toast('Đang có tác vụ khác chạy');
-    jobModal(title); $('#jcancel').onclick = () => Studio.api('/api/job/cancel', {});
-    Studio.pollJob(j => (j.state === 'done' ? (Studio.closeModal(), done(j.out)) : fail(j)));
-  }
+  // S26 M186: việc nền chạy trong khay việc (features/05_jobs.js), không hộp chờ giữa màn hình. done(out) → câu kết quả (thẻ + toast) hoặc {text, acts}
+  const asRes = v => (typeof v === 'string' ? { text: v, toast: v } : v || { text: 'Xong' });
+  // Dò mặt không khoá (kết quả áp vào clip lúc xong); dịch / lồng tiếng ghi lại captions + timeline nên khoá (kind 'dub', JobsCore.KINDS)
+  const startJob = (path, body, kind, done, title) => Studio.jobs.start(path, body, { kind, title, onDone: async j => asRes(await done(j.out)) });
 
   // ---------- Bám mặt (clip inspector) ----------
   Studio.addInspectorTab(c => {
@@ -48,12 +44,12 @@
       k.reframe = out.keys.filter(x => x.t >= a && x.t <= b); k.ar = out.ar; k.fit = 'cover'; delete k.reframe_off; n++;
     }
     Studio.changed(true);
-    Studio.toast(`Đã bám mặt ${n} clip · thấy mặt ở ${Math.round(out.found * 100)}% mẫu${out.cuts ? ` · ${out.cuts} chỗ cắt cảnh` : ''}`);
+    return `Đã bám mặt ${n} clip · thấy mặt ở ${Math.round(out.found * 100)}% mẫu${out.cuts ? ` · ${out.cuts} chỗ cắt cảnh` : ''}`;
   }
   document.addEventListener('click', e => {
     const b = e.target.closest('#rfpanel [data-rf]'); if (!b) return;
     const c = clipSel(); if (!c) return; const o = c.obj, a = b.dataset.rf;
-    if (a === 'run') return startJob('/api/reframe', { src: o.src }, '<i class="ti ti-face-id"></i> Đang dò mặt…', out => applyTrack(out, o));
+    if (a === 'run') return startJob('/api/reframe', { src: o.src }, 'reframe', out => applyTrack(out, o));
     Studio.pushUndo();
     if (a === 'toggle') { if (o.reframe_off) delete o.reframe_off; else o.reframe_off = true; }
     if (a === 'clear') { delete o.reframe; delete o.reframe_off; }
@@ -100,18 +96,20 @@
     </div>`;
   }
   function setSub2(fn) { const TL = Studio.TL; Studio.pushUndo('sub2'); TL.sub2 = TL.sub2 || { style: 'plain', lang: state().lang }; fn(TL.sub2); Studio.changed(); }
+  const dubDone = kind => async out => {
+    await Studio.reload();
+    const ov = out?.overruns?.length;
+    Studio.renderPanel();
+    return kind === 'dub' ? `Đã lồng tiếng ${out?.phrases || ''} câu${ov ? ` · ${ov} câu dài hơn chỗ trống (lấn nhẹ)` : ''}` : 'Đã dịch phụ đề';
+  };
+  Studio.jobs.resumable('dub', () => ({ onDone: async j => asRes(await dubDone(j.out?.phrases ? 'dub' : 'translate')(j.out)) }));
   async function run(kind) {
     const s = state(), TL = Studio.TL;
     if (!(Studio.CAP || []).length) return Studio.needCaptions(() => run(kind), 'Dịch và lồng tiếng');
     if (!await Studio.saveNow()) return;
     const body = { lang: s.lang, tts: s.tts, voice: s.voice || undefined, voice_gain: TL.audio?.voice_gain ?? .15,
       translate: kind === 'translate' || TL.sub2?.lang !== s.lang || !(Studio.CAP || []).some(c => c.tr), dub: kind === 'dub', force: kind === 'translate' };
-    startJob('/api/dub', body, kind === 'dub' ? '<i class="ti ti-microphone-2"></i> Đang lồng tiếng…' : '<i class="ti ti-language"></i> Đang dịch phụ đề…', async out => {
-      await Studio.reload();
-      const ov = out?.overruns?.length;
-      Studio.toast(kind === 'dub' ? `Đã lồng tiếng ${out?.phrases || ''} câu${ov ? ` · ${ov} câu dài hơn chỗ trống (lấn nhẹ)` : ''}` : 'Đã dịch phụ đề');
-      Studio.renderPanel();
-    });
+    startJob('/api/dub', body, 'dub', dubDone(kind), kind === 'dub' ? 'Lồng tiếng' : 'Dịch phụ đề');
   }
   document.addEventListener('click', e => {
     if (!e.target.closest('#dubp')) return; let b;

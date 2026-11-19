@@ -86,12 +86,10 @@
       const r = await Studio.api('/api/aikeys', b); KEYS = r.keys; Studio.closeModal(); Studio.toast('Đã lưu key'); render();
     };
   }
-  const jobModal = title => Studio.modal(`<h3>${title}</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="jcancel">Dừng</button></div>`);
-  async function runJob(path, body, title, done) {
-    const r = await Studio.api(path, body); if (!r.ok) return Studio.toast(r.error || 'Đang có tác vụ khác chạy');
-    jobModal(title); $('#jcancel').onclick = () => Studio.api('/api/job/cancel', {});
-    Studio.pollJob(j => { if (j.state === 'done') { Studio.closeModal(); done(j.out); } else Studio.modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><div class="actions"><button onclick="closeModal()">Đóng</button></div>`); });
-  }
+  // S26 M186: việc nền chạy trong khay việc (features/05_jobs.js), không hộp chờ giữa màn hình. done(out) → câu kết quả (thẻ + toast) hoặc {text, acts}
+  const asRes = v => (typeof v === 'string' ? { text: v, toast: v } : v || { text: 'Xong' });
+  // không khoá: gợi ý chỉ hiện danh sách để chọn, ảnh tạo xong mới chèn vào timeline
+  const runJob = (path, body, kind, done) => Studio.jobs.start(path, body, { kind, onDone: async j => asRes(await done(j.out)) });
   async function insertPicked() {
     const list = [...PICK].map(i => SUG[i]).filter(Boolean); if (!list.length) return Studio.toast('Chưa chọn mục nào');
     let n = 0;
@@ -125,14 +123,15 @@
     if ((b = e.target.closest('[data-abact]'))) {
       const a = b.dataset.abact;
       if (a === 'keys') return keysModal();
-      if (a === 'suggest') return runJob('/api/broll/suggest', {}, '<i class="ti ti-sparkles"></i> Claude đang gợi ý b-roll…', out => { SUG = out || []; PICK = new Set(SUG.map((_, i) => i)); tab = 'ai'; render(); });
+      if (a === 'suggest') return runJob('/api/broll/suggest', {}, 'broll_suggest', out => { SUG = out || []; PICK = new Set(SUG.map((_, i) => i)); tab = 'ai'; render();
+        return { text: `${SUG.length} gợi ý b-roll`, acts: [{ label: 'Xem gợi ý', icon: 'ti-sparkles', primary: true, on: () => { tab = 'ai'; Studio.jobs.open('aibroll'); render(); } }] }; });
       if (a === 'insert') return insertPicked();
       if (a === 'gen') {
         GEN = $('#abgen').value.trim(); if (!GEN) return Studio.toast('Nhập mô tả ảnh');
         const T = Studio.T;
-        return runJob('/api/genimage', { prompt: GEN, provider: $('#abprov')?.value }, '<i class="ti ti-photo-ai"></i> Đang tạo ảnh…', out => {
+        return runJob('/api/genimage', { prompt: GEN, provider: $('#abprov')?.value }, 'genimage', out => {
           Studio.pushUndo(); const s = insertMedia({ kind: 'image', path: out.path }, T, T + 3); Studio.changed(); Studio.select(compOf(s));
-          if (typeof MEDIA_LOAD === 'function') MEDIA_LOAD(); Studio.toast('Đã tạo ảnh bằng ' + out.provider);
+          if (typeof MEDIA_LOAD === 'function') MEDIA_LOAD(); return 'Đã tạo ảnh bằng ' + out.provider;
         });
       }
     }

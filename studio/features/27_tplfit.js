@@ -10,43 +10,36 @@
   css.textContent = `.tf-p { margin: 0 0 var(--space-2); } .tf-el { font-size: var(--text-2xs); margin-top: var(--space-1); }`;
   document.head.appendChild(css);
   let busy = false;
+  // S26 M186: chạy nền trong khay việc, không hộp chờ giữa màn hình. Server ghi lại timeline.json lúc xong → khoá sửa timeline tới khi xong.
+  // Xong thì thẻ ghi tóm tắt; còn lưu ý (Claude lỗi, thiếu key ảnh, chỗ lời thoại không nhắc tới) thì nút "Xem chi tiết" mở hộp.
   S.fitTemplate = async (tpl, o = {}) => {
     if (busy) return;
     busy = true;
     if (!await S.saveNow()) { busy = false; return; }
-    const r = await S.api('/api/tplfit', { claude: o.claude !== false, images: o.images !== false });
-    if (!r.ok) { busy = false; return S.toast(r.error || 'Đang có tác vụ khác chạy'); }
-    const t0 = Date.now();
-    S.modal(`<h3><i class="ti ti-wand"></i> Đang làm mẫu ${tpl?.name ? '“' + esc(tpl.name) + '” ' : ''}khớp lời thoại…</h3>
-      <div class="muted tf-p">Canh từng graphic đúng lúc nói · viết lại chữ theo nội dung clip · thay ảnh mẫu bằng ảnh theo lời nói · nhấn từ khoá phụ đề.</div>
-      <div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><div class="muted tf-el" id="tfel"></div>`);
-    const tick = setInterval(() => { const el = document.getElementById('tfel'); if (el) el.textContent = `Đã chạy ${Math.round((Date.now() - t0) / 1000)} giây`; else clearInterval(tick); }, 1000);
-    S.pollJob(async j => {
-      clearInterval(tick); busy = false;
-      if (j.state !== 'done') {
-        return S.modal(`<h3>Chưa làm mẫu khớp lời thoại được</h3><p>${esc(j.step)}</p>
-          <p class="muted">Mẫu đã được áp dụng, nhưng chữ và ảnh vẫn là nội dung mẫu. Kiểm tra video có tiếng nói, rồi bấm “Bám lời thoại” trong tab Dự án để thử lại.</p>
-          <div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      }
-      await S.reload();
-      const x = j.out || {}, miss = [...new Set(x.missing || [])];
-      // nothing from a template on the timeline: say so instead of "khớp: 0 chữ, 0 ảnh, 0 cảnh" (no model call happened)
-      if (!x.fit) return S.modal(`<h3><i class="ti ti-info-circle"></i> Chưa có cảnh mẫu để bám lời thoại</h3>
-        <p>${x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : ''}“Bám lời thoại” viết lại chữ và canh thời gian cho các cảnh của một <b>mẫu</b>. Chọn một mẫu ở panel <b>Mẫu</b> rồi bấm “Dùng mẫu”: mẫu sẽ tự bám lời thoại.</p>
-        <div class="actions"><button class="primary" onclick="closeModal()">OK</button></div>`);
-      // free libraries only (no Pexels/Pixabay key): photos that do not match are skipped, so suggest adding a key
-      const key = x.noStockKey ? `<p class="muted"><i class="ti ti-key"></i> Ảnh chỉ tìm trong thư viện miễn phí (Openverse/Commons), ảnh không khớp lời thoại được bỏ qua. Thêm key Pexels hoặc Pixabay (panel <b>B-roll AI</b> → nút <b>⚙ Key</b>) để có ảnh khớp hơn.</p>` : '';
-      const ai = x.claude && x.claude !== 'ok' ? `<p class="muted"><i class="ti ti-alert-triangle"></i> Không dùng được Claude (${esc(x.claude)}), chữ được lấy thẳng từ lời nói — nên đọc lại.</p>` : '';
-      if (miss.length || ai || key) {
-        S.modal(`<h3><i class="ti ti-check"></i> Mẫu đã khớp lời thoại</h3>
-          <p>${x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : ''}${x.fit} cảnh canh theo câu nói · ${x.texts} chữ viết lại · ${x.images} ảnh theo lời thoại${x.hl ? ` · ${x.hl} từ khoá phụ đề` : ''}.</p>${ai}${key}
-          ${miss.length ? `<p class="muted">Còn ${miss.length} chỗ lời thoại không nhắc tới, bạn tự sửa nhé: ${miss.slice(0, 8).map(esc).join(' · ')}</p>` : ''}
-          <div class="actions"><button class="primary" onclick="closeModal()">OK</button></div>`);
-      } else {
-        S.closeModal();
-        S.toast(`Mẫu đã khớp lời thoại: ${x.texts} chữ, ${x.images} ảnh, ${x.fit} cảnh canh theo câu nói — ⌘Z để hoàn tác`);
-      }
-    });
+    const t = await S.jobs.start('/api/tplfit', { claude: o.claude !== false, images: o.images !== false }, { kind: 'tplfit',
+      title: `Mẫu ${tpl?.name ? '“' + tpl.name + '” ' : ''}khớp lời thoại`, note: 'Canh graphic đúng lúc nói, viết lại chữ, thay ảnh mẫu theo lời nói, nhấn từ khoá phụ đề',
+      onDone: done, onFail: fail });
+    busy = false;
+    return t;
   };
+  const fail = j => ({ text: `${j.step || 'Chưa làm mẫu khớp lời thoại được'}. Mẫu đã được áp dụng nhưng chữ và ảnh vẫn là nội dung mẫu: kiểm tra video có tiếng nói rồi bấm “Bám lời thoại” ở tab Dự án để thử lại.` });
+  async function done(j) {
+    await S.reload();
+    const x = j.out || {}, miss = [...new Set(x.missing || [])];
+    const tr = x.transcribed ? `Đã tạo lời thoại (${x.transcribed.words} từ). ` : '';
+    // nothing from a template on the timeline: say so instead of "khớp: 0 chữ, 0 ảnh, 0 cảnh" (no model call happened)
+    if (!x.fit) return { text: `${tr}Chưa có cảnh mẫu để bám lời thoại: chọn một mẫu ở panel Mẫu rồi bấm “Dùng mẫu”, mẫu sẽ tự bám lời thoại.`, toast: 'Chưa có cảnh mẫu để bám lời thoại' };
+    // free libraries only (no Pexels/Pixabay key): photos that do not match are skipped, so suggest adding a key
+    const key = x.noStockKey ? `<p class="muted"><i class="ti ti-key"></i> Ảnh chỉ tìm trong thư viện miễn phí (Openverse/Commons), ảnh không khớp lời thoại được bỏ qua. Thêm key Pexels hoặc Pixabay (panel <b>B-roll AI</b> → nút <b>⚙ Key</b>) để có ảnh khớp hơn.</p>` : '';
+    const ai = x.claude && x.claude !== 'ok' ? `<p class="muted"><i class="ti ti-alert-triangle"></i> Không dùng được Claude (${esc(x.claude)}), chữ được lấy thẳng từ lời nói — nên đọc lại.</p>` : '';
+    const sum = `${x.fit} cảnh canh theo câu nói · ${x.texts} chữ viết lại · ${x.images} ảnh theo lời thoại${x.hl ? ` · ${x.hl} từ khoá phụ đề` : ''}`;
+    const acts = [{ label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác'); return 'close'; } }];
+    if (miss.length || ai || key) acts.unshift({ label: 'Xem chi tiết', icon: 'ti-list-details', primary: true, on: () => S.modal(`<h3><i class="ti ti-check"></i> Mẫu đã khớp lời thoại</h3>
+      <p>${esc(tr)}${sum}.</p>${ai}${key}
+      ${miss.length ? `<p class="muted">Còn ${miss.length} chỗ lời thoại không nhắc tới, bạn tự sửa nhé: ${miss.slice(0, 8).map(esc).join(' · ')}</p>` : ''}
+      <div class="actions"><button class="primary" onclick="closeModal()">OK</button></div>`) });
+    return { text: tr + sum + (miss.length || ai || key ? ' · có lưu ý' : ''), toast: `Mẫu đã khớp lời thoại: ${x.texts} chữ, ${x.images} ảnh, ${x.fit} cảnh — ⌘Z để hoàn tác`, acts };
+  }
+  S.jobs.resumable('tplfit', () => ({ onDone: done, onFail: fail }));
   document.addEventListener('click', e => { if (e.target.closest('[data-pact="tplfit"]')) { S.pushUndo(); S.fitTemplate(); } });
 })();

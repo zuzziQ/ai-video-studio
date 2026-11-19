@@ -44,23 +44,19 @@
   async function run(next) {
     const body = { model: document.querySelector('[name=trm]:checked').value, lang: $('#trl').value, max: +$('#trx').value };
     if (!await S.saveNow()) return;
-    const r = await S.api('/api/transcribe', body);
-    if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
-    const t0 = Date.now();
-    S.modal(`<h3><i class="ti ti-microphone"></i> Đang tạo lời thoại…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div>
-      <div class="muted tr-el" id="trel"></div><pre id="joblog"></pre><div class="actions"><button id="trcancel">Dừng</button></div>`);
-    const tick = setInterval(() => { const el = $('#trel'); if (el) el.textContent = `Đã chạy ${Math.round((Date.now() - t0) / 1000)} giây`; else clearInterval(tick); }, 1000);
-    $('#trcancel').onclick = () => S.api('/api/job/cancel', {});
-    S.pollJob(async j => {
-      clearInterval(tick);
-      if (j.state !== 'done') return S.modal(`<h3>Chưa tạo được lời thoại</h3><p>${S.esc(j.step)}</p><pre>${S.esc((j.log || '').slice(-900))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      await S.reload();
-      S.closeModal();
-      S.toast(`Đã tạo lời thoại: ${j.out?.words || 0} từ, ${j.out?.captions || 0} dòng phụ đề`);
-      if (typeof next === 'function') setTimeout(next, 300);
-      else S.renderPanel();
-    });
+    // S26 M186: chạy nền trong khay việc, không hộp giữa màn hình. Server ghi lại captions + timeline lúc xong → khoá sửa timeline tới khi xong
+    S.closeModal();
+    S.jobs.start('/api/transcribe', body, { kind: 'transcribe', note: 'Whisper chạy trên máy; lần đầu tải mô hình có thể lâu', onDone: j => done(j, next) });
   }
+  async function done(j, next) {
+    await S.reload();
+    const text = `${j.out?.words || 0} từ, ${j.out?.captions || 0} dòng phụ đề`;
+    if (typeof next === 'function') setTimeout(next, 300); // việc đang chờ phụ đề (AI dựng, dò lỗi nói…) tự chạy tiếp
+    else S.renderPanel();
+    return { text: 'Đã tạo lời thoại: ' + text, toast: 'Đã tạo lời thoại: ' + text,
+      acts: [{ label: 'Xem lời thoại', icon: 'ti-text-caption', primary: true, on: () => S.jobs.open('words') }] };
+  }
+  S.jobs.resumable('transcribe', () => ({ onDone: j => done(j) }));
 
   document.addEventListener('click', e => { if (e.target.closest('[data-transcribe]')) { e.preventDefault(); e.stopPropagation(); S.openTranscribe(); } }, true);
 })();

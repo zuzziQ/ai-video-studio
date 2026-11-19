@@ -174,21 +174,24 @@
         const login = /đăng nhập|Claude Code/.test(step + rest);
         return { text: 'AI dựng chưa được: ' + step, acts: login ? [{ label: 'Mở Kiểm tra máy', icon: 'ti-stethoscope', on: () => S.openSetup?.() }] : [] };
       },
-      onDone: async j => {
-        const plan = await S.api('/api/ai/plan');
-        if (plan.error) return { error: true, text: plan.error };
-        lastPlan = plan; applyPlan(plan);
-        // M108: Thêm b-roll / Thêm âm thanh = Tự động chạy nối ngay, cùng bước hoàn tác với bản dựng AI
-        const out = af ? await S.autofill.run(af, { noUndo: true }) : undefined;
-        // S19 M134: bản AI giao (đã lưu) để "Học từ chỉnh sửa" so với các lần bạn sửa sau
-        try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này, không chặn */ }
-        if (panel === 'wf-aihelp') renderAi();
-        const n = (plan.scenes || plan.graphics || []).length;
-        return { text: 'Đã dựng xong' + (n ? ` · ${n} graphic` : '') + '. Sửa được trên timeline; Hoàn tác trả về bản trước.', toast: 'AI dựng xong: bấm “Xem kết quả” ở khay việc',
-          acts: [{ label: 'Xem kết quả', icon: 'ti-eye', primary: true, on: () => showResult(plan, af ? (out || { error: true }) : null) },
-            { label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác bản dựng AI'); if (panel === 'wf-aihelp') renderAi(); return 'close'; } }] };
-      } });
+      onDone: () => aiDone(af) });
   }
+  // AI dựng xong: nạp kế hoạch, áp lên timeline (một bước hoàn tác), thẻ khay có Xem kết quả / Hoàn tác. S26 M186: cũng chạy khi trang tải lại giữa chừng
+  async function aiDone(af) {
+    const plan = await S.api('/api/ai/plan');
+    if (plan.error) return { error: true, text: plan.error };
+    lastPlan = plan; applyPlan(plan);
+    // M108: Thêm b-roll / Thêm âm thanh = Tự động chạy nối ngay, cùng bước hoàn tác với bản dựng AI
+    const out = af ? await S.autofill.run(af, { noUndo: true }) : undefined;
+    // S19 M134: bản AI giao (đã lưu) để "Học từ chỉnh sửa" so với các lần bạn sửa sau
+    try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này, không chặn */ }
+    if (panel === 'wf-aihelp') renderAi();
+    const n = (plan.scenes || plan.graphics || []).length;
+    return { text: 'Đã dựng xong' + (n ? ` · ${n} graphic` : '') + '. Sửa được trên timeline; Hoàn tác trả về bản trước.', toast: 'AI dựng xong: bấm “Xem kết quả” ở khay việc',
+      acts: [{ label: 'Xem kết quả', icon: 'ti-eye', primary: true, on: () => showResult(plan, af ? (out || { error: true }) : null) },
+        { label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác bản dựng AI'); if (panel === 'wf-aihelp') renderAi(); return 'close'; } }] };
+  }
+  S.jobs.resumable('ai', () => ({ onDone: () => aiDone('') }));
   // S22 M153: AI dựng từ thanh Hỏi Claude (75_ask.js): không có hộp chọn, dùng mặc định (giữ gói, mật độ vừa) + yêu cầu của người dùng.
   // Áp kế hoạch KHÔNG đẩy bước hoàn tác: thanh Hỏi Claude trả timeline về như cũ rồi đưa bản mới qua Studio.review (Nhận = một ⌘Z).
   // → Promise<{ plan } | { error }>
@@ -372,13 +375,24 @@
     const body = { words: W, pause: +$('#flpause').value || .7, fillers: $('#fllist').value.trim(), claude: $('#flclaude').checked };
     flBusy = true; renderAi();
     const done = res => { flBusy = false; if (res.error) { S.toast('Lỗi dò: ' + res.error); fl = null; } else { fl = res; flSel = new Set(res.cuts.map((c, i) => (c.conf >= .6 ? i : -1)).filter(i => i >= 0)); } renderAi(); };
+    // S26 M186: nhờ Claude dò chạy nền trong khay việc (không khoá: chỉ đọc lời thoại, cắt là bước người dùng tự bấm). Xong thì thẻ có "Xem chỗ cắt"
     if (body.claude) {
-      const r = await S.api('/api/ai/fillers', body);
-      if (!r.ok) { flBusy = false; renderAi(); return S.toast(r.error || 'Đang có tác vụ khác chạy'); }
-      S.modal(`<h3><i class="ti ti-scissors"></i> Đang dò lỗi nói…</h3><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
-      S.pollJob(async j => { S.closeModal(); done(j.state === 'done' ? await S.api('/api/ai/fillers') : { error: j.step }); });
+      const t = await S.jobs.start('/api/ai/fillers', body, { kind: 'fillers', title: 'Dò lỗi nói (Claude)', onDone: fillersDone, onFail: fillersFail });
+      if (t.refused) { flBusy = false; renderAi(); }
     } else done(await S.api('/api/ai/fillers', body));
   }
+  const fillersFail = j => { flBusy = false; fl = null; renderAi(); return { text: 'Chưa dò được: ' + (j.step || '') }; };
+  // kết quả dò bằng Claude (cả khi trang tải lại giữa chừng: resumable bên dưới)
+  async function fillersDone() {
+    const res = await S.api('/api/ai/fillers');
+    flBusy = false;
+    if (res.error) { fl = null; renderAi(); return { error: true, text: 'Lỗi dò: ' + res.error }; }
+    fl = res; flSel = new Set(res.cuts.map((c, i) => (c.conf >= .6 ? i : -1)).filter(i => i >= 0)); renderAi();
+    const n = res.cuts.length;
+    return { text: n ? `Tìm thấy ${n} chỗ nên cắt` : 'Không thấy lỗi nói nào', toast: n ? `Dò lỗi nói xong: ${n} chỗ · bấm “Xem chỗ cắt” ở khay việc` : 'Dò lỗi nói xong: không thấy lỗi nói nào',
+      acts: n ? [{ label: 'Xem chỗ cắt', icon: 'ti-scissors', primary: true, on: () => { if (panel !== 'ai') openPanel('ai'); else renderAi(); } }] : [] };
+  }
+  S.jobs.resumable('fillers', () => { flBusy = true; return { title: 'Dò lỗi nói (Claude)', onDone: fillersDone, onFail: fillersFail }; });
   function cutSelected() {
     if (!fl) return;
     const list = fl.cuts.filter((c, i) => flSel.has(i));

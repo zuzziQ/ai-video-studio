@@ -170,7 +170,37 @@
     ap = { items, line }; render();
   }
 
-  S.jobs = { exportNote: J.exportNote, track, refuse, locked, running: () => running()?.title || '', autopilot, show: () => { mini = false; render(); }, log: showLog, cards: () => cards.slice() };
+  // S26 M186: POST một việc rồi theo dõi trong khay. Server bận (409) → refuse (toast tên việc đang chạy); lỗi khác (thiếu video…) → toast lỗi.
+  // Tên + khoá mặc định lấy theo kind (JobsCore.KINDS); o ghi đè; onStart(r) chạy ngay khi server nhận. → Promise (tới khi việc dừng)
+  // <{ok, job, result} | {ok:false, refused, r}>
+  async function start(path, body, o = {}) {
+    let r; try { r = await S.api(path, body || {}); } catch (e) { r = { error: e.message }; }
+    if (!r?.ok) {
+      if (r?.error && !/tác vụ/i.test(r.error)) S.toast(r.error); else refuse(r);
+      return { ok: false, refused: true, r };
+    }
+    try { o.onStart?.(r); } catch (e) { console.error(e); } // server đã nhận: đóng hộp tuỳ chọn người dùng mở…
+    const fn = o.onDone; // onDone(j, r): r = phản hồi của POST (vd. thư mục kết quả server đã chọn)
+    return track({ ...(J.kindInfo(o.kind) || {}), ...o, onDone: fn && (j => fn(j, r)) });
+  }
+  // Tải lại trang khi server còn chạy việc: lúc khởi động nhận lại vào khay theo job.kind. Tính năng nào cần làm gì lúc xong
+  // (AI dựng áp kế hoạch, dò lỗi nói nạp kết quả) đăng ký resumable(kind, j => opts track); mặc định: việc khoá thì tải lại dự án.
+  const resumers = {};
+  const resumable = (kind, fn) => { resumers[kind] = fn; };
+  async function resume() {
+    let j = null; try { j = await S.api('/api/job'); } catch { return; }
+    const info = J.resumeOf(j); if (!info || running()) return;
+    let extra = {}; try { extra = resumers[info.kind]?.(j) || {}; } catch (e) { console.error(e); }
+    track({ ...info, note: 'Việc đang chạy từ trước khi tải lại trang', resumed: true,
+      onDone: async () => { if (info.lock && S.TL) await S.reload(); return { text: info.lock ? 'Xong · đã tải lại dự án từ đĩa' : 'Xong' }; }, ...extra });
+  }
+  // chạy cả khi chưa mở dự án (boot không gọi onReady): tạo dự án từ video kéo vào app, hay tạo dự án mới rồi tải lại trang
+  if (document.readyState === 'complete') setTimeout(resume, 900); else addEventListener('load', () => setTimeout(resume, 900), { once: true });
+
+  // nút kết quả "Xem …" của thẻ: mở panel theo id (S.addPanel), qua bước quy trình nếu panel không nằm trên thanh trái
+  const open = id => (typeof window.openPanel === 'function' ? window.openPanel(id) : S.workflow?.focus?.(id));
+
+  S.jobs = { exportNote: J.exportNote, track, start, refuse, resumable, open, locked, running: () => running()?.title || '', autopilot, show: () => { mini = false; render(); }, log: showLog, cards: () => cards.slice() };
   // tạo dự án mới (studio.js): trình chỉnh sửa hiện chỗ chờ, trang chủ và Tự lái vẫn dùng được
   if (!cl('np-wait')) { const w = document.createElement('div'); w.id = 'np-wait'; w.setAttribute('role', 'status'); w.innerHTML = '<i class="ti ti-loader-2 spin"></i><b>Đang tạo dự án mới…</b><span>Xong sẽ tự mở. Trang chủ và Tự lái vẫn dùng được trong lúc chờ.</span>'; (cl('center') || document.body).appendChild(w); }
 })();
