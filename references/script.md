@@ -171,3 +171,24 @@ dòng gọn trong hộp AI dựng. Không chạy trong Tự lái (chọn take v�
   lời nhận dạng của các take vào `captions_noscript.json` (+ `heardDur`) để sửa kịch bản lần sau căn đúng. Clip mang `_script` { kind: "A-ROLL", note: take · khớp } nên Thuộc tính hiện ghi chú + Sửa tay / Hỏi Claude (`23_scriptnotes.js`).
   Áp hỏi lại khi track chính đã đổi từ lúc dựng (`clipsKey`), nền nhạc phủ cả video theo độ dài mới, `/applied` nhận `at` của kế hoạch đã áp (khác → 409).
   Graphic đã dựng giữ nguyên giờ: AI dựng lại.
+
+## 11. Nguồn cho bản dựng (S27 M198)
+Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 8. Mã: `scripts/script_sources.mjs`, `studio/routes/19_script.mjs`, `studio/features/19_script.js`,
+`userSources` / `sheetMedia` trong `scripts/ai_edit.mjs`; test `scripts/tests/s27_m198.test.mjs`.
+
+- **Danh sách** `<dự án>/.studio/script_sources.json` `{ version: 1, items: [{ rel, name, kind: video|image, at }] }`, `rel` tương đối trong Kho
+  của dự án (`khoOf`). Vùng thả "Nguồn cho bản dựng" của ô Kịch bản tải file lên `/api/kho/upload?brand=&to=source` (thư mục `Nguon/`;
+  chưa có Kho → `/api/kho/create`) rồi `POST /api/script/sources {add: [rel]}` (kiểm `resolveRel`, bỏ trùng, tối đa 40) hoặc `{remove: rel}`.
+  `GET /api/script` trả thêm `sources` và `kho { brand, title, exists }`.
+- **Tên file** (cột source Excel → `[B-ROLL: <tên> | tệp <tên>]`, dấu `| tệp …`): `findSource` tìm trong nguồn rồi mọi video / ảnh của Kho,
+  so bỏ dấu (cả đường dẫn, tên file, tên không đuôi); `unsafeName` chặn tuyệt đối, UNC, `..`, `:`, thư mục ẩn. Không thấy: `/api/script/table`
+  thêm warn "Không thấy trong Kho: …".
+- **Bảng dựng**: `pickBroll` có nguồn `mine` trước `kho` (`sheetSources`: `src.mine`, `src.find`). AI dựng (`userSources`): ô dùng file bạn đưa
+  mang `mine: true`; file chưa có ô nào → `assignSources`: `contactSheet` (video: `tile=4x1`, ảnh: 480 px; tối đa `MAX_IMAGES` = 12) trong
+  thư mục tạm, Claude (`--allowedTools Read`) trả `{assign: [{id, seg, from}]}`, `checkAssign` kiểm (đoạn có thật, mỗi file một lần, `from`
+  kẹp theo độ dài); lỗi / `--no-ai-sources` → `assignByName` (`scoreRel`). Ô thêm `from: claude|auto`, `clip` = giây bắt đầu.
+- **Media**: `useSource`: ảnh và video ≤ 60 s qua `useFromKho` (không giới hạn 30 s, cảnh dời khung `media.t0 = t0 − off`); video dài hơn cắt
+  đoạn con (ffmpeg) vào `media/kho_<tên>_<giây>s.mp4` rồi tách khung. Cảnh: `credit` "Nguồn bạn đưa", `_script.mine` (rel), `_script.file`,
+  dài tới 5 s.
+- **Báo cáo**: `plan.sources` = `sourceReport` { total, used, unused, items }; ghi chú trên khối "Đã dùng: <tên file>"; `Studio.scriptNotes.stat`
+  thêm `unused` (tính trên timeline hiện tại), dòng "Theo kịch bản" (panel AI dựng và tiêu chí `script` của bước Dựng) thêm "· n nguồn bạn đưa chưa dùng".

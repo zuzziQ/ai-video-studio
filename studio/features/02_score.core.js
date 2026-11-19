@@ -96,7 +96,7 @@
     if (needs.has('broll')) build.push(it('broll', 'B-roll', 2, scenes.some(isBroll), 'Gói này cần b-roll minh hoạ mà video chưa có đoạn nào.'));
     // S27 M200: dựng theo kịch bản (I.script = Studio.scriptNotes.stat(kế hoạch AI dựng gần nhất): { total, done, need }), nên làm
     const sn = I.script, sNeed = sn ? arr(sn.need) : [];
-    if (sn && sn.total > 0) build.push(it('script', `Theo kịch bản: ${sn.done}/${sn.total} yêu cầu đã dựng${sNeed.length ? ` · ${sNeed.length} cần xem` : ''}`, 1, sn.done / sn.total,
+    if (sn && sn.total > 0) build.push(it('script', `Theo kịch bản: ${sn.done}/${sn.total} yêu cầu đã dựng${sNeed.length ? ` · ${sNeed.length} cần xem` : ''}${arr(sn.unused).length ? ` · ${arr(sn.unused).length} nguồn bạn đưa chưa dùng` : ''}`, 1, sn.done / sn.total,
       `${sNeed.length} yêu cầu của kịch bản chưa dựng được: bấm để tới chỗ cần xem.`, { opt: true, ...(sNeed.length ? { at: +sNeed[0].t0 || 0 } : {}) }));
     if (needs.has('music')) build.push(it('music', 'Nhạc hoặc âm thanh', 2, arr(audio.music).length > 0 || arr(audio.sfx).length > 0, 'Gói này cần nhạc nền hoặc SFX mà video chưa có.'));
 

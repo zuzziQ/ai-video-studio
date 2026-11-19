@@ -6,6 +6,8 @@
 //   Thuộc tính: bài học ai-video-studio-059) / Hỏi Claude (Studio.ask: tab Claude, câu hỏi điền sẵn về element đang chọn, chưa gửi).
 // - Studio.scriptNotes.line(plan): một dòng "Theo kịch bản: 12/14 yêu cầu đã dựng · 2 cần xem" ở panel AI dựng (20_ai.js); bấm = tua tới
 //   yêu cầu cần xem kế tiếp, chọn khối cùng đoạn nếu có, báo lý do. Đếm trên timeline hiện tại (mục đã xoá thành "cần xem").
+// - S27 M198: cảnh dùng file bạn đưa ở ô Kịch bản mang `_script.mine` (rel trong Kho) + `file`: ghi chú "Đã dùng: <tên file>"; plan.sources
+//   { items: [{rel, name}] } → stat().unused (file chưa có cảnh nào trên timeline) và dòng tóm tắt thêm "· 2 nguồn bạn đưa chưa dùng".
 'use strict';
 (() => {
   const S = window.Studio; if (!S) return;
@@ -28,7 +30,7 @@
   document.head.appendChild(css);
 
   const label = x => `[${x.kind}${x.text ? `: ${x.text}` : ''}]`;
-  const did = x => (x.auto ? `AI tự thêm theo lời: ${x.note}` : `Đã dựng: ${x.note}`);
+  const did = x => (x.file ? `Đã dùng: ${x.file}${x.note && /từ giây/.test(x.note) ? ` (${x.note.match(/từ giây [d.]+/)[0]})` : ''}` : x.auto ? `AI tự thêm theo lời: ${x.note}` : `Đã dựng: ${x.note}`);
   // khối chữ (kind 'line') có obj là dòng chữ, ghi chú nằm ở cảnh của nó (c.scene)
   const noteOf = c => { const x = c?.obj?._script || c?.scene?._script; return x && typeof x === 'object' && x.kind ? x : null; };
 
@@ -60,20 +62,26 @@
 
   // ---------- dòng tóm tắt ở panel AI dựng ----------
   const fullCover = s => s._sheet != null && ((s.type === 'photo' && s.mode === 'full') || (s.type === 'broll' && s.layout === 'full'));
+  // S27 M198: tên các file bạn đưa chưa có cảnh nào (không ẩn) trên timeline hiện tại
+  function unusedOf(plan, TL) {
+    const items = plan?.sources?.items; if (!Array.isArray(items) || !items.length) return [];
+    const on = new Set((TL?.scenes || []).filter(s => !s.hidden).map(s => s?._script?.mine).filter(Boolean));
+    return items.filter(x => x && !on.has(x.rel)).map(x => x.name);
+  }
   function stat(plan) {
     const req = plan?.script?.req; if (!Array.isArray(req) || !req.length || !S.TL) return null;
     const TL = S.TL, have = new Map();
     for (const x of [...(TL.scenes || []), ...(TL.audio?.sfx || []), ...(TL.audio?.music || [])]) if (x?._script?.id && !x.hidden && !have.has(x._script.id)) have.set(x._script.id, x);
     for (const s of TL.scenes || []) if (fullCover(s) && !s.hidden && !have.has(`${s._sheet}:aroll`)) have.set(`${s._sheet}:aroll`, s);
     const all = req.map(q => (have.has(q.id) ? { ...q, ok: true } : { ...q, ok: false, why: q.ok ? 'đã xoá hoặc ẩn khỏi timeline' : q.why || 'chưa dựng được' }));
-    return { total: all.length, done: all.filter(q => q.ok).length, need: all.filter(q => !q.ok).sort((a, b) => a.t0 - b.t0) };
+    return { total: all.length, done: all.filter(q => q.ok).length, need: all.filter(q => !q.ok).sort((a, b) => a.t0 - b.t0), unused: unusedOf(plan, TL) };
   }
   let cur = null, at = -1; // kế hoạch của dòng đang hiện, yêu cầu cần xem vừa nhảy tới
   function line(plan) {
     const st = stat(plan); cur = plan; if (!st) return '';
-    const n = st.need.length;
+    const n = st.need.length, u = st.unused.length;
     return `<button class="ghost scn-sum" data-scnj ${n ? '' : 'disabled'} title="${n ? 'Tua tới yêu cầu kịch bản cần xem kế tiếp' : 'Mọi yêu cầu của kịch bản đã có trên timeline'}">
-      <i class="ti ${n ? 'ti-alert-triangle' : 'ti-circle-check'}" aria-hidden="true"></i><span>Theo kịch bản: <b>${st.done}/${st.total}</b> yêu cầu đã dựng${n ? ` · <em>${n} cần xem</em>` : ''}</span>${n ? '<i class="ti ti-arrow-right" aria-hidden="true"></i>' : ''}</button>`;
+      <i class="ti ${n ? 'ti-alert-triangle' : 'ti-circle-check'}" aria-hidden="true"></i><span>Theo kịch bản: <b>${st.done}/${st.total}</b> yêu cầu đã dựng${n ? ` · <em>${n} cần xem</em>` : ''}${u ? ` · <em title="${esc(st.unused.join(', '))}">${u} nguồn bạn đưa chưa dùng</em>` : ''}</span>${n ? '<i class="ti ti-arrow-right" aria-hidden="true"></i>' : ''}</button>`;
   }
   function jump(plan) { // S27 M200: plan = kế hoạch từ tiêu chí `script` của bước Dựng (03_nextstep), khi panel AI dựng chưa vẽ dòng
     if (plan) cur = plan;

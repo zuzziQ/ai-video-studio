@@ -6,6 +6,8 @@
 // Claude chèn dấu vào chính chữ đó, hiện so sánh (dấu thêm tô màu), người dùng Nhận hết / Bỏ rồi mới Lưu. Dấu dựng đọc vào .studio/build_sheet.json (nội bộ: AI dựng làm theo, không có bảng để sửa).
 // S27 M197: mở .xlsx / .csv (kịch bản theo đoạn giây): server tự nhận cột (cột lạ thành ghi chú), chỉ khi không nhận ra cột lời mới
 // hiện bảng chọn vai trò cột; hàng thành đoạn có [MỐC: …] [GHI CHÚ: …]. Chỉ dẫn không cần bước Nhận / Bỏ: AI dựng làm theo.
+// S27 M198: vùng thả gọn "Nguồn cho bản dựng" (chỉ ở bước Nguồn): video / ảnh chép vào Nguon/ của Kho dự án (/api/kho/upload, chưa có Kho
+// thì /api/kho/create), danh sách ghi vào kịch bản (/api/script/sources); AI dựng dùng các file này trước Kho chung / stock.
 (() => {
   const { $, esc } = Studio;
   const css = document.createElement('style');
@@ -26,7 +28,17 @@
   .sc-map .sc-col { min-width: 0; overflow-wrap: anywhere; }
   .sc-map .sc-col small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sc-map .is-new { color: rgb(var(--color-warning)); }
-  .sc-map select { width: 100%; min-width: 0; }`;
+  .sc-map select { width: 100%; min-width: 0; }
+  .sc-src { margin-top: var(--space-2); padding: var(--space-2); border: 1px dashed rgb(var(--color-border)); border-radius: var(--radius-card); font-size: var(--text-2xs); min-width: 0; }
+  .sc-src.is-over { border-color: rgb(var(--color-accent)); background: rgb(var(--color-accent) / .08); }
+  .sc-src-h { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; color: rgb(var(--color-fg-muted)); }
+  .sc-src-h > span { flex: 1 1 12rem; min-width: 0; }
+  .sc-src-h button { font-size: var(--text-2xs); padding: 0 var(--space-2); min-height: var(--h-sm, 24px); }
+  .sc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-1) 0 0; padding: 0; }
+  .sc-chips li { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; padding: 0 0 0 var(--space-1);
+    border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-sm, 6px); background: rgb(var(--color-surface-raised)); }
+  .sc-chips li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc-chips li button { padding: 0 var(--space-1); min-height: var(--h-sm, 24px); border: 0; background: none; }`;
   document.head.appendChild(css);
   const HINT = 'Không bắt buộc. Dấu tuỳ chọn: <code>[HOOK]</code> mở đầu · <code>[CHỮ: …]</code> chữ trên màn hình · <code>[B-ROLL: …]</code> hình minh hoạ · <code>[CTA]</code> kêu gọi. Không dấu: dòng trống tách đoạn. Mẫu quyết định giao diện, kịch bản quyết định chữ.'
     + '<details><summary>Dấu dựng</summary><code>[MOOD: hồi hộp]</code> nhạc từ đoạn này trở đi · <code>[NHẠC: tắt|bật|đổi|to|nhỏ|kho tên bài]</code> · <code>[A-ROLL: cận mặt|trung|rộng|clip 2|bỏ]</code> · '
@@ -79,7 +91,7 @@
   }
 
   // ---------- bước Nguồn: kịch bản của dự án đang mở ----------
-  let P = { dir: null, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null };
+  let P = { dir: null, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null, up: null };
   const fmtPct = v => Math.round(v * 100) + '%';
   function statusOf(d) {
     const sc = d?.script; if (!sc) return '';
@@ -100,6 +112,55 @@
       ${segs.some(s => s.raw?.length) ? li(true, 'ti-alert-triangle', `Dấu chưa hiểu: ${esc(segs.flatMap(s => s.raw || []).slice(0, 3).join(' '))}`) : ''}
       ${P.sheet ? li(!!P.sheet.error || !!P.sheet.miss, 'ti-wand', P.sheet.error ? `Đọc dấu dựng lỗi: ${esc(P.sheet.error)}` : `AI dựng làm theo dấu của ${P.sheet.rows} đoạn${P.sheet.miss ? ` · ${P.sheet.miss} dấu chưa tìm được cảnh / tiếng` : ''}`) : ''}</ul>`;
   }
+  // ---------- S27 M198: nguồn cho bản dựng ----------
+  const SRC_RX = /.(mp4|mov|m4v|mkv|webm|avi|mts|jpe?g|png|webp|gif|heic)$/i;
+  function srcHtml() {
+    const list = P.data?.sources || [], up = P.up;
+    return `<div class="sc-src" data-sc="src" aria-label="Nguồn cho bản dựng"><div class="sc-src-h"><i class="ti ti-photo-video" aria-hidden="true"></i>
+      <span><b>Nguồn cho bản dựng</b> · thả video / ảnh vào đây, AI dựng dùng trước Kho và stock${list.length ? ` · ${list.length} file` : ''}</span>
+      <button data-sc="src-pick" ${up ? 'disabled' : ''} title="Chọn nhiều video, ảnh"><i class="ti ${up ? 'ti-loader-2 spin' : 'ti-upload'}"></i>${up ? esc(up) : 'Chọn file'}</button></div>
+      ${list.length ? `<ul class="sc-chips">${list.map(x => `<li title="${esc(x.rel)}"><i class="ti ${x.kind === 'video' ? 'ti-movie' : 'ti-photo'}" aria-hidden="true"></i><span>${esc(x.name)}</span>
+        <button data-src-rm="${esc(x.rel)}" title="Bỏ khỏi nguồn (file vẫn trong Kho)" aria-label="Bỏ ${esc(x.name)}"><i class="ti ti-x"></i></button></li>`).join('')}</ul>` : ''}
+      <input type="file" data-sc="src-in" accept="video/*,image/*" multiple hidden></div>`;
+  }
+  async function addSources(files) {
+    const fs2 = [...files].filter(f => SRC_RX.test(f.name)), dir = P.dir;
+    if (!fs2.length) return Studio.toast('Chỉ nhận video hoặc ảnh');
+    const kho = P.data?.kho; if (!kho) return Studio.toast('Chưa đọc được Kho của dự án');
+    const rels = [], bad = [];
+    try {
+      if (!kho.exists) { const r = await Studio.api('/api/kho/create', { brand: kho.brand || '' }); if (r.error) throw new Error(r.error); kho.exists = true; }
+      for (let i = 0; i < fs2.length; i++) {
+        const f = fs2[i]; P.up = `Đang chép ${i + 1}/${fs2.length}`; renderCard();
+        const q = new URLSearchParams({ brand: kho.brand || '', name: f.name, to: 'source' });
+        const j = await fetch('/api/kho/upload?' + q, { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
+        if (j.error || !j.rel) bad.push(`${f.name}: ${j.error || 'lỗi'}`); else rels.push(j.rel);
+      }
+      if (rels.length) {
+        const r = await Studio.api('/api/script/sources', { add: rels });
+        if (r.error) throw new Error(r.error);
+        if (P.dir === dir) P.data = { ...(P.data || {}), sources: r.sources };
+        bad.push(...(r.skipped || []).map(x => `${x.rel}: ${x.why}`));
+      }
+      Studio.toast(rels.length ? `Đã thêm ${rels.length} nguồn vào Kho (Nguon/)${bad.length ? ` · lỗi: ${bad[0]}` : ''}` : `Chưa thêm được nguồn: ${bad[0] || 'lỗi'}`);
+    } catch (e) { Studio.toast(e.message); }
+    P.up = null; renderCard();
+  }
+  function bindSrc(el) {
+    const box = el.querySelector('[data-sc="src"]'); if (!box) return;
+    const inp = box.querySelector('[data-sc="src-in"]');
+    box.querySelector('[data-sc="src-pick"]').onclick = () => inp.click();
+    inp.onchange = () => { if (inp.files.length) addSources(inp.files); };
+    // stopPropagation: trình thả file của cửa sổ (library.js) sẽ chép file vào Media của dự án thay vì Kho (như 12_workspace.js)
+    box.ondragover = e => { if (![...(e.dataTransfer?.types || [])].includes('Files')) return; e.preventDefault(); e.stopPropagation(); if (!P.up) box.classList.add('is-over'); };
+    box.ondragleave = () => box.classList.remove('is-over');
+    box.ondrop = e => { e.preventDefault(); e.stopPropagation(); box.classList.remove('is-over'); document.getElementById('drop')?.remove(); if (!P.up && e.dataTransfer?.files?.length) addSources(e.dataTransfer.files); };
+    box.querySelectorAll('[data-src-rm]').forEach(b => { b.onclick = async () => {
+      const r = await Studio.api('/api/script/sources', { remove: b.dataset.srcRm });
+      if (r.error) return Studio.toast(r.error);
+      P.data = { ...(P.data || {}), sources: r.sources }; renderCard();
+    }; });
+  }
   // luôn vẽ vào phần tử đang gắn (P.el): Studio.reload() vẽ lại panel Nguồn giữa lúc lưu, phần tử cũ bị gỡ
   function renderCard() {
     const el = P.el; if (!el?.isConnected) return;
@@ -114,11 +175,12 @@
       return;
     }
     if (P.table) return renderTable(el);
-    const { ta, pick } = frame(el, { text, status: P.data ? statusOf(P.data) : '',
+    const { ta, pick } = frame(el, { text, status: (P.data ? srcHtml() + statusOf(P.data) : ''),
       extra: `${P.ai ? `<button data-sc="suggest" title="Claude chèn dấu MOOD, B-ROLL, SFX, CHỮ… vào chính chữ này, không sửa lời" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === 'suggest' ? 'ti-loader-2 spin' : 'ti-sparkles'}"></i>Gợi ý dấu</button>` : ''}
         ${sc ? '<button data-sc="clear" title="Bỏ kịch bản, lấy lại phụ đề nhận dạng tự động"><i class="ti ti-trash"></i>Bỏ</button>' : ''}
         <button class="primary" data-sc="save" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === true ? 'ti-loader-2 spin' : 'ti-device-floppy'}"></i>${sc ? 'Lưu lại' : 'Dùng kịch bản'}</button>` });
     ta.oninput = () => { P.draft = ta.value; };
+    bindSrc(el);
     pick.onchange = async () => {
       const f = pick.files[0]; if (!f) return;
       try {
@@ -199,7 +261,7 @@
   Studio.scriptCard = {
     mount(el) {
       const dir = Studio.META?.dir || '';
-      if (P.dir !== dir) { P = { dir, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null }; }
+      if (P.dir !== dir) { P = { dir, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null, up: null }; }
       P.el = el; renderCard();
       if (!P.data) Studio.api('/api/script').then(r => { if (P.dir === dir && !r.error) { P.data = r; renderCard(); if (r.script) loadSheet(); } }).catch(() => {});
       claudeOk().then(ok => { if (P.dir === dir && ok !== P.ai) { P.ai = ok; renderCard(); } });

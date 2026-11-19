@@ -16,12 +16,18 @@
 //                                    (cột lạ tự thành ghi chú; ask: không nhận ra cột lời → người dùng gán cột trong ô Kịch bản)
 //   POST /api/script/table/text {columns, rows, roles} → { text, segs, timed, notes, warn }   dựng lại chữ theo vai trò người dùng gán
 //   Chỉ dẫn [GHI CHÚ] không có bước Nhận / Bỏ: lưu kịch bản thì buildSheet chuyển ngầm thành ô (from note), AI dựng đọc nguyên văn.
+//   S27 M198 (scripts/script_sources.mjs): nguồn cho bản dựng (video / ảnh người dùng thả ở ô Kịch bản)
+//   GET /api/script trả thêm { sources: [{rel, name, kind, at}], kho: {brand, title, exists} } (Kho của dự án; client tải file lên bằng
+//                                    /api/kho/upload?brand=&to=source, chưa có Kho thì /api/kho/create trước)
+//   POST /api/script/sources {add: [rel]} | {remove: rel} → { ok, sources, added, skipped: [{rel, why}] }  rel kiểm bằng resolveRel (realpath, chặn thoát Kho)
+//   /api/script/table thêm warn "Không thấy trong Kho: a.mp4, …" khi cột source ghi tên file không có trong nguồn / Kho.
 // Như mọi /api/*, cần token phiên + cùng origin (studio/security.mjs).
 import fs from 'node:fs';
 import os from 'node:os';
 import { applyScript, docxText, gateScript, readScript, removeScript, stageScript, writeScript, MAX_TEXT } from '../../scripts/script_doc.mjs';
 import { checkSuggested, dropSheet, readSheet, sheetFor, suggestPrompt } from '../../scripts/script_build.mjs';
 import { ROLES, readTable, tableToScript } from '../../scripts/script_table.mjs';
+import { addSources, missingFiles, readSources, removeSource } from '../../scripts/script_sources.mjs';
 
 const MAX_DOCX = 10 << 20;
 function rawBody(req, max) {
@@ -35,6 +41,13 @@ function rawBody(req, max) {
 const aspectOf = tl => (tl.width && tl.height ? (tl.width < tl.height ? 'dọc 9:16' : tl.width === tl.height ? 'vuông 1:1' : 'ngang 16:9') : '');
 const readCat = async f => { try { return JSON.parse(fs.readFileSync(new URL('../../assets/' + f, import.meta.url), 'utf8')); } catch { return []; } };
 // bảng dựng lỗi không chặn việc lưu kịch bản (Kho đọc lỗi, catalog hỏng…): trả lỗi kèm kết quả
+// S27 M198: Kho của dự án + danh sách nguồn + mọi video / ảnh của Kho (phân giải tên file của Excel)
+async function khoCtx(dir, tl) {
+  const K = await import('../../scripts/kho_media.mjs'), ws = K.khoOf(dir, tl);
+  let items = []; try { if (fs.existsSync(ws.root)) items = K.khoItems(dir, ws).filter(it => ['video', 'image'].includes(it.kind)); } catch { /* Kho đọc lỗi */ }
+  return { K, ws, sources: readSources(dir), items };
+}
+const missWarn = (t, c) => { const m = missingFiles(t.text, c); if (m.length) t.warn = [`Không thấy trong Kho: ${m.slice(0, 4).join(', ')}${m.length > 4 ? ` và ${m.length - 4} file nữa` : ''} (thả file vào “Nguồn cho bản dựng”)`, ...(t.warn || [])]; return t; };
 async function rebuild(dir, tl, captions, o = {}) { try { return await sheetFor(dir, { tl, captions, ...o }); } catch (e) { return { error: String(e.message || e).slice(0, 200), rows: [] }; } }
 
 export default ctx => async (req, res, p) => {
@@ -50,13 +63,16 @@ export default ctx => async (req, res, p) => {
       const name = decodeURIComponent(String(req.headers['x-file-name'] || '')).slice(0, 200);
       if (name && !/\.(xlsx|csv|tsv|txt)$/i.test(name)) return J({ error: 'Chỉ nhận file .xlsx hoặc .csv (Excel cũ .xls: lưu lại thành .xlsx)' }, 400);
       const t = await readTable(await rawBody(req, MAX_DOCX), name);
+      if (ctx.project) try { missWarn(t, await khoCtx(ctx.project.dir, ctx.readProject().timeline)); } catch { /* chưa có Kho: không báo */ }
       return J(t);
     }
     if (p === '/api/script/table/text' && req.method === 'POST') {
       const b = await ctx.body(req);
       const columns = Array.isArray(b.columns) ? b.columns.map(String).slice(0, 60) : [], rows = Array.isArray(b.rows) ? b.rows.slice(0, 1000).filter(r => r && typeof r === 'object') : [];
       const roles = Object.fromEntries(columns.map(c => [c, ROLES.includes(b.roles?.[c]) ? b.roles[c] : null]));
-      return J(tableToScript(columns, rows, roles));
+      const t = tableToScript(columns, rows, roles);
+      if (ctx.project) try { missWarn(t, await khoCtx(ctx.project.dir, ctx.readProject().timeline)); } catch { /* chưa có Kho */ }
+      return J(t);
     }
     if (p === '/api/script/stage' && req.method === 'POST') {
       const b = await ctx.body(req);
@@ -66,7 +82,8 @@ export default ctx => async (req, res, p) => {
     const dir = ctx.project.dir;
     if (p === '/api/script' && req.method === 'GET') {
       const { timeline: tl, captions } = ctx.readProject();
-      return J({ script: readScript(dir), caps: captions.length, mute: !!tl.speech?.none });
+      let kho = null; try { const { ws } = await khoCtx(dir, tl); kho = { brand: ws.brand || '', title: ws.title, exists: !!ws.exists }; } catch { /* không có Kho */ }
+      return J({ script: readScript(dir), caps: captions.length, mute: !!tl.speech?.none, sources: readSources(dir), kho });
     }
     if (p === '/api/script/sheet' && req.method === 'GET') return J({ sheet: readSheet(dir) });
     if (req.method !== 'POST') return false;
@@ -88,6 +105,13 @@ export default ctx => async (req, res, p) => {
       const { timeline: tl, captions } = ctx.readProject();
       const sheet = await rebuild(dir, tl, captions, { stock: !!b.stock });
       return sheet.error ? J({ error: sheet.error }, 500) : J({ ok: true, sheet });
+    }
+    if (p === '/api/script/sources') {
+      const b = await ctx.body(req), { K, ws } = await khoCtx(dir, ctx.readProject().timeline);
+      if (typeof b.remove === 'string') return J({ ok: true, sources: removeSource(dir, b.remove), added: [], skipped: [] });
+      if (!Array.isArray(b.add)) return J({ error: 'Thiếu danh sách file' }, 400);
+      const r = addSources(dir, b.add, rel => K.resolveRel(ws, rel));
+      return J({ ok: true, sources: r.items, added: r.added, skipped: r.skipped });
     }
     if (p === '/api/script/suggest') {
       const b = await ctx.body(req), text = typeof b.text === 'string' ? b.text : '';

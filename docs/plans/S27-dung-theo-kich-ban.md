@@ -243,3 +243,20 @@ cùng ngày: người dùng chỉ nhập kịch bản rồi bấm AI dựng, kh�
   (nguyên văn, làm theo khi dựng)" nên phần luật chưa hiểu Claude làm theo lúc dựng, không gọi Claude riêng.
 - **Hiện lại câu gốc**: khối AI dựng theo kịch bản có ghi chú "Kịch bản yêu cầu … · Đã dựng …" khi trỏ / chọn trên timeline (phiên `M194`
   đổi sang không có panel Bảng dựng): đọc `note` của ô, hoặc `note[]` của hàng.
+
+## 8. Nguồn người dùng đưa cho bản dựng (`M198`)
+
+Chủ repo 2026-11-19: người dùng đưa thêm video / ảnh để AI dựng dùng theo kịch bản; vẫn chỉ nhập kịch bản rồi bấm AI dựng, không panel.
+
+- **Đưa vào**: vùng thả gọn "Nguồn cho bản dựng" trong ô Kịch bản (bước Nguồn). File chép vào `Nguon/` của Kho dự án bằng API Kho sẵn có
+  (`/api/kho/upload?to=source`; không thương hiệu thì Kho Chung, chưa có Kho thì tạo Kho mặc định); danh sách (đường dẫn tương đối trong Kho)
+  ở `.studio/script_sources.json`. Bỏ một file khỏi danh sách không xoá file trong Kho.
+- **Gắn đoạn**: Excel cột source / hình và dấu `[B-ROLL: … | tệp <tên>]` nhận tên file hoặc đường dẫn tương đối; tìm trong nguồn bạn đưa rồi
+  mọi video / ảnh của Kho. Tên tuyệt đối, UNC, `..`, `:` bị chặn; file thật kiểm bằng `resolveRel` (realpath). Tên không thấy: một dòng
+  "Không thấy trong Kho: …" khi mở bảng.
+- **Thứ tự nguồn** (bổ sung mục 2.2): nguồn bạn đưa → Kho chung → thư viện → stock → ảnh AI → b-roll động.
+- **File chưa gắn đoạn**: Claude xem tên + khung ảnh nhỏ (một hàng 4 khung mỗi video, ảnh thu nhỏ; tối đa 12 ảnh mỗi lần) và chọn một đoạn
+  cho mỗi file, với video dài hơn đoạn thì chọn giây bắt đầu; Claude lỗi thì khớp tên file với lời. Video ≤ 60 s dùng cả file và dời khung,
+  dài hơn thì cắt đoạn con vào `media/`.
+- **Hiện lại**: khối ghi "Kịch bản: [B-ROLL: …] · Đã dùng: <tên file>" (Sửa tay / Hỏi Claude như mục 2.3); file chưa có cảnh nào thì dòng
+  "Theo kịch bản" ở bước Dựng thêm "· n nguồn bạn đưa chưa dùng".
