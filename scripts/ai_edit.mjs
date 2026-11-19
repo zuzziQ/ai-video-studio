@@ -16,6 +16,7 @@ import { faceZone } from './face_track_project.mjs';
 import { safeOf, designOf } from './ai_qc.mjs'; // ai_qc runs its CLI only when executed directly; Chrome opens only in placePlan
 import { readScript, scriptMarks, scriptPrompt, markMissing } from './script_doc.mjs';
 // S27 M194: AI dựng theo kịch bản — bảng dựng nội bộ (.studio/build_sheet.json) dựng lại mỗi lần, áp cùng kế hoạch của Claude
+import { DEFAULT_DUCK } from './audio_defaults.mjs';
 import { readSheet, sheetFor, sheetToPlan, sheetPrompt, builtSegs, mediaKey, dynamicFor, scriptRequests, scriptReport, sheetMood as sheetMoodOf } from './script_build.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -421,8 +422,33 @@ export function applyLearned(plan, L) {
 // Không xét gain để đổi gain mặc định không làm hỏng nhận diện.
 export const isUserMusic = m => !!m && (!!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech'))));
 export const hasUserBed = (music, dur) => (music || []).some(m => isUserMusic(m) && m.t0 <= .05 && m.t1 >= dur - .1);
-// S27 M194: nền nhạc theo dấu MOOD (_sheet) phủ cả video: AI dựng không kèm kịch bản giữ như nhạc người dùng chọn
-export const hasSheetBed = (music, dur) => (music || []).some(m => m._sheet != null && m.t0 <= .05 && m.t1 >= dur - .1);
+// S27 M194 / M195: nền nhạc theo kịch bản (một hoặc nhiều khúc _sheet): AI dựng không kèm kịch bản giữ như nhạc người dùng chọn
+export const hasSheetBed = music => (music || []).some(m => m._sheet != null && !m.hidden);
+// S27 M195: nền nhạc theo kịch bản (mảng khúc _sheet) → (music mới, kept). Bài học ai-video-studio-020: nền tự sinh (_ai, _auto, _sheet,
+// nhạc khởi đầu) bị thay và cất vào _was của khúc đầu (nền _sheet cũ thì lấy lại _was của nó, không lồng nền trong nền); nhạc người dùng
+// (isUserMusic: file / tay) giữ song song, nền người dùng phủ cả video thì không thêm; khúc _sheet đã chỉnh tay (_orig) → giữ CẢ nền.
+// Bản client: studio/features/20_ai.js sheetMusic (cùng luật; scripts/tests/s27_m195.test.mjs so hai bản).
+export function sheetMusic(music, plan, dur) {
+  music = music || [];
+  if (music.some(m => m._sheet != null && m._orig)) return { music, kept: 'orig' };
+  const full = Array.isArray(plan) || !!plan, keepUser = music.some(m => isUserMusic(m) && m.t0 <= .05 && m.t1 >= dur - .1);
+  const gone = m => !isUserMusic(m) && (m._ai || m._auto || m._sheet != null || (full && m.t0 <= .05 && m.t1 >= dur - .1));
+  const stay = music.filter(m => !gone(m)), was = music.filter(gone).flatMap(m => (m._sheet != null ? m._was || [] : [m]));
+  if (keepUser || !plan) return { music: stay, kept: keepUser ? 'user' : null };
+  const beds = (Array.isArray(plan) ? plan : [{ ...plan, t0: 0, t1: dur }]).filter(m => m.t0 < dur - .05).map(m => ({ ...m, t1: Math.min(m.t1, dur) }));
+  if (beds.length) { beds[beds.length - 1].t1 = dur; if (was.length) beds[0]._was = was; }
+  return { music: [...stay, ...beds], kept: null };
+}
+/** Hoàn tác nhạc theo kịch bản: bỏ các khúc _sheet, trả lại nền đã cất trong _was. */
+export const dropSheetMusic = music => [...(music || []).filter(m => m._sheet == null), ...(music || []).filter(m => m._sheet != null).flatMap(m => m._was || [])];
+/** Nhạc của kế hoạch cho người đọc: "hype → sad (2 khúc)" / "tắt" / tên bài Kho. */
+export function musicLabel(music) {
+  const list = Array.isArray(music) ? music : music ? [music] : [];
+  if (!list.length) return 'tắt';
+  const names = list.map(m => (m.kho ? `${m.title || m.kho} (Kho)` : String(m.mood || '').replace(/_\d+$/, ''))).filter((x, i, a) => x && x !== a[i - 1]);
+  return names.join(' → ') + (list.length > 1 ? ` (${list.length} khúc)` : '');
+}
+
 // Apply a plan: earlier AI items (and untouched recipe items) are replaced; anything the user edited (_orig) or added stays.
 // S27 M194: kế hoạch theo kịch bản (plan.script) thay cả mục _sheet cũ chưa sửa tay; mục _sheet bạn đã sửa tay (_orig) giữ, và mục mới
 // cùng đoạn cùng loại không thêm lần nữa. Kế hoạch không kèm kịch bản giữ mục _sheet và nền nhạc của nó (như nhạc người dùng chọn).
@@ -440,7 +466,12 @@ export function applyPlan(tl, caps, plan) {
   // plan.music null (thói quen "không nhạc", M134): bỏ nhạc _ai cũ, không thêm nhạc mới
   // S26 M182: nhạc người dùng đã chọn / chỉnh (isUserMusic) được giữ và thắng nhạc AI; chỉ nhạc _ai/_auto hoặc nhạc khởi đầu chưa ai đụng bị thay
   const keep = hasUserBed(tl.audio.music, tl.duration) || (!merged && hasSheetBed(tl.audio.music, tl.duration));
-  tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
+  // S27 M195: nhạc theo kịch bản nhiều khúc (hoặc nền theo kịch bản đã chỉnh tay) đi sheetMusic; nền theo kịch bản luôn có duck (tự hạ nhạc dưới giọng)
+  if (merged && (Array.isArray(plan.music) || (tl.audio.music || []).some(m => m._sheet != null && m._orig))) {
+    const r = sheetMusic(tl.audio.music, plan.music, tl.duration);
+    tl.audio.music = r.music;
+    if (!r.kept && plan.music && (!tl.audio.duck || typeof tl.audio.duck !== 'object')) tl.audio.duck = { ...DEFAULT_DUCK };
+  } else tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
   tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x)))];
   let n = 0;
   for (const e of plan.captions) {
@@ -456,16 +487,17 @@ export function applyPlan(tl, caps, plan) {
  * S27 M194: dấu của kịch bản (bảng dựng nội bộ) → phần kế hoạch đi qua validate như bản của Claude. ctx = { tl, caps, cat, lib };
  * media = { [mediaKey]: {seq}|{path} } đã liên kết vào dự án (Kho, thư viện, stock, ảnh AI), mediaErr = { [mediaKey]: lý do }.
  * Chữ và b-roll động validate riêng (hai lớp được chồng nhau), ảnh / clip thêm thẳng. Cảnh nền của gói (_base) không lặp lại.
- * → { scenes, music | undefined, sfx, clips, miss: { [id yêu cầu]: lý do }, dropped, cuts }
+ * → { scenes, music: [khúc] | undefined, sfx, clips, miss: { [id yêu cầu]: lý do }, notes: [ghi chú nhạc], dropped, cuts }
  */
 export function planFromSheet(sheet, { tl, caps, cat, lib }, media = {}, mediaErr = {}) {
-  const raw = sheetToPlan(sheet, tl, { design: designOf(tl), media, mediaErr, dynIds: new Set(lib.broll.map(x => x.id)), dynCat: new Map(lib.broll.map(x => [x.id, x])) });
+  const raw = sheetToPlan(sheet, tl, { design: designOf(tl), media, mediaErr, dynIds: new Set(lib.broll.map(x => x.id)), dynCat: new Map(lib.broll.map(x => [x.id, x])),
+    catalog: lib.music, mood: (tl.audio?.music || []).find(m => m.mood && !m.file)?.mood?.replace(/_\d+$/, '') });
   const ctx = { tl, caps, cat, lib, o: { pack: 'keep', sheet: true }, script: null };
   const head = { pack: tl.pack, caption_style: tl.caption_style };
-  const a = validate({ ...head, scenes: raw.text, sfx: raw.sfx, music: raw.music || null }, ctx), b = validate({ ...head, scenes: raw.dyn }, ctx);
+  const a = validate({ ...head, scenes: raw.text, sfx: raw.sfx, music: null }, ctx), b = validate({ ...head, scenes: raw.dyn }, ctx);
   const scenes = [...a.scenes, ...b.scenes].filter(s => !s._base).concat(raw.photos).sort((x, y) => x.t0 - y.t0);
-  const music = raw.music ? { ...a.music, _sheet: raw.music._sheet, _script: raw.music._script } : undefined;
-  return { scenes, music, sfx: a.sfx, clips: raw.clips, miss: raw.miss, dropped: [...raw.dropped, ...a.dropped, ...b.dropped], cuts: a.cuts };
+  const music = raw.music; // S27 M195: nền nhiều khúc (musicFromSheet đã kiểm mood theo catalog), undefined = giữ nhạc
+  return { scenes, music, sfx: a.sfx, clips: raw.clips, miss: raw.miss, notes: raw.notes || [], dropped: [...raw.dropped, ...a.dropped, ...b.dropped], cuts: a.cuts };
 }
 /**
  * S27 M194: gộp phần dựng theo dấu kịch bản (planFromSheet) vào kế hoạch của Claude, sửa `plan` tại chỗ: cảnh của Claude chồng giờ cảnh
@@ -481,8 +513,9 @@ export function mergeScript(plan, sp) {
   }
   plan.scenes = [...own.filter(s => s._base), ...[...own.filter(s => !s._base), ...sp.scenes].sort((x, y) => x.t0 - y.t0)];
   plan.sfx = [...plan.sfx.filter(x => !sp.sfx.some(y => Math.abs(y.t - x.t) < .3)), ...sp.sfx].sort((x, y) => x.t - y.t);
-  if (plan.music && sp.music) plan.music = { ...plan.music, mood: sp.music.mood, _sheet: sp.music._sheet, _script: sp.music._script };
-  plan.dropped = [...plan.dropped.filter(d => !/^kịch bản: dấu (B-ROLL|CHỮ) /.test(d)), ...sp.dropped];
+  // S27 M195: nhạc theo kịch bản = một nền nhiều khúc thay nền Claude chọn (plan.music null = thói quen "không nhạc" giữ nguyên)
+  if (plan.music && sp.music) plan.music = sp.music.map(m => ({ ...m }));
+  plan.dropped = [...plan.dropped.filter(d => !/^kịch bản: dấu (B-ROLL|CHỮ) /.test(d)), ...sp.dropped, ...(sp.notes || [])];
   return plan;
 }
 
@@ -532,12 +565,24 @@ async function main() {
   }
   // mood chốt của kịch bản thắng mood Claude chọn
   const sm = sheet && sheetMoodOf(sheet);
-  if (plan.music && sm && lib.music.some(m => m.mood === sm)) plan.music.mood = sm;
+  if (plan.music && !Array.isArray(plan.music) && sm && lib.music.some(m => m.mood === sm)) plan.music.mood = sm;
   // S26 M182: đã có nhạc phủ cả video do người dùng chọn/chỉnh → giữ, không đề xuất nhạc mới
   if (plan.music && hasUserBed(tl.audio?.music, tl.duration)) { plan.music = null; plan.keptMusic = true; plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + 'Giữ nhạc bạn chọn.'; }
   // S12 · M99: nhạc nền ưu tiên Nhac/ của Kho khi có bài hợp mood → media/kho_* (nguồn ghi ở media/credits.json); không có thì nhạc thư viện
   // S19 M138: phong cách thương hiệu chọn nhạc riêng (opts.music_pick = 'kho' | 'kho:<rel>') → bài đó thắng bài hợp mood
-  if (plan.music) try { const K = await import('./kho_media.mjs'); const k = (o.music_pick && await K.khoMusicPick(dir, tl, o.music_pick)) || await K.khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
+  if (plan.music && !Array.isArray(plan.music)) try { const K = await import('./kho_media.mjs'); const k = (o.music_pick && await K.khoMusicPick(dir, tl, o.music_pick)) || await K.khoMusic(dir, tl, plan.music.mood); if (k) plan.music = { ...plan.music, file: k.file, kho: k.kho, title: k.title }; } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
+  // S27 M195: nền theo kịch bản: mỗi khúc NHẠC: kho … → khoMusicPick; còn lại bài Kho hợp mood (khoMusic), không có thì nhạc thư viện.
+  // opts.music_pick (một bài cho mọi video của phong cách) không áp: kịch bản đã chọn nhạc theo đoạn.
+  if (Array.isArray(plan.music) && plan.music.length) try {
+    const K = await import('./kho_media.mjs'), byMood = new Map();
+    for (const m of plan.music) {
+      const pick = m.pick, mood = String(m.mood).replace(/_\d+$/, ''); delete m.pick;
+      let k = pick ? await K.khoMusicPick(dir, tl, pick).catch(() => null) : null;
+      if (pick && !k) plan.dropped.push(`Nhạc: Kho chưa có bài “${pick.slice(4) || 'nhạc'}”, dùng nhạc thư viện ${mood}`);
+      if (!k) { if (!byMood.has(mood)) byMood.set(mood, await K.khoMusic(dir, tl, mood).catch(() => null)); k = byMood.get(mood); }
+      if (k) Object.assign(m, { file: k.file, kho: k.kho, title: k.title });
+    }
+  } catch (e) { console.log('Kho: bỏ qua nhạc Kho (' + e.message + ')'); }
   // S13 · M104: render the plan once and move graphics off the speaking face / captions / unsafe edges before it is applied
   if (!args.includes('--no-place')) {
     say(.93, 'Đặt graphic né mặt, phụ đề và mép khung');
@@ -551,13 +596,14 @@ async function main() {
     } catch (e) { console.log('Bỏ qua bước đặt chỗ: ' + e.message.slice(0, 200)); plan.placed = { error: e.message.slice(0, 200) }; }
   }
   if (sp) { // báo cáo cuối cùng (sau nhạc, đặt chỗ): "Theo kịch bản: x/y yêu cầu đã dựng"
-    if (plan.keptMusic && sp.music) sp.miss[sp.music._script.id] = 'giữ nhạc bạn đã chọn cho video';
+    if (plan.keptMusic && sp.music) { for (const m of sp.music) if (m._script?.id) sp.miss[m._script.id] = 'giữ nhạc bạn đã chọn cho video'; }
+    else if (sp.music && (tl.audio?.music || []).some(m => m._sheet != null && m._orig)) for (const m of sp.music) if (m._script?.id) sp.miss[m._script.id] = 'nhạc theo kịch bản đã chỉnh tay: giữ nguyên (xoá khúc đã sửa để dựng lại nhạc)';
     plan.script = scriptReport(scriptRequests(sheet), plan, sp.miss);
     plan.summary = (plan.summary ? plan.summary.replace(/\s*$/, ' ') : '') + `Theo kịch bản: ${plan.script.done}/${plan.script.total} yêu cầu đã dựng.`;
   }
   const out = path.resolve(dir, opt('--out', '.studio/ai_plan.json'));
   fs.writeFileSync(out, JSON.stringify(plan, null, 1));
-  console.log(`plan: ${plan.pack} · ${plan.scenes.length} cảnh · ${plan.captions.length} dòng phụ đề sửa · ${plan.sfx.length} sfx · bỏ ${plan.dropped.length}`);
+  console.log(`plan: ${plan.pack} · ${plan.scenes.length} cảnh · ${plan.captions.length} dòng phụ đề sửa · ${plan.sfx.length} sfx · nhạc ${plan.music === undefined ? 'giữ' : musicLabel(plan.music)} · bỏ ${plan.dropped.length}`);
   if (args.includes('--apply')) {
     const n = applyPlan(tl, caps, plan);
     const capFile = typeof tl.captions === 'string' ? tl.captions : 'work/captions.json';
