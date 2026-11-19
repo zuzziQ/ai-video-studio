@@ -83,11 +83,23 @@ export const claudeBin = () => claudeCmd()[0];
 // (or CLAUDE_CODE_OAUTH_TOKEN) so the app does not share the CLI's rotating login. Session variables inherited from a
 // Claude Code session that started the server are dropped (they die with that session). --setting-sources "" keeps the
 // user's ~/.claude/CLAUDE.md and settings out of video prompts. ANTHROPIC_API_KEY, if set, still wins (billed API).
-const TOKEN_FILE = path.join(process.env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'claude-token');
-function claudeEnv(env = process.env) {
-  const e = { ...env };
+// Lượt kiểm "người dùng mới" (worktree, subagent) chạy Studio với USERPROFILE/HOME/AVS_HOME trong thư mục tạm, nơi không có
+// token lẫn đăng nhập của CLI → "Claude Code chưa đăng nhập". Token lấy thêm ở home thật của tài khoản (os.userInfo, không
+// theo biến môi trường), và khi không có CLAUDE_CONFIG_DIR thì CLI con chạy với home thật để thấy ~/.claude của người dùng.
+export const realHome = () => { try { return os.userInfo().homedir || os.homedir(); } catch { return os.homedir(); } };
+const tokenFiles = (env, home) => [...new Set([path.join(env.AVS_HOME || path.join(os.homedir(), '.ai-video-studio'), 'claude-token'),
+  path.join(home, '.ai-video-studio', 'claude-token')])];
+export function claudeEnv(env = process.env, o = {}) {
+  const e = { ...env }, home = o.home || realHome();
   for (const k of Object.keys(e)) if (k === 'CLAUDECODE' || (k.startsWith('CLAUDE_CODE_') && k !== 'CLAUDE_CODE_OAUTH_TOKEN')) delete e[k];
-  if (!e.CLAUDE_CODE_OAUTH_TOKEN) try { const t = fs.readFileSync(TOKEN_FILE, 'utf8').trim(); if (t) e.CLAUDE_CODE_OAUTH_TOKEN = t; } catch { /* CLI login */ }
+  for (const f of tokenFiles(env, home)) {
+    if (e.CLAUDE_CODE_OAUTH_TOKEN) break;
+    try { const t = fs.readFileSync(f, 'utf8').trim(); if (t) e.CLAUDE_CODE_OAUTH_TOKEN = t; } catch { /* CLI login */ }
+  }
+  if (!e.CLAUDE_CONFIG_DIR && home) {
+    const same = a => !a || path.resolve(a).toLowerCase() === path.resolve(home).toLowerCase();
+    if (!same(e.USERPROFILE) || !same(e.HOME)) { if (IS_WIN) e.USERPROFILE = home; e.HOME = home; }
+  }
   return e;
 }
 const claudeArgs = args => (args.includes('--setting-sources') ? args : [...args, '--setting-sources', '']);
