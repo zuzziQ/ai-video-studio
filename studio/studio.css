@@ -265,6 +265,10 @@ body[data-focus] #lib, body[data-focus] #right { display: none; }
 .tx:hover { border-color: rgb(var(--color-accent-text)); background: radial-gradient(ellipse at 50% 40%, rgb(var(--color-surface-hover)), rgb(var(--color-surface-raised))); }
 .tx span { white-space: nowrap; max-width: 100%; }
 .tx small { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
+/* S25: mẫu chữ của thư viện là kiểu chữ của VIDEO (chữ trắng / vàng có bóng): nằm trên nền như khung xem trước, không đổi theo nền giao diện */
+.txgrid .tx { background: radial-gradient(ellipse at 50% 40%, rgb(var(--stage-glow)), rgb(var(--stage-bg))); }
+.txgrid .tx:hover { background: rgb(var(--stage-glow)); border-color: rgb(var(--color-fg-on-media) / .6); }
+.txgrid .tx small { color: rgb(var(--color-fg-on-media) / .72); }
 .cslist { display: flex; flex-direction: column; gap: var(--space-1); }
 .cslist button { justify-content: flex-start; background: rgb(var(--color-surface-raised)); border-color: rgb(var(--color-line)); }
 .cslist button.on { background: rgb(var(--color-accent-soft) / .24); border-color: rgb(var(--color-accent-text) / .5); color: rgb(var(--color-accent-text-strong)); font-weight: 600; }
@@ -379,7 +383,7 @@ body[data-focus] #lib, body[data-focus] #right { display: none; }
 #insp .algrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--space-1); }
 #insp .algrid button { justify-content: center; padding: var(--space-1); }
 #overlay .safe { position: absolute; border: 1.5px dashed rgb(var(--color-danger) / .9); pointer-events: none; }
-#overlay .safe span { position: absolute; top: -20px; left: -1px; font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-canvas)); background: rgb(var(--color-danger)); padding: 0 var(--space-1); border-radius: var(--radius-xs); }
+#overlay .safe span { position: absolute; top: -20px; left: -1px; font-size: var(--text-2xs); font-weight: 600; color: rgb(var(--color-danger-fg)); background: rgb(var(--color-danger)); padding: 0 var(--space-1); border-radius: var(--radius-xs); }
 #overlay .facezone { position: absolute; border: 1.5px dashed rgb(var(--color-success) / .9); border-radius: 50%; pointer-events: none; }
 /* S23 M161: flex + container query thay grid 1fr auto 1fr: vùng giữa hẹp (cửa sổ 1024 px, Claude cạnh khung) không đẩy nút ⤢
    và thời gian ra sau cột phải. Hai bên co về đúng nội dung, nút phát vẫn giữa khi đủ chỗ; hẹp dần thì bớt phần phụ. */

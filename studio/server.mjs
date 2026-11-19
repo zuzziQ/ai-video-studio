@@ -445,13 +445,18 @@ function sendIndex(res) {
 }
 // No session cookie (opened as a bare http://localhost:<port>, or the server restarted): explain how to get in, never the token.
 // The page loads nothing else (no stylesheet), so it carries the few token values it needs, copied from studio/theme/tokens.css.
+// S25: light values too (same rule as studio/theme/theme-boot.js: stored avs.theme, else the system preference).
+const LOCKED_LIGHT = `color-scheme: light;
+  --color-canvas: 241 244 250; --color-fg: 15 23 42; --color-fg-muted: 51 65 85; --color-accent-text: 6 32 182;`; /* design-token-ok: copy of the light block of tokens.css */
 const LOCKED_CSS = `:root { color-scheme: dark;
   --color-canvas: 2 6 23; --color-fg: 248 250 252; --color-fg-muted: 203 213 225; --color-accent-text: 135 152 238; } /* design-token-ok: copy of tokens.css (canvas, fg, fg-muted, accent-text) */
+:root[data-theme="light"] { ${LOCKED_LIGHT} }
+@media not (prefers-color-scheme: dark) { :root:not([data-theme="dark"]) { ${LOCKED_LIGHT} } } /* như theme-boot.js: không báo tối thì sáng */
 body { max-width: 620px; margin: 12vh auto; padding: 0 16px; background: rgb(var(--color-canvas)); color: rgb(var(--color-fg)); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
 h2 { font-size: 22px; } .note { color: rgb(var(--color-fg-muted)); font-size: 13px; } a { color: rgb(var(--color-accent-text)); }`;
 function sendLocked(res) {
   res.writeHead(401, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
-  res.end(`<!doctype html><meta charset="utf-8"><title>AI Video Studio</title><style>${LOCKED_CSS}</style><body>
+  res.end(`<!doctype html><meta charset="utf-8"><title>AI Video Studio</title><script>try{var v=localStorage.getItem("avs.theme");if(v==="light"||v==="dark")document.documentElement.setAttribute("data-theme",v)}catch(e){}</script><style>${LOCKED_CSS}</style><body>
 <h2>Mở AI Video Studio bằng lối tắt</h2><p>Trang này cần mã phiên để bảo vệ dự án của bạn khỏi chương trình khác trên máy.</p>
 <ul><li>Bấm đúp <b>AI Video Studio</b> ngoài Desktop (hoặc <code>studio.cmd</code> / <code>./studio.sh</code>). Studio đang chạy thì lối tắt chỉ mở lại trình duyệt đúng trang.</li>
 <li>Hoặc mở link “Mở lại trong trình duyệt” in trong cửa sổ server.</li></ul>

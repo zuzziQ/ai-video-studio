@@ -92,3 +92,14 @@ mắt**, thành phần mới phải có mẫu ở đây trước khi feature dù
 - Không đổi khung xem trước, màu track, engine render theo nền.
 - Không đổi trang khoá của `server.mjs` (tệp nóng; làm sau nếu cần).
 - Không thêm nền thứ ba hay bộ màu người dùng tự chọn.
+
+## 8. `M180` — phần còn lại (sau `#223`)
+
+Chủ repo: "chạy đủ hết phần còn lại, không để các lỗi nhỏ". Làm trong một PR, gồm:
+
+- **Trang khoá có nền sáng.** Đổi mục 7 "không đổi trang khoá". Trang chỉ sửa HTML/CSS của `sendLocked` trong `studio/server.mjs` và không đụng đường dẫn hay xác thực. `LOCKED_LIGHT` chép khối sáng (có test so). Trang dùng cùng luật như `theme-boot.js`: theo `avs.theme`, không có thì "không báo tối là sáng".
+- **Vai trò chữ trên nền đặc trạng thái.** Thêm `--color-danger-fg`, `--color-warning-fg`: huy hiệu số đỏ ở nền tối từ 2,7 lên 7,5:1.
+- **Mẫu chữ thư viện** (`.txgrid .tx`) đặt trên nền khung xem trước.
+- **Tắt transition 2 khung hình lúc đổi nền** (`.avs-theme-sw`).
+- **Quét cả hai nền trên Studio thật:** 35 panel, 5 bước + Cài đặt, modal Xuất, Trang chủ, ⋯, ⌘K, trang mẫu 22 cặp. Kết quả 0 chữ dưới ngưỡng.
+

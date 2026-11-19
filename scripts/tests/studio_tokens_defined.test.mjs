@@ -110,3 +110,41 @@ test('theme-boot.js: system by default, remembers light / dark, toggle switches 
   b.T.set('system');
   assert.equal(b.ls.has('avs.theme'), false); assert.equal(b.attrs['data-theme'], 'dark');
 });
+
+test('the lock page of server.mjs copies its light colours from the light block of tokens.css', () => {
+  const tokens = read('studio/theme/tokens.css'), server = read('studio/server.mjs');
+  const block = server.match(/const LOCKED_LIGHT = `([\s\S]*?)`;/)?.[1];
+  const light = tokens.match(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(block && light, 'LOCKED_LIGHT or the light block not found');
+  const val = (src, name) => { // one level of var(): --color-fg: var(--neutral-900) -> palette value from the dark :root
+    let v = src.match(new RegExp(`\\n\\s*${name}:\\s*([^;]+);`))?.[1].trim();
+    const ref = v?.match(/^var\((--[\w-]+)\)$/)?.[1];
+    if (ref) v = tokens.match(new RegExp(`\\n\\s*${ref}:\\s*([^;]+);`))?.[1].trim();
+    return v;
+  };
+  const pairs = [...block.matchAll(/(--color-[\w-]+):\s*([\d ]+);/g)];
+  assert.ok(pairs.length >= 4);
+  for (const m of pairs) assert.equal(m[2].trim(), val('\n' + light, m[1]), m[1]);
+  assert.match(server, /@media not \(prefers-color-scheme: dark\) \{ :root:not\(\[data-theme="dark"\]\)/, 'lock page: same rule as theme-boot.js (light unless the system says dark)');
+});
+
+test('theme-boot.js: switching theme turns transitions off for two frames (.avs-theme-sw), not on first paint', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const cls = new Set(), frames = [], attrs = {};
+  const ctx = {
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    document: { documentElement: { classList: { add: c => cls.add(c), remove: c => cls.delete(c) }, setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: k => attrs[k] ?? null }, dispatchEvent() {} },
+    CustomEvent: class { constructor(type) { this.type = type; } },
+    addEventListener() {},
+    requestAnimationFrame: f => frames.push(f),
+    matchMedia: () => ({ matches: true, addEventListener() {} }),
+  };
+  ctx.window = ctx;
+  runInNewContext(read('studio/theme/theme-boot.js'), ctx);
+  assert.equal(cls.has('avs-theme-sw'), false, 'first paint must not touch transitions');
+  ctx.AVSTheme.toggle();
+  assert.equal(cls.has('avs-theme-sw'), true);
+  frames.shift()(); assert.equal(cls.has('avs-theme-sw'), true, 'still off after one frame');
+  frames.shift()(); assert.equal(cls.has('avs-theme-sw'), false, 'back on after two frames');
+  assert.match(read('studio/theme/tokens.css'), /:root\.avs-theme-sw \*[^{]*\{ transition: none !important; \}/);
+});

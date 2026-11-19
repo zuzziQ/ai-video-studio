@@ -105,6 +105,8 @@
   --color-warning-text: var(--warning-200);
   --color-danger: var(--danger-400);
   --color-danger-text: var(--danger-300);
+  --color-danger-fg: var(--neutral-950);     /* text on a solid --color-danger fill (badge, label) */
+  --color-warning-fg: var(--neutral-950);    /* text on a solid --color-warning fill */
   --color-highlight: var(--warning-400);     /* highlighted word in the transcript */
   --color-audio: 45 212 191;                 /* waveform teal, kept from the old theme */
   --color-playhead: var(--neutral-100);
@@ -254,6 +256,8 @@
   --color-warning-text: var(--warning-800);
   --color-danger: var(--danger-600);
   --color-danger-text: var(--danger-700);
+  --color-danger-fg: 255 255 255;
+  --color-warning-fg: 255 255 255;
   --color-highlight: var(--warning-400);
   --color-audio: 13 148 136;
   --color-playhead: var(--navy-600);
@@ -268,6 +272,9 @@
   --shadow-overlay: 0 24px 60px -12px rgb(var(--color-shadow) / 0.3);
   --shadow-accent: 0 6px 18px -6px rgb(var(--navy-600) / 0.4);
 }
+
+/* Theme switch (S25): theme-boot.js sets this class for two frames while the theme changes, so colours swap at once. */
+:root.avs-theme-sw *, :root.avs-theme-sw *::before, :root.avs-theme-sw *::after { transition: none !important; }
 
 /* Reduced motion: every transition that uses the duration tokens stops; a loading spinner still turns. */
 @media (prefers-reduced-motion: reduce) {
