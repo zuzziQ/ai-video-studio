@@ -99,5 +99,5 @@ test('launcher không đối số không mở clip-mau; trình cài không tạo
 test('trang chủ: nút "Xem thử dự án mẫu", nhắc bước Chuẩn bị khi chưa có thương hiệu', () => {
   const js = read('studio/features/02_onboarding.js');
   assert.match(js, /data-h="sample"/); assert.match(js, /\/api\/onboarding\/sample/);
-  assert.match(js, /data-h="prep"/); assert.match(js, /brandCount\(\)\) === 0/);
+  assert.match(js, /data-h="prep"/); assert.match(js, /const nb = await brandCount\(\);\s*if \(nb !== 0\) return;/); // S26 M188
 });

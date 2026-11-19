@@ -9,6 +9,8 @@
 //   S19 M132: Tự lái bắt đầu ở thẻ của trang chủ (thả nhiều video → /api/autopilot/upload, chọn thương hiệu); thanh trên chỉ còn
 //   chỉ báo việc nền (15_autopilot.js). S19 M136: dự án gần đây là lưới thẻ có ảnh bìa (/api/onboarding/thumb?i=, tạo nền ở
 //   scripts/home_cards.mjs), thời lượng, Kho, sửa lần cuối, đã xuất, dấu đang mở trên thanh tab; tìm theo tên, lọc theo thương hiệu.
+// - S26 M188: đã có thương hiệu thì hướng dẫn không tự mở nữa; trang chủ có mục Thương hiệu: mỗi thương hiệu một thẻ (Video mới chọn
+//   sẵn thương hiệu đó, Dự án lọc dự án gần đây, Sửa), thẻ "Thương hiệu mới" mở hướng dẫn trống. Tạo / sửa từ thẻ chỉ có 2 bước (Thương hiệu, Kho).
 // - S17 M125: Studio mở không kèm dự án (không còn dự án mẫu tự tạo). Chưa có thương hiệu: trang chủ nhắc bước Chuẩn bị và tự mở
 //   hướng dẫn ở bước Thương hiệu (một lần mỗi phiên trình duyệt); "Xem thử dự án mẫu" chép sample/clip-mau rồi mở (/api/onboarding/sample).
 'use strict';
@@ -110,6 +112,17 @@
   #onb-home .prep .ti { font-size: 22px; color: var(--acc); flex: none; } #onb-home .prep div { flex: 1; min-width: 0; } #onb-home .prep small { display: block; color: var(--tx2); font-size: 12px; margin-top: 2px; }
   #onb-home .prep button { flex: none; font-size: 13px; }
   @media (max-width: 720px) { #onb-home .prep { flex-wrap: wrap; } }
+  /* S26 M188: mục Thương hiệu của trang chủ */
+  #onb-home .brs { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  #onb-home .bc { box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: var(--r); background: var(--bg2); border: 1px solid var(--line); }
+  #onb-home .bc .bt { display: flex; gap: 12px; align-items: center; min-width: 0; } #onb-home .bc .bt > div { min-width: 0; flex: 1; }
+  #onb-home .bc .lg { width: 40px; height: 40px; flex: none; border-radius: var(--r); background: var(--bg3); display: flex; align-items: center; justify-content: center; overflow: hidden; font-weight: 700; font-size: 16px; color: rgb(var(--color-fg-on-media)); }
+  #onb-home .bc .lg img { width: 100%; height: 100%; object-fit: contain; background: var(--bg1); }
+  #onb-home .bc b { display: block; font-size: 14px; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #onb-home .bc small { display: block; font-size: 11px; color: var(--tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #onb-home .bc .ba { display: flex; gap: 8px; flex-wrap: wrap; } #onb-home .bc .ba button { font-size: 12px; height: 32px; } #onb-home .bc .ba .grow { flex: 1; }
+  #onb-home .bc.add { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 112px; padding: 16px; border-radius: var(--r); border: 1px dashed var(--line3); color: var(--tx2); font-size: 13px; }
+  #onb-home .bc.add:hover, #onb-home .bc.add:focus-visible { border-color: var(--acc); color: var(--tx); } #onb-home .bc.add .ti { font-size: 18px; color: var(--acc); }
   #onb-home .links { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; } #onb-home .links button { font-size: 12px; }
   @media (max-width: 720px) { #onb-home .cards.sm { grid-template-columns: minmax(0, 1fr); } #onb-home .rhd input { width: 100%; } #onb-home .rhd select { max-width: none; flex: 1; } }
   @media (max-width: 420px) { #onb-home .rec { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } #onb-home .in { padding-top: 32px; } }
@@ -157,12 +170,15 @@
   }
 
   // ---------- wizard ----------
-  async function openWizard(step) {
+  // opt.fresh: tạo thương hiệu mới (ô trống); opt.brand: sửa thương hiệu đó. Hai cách này mở từ trang chủ, chỉ 2 bước, không đụng trạng thái hướng dẫn.
+  async function openWizard(step, opt = {}) {
     closeWizard();
     await loadState();
     const brands = await api('/api/brands').catch(() => []);
-    const kit = (Array.isArray(brands) ? brands : []).find(b => b.id === ST?.brand) || null;
-    W = { step: Math.min(step ?? ST?.step ?? 0, 2), kit, logoFile: null, logoUrl: kit?.logoUrl ? avsUrl(kit.logoUrl) : '', colors: [kit?.primary || '', kit?.accent || ''],
+    const want = opt.fresh ? null : opt.brand || ST?.brand;
+    const kit = (Array.isArray(brands) ? brands : []).find(b => b.id === want) || null;
+    const mode = opt.fresh ? 'new' : opt.brand && kit ? 'edit' : '';
+    W = { step: Math.min(step ?? ST?.step ?? 0, mode ? 1 : 2), mode, last: mode ? 1 : 2, kit, logoFile: null, logoUrl: kit?.logoUrl ? avsUrl(kit.logoUrl) : '', colors: [kit?.primary || '', kit?.accent || ''],
       name: kit?.title || kit?.name || '', phone: kit?.phone || '', website: kit?.website || '', handle: kit?.handle || '',
       files: [], uploading: 0, kho: null, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: {}, pImage: null, pUrl: '', bAi: null, pAi: null,
       purpose: ST?.purpose || '', aspect: ST?.aspect === '16:9' ? '16:9' : '9:16', platforms: [...(ST?.platforms || [])], busy: false };
@@ -177,16 +193,18 @@
 
   function render() {
     const box = document.querySelector('#onb-wiz .onb-card'); if (!box || !W) return;
-    const s = W.step, heads = [
-      ['Thương hiệu của bạn', 'Tên và logo sẽ hiện trên mọi video. Màu chủ đạo tự lấy từ logo.'],
+    const s = W.step, n = W.last + 1, heads = [
+      W.mode === 'new' ? ['Thương hiệu mới', 'Mỗi thương hiệu có tên, logo, màu và Kho riêng. Màu chủ đạo tự lấy từ logo.']
+        : W.mode === 'edit' ? ['Sửa thương hiệu', 'Đổi tên, logo, màu hay thông tin liên hệ; video mới của thương hiệu này dùng bản đã lưu.']
+          : ['Thương hiệu của bạn', 'Tên và logo sẽ hiện trên mọi video. Màu chủ đạo tự lấy từ logo.'],
       ['Kho của thương hiệu', 'Một thư mục trên máy chứa video quay, ảnh, nhạc và logo; mọi video sau lấy file từ đây. Bước này không bắt buộc.'],
       ['Bạn làm video để làm gì?', 'Studio gợi ý gói style, mẫu và khổ hình hợp với bạn.']];
-    box.innerHTML = `<div class="onb-head"><div class="onb-prog">${STEPS.map((_, i) => `<i class="${i <= s ? 'on' : ''}"></i>`).join('')}</div>
-      <p class="onb-kick">Bước ${s + 1}/3 · ${STEPS[s]}</p><h2 id="onb-title">${heads[s][0]}</h2><p>${heads[s][1]}</p></div>
+    box.innerHTML = `<div class="onb-head"><div class="onb-prog">${STEPS.slice(0, n).map((_, i) => `<i class="${i <= s ? 'on' : ''}"></i>`).join('')}</div>
+      <p class="onb-kick">Bước ${s + 1}/${n} · ${STEPS[s]}</p><h2 id="onb-title">${heads[s][0]}</h2><p>${heads[s][1]}</p></div>
       <div class="onb-body">${[stepBrand, stepAssets, stepPurpose][s]()}<p class="onb-err" id="onb-err"></p></div>
-      <div class="onb-foot"><button class="ghost" data-o="skip">Bỏ qua hướng dẫn</button><span class="grow"></span>
+      <div class="onb-foot"><button class="ghost" data-o="skip">${W.mode ? 'Đóng' : 'Bỏ qua hướng dẫn'}</button><span class="grow"></span>
         ${s ? '<button data-o="back"><i class="ti ti-arrow-left"></i> Quay lại</button>' : ''}
-        <button class="primary" data-o="next" ${W.busy ? 'disabled' : ''}>${W.busy ? '<i class="ti ti-loader-2 spin"></i> Đang lưu…' : s === 2 ? '<i class="ti ti-check"></i> Xong' : 'Tiếp <i class="ti ti-arrow-right"></i>'}</button></div>`;
+        <button class="primary" data-o="next" ${W.busy ? 'disabled' : ''}>${W.busy ? '<i class="ti ti-loader-2 spin"></i> Đang lưu…' : s === W.last ? '<i class="ti ti-check"></i> Xong' : 'Tiếp <i class="ti ti-arrow-right"></i>'}</button></div>`;
     box.querySelector('[data-o=skip]').onclick = skip;
     box.querySelector('[data-o=back]')?.addEventListener('click', () => { W.step--; render(); });
     box.querySelector('[data-o=next]').onclick = next;
@@ -265,7 +283,7 @@
     }
     if (W.kit?.id !== b.id) W.kho = null; // Kho theo thương hiệu: đổi thương hiệu thì đọc lại
     W.kit = b;
-    await saveState({ brand: b.id, step: 1 });
+    await saveState(W.mode ? { brand: b.id } : { brand: b.id, step: 1 });
     // "Đang dùng": with a project open, apply the kit to it the same way the Thương hiệu panel does (undoable).
     if (Studio.TL && Studio._isReady) {
       const r = await api('/api/brands/apply', { id: b.id });
@@ -392,7 +410,7 @@
       W.product = { name: '', price: '', strengths: '', faq: [], industry: '' }; W.pImage = null; W.pUrl = ''; W.pAi = null;
       toast(`Đã lưu sản phẩm “${r.name}”`);
     } else if (p.price.trim() || p.strengths.trim()) throw new Error('Nhập tên sản phẩm, hoặc xoá giá và điểm mạnh để bỏ qua.');
-    await saveState({ step: 2 });
+    if (!W.mode) await saveState({ step: 2 });
   }
 
   const stepPurpose = () => `<div class="onb-f"><label>Lĩnh vực</label><div class="onb-pick">${PURPOSES.map(([id, ic, name]) => `<button data-pp="${id}" class="${W.purpose === id ? 'on' : ''}" aria-pressed="${W.purpose === id}"><i class="ti ${ic}"></i>${name}</button>`).join('')}</div>
@@ -426,12 +444,14 @@
       else await saveState({ purpose: W.purpose, aspect: W.aspect, platforms: W.platforms, done: true, skipped: false, step: 3 });
     } catch (e) { if (W) { W.busy = false; render(); err(e.message || 'Có lỗi, thử lại.'); } return; }
     W.busy = false;
-    if (s < 2) { W.step++; render(); return; }
+    if (s < W.last) { W.step++; render(); return; }
+    if (W.mode) { const t = W.kit?.title || W.name; closeWizard(); toast(`Đã lưu thương hiệu ${t}`); return openHome(); }
     const pid = W.purpose; closeWizard();
     toast('Xong! Mở lại hướng dẫn bằng nút nhà trên thanh trên.');
     if (ST?.project) openTemplates(pid); else openHome();
   }
   async function skip() {
+    if (W?.mode) { closeWizard(); return HOME ? openHome() : undefined; } // đóng hộp tạo / sửa thương hiệu: trang chủ đọc lại danh sách
     try { await saveState({ skipped: true }); } catch (e) { return err(e.message); }
     closeWizard();
     toast('Đã bỏ qua. Mở lại hướng dẫn bằng nút nhà trên thanh trên.');
@@ -586,6 +606,17 @@
     const p = purpose(ST?.purpose), rec = groupRecent(ST?.recent || []);
     const card = (act, ic, title, sub, small = '') => `<button class="card" data-h="${act}"><span class="ic"><i class="ti ${ic}"></i></span><div><b>${title}</b><span>${sub}</span>${small ? `<small>${small}</small>` : ''}</div></button>`;
     const kb = [...new Map(rec.filter(r => !r.gone).map(r => [r.brand || '', r.kho || 'Chung'])).entries()];
+    // S26 M188: mỗi thương hiệu đã có một thẻ: tạo video mới cho thương hiệu đó, xem dự án của nó, sửa; thêm thẻ Thương hiệu mới
+    const brandCard = b => {
+      const t = b.title || b.name || b.id, live = rec.filter(r => !r.gone && r.brand === b.id), col = /^#[0-9a-f]{3,8}$/i.test(b.primary || '') ? b.primary : '';
+      const last = live.reduce((m, r) => Math.max(m, +new Date(r.edited || r.t) || 0), 0);
+      const info = [live.length ? `${live.length} dự án` : 'Chưa có dự án', last ? fmtAgo(last) : '', b.ws && !b.ws.exists ? 'Kho chưa tạo' : ''].filter(Boolean).join(' · ');
+      return `<div class="bc"><div class="bt"><span class="lg"${col && !b.logoUrl ? ` style="background:${col}"` : ''}>${b.logoUrl ? `<img src="${esc(avsUrl(b.logoUrl))}" alt="">` : esc(t.trim().charAt(0).toUpperCase() || '?')}</span>
+        <div><b title="${esc(t)}">${esc(t)}</b><small>${esc(info)}</small></div></div>
+        <div class="ba"><button class="primary" data-h="bvid" data-bid="${esc(b.id)}"><i class="ti ti-video-plus"></i> Video mới</button>
+          ${live.length ? `<button data-h="bproj" data-bid="${esc(b.id)}"><i class="ti ti-folders"></i> Dự án</button>` : ''}<span class="grow"></span>
+          <button class="ghost" data-h="bedit" data-bid="${esc(b.id)}" title="Sửa thương hiệu ${esc(t)}" aria-label="Sửa thương hiệu ${esc(t)}"><i class="ti ti-pencil"></i></button></div></div>`;
+    };
     HOME.innerHTML = `<div class="in"><div class="hd"><div class="grow"><h1>Bạn muốn làm video gì hôm nay?</h1><p class="sub">Chọn một cách bắt đầu. Studio dẫn bạn từng bước.</p></div>
       ${ST?.project ? '<button class="ghost" data-h="close" title="Về trình chỉnh sửa (Esc)"><i class="ti ti-x"></i> Đóng</button>' : ''}</div>
       <div class="cards">${card('new', 'ti-video-plus', 'Video mới', 'Chọn video quay sẵn rồi tự tay dựng: cắt, phụ đề, hiệu ứng, nhạc, xuất.', 'Trình chỉnh sửa')}
@@ -593,6 +624,8 @@
       <div class="cards sm">${card('tpl', 'ti-layout-grid', 'Dựng theo mẫu', 'Chọn mẫu đẹp sẵn rồi thay chữ, ảnh, video.', p ? `Gợi ý cho ${p[2]}` : 'Gần 90 mẫu theo lĩnh vực')}
         ${card('long', 'ti-scissors', 'Cắt clip từ video dài', 'Livestream, podcast, buổi học: AI chọn đoạn hay.', 'Cắt clip')}
         ${card('batch', 'ti-stack-2', 'Làm hàng loạt', 'Từ file Excel hoặc CSV, nhiều video cùng mẫu.', 'Hàng loạt')}</div>
+      ${bl.length ? `<div class="rhd"><h3>Thương hiệu</h3></div><div class="brs">${bl.map(brandCard).join('')}
+        <button class="bc add" data-h="bnew"><i class="ti ti-plus"></i> Thương hiệu mới</button></div>` : ''}
       ${nb === 0 ? `<div class="prep"><i class="ti ti-briefcase"></i><div><b>Chưa có thương hiệu</b><small>Làm bước Chuẩn bị trước: thương hiệu (logo, màu, lời kết) và Kho chứa dự án, thành phẩm.</small></div>
         <button class="primary" data-h="prep"><i class="ti ti-arrow-right"></i> Chuẩn bị</button></div>` : ''}
       <div class="rhd"><h3>Dự án gần đây</h3>${rec.length > 1 ? `<input type="search" id="onb-q" placeholder="Tìm dự án theo tên" title="Gõ có dấu hay không dấu đều được" aria-label="Tìm dự án theo tên">` : ''}
@@ -629,6 +662,14 @@
     if (a === 'close') return hideHome();
     if (a === 'new') { hideHome(); return document.getElementById('newproj')?.click(); }
     if (a === 'wiz' || a === 'prep') return openWizard(0);
+    if (a === 'bnew') return openWizard(0, { fresh: true });
+    if (a === 'bedit') return openWizard(0, { brand: b.dataset.bid });
+    if (a === 'bvid') { hideHome(); return Studio.newProject ? Studio.newProject({ brand: b.dataset.bid }) : document.getElementById('newproj')?.click(); }
+    if (a === 'bproj') {
+      const sel = HOME.querySelector('#onb-kb');
+      if (sel && [...sel.options].some(o => o.value === b.dataset.bid)) { sel.value = b.dataset.bid; filterRec(); }
+      return HOME.querySelector('.rec')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     if (a === 'sample') {
       b.disabled = true;
       try {
@@ -673,8 +714,11 @@
       const drop = () => { if (mb && /Chưa mở dự án/.test(mb.textContent) && HOME && !document.getElementById('modal').hidden) { Studio.closeModal(); return true; } };
       if (mb && !drop()) { const mo = new MutationObserver(() => drop() && mo.disconnect()); mo.observe(mb, { childList: true }); setTimeout(() => mo.disconnect(), 15000); }
     }
+    // S26 M188: đã có thương hiệu thì không tự mở hướng dẫn (trang chủ cho chọn thương hiệu cũ hay tạo mới); chỉ người chưa có thương hiệu mới được dẫn vào
+    const nb = await brandCount();
+    if (nb !== 0) return;
     if (!s.done && !s.skipped) afterSetup(() => openWizard());
-    else if (!s.project && (await brandCount()) === 0) {
+    else if (!s.project) {
       // S17 M125: đã qua hướng dẫn nhưng chưa có thương hiệu: vào thẳng bước Chuẩn bị (Thương hiệu → Kho), mỗi phiên một lần
       let seen = false; try { seen = !!sessionStorage.getItem('avs-onb-prep'); sessionStorage.setItem('avs-onb-prep', '1'); } catch { /* không có sessionStorage */ }
       if (!seen) afterSetup(() => openWizard(0));
