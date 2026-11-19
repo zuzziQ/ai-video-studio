@@ -75,7 +75,8 @@
     return `<button class="ghost scn-sum" data-scnj ${n ? '' : 'disabled'} title="${n ? 'Tua tới yêu cầu kịch bản cần xem kế tiếp' : 'Mọi yêu cầu của kịch bản đã có trên timeline'}">
       <i class="ti ${n ? 'ti-alert-triangle' : 'ti-circle-check'}" aria-hidden="true"></i><span>Theo kịch bản: <b>${st.done}/${st.total}</b> yêu cầu đã dựng${n ? ` · <em>${n} cần xem</em>` : ''}</span>${n ? '<i class="ti ti-arrow-right" aria-hidden="true"></i>' : ''}</button>`;
   }
-  function jump() {
+  function jump(plan) { // S27 M200: plan = kế hoạch từ tiêu chí `script` của bước Dựng (03_nextstep), khi panel AI dựng chưa vẽ dòng
+    if (plan) cur = plan;
     const st = stat(cur); if (!st?.need.length) return;
     at = (at + 1) % st.need.length;
     const q = st.need[at];
