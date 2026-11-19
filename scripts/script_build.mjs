@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fold, norm, parseScript, stripMarks, readScript } from './script_doc.mjs';
 import { rmSync } from './fs_rm.mjs';
+import { ruleCells } from './script_table.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const r2 = v => Math.round(v * 100) / 100;
@@ -139,15 +140,34 @@ export async function buildSheet(sc, o = {}) {
     });
     if (!row.sfx.length && k === 0 && s.kind === 'hook' && (o.sfx || []).some(x => x.name === 'whoosh')) row.sfx.push({ name: 'whoosh', q: 'whoosh', at: t0, pos: 'dau', from: 'auto' });
     row.screen = s.screen.map((t, i) => ({ text: t, kind: s.screenKind?.[i] || null, from: 'mark' }));
+    if (s.note?.length) await noteCells(row, s, src, taken);
     row.lock = false;
     rows.push(row);
   }
   return { version: SHEET_VERSION, script_updated: sc?.updated || null, at: new Date().toISOString(), rows: mergeSheet(rows, o.prev) };
 }
 /**
- * Giữ phần người dùng đã sửa của bảng cũ: hàng khoá giữ cả hàng; ô `user` và ô chỉ dẫn đã Nhận (`from: claude` + `by`, M197) giữ khi lời
- * của hàng không đổi (so norm(say)).
+ * Chỉ dẫn [GHI CHÚ] của đoạn (kịch bản Excel, M197) → ô bảng dựng ngầm, không bước Nhận / Bỏ: luật thuần (ruleCells) cho mẫu câu hay
+ * gặp; ô mang `from: 'note'` + `note` = nguyên văn câu người dùng viết (ghi chú "Kịch bản yêu cầu …" trên timeline đọc lại).
+ * Không đè ô của dấu / người dùng; chỉ dẫn luật chưa hiểu vẫn nằm ở row.note, AI dựng đọc trong prompt (sheetPrompt).
  */
+async function noteCells(row, s, src, taken) {
+  for (const note of s.note) {
+    const tag = { from: 'note', note };
+    for (const c of ruleCells(note, s.say).cells) {
+      if (c.type === 'aroll') { if (row.aroll?.from === 'auto') row.aroll = { ...row.aroll, frame: c.frame, ...tag }; }
+      else if (c.type === 'focus') { if (!row.focus) row.focus = { on: c.on, ...(c.target ? { target: c.target } : {}), ...tag }; }
+      else if (c.type === 'transition') { if (!row.transition) row.transition = { v: c.v, ...tag }; }
+      else if (c.type === 'broll') {
+        if (row.broll.some(b => key(b.q) === key(c.q))) continue;
+        const b = await pickBroll(c.q, null, src, taken); // nguồn theo thứ tự thường (Kho → thư viện → stock khi bật → động)
+        if (b.pick) taken.add(`${b.src}:${b.pick}`);
+        row.broll.push({ ...b, ...tag });
+      } else if (c.type === 'graphic') { if (!row.screen.some(x => key(x.text) === key(c.text))) row.screen.push({ text: c.text, kind: 'vidu', ...tag }); }
+    }
+  }
+}
+/** Giữ phần người dùng đã sửa của bảng cũ: hàng khoá giữ cả hàng; ô `user` giữ khi lời của hàng không đổi (so norm(say)). */
 export function mergeSheet(rows, prev) {
   const old = Array.isArray(prev?.rows) ? prev.rows : [];
   if (!old.length) return rows;
@@ -157,7 +177,7 @@ export function mergeSheet(rows, prev) {
     if (!p) return r;
     if (p.lock) return { ...p, seg: r.seg, t0: r.t0, t1: r.t1, kind: r.kind };
     const out = { ...r };
-    const kept = x => x?.from === 'user' || (x?.from === 'claude' && !!x.by); // ô claude của chỉ dẫn (M197, có `by`); ô Dựng lại ô trống (M194) thì không
+    const kept = x => x?.from === 'user';
     for (const f of ['mood', 'music', 'aroll', 'focus', 'transition']) if (kept(p[f])) out[f] = p[f];
     for (const f of ['broll', 'sfx', 'screen']) {
       const mine = (p[f] || []).filter(kept); if (!mine.length) continue;
@@ -353,7 +373,7 @@ export function sheetToPlan(sheet, tl = {}, o = {}) {
 /** Bảng dựng cho prompt AI dựng (thay dấu thô): ô mark / user là ràng buộc cứng; hàng đã áp (`applied`) Claude không đặt graphic chồng. */
 export function sheetPrompt(sheet, applied = new Set()) {
   const fx = n => (n == null ? '?' : Number(n).toFixed(1)), cut = (s, n) => (String(s).length > n ? String(s).slice(0, n) + '…' : String(s));
-  const hard = c => (c && (c.from === 'mark' || c.from === 'user') ? ' (chốt)' : '');
+  const hard = c => (c && (c.from === 'mark' || c.from === 'user') ? ' (chốt)' : c?.from === 'note' ? ' (theo chỉ dẫn)' : '');
   return (sheet?.rows || []).filter(r => r.t0 != null && r.spoken !== false).map(r => {
     const parts = [];
     if (r.mood?.v) parts.push(`MOOD ${r.mood.v}${hard(r.mood)}`);
@@ -363,6 +383,9 @@ export function sheetPrompt(sheet, applied = new Set()) {
     for (const s of r.screen || []) parts.push(`CHỮ "${cut(s.text, 60)}"${s.kind ? ` kiểu ${s.kind}` : ''}${hard(s)}`);
     for (const b of r.broll || []) parts.push(`B-ROLL "${cut(b.q || '', 50)}"${b.src ? ` nguồn ${b.src}` : ''}${hard(b)}`);
     for (const x of r.sfx || []) if (x.name) parts.push(`SFX ${x.name}${x.at != null ? ` @${fx(x.at)}s` : ''}${hard(x)}`);
+    if (r.transition?.v) parts.push(`CHUYỂN CẢNH vào đoạn: ${r.transition.v}${hard(r.transition)}`);
+    if (r.focus?.on) parts.push(`FOCUS ${r.focus.on === 'speaker' ? 'người nói' : `sản phẩm${r.focus.target ? ` "${cut(r.focus.target, 40)}"` : ''}`}${hard(r.focus)}`);
+    for (const n of r.note || []) parts.push(`KỊCH BẢN YÊU CẦU (nguyên văn, làm theo khi dựng): "${cut(n, 160)}"`);
     const head = `Đ${r.seg + 1} [${fx(r.t0)}–${fx(r.t1)}] ${r.kind !== 'body' ? r.kind.toUpperCase() + ' ' : ''}"${cut(r.say, 90)}"`;
     return head + (r.lock ? ' · khoá cả hàng' : '') + (applied.has(r.seg) ? ' · ĐÃ TRÊN TIMELINE' : '') + (parts.length ? '\n   · ' + parts.join('\n   · ') : '');
   }).join('\n');

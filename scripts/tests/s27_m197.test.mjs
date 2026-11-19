@@ -39,30 +39,30 @@ test('nhận cột theo tên (không dấu, nhiều cách viết), cột lạ = 
   assert.equal(g.roles['Cái gì đó'], 'say'); assert.deepEqual(g.unknown, []);
 });
 
-test('.xlsx mẫu → kịch bản có dấu, mỗi hàng một đoạn, mốc giây là t0 / t1, cột lạ báo hỏi', () => {
-  const t = T.readTable(FX('s27_m197_kich_ban.xlsx'), 'kb.xlsx');
-  assert.deepEqual(t.unknown, ['Cột lạ XYZ']);
+test('.xlsx mẫu → kịch bản có dấu, mỗi hàng một đoạn, mốc giây là t0 / t1, cột lạ tự thành ghi chú', async () => {
+  const t = await T.readTable(FX('s27_m197_kich_ban.xlsx'), 'kb.xlsx');
+  assert.deepEqual(t.unknown, ['Cột lạ XYZ']); assert.equal(t.roles['Cột lạ XYZ'], 'note'); assert.equal(t.ask, false);
   assert.equal(t.roles['Thời gian'], 'time'); assert.equal(t.roles.STT, 'skip');
-  assert.doesNotMatch(t.text, /abc|xyz/); // cột chưa gán không vào kịch bản
-  assert.match(t.text, /^\[MỐC: 0:00–0:05\] \[A-ROLL: cận mặt\] \[CHỮ: XIN CHÀO\] \[GHI CHÚ: Chuyển cảnh mờ dần\]\nChào mừng/);
+  assert.equal(t.segs, 5); assert.equal(t.timed, 4); assert.equal(t.notes, 6);
+  assert.match(t.text, /\[GHI CHÚ: abc\]/); // cột lạ giữ nguyên văn như chỉ dẫn
+  assert.match(t.text, /^\[MỐC: 0:00–0:05\] \[A-ROLL: cận mặt\] \[CHỮ: XIN CHÀO\] \[GHI CHÚ: Chuyển cảnh mờ dần\] \[GHI CHÚ: abc\]\nChào mừng/);
   assert.match(t.text, /\[B-ROLL: cảnh spa \| stock\]/);
   assert.match(t.text, /\[B-ROLL: clip_02 \| tệp clip_02\.mp4\]/);
   const segs = D.parseScript(t.text);
   assert.equal(segs.length, 4); // hàng chỉ có hình (không lời) gộp vào đoạn sau
   assert.deepEqual(segs.map(s => s.at), [{ t0: 0, t1: 5 }, { t0: 5, t1: 12 }, { t0: 12, t1: null }, { t0: 25, t1: null }]);
-  assert.deepEqual(segs[0].note, ['Chuyển cảnh mờ dần']); assert.deepEqual(segs[0].aroll, { frame: 'can' });
+  assert.deepEqual(segs[0].note, ['Chuyển cảnh mờ dần', 'abc']); assert.deepEqual(segs[0].aroll, { frame: 'can' });
   assert.deepEqual(segs[3].broll, ['clip_02']); assert.equal(segs[3].brollSrc[0], 'tep:clip_02.mp4');
   // lời giữ nguyên từng chữ: bỏ dấu ra là đúng cột lời
   assert.deepEqual(segs.map(s => s.say), ['Chào mừng các bạn đến với kênh', 'Hôm nay mình review hộp kem dưỡng', 'Kem này giúp da mịn sau một tuần', 'Đăng ký kênh nhé']);
-  // người dùng gán cột lạ là ghi chú
-  const r = T.tableToScript(t.columns, t.rows, { ...t.roles, 'Cột lạ XYZ': 'note' });
-  assert.match(r.text, /\[GHI CHÚ: abc\]/);
+  // người dùng bỏ cột lạ
+  assert.doesNotMatch(T.tableToScript(t.columns, t.rows, { ...t.roles, 'Cột lạ XYZ': 'skip' }).text, /abc|xyz/);
   // chưa có cột lời: cảnh báo
   assert.match(T.tableToScript(t.columns, t.rows, { ...t.roles, 'Lời thoại': 'skip' }).warn.join(' '), /Chưa có cột lời/);
 });
 
-test('.csv mẫu (dấu ;, BOM, ô nhiều dòng, cột bắt đầu / kết thúc riêng, số thập phân dấu phẩy)', () => {
-  const t = T.readTable(FX('s27_m197_kich_ban.csv'), 'kb.csv');
+test('.csv mẫu (dấu ;, BOM, ô nhiều dòng, cột bắt đầu / kết thúc riêng, số thập phân dấu phẩy)', async () => {
+  const t = await T.readTable(FX('s27_m197_kich_ban.csv'), 'kb.csv');
   assert.deepEqual(t.unknown, []);
   assert.deepEqual(t.roles, { 'Bắt đầu': 'start', 'Kết thúc': 'end', 'Voice over': 'say', 'Text on screen': 'screen', Notes: 'note' });
   const segs = D.parseScript(t.text);
@@ -94,7 +94,7 @@ test('căn: không lời giữ mốc bảng, đoạn không mốc chia khoảng 
   assert.equal(D.alignScript(D.parseScript('A b c'), heard).align.drift, undefined); // kịch bản thường: không có trường mới
 });
 
-test('luật chỉ dẫn → ô bảng dựng; vế lạ để cho Claude', () => {
+test('luật chỉ dẫn → ô bảng dựng; vế lạ để AI dựng đọc nguyên văn', () => {
   const say = 'Kem dưỡng da ban đêm giúp da mịn màng';
   const c = n => T.ruleCells(n, say);
   assert.deepEqual(c('Chuyển cảnh mờ dần, focus vào sản phẩm hộp kem').cells.map(x => [x.type, x.v || x.on, x.target]), [['transition', 'fade', undefined], ['focus', 'product', 'sản phẩm hộp kem']]);
@@ -108,22 +108,6 @@ test('luật chỉ dẫn → ô bảng dựng; vế lạ để cho Claude', () =
   assert.equal(c('chuyển cảnh trượt').cells[0].v, 'slide');
   const mix = c('cận mặt người nói; làm cho sang hơn');
   assert.deepEqual(mix.cells.map(x => x.frame), ['can']); assert.deepEqual(mix.rest, ['làm cho sang hơn']);
-  const sc = { segments: D.parseScript('[GHI CHÚ: chuyển cảnh mờ dần] A b\n\n[GHI CHÚ: làm cho sang hơn] C d\n\nE') };
-  const dr = T.directiveDraft(sc);
-  assert.deepEqual(dr.cells.map(x => [x.seg, x.type]), [[0, 'transition']]);
-  assert.deepEqual(dr.ask, [{ seg: 1, say: 'C d', note: 'làm cho sang hơn' }]);
-  assert.match(T.directivePrompt(dr.ask, { brand: 'Nhà Xanh' }), /Nhà Xanh[\s\S]*KHÔNG viết lại lời[\s\S]*làm cho sang hơn/);
-});
-
-test('kiểm ô của Claude: chỉ loại biết, đúng đoạn được hỏi, tối đa 3 ô mỗi đoạn', () => {
-  const ask = [{ seg: 1, say: 'x', note: 'làm sang' }];
-  assert.throws(() => T.checkClaudeCells({ text: 'x' }, ask, 3), /cells/);
-  const out = T.checkClaudeCells({ cells: [
-    { seg: 1, type: 'transition', v: 'fade' }, { seg: 1, type: 'aroll', frame: 'xa' }, { seg: 0, type: 'broll', q: 'x' }, { seg: 1, type: 'say', text: 'lời mới' },
-    { seg: 1, type: 'broll', q: 'sảnh khách sạn [sang]' }, { seg: 1, type: 'graphic', text: 'Ví dụ: khách VIP' }, { seg: 1, type: 'focus', on: 'product' },
-  ] }, ask, 3);
-  assert.deepEqual(out.map(x => x.type), ['transition', 'broll', 'graphic']);
-  assert.equal(out[1].q, 'sảnh khách sạn (sang)'); assert.equal(out[0].by, 'claude'); assert.equal(out[0].note, 'làm sang');
 });
 
 // ---------- route với ctx giả (như s27_m193) ----------
@@ -146,58 +130,53 @@ function fakeCtx(dir, llm) {
 }
 const req = (method, json, buf, headers = {}) => Object.assign(Readable.from(buf ? [buf] : []), { method, _json: json, headers });
 
-test('route: mở .xlsx, gán cột, lưu (video không lời giữ mốc), chỉ dẫn → ô bảng dựng, Nhận ghi from claude và giữ qua dựng lại', async () => {
+test('buildSheet: chỉ dẫn thành ô ngầm (from note, giữ câu gốc), không đè dấu; prompt AI dựng có câu gốc', async () => {
+  const sc = { segments: D.parseScript('[MỐC: 0:00–0:05] [A-ROLL: rộng] [GHI CHÚ: Chuyển cảnh mờ dần, cận mặt người nói] Chào các bạn\n\n'
+    + '[MỐC: 0:05] [GHI CHÚ: focus vào sản phẩm hộp kem] [GHI CHÚ: tìm thêm video về quán phở] Đây là hộp kem\n\n[MỐC: 0:10] [GHI CHÚ: Thêm ví dụ khi giới thiệu cái này] [GHI CHÚ: làm cho sang hơn] Kem giúp da mịn') };
+  const dyn = [{ id: 'bd-pho', title: 'quán phở', tags: ['quán', 'phở'] }];
+  const sheet = await B.buildSheet(sc, { src: { dyn: q => B.dynamicFor(q, dyn) } });
+  const [a, b, c] = sheet.rows;
+  assert.equal(a.t0, 0); assert.equal(a.t1, 5); // chưa căn: mốc bảng
+  assert.deepEqual(a.transition, { v: 'fade', from: 'note', note: 'Chuyển cảnh mờ dần, cận mặt người nói' });
+  assert.deepEqual(a.aroll, { frame: 'rong', take: null, from: 'mark' }); // dấu A-ROLL của người dùng thắng chỉ dẫn
+  assert.equal(a.focus, undefined); // "cận mặt người nói" là cỡ khung, đã có dấu A-ROLL
+  assert.deepEqual(b.focus, { on: 'product', target: 'sản phẩm hộp kem', from: 'note', note: 'focus vào sản phẩm hộp kem' });
+  const br = b.broll.find(x => x.from === 'note');
+  assert.equal(br.q, 'quán phở'); assert.equal(br.note, 'tìm thêm video về quán phở');
+  assert.deepEqual(c.screen, [{ text: 'Kem giúp da mịn', kind: 'vidu', from: 'note', note: 'Thêm ví dụ khi giới thiệu cái này' }]);
+  assert.deepEqual(c.note, ['Thêm ví dụ khi giới thiệu cái này', 'làm cho sang hơn']); // câu gốc giữ nguyên ở hàng
+  const p = B.sheetPrompt(sheet);
+  assert.match(p, /CHUYỂN CẢNH vào đoạn: fade \(theo chỉ dẫn\)/);
+  assert.match(p, /KỊCH BẢN YÊU CẦU \(nguyên văn, làm theo khi dựng\): "làm cho sang hơn"/);
+  assert.match(p, /FOCUS sản phẩm "sản phẩm hộp kem"/);
+  // dựng lại: ô chỉ dẫn sinh lại từ kịch bản (không cần mergeSheet giữ), không trùng
+  const again = await B.buildSheet(sc, { prev: sheet, src: { dyn: q => B.dynamicFor(q, dyn) } });
+  assert.equal(again.rows[1].broll.filter(x => x.from === 'note').length, 1);
+  assert.equal(again.rows[2].screen.length, 1);
+});
+
+test('route: mở .xlsx (tự nhận cột, không hỏi), bảng thiếu cột lời thì hỏi; lưu (video không lời giữ mốc) dựng bảng có ô chỉ dẫn', async () => {
   const route = (await import('../../studio/routes/19_script.mjs')).default;
-  const L = await import('../llm.mjs');
-  let prompts = [];
-  const llm = { askJSON: (p, o) => L.askJSON(p, { ...o, run: async q => { prompts.push(q); return { text: JSON.stringify({ cells: [{ seg: 3, type: 'transition', v: 'zoom' }, { seg: 3, type: 'broll', q: 'sảnh sang trọng' }] }), provider: 'claude' }; } }) };
-  const dir = project({ mute: true }), ctx = fakeCtx(dir, llm), h = route(ctx);
-  // file không phải bảng
+  const dir = project({ mute: true }), ctx = fakeCtx(dir), h = route(ctx);
   await h(req('POST', null, Buffer.from('x'), { 'x-file-name': 'a.pdf' }), {}, '/api/script/table'); assert.equal(ctx.out.code, 400);
   await h(req('POST', null, FX('s27_m197_kich_ban.xlsx'), { 'x-file-name': encodeURIComponent('Kịch bản.xlsx') }), {}, '/api/script/table');
   assert.equal(ctx.out.code, 200, JSON.stringify(ctx.out.body));
-  const t = ctx.out.body; assert.deepEqual(t.unknown, ['Cột lạ XYZ']); assert.equal(t.rows.length, 5);
-  await h(req('POST', { columns: t.columns, rows: t.rows, roles: { ...t.roles, 'Cột lạ XYZ': 'skip', STT: 'hack' } }), {}, '/api/script/table/text');
-  const text = ctx.out.body.text; assert.equal(ctx.out.body.segs, 5);
-  await h(req('POST', { text, name: 'Kịch bản.xlsx' }), {}, '/api/script');
+  const t = ctx.out.body; assert.equal(t.ask, false); assert.equal(t.rows.length, 5); assert.equal(t.notes, 6);
+  // bảng không có cột tên lời và chữ ngắn: hỏi
+  const csv = Buffer.from('Giây,Cột A\n0-3,hi\n3-6,yo\n');
+  await h(req('POST', null, csv, { 'x-file-name': 'x.csv' }), {}, '/api/script/table'); assert.equal(ctx.out.body.ask, true);
+  await h(req('POST', { columns: ['Giây', 'Cột A'], rows: [{ 'Giây': '0-3', 'Cột A': 'hi' }], roles: { 'Giây': 'time', 'Cột A': 'say', x: 'hack' } }), {}, '/api/script/table/text');
+  assert.equal(ctx.out.body.text, '[MỐC: 0:00–0:03]\nhi');
+  await h(req('POST', { text: t.text, name: 'Kịch bản.xlsx' }), {}, '/api/script');
   assert.equal(ctx.out.code, 200, JSON.stringify(ctx.out.body));
   const sc = D.readScript(dir);
   assert.equal(sc.align.mode, 'even');
   assert.deepEqual(sc.segments.map(s => [s.t0, s.t1]), [[0, 5], [5, 12], [12, 25], [25, 30]]);
-  let sheet = B.readSheet(dir); assert.equal(sheet.rows[1].t0, 5); assert.deepEqual(sheet.rows[1].note, ['focus vào sản phẩm hộp kem']);
-  // chỉ dẫn: luật + Claude cho vế còn lại
-  await h(req('POST', { claude: true }), {}, '/api/script/directives');
-  assert.equal(ctx.out.code, 200, JSON.stringify(ctx.out.body));
-  const cells = ctx.out.body.cells;
-  assert.deepEqual(cells.map(c => [c.seg, c.type, c.by]), [[0, 'transition', 'luat'], [1, 'focus', 'luat'], [2, 'graphic', 'luat'], [3, 'transition', 'claude'], [3, 'broll', 'claude']]);
-  assert.equal(cells[0].label, 'Chuyển cảnh mờ dần');
-  assert.equal(prompts.length, 1); assert.match(prompts[0], /làm cho sang hơn/); assert.doesNotMatch(prompts[0], /Chuyển cảnh mờ dần/);
-  // không Claude: chỉ ô của luật
-  await h(req('POST', {}), {}, '/api/script/directives'); assert.equal(ctx.out.body.cells.length, 3); assert.equal(prompts.length, 1);
-  // Nhận 4 ô (bỏ ô graphic); ô lạ bị loại
-  await h(req('POST', { cells: [...cells.filter(c => c.type !== 'graphic'), { seg: 9, type: 'aroll', frame: 'can' }] }), {}, '/api/script/directives/accept');
-  assert.equal(ctx.out.body.added, 4, JSON.stringify(ctx.out.body));
-  sheet = B.readSheet(dir);
-  assert.deepEqual(sheet.rows[0].transition, { v: 'fade', from: 'claude', by: 'luat', note: 'Chuyển cảnh mờ dần' });
-  assert.equal(sheet.rows[1].focus.on, 'product');
-  assert.deepEqual(sheet.rows[3].broll.find(b => b.from === 'claude'), { q: 'sảnh sang trọng', src: 'stock', pick: null, alts: [], miss: 'Cần tìm nguồn', from: 'claude', by: 'claude', note: 'làm cho sang hơn' });
-  // nhận lại: không trùng
-  await h(req('POST', { cells }), {}, '/api/script/directives/accept'); assert.equal(ctx.out.body.added, 1);
-  // lưu lại kịch bản (lời không đổi) → dựng lại bảng vẫn giữ ô đã Nhận; lời không bị sửa
-  await h(req('POST', { text, name: 'Kịch bản.xlsx' }), {}, '/api/script');
-  sheet = B.readSheet(dir);
-  assert.equal(sheet.rows[0].transition.v, 'fade'); assert.equal(sheet.rows[2].screen.find(x => x.kind === 'vidu').from, 'claude');
-  assert.equal(sheet.rows[3].broll.filter(b => b.from === 'claude').length, 1);
-  assert.deepEqual(D.readScript(dir).segments.map(s => s.say), ['Chào mừng các bạn đến với kênh', 'Hôm nay mình review hộp kem dưỡng', 'Kem này giúp da mịn sau một tuần', 'Đăng ký kênh nhé']);
-});
-
-test('acceptCells bỏ qua hàng khoá; mergeSheet giữ ô claude khi lời không đổi, bỏ khi lời đổi', () => {
-  const sheet = { rows: [{ seg: 0, say: 'a b', broll: [], screen: [], aroll: { frame: null, from: 'auto' } }, { seg: 1, say: 'c', lock: true, broll: [], screen: [] }] };
-  const r = T.acceptCells(sheet, [{ seg: 0, type: 'aroll', frame: 'can', by: 'luat' }, { seg: 1, type: 'transition', v: 'cut', by: 'luat' }]);
-  assert.equal(r.added, 1); assert.equal(r.sheet.rows[0].aroll.frame, 'can'); assert.equal(r.sheet.rows[1].transition, undefined);
-  assert.equal(sheet.rows[0].aroll.frame, null); // hàm thuần
-  const fresh = [{ seg: 0, say: 'a b', aroll: { frame: null, from: 'auto' }, broll: [], sfx: [], screen: [] }, { seg: 1, say: 'khác', broll: [], sfx: [], screen: [] }];
-  const kept = B.mergeSheet(fresh, { rows: [{ ...r.sheet.rows[0], transition: { v: 'fade', from: 'claude', by: 'luat' }, focus: { on: 'product', from: 'claude' } }, { seg: 1, say: 'c', transition: { v: 'cut', from: 'claude', by: 'luat' } }] });
-  assert.equal(kept[0].focus, undefined); // ô claude không `by` (Dựng lại ô trống của M194): dựng lại thì bỏ như trước
-  assert.equal(kept[0].aroll.frame, 'can'); assert.equal(kept[0].transition.v, 'fade'); assert.equal(kept[1].transition, undefined);
+  const sheet = B.readSheet(dir);
+  assert.equal(sheet.rows[0].transition.v, 'fade'); assert.equal(sheet.rows[1].focus.on, 'product');
+  assert.equal(sheet.rows[2].screen[0].kind, 'vidu');
+  assert.deepEqual(sheet.rows[3].note, ['làm cho sang hơn']);
+  // không còn bước Nhận / Bỏ
+  assert.equal(await h(req('POST', {}), {}, '/api/script/directives'), false);
+  assert.deepEqual(sc.segments.map(s => s.say), ['Chào mừng các bạn đến với kênh', 'Hôm nay mình review hộp kem dưỡng', 'Kem này giúp da mịn sau một tuần', 'Đăng ký kênh nhé']);
 });
