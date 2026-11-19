@@ -1726,22 +1726,24 @@ function videoPicker(host, o = {}) {
 }
 // newBusy: đang tạo video mới (S17 M126), không lưu dự án cũ nữa; newOpening: hai lần bấm nhanh không mở hai hộp (hộp chờ /api/onboarding + /api/brands)
 let newOpening = false, newBusy = false;
-$('#newproj').addEventListener('click', async () => {
+const newProject = async (opt = {}) => {
   if (newOpening) return; newOpening = true;
-  try { await openNewProject(); } finally { newOpening = false; }
-});
+  try { await openNewProject(opt); } finally { newOpening = false; }
+};
+$('#newproj').addEventListener('click', () => newProject());
 // S17 M126: video mới không lẫn với dự án đang mở. Thương hiệu mặc định = thương hiệu (Kho) của dự án đang mở, chưa mở thì theo
 // hướng dẫn đầu; dòng "Thương hiệu · Kho" luôn hiện, chọn Kho khác dự án đang mở thì nhắc và cho đổi lại. Bấm Tạo: lưu dự án đang mở,
 // che trình chỉnh sửa (server đóng dự án cũ trong lúc tạo), xong thì nạp lại trang với dự án mới sạch.
 const khoLabel = k => (k ? `${k.brand ? 'Thương hiệu ' + k.title : 'Không thương hiệu'} · Kho: ${k.brand ? k.title : 'Chung'}` : '');
-async function openNewProject() {
+async function openNewProject(opt = {}) {
+  // S26 M188: trang chủ mở hộp này từ thẻ thương hiệu (opt.brand) thì chọn sẵn thương hiệu đó.
   // Thương hiệu, gói style và khổ hình đã chọn ở hướng dẫn đầu / brand kit: lấy sẵn, không hỏi lại. Muốn khác thì mở "Đổi".
   const ls = { get: (k, d) => { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('avs.' + k, v); } catch {} } };
   const [onb, brands] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => [])]);
   for (let i = 0; i < 20 && !packs().length; i++) await new Promise(r => setTimeout(r, 150)); // khung preview còn đang nạp engine
   const BR = Array.isArray(brands) ? brands : [], PK = packs().filter(p => p.recipe);
   const cur = TL ? META?.kho || null : null; // Kho của dự án đang mở (server đọc từ .kho.json / brand kit)
-  const brand0 = (cur && (cur.brand === '' || BR.some(b => b.id === cur.brand)) ? cur.brand : null) ?? (BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : ''));
+  const brand0 = (typeof opt.brand === 'string' && (opt.brand === '' || BR.some(b => b.id === opt.brand)) ? opt.brand : null) ?? (cur && (cur.brand === '' || BR.some(b => b.id === cur.brand)) ? cur.brand : null) ?? (BR.find(b => b.id === onb?.brand)?.id || (BR.length === 1 ? BR[0].id : ''));
   const packFor = id => window.PackPick.defaultPack({ brand: BR.find(x => x.id === id), purpose: onb?.purpose, last: ls.get('newPack', ''), packs: PK });
   const orient0 = { '16:9': 'horizontal', '9:16': 'vertical' }[onb?.aspect] || 'auto';
   const OR = [['auto', 'Theo video'], ['vertical', 'Dọc 9:16 (Reels, TikTok, Shorts)'], ['horizontal', 'Ngang 16:9 (YouTube)']];
@@ -1832,7 +1834,7 @@ document.addEventListener('click', e => { const t = e.target.closest?.('.tip'); 
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get PPS() { return PPS; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
-  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
+  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, newProject, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
