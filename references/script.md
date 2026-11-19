@@ -59,7 +59,7 @@ Gọi tay `autopilot.mjs`: `--script` nhận cả đường dẫn `.txt` / `.doc
 
 ## 7. Dấu dựng và bảng dựng (S27 M193)
 Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 1, 1.1, 2.1, 2.2. Mã: `scripts/script_doc.mjs` (tách dấu), `scripts/script_build.mjs`
-(bảng dựng, gợi ý dấu), test `scripts/tests/s27_m193.test.mjs`. Panel Bảng dựng và Áp lên timeline: `M194`.
+(bảng dựng, gợi ý dấu), test `scripts/tests/s27_m193.test.mjs`. Panel Bảng dựng và Áp lên timeline: mục 8 (`M194`).
 
 | Dấu | Tên khác | Trường của đoạn |
 |---|---|---|
@@ -87,3 +87,30 @@ inherit?}, music {v, from}, aroll {frame, take, file?, off?, from}, broll [{q, s
 áp"), mỗi đoạn ≤ 1 MOOD, 2 CHỮ, 2 B-ROLL, 2 SFX (không tính dấu người dùng đã có), MOOD đổi cách nhau ≥ ~10 s đọc (2,6 từ/giây),
 không A-ROLL clip / take / tệp. Sai luật thì hỏi lại một lần. Kết quả hiện dạng so sánh (dấu thêm tô màu): **Nhận hết** đưa vào ô chữ
 (chưa lưu), **Bỏ** giữ bản cũ.
+
+## 8. Panel Bảng dựng và Áp lên timeline (S27 M194)
+Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 2.3, 2.4. Mã: `studio/features/23_buildsheet.js` + `studio/routes/23_buildsheet.mjs`,
+hàm thuần ở `scripts/script_build.mjs` (`editCell`, `cleanCell`, `sheetToPlan`, `sheetPrompt`, `sheetMood`, `fillPrompt`, `applyFill`),
+`scripts/ai_edit.mjs` (`planFromSheet`, `applySheet`, `--sheet`), QC `buildMarkIssues` trong `scripts/ai_qc.mjs`; test `scripts/tests/s27_m194.test.mjs`.
+
+- **Panel** (bước Dựng, mức Chuyên nghiệp; mở từ dòng "Bảng dựng" của ô Kịch bản và từ tab Claude): mỗi đoạn một thẻ: Lời (bấm = tua tới),
+  Mood, Nhạc, A-roll, B-roll (ảnh nhỏ + nguồn, **Đổi** = phương án kế trong `alts`, **Tìm cảnh** / **Chọn từ Kho**, ảnh AI theo từ khoá),
+  SFX (nghe thử), Chữ (+ kiểu). Ô sửa tay → `from: user` (`POST /api/buildsheet/cell`, giá trị qua `cleanCell`: mood / SFX phải có
+  trong catalog, `pick` của Kho / thư viện / b-roll động phải có thật, link stock chỉ `https`). Khoá hàng = `lock`.
+- **Dựng lại ô trống**: một lần Claude cho cả bảng (`fillPrompt`), chỉ lấp mood ô `auto`, SFX / B-roll ô rỗng (`from: claude`); ô `mark` /
+  `user`, hàng khoá không đổi.
+- **Áp lên timeline**: job `buildsheet` (khay việc, khoá sửa timeline) chạy `node scripts/ai_edit.mjs <tl> --sheet [--ai]`: đưa media
+  của ô B-roll vào dự án (Kho `useFromKho`, thư viện `useIn`, stock `fetchMedia`, ảnh AI `genImage` chỉ khi tích "Tạo ảnh AI lúc Áp"),
+  `planFromSheet` = `sheetToPlan` rồi `validate` (chữ và b-roll động hai lượt riêng: hai lớp được chồng), đặt né mặt (`placePlan`), ghi
+  `.studio/sheet_plan.json`. Trình duyệt áp bằng `Studio.ai.applyPlan(plan)` (`plan.sheet` → `applySheet`): **một bước hoàn tác**, thẻ khay
+  có Hoàn tác. Mọi mục mang `_ai: true` + `_sheet: <seg>`.
+- `applySheet`: không đổi gói, kiểu phụ đề, tiêu đề, phụ đề; thay mục `_sheet` cũ chưa sửa tay (`_orig` giữ); cảnh AI / Tự động chưa sửa tay
+  chồng giờ cảnh mới của bảng bị bỏ; nhạc: chỉ khi bảng có mood chốt (ô không phải `auto`, mood phủ nhiều giây nhất) thì thay nền
+  `_ai` / `_auto` / `_sheet` bằng một nền mood đó, nhạc người dùng chọn giữ; mục bảng bạn đã sửa (`_orig`) giữ và Áp lại không thêm mục cùng đoạn cùng loại. A-ROLL `bỏ`: b-roll của đoạn chia đều phủ cả đoạn (b-roll động thành `broll` toàn khung). Kế hoạch ghi `dir`: Studio chỉ áp khi đúng dự án và đúng lần chạy; ô sửa tay thay hẳn mục cũ; Dựng lại ô trống đọc lại bảng sau khi Claude trả lời (ô sửa trong lúc chờ giữ), từ chối khi đang Áp.
+  Nhạc nhiều khúc theo đoạn là `M195`, take / cỡ khung A-roll là `M196`.
+- **AI dựng** khi có bảng: prompt nhận bảng (`sheetPrompt`) thay dấu thô; ô `(chốt)` là ràng buộc cứng, hàng "ĐÃ TRÊN TIMELINE" Claude không
+  đặt graphic chồng (`validate` bỏ cảnh chồng cảnh `_sheet`); `applyPlan` giữ mục `_sheet` và nền nhạc của bảng; mood chốt thắng mood Claude chọn.
+- `applyPlan` / `applySheet` có hai bản (server `ai_edit.mjs`, client `20_ai.js`): test chạy bản client trong node, so hai bản qua chuỗi
+  AI dựng → Áp bảng → AI dựng → Áp bảng (luôn một nền nhạc).
+- **QC** (`script_mark`, low): `[SFX]` không có trong thư viện / chưa có quanh đoạn; `[A-ROLL: bỏ]` mà b-roll phủ < 70 % đoạn; `[B-ROLL: … | nguồn]`
+  có cảnh nhưng khác nguồn; `[MOOD]` không khớp mood nào / nhạc nền lúc đó khác mood; dấu chưa hiểu (`raw`).

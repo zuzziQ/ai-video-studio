@@ -77,7 +77,7 @@
       ${(A?.offscript || []).slice(0, 3).map(o => li(true, 'ti-alert-triangle', `Nói ngoài kịch bản ${o.t0.toFixed(1)}s: “${esc(o.text.slice(0, 50))}…”`)).join('')}
       ${(sc.gate?.issues || []).filter(i => i.severity !== 'low').slice(0, 4).map(i => li(true, 'ti-shield-x', `Claim quảng cáo · ${esc(i.where)}: ${esc(i.msg.slice(0, 120))}`)).join('')}
       ${segs.some(s => s.raw?.length) ? li(true, 'ti-alert-triangle', `Dấu chưa hiểu: ${esc(segs.flatMap(s => s.raw || []).slice(0, 3).join(' '))}`) : ''}
-      ${P.sheet ? li(!!P.sheet.error, 'ti-table', P.sheet.error ? `Bảng dựng lỗi: ${esc(P.sheet.error)}` : `Bảng dựng: ${P.sheet.rows} đoạn${P.sheet.miss ? ` · ${P.sheet.miss} ô chưa có nguồn` : ''}`) : ''}</ul>`;
+      ${P.sheet ? li(!!P.sheet.error, 'ti-table', P.sheet.error ? `Bảng dựng lỗi: ${esc(P.sheet.error)}` : `Bảng dựng: ${P.sheet.rows} đoạn${P.sheet.miss ? ` · ${P.sheet.miss} ô chưa có nguồn` : ''} <button class="ai-lnk" data-sc="sheet">Mở bảng dựng</button>`) : ''}</ul>`;
   }
   // luôn vẽ vào phần tử đang gắn (P.el): Studio.reload() vẽ lại panel Nguồn giữa lúc lưu, phần tử cũ bị gỡ
   function renderCard() {
@@ -122,6 +122,8 @@
       } catch (e) { Studio.toast(e.message); }
       P.busy = false; renderCard();
     };
+    const sh = el.querySelector('[data-sc="sheet"]'); // S27 M194: panel Bảng dựng (23_buildsheet.js)
+    if (sh) sh.onclick = () => (Studio.buildSheet ? Studio.buildSheet.open() : Studio.workflow?.focus?.('buildsheet'));
     const clr = el.querySelector('[data-sc="clear"]');
     if (clr) clr.onclick = async () => {
       if (!confirm('Bỏ kịch bản của dự án này? Phụ đề quay về bản nhận dạng tự động (nếu còn bản sao lưu).')) return;
@@ -132,7 +134,7 @@
       Studio.toast(r.restored ? 'Đã bỏ kịch bản, phụ đề quay về bản nhận dạng' : 'Đã bỏ kịch bản'); renderCard();
     };
   }
-  // tóm tắt bảng dựng cho dòng trạng thái (panel Bảng dựng sửa từng ô thuộc M194)
+  // tóm tắt bảng dựng cho dòng trạng thái (sửa từng ô ở panel Bảng dựng, studio/features/23_buildsheet.js, M194)
   function loadSheet() {
     const dir = P.dir;
     Studio.api('/api/script/sheet').then(r => {

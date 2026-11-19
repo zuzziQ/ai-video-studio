@@ -101,6 +101,7 @@
     autofill: ['Tự thêm b-roll / âm thanh', 1], dub: ['Dịch & lồng tiếng', 1], mix: ['Trộn âm thanh'], reframe: ['Dò mặt'], segment: ['Tách nền'],
     sticker: ['Tạo sticker người'], broll_suggest: ['Claude gợi ý b-roll'], genimage: ['Tạo ảnh AI'], brolltag: ['Claude gắn thẻ thư viện'],
     'kho-migrate': ['Chuyển file cũ vào Kho'], highlights: ['Cắt clip từ video dài'], topic: ['Tạo video từ chủ đề'], 'longform-export': ['Xuất các clip'],
+    buildsheet: ['Áp bảng dựng', 1], // S27 M194 (23_buildsheet): kế hoạch ghi .studio/sheet_plan.json, trình duyệt áp lúc xong
   };
   const kindInfo = kind => (Object.hasOwn(KINDS, kind) ? { kind, title: KINDS[kind][0], lock: !!KINDS[kind][1] } : null);
   // Lúc khởi động (GET /api/job): việc đang chạy mà khay chưa có thẻ thì nhận lại; loại có màn riêng hay đã xong thì thôi
