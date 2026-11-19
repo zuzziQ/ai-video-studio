@@ -7,7 +7,7 @@
 //   GET  /api/elem/ai        → {state: idle|running|done|error|cancelled, run, step, …kết quả: patch, diff, why | variants, warnings,
 //                            | knobs, warnings, provider, ms | error, kind (theo LlmError: missing, login, quota, timeout, parse…)}
 //   POST /api/elem/ai/cancel → {ok, cancelled}
-//   POST /api/elem/shots     {timelines: [≤ 3 timeline đã áp bản vá], captions, t} → {shots: [data URL JPEG | null], error?}
+//   POST /api/elem/shots     {timelines: [≤ 3 timeline đã áp bản vá], captions, t, px?: cạnh dài ảnh 160–960, mặc định 320} → {shots: [data URL JPEG | null], error?}
 //                            Ảnh nhỏ cho biến thể: cùng engine headless của QC (scripts/ai_qc.mjs openEngine / engineInit / engineShot).
 // Route không ghi gì xuống đĩa; bản vá chỉ là đề xuất, giao diện áp khi người dùng bấm Nhận / chọn ảnh.
 import os from 'node:os';
@@ -53,7 +53,8 @@ export default ctx => {
     const t = +b.t; if (!Number.isFinite(t) || t < 0) throw Object.assign(new Error('t không hợp lệ'), { status: 400 });
     const caps = Array.isArray(b.captions) ? b.captions : [];
     const Q = ctx.elemShotLib || await imp('scripts/ai_qc.mjs');
-    const [DW, DH] = Q.designOf(list[0]), scale = 320 / (Math.max(DW, DH) * 1.5);
+    const px = Number.isFinite(+b.px) ? Math.min(960, Math.max(160, +b.px)) : 320; // S27 M199: Element riêng chụp to hơn để cắt vùng element
+    const [DW, DH] = Q.designOf(list[0]), scale = px / (Math.max(DW, DH) * 1.5);
     const eng = await Q.openEngine(ctx.project.dir, { scale });
     try {
       const out = [];
