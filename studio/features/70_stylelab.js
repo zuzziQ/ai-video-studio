@@ -10,7 +10,7 @@
   .sl-card p { margin: var(--space-1) 0; color: rgb(var(--color-fg-muted)); line-height: 1.5; }
   .sl-card p.sl-sm { font-size: var(--text-xs); } .sl-card p.sl-xs { font-size: var(--text-2xs); margin-top: var(--space-2); }
   .sl-kv { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-2) 0; }
-  .sl-sw { display: flex; gap: var(--space-050); margin: var(--space-2) 0; } .sl-sw i { flex: 1; height: 24px; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-white) / .08); background: var(--sw); } .sl-sw i.acc { flex: .6; }
+  .sl-sw { display: flex; gap: var(--space-050); margin: var(--space-2) 0; } .sl-sw i { flex: 1; height: 24px; border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-overlay) / .12); background: var(--sw); } .sl-sw i.acc { flex: .6; }
   .sl-sheet { width: 100%; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); cursor: zoom-in; background: rgb(var(--color-black)); display: block; }
   .sl-zoom { max-width: 100%; max-height: 80vh; display: block; margin: auto; }
   .sl-nav { display: flex; gap: var(--space-1); justify-content: center; margin-top: var(--space-1); }

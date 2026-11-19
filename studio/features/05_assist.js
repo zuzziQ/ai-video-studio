@@ -35,7 +35,7 @@
   .as-a button { padding: var(--space-1) var(--space-2); font-size: var(--text-2xs); }
   .as-note, .as-cur { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); }
   .as-note.med { color: rgb(var(--color-warning-text)); } .as-note.high { color: rgb(var(--color-danger-text)); }
-  .as-sw { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-white) / .2); background: var(--as-c); }
+  .as-sw { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: var(--space-1); border-radius: var(--radius-xs); border: 1px solid rgb(var(--color-overlay) / .2); background: var(--as-c); }
   .as-row.done .as-v, .as-row.skip .as-v { color: rgb(var(--color-fg-subtle)); } .as-row.skip .as-v { text-decoration: line-through; }
   .as-ok { color: rgb(var(--color-success-text)); font-size: var(--text-2xs); white-space: nowrap; } .as-no { color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); white-space: nowrap; }
   .as-foot { display: flex; gap: var(--space-2); margin-top: var(--space-2); }

@@ -27,7 +27,7 @@
   .pb-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); }
   .pb-cl { border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-2); margin: var(--space-2) 0; background: rgb(var(--color-surface)); display: grid; gap: var(--space-1); }
   .pb-cl .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--h-sm); gap: var(--space-1); align-items: center; }
-  .pb-cl textarea { resize: vertical; } .pb-form input[type=date] { color-scheme: dark; }
+  .pb-cl textarea { resize: vertical; }
   .pb-cl[data-st="approved"] { border-left: 4px solid rgb(var(--color-success)); } .pb-cl[data-st="prohibited"], .pb-cl[data-st="expired"] { border-left: 4px solid rgb(var(--color-danger)); }
   .pb-cl[data-st="pending"] { border-left: 4px solid rgb(var(--color-warning)); }
   .pb-faq { display: grid; grid-template-columns: minmax(0, 1fr) var(--h-sm); gap: var(--space-1); margin: var(--space-1) 0; }

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Mẫu giao diện · AI Video Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<!-- S25 M179: trang mẫu design system (theo /ui của dashboard-lychee-main). Nền đặt trước khi vẽ; ?theme=light|dark ép nền
+     cho khung nhúng ở mục "Hai nền cạnh nhau" mà không đổi lựa chọn đã lưu. -->
+<script src="/studio/theme/theme-boot.js"></script>
+<script>
+  (function () { var t = new URLSearchParams(location.search).get('theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/studio/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/studio/theme/tokens.css">
+<link rel="stylesheet" href="/studio/theme/components.css">
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: rgb(var(--color-canvas)); color: rgb(var(--color-fg)); font: var(--text-sm)/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: var(--space-6) var(--space-4); }
+  header.pg { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-5); }
+  .eyebrow { font-size: var(--text-2xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--color-accent-text)); }
+  h1 { margin: 2px 0 0; font-size: var(--text-xl); letter-spacing: -.01em; }
+  h2 { margin: 0 0 var(--space-1); font-size: var(--text-md); }
+  h3 { margin: var(--space-4) 0 var(--space-1); font-size: var(--text-sm); }
+  .sub { color: rgb(var(--color-fg-muted)); font-size: var(--text-xs); }
+  code { font-family: var(--font-mono); font-size: var(--text-2xs); background: rgb(var(--color-surface-muted)); padding: 1px 5px; border-radius: var(--radius-xs); }
+  section.box { background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-card); padding: var(--space-4); margin-bottom: var(--space-4); box-shadow: var(--shadow-xs); min-width: 0; }
+  .sw-grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--min, 120px)), 1fr)); margin-top: var(--space-2); }
+  .sw { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-2xs); min-width: 0; }
+  .sw i { display: block; height: 40px; border-radius: var(--radius-control); border: 1px solid rgb(var(--color-line-strong)); }
+  .sw code { overflow-wrap: anywhere; }
+  .sw .v { color: rgb(var(--color-fg-subtle)); font-family: var(--font-mono); }
+  .row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-top: var(--space-2); }
+  .grid2 { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+  table.ct { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+  table.ct th, table.ct td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: 1px solid rgb(var(--color-line)); }
+  table.ct td.n { font-family: var(--font-mono); text-align: right; }
+  table.ct .fail { color: rgb(var(--color-danger-text)); font-weight: 700; }
+  table.ct .ok { color: rgb(var(--color-success-text)); }
+  table.ct .demo { display: inline-block; padding: 0 var(--space-2); border-radius: var(--radius-xs); font-weight: 600; }
+  .frames { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
+  .frames iframe { width: 100%; height: 720px; border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-card); background: rgb(var(--color-canvas)); }
+  .seg { display: inline-flex; gap: var(--space-1); padding: var(--space-1); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); background: rgb(var(--color-surface)); }
+  .seg button { height: var(--h-sm); padding: 0 var(--space-2); border: 0; border-radius: var(--radius-xs); background: transparent; color: rgb(var(--color-fg-muted)); font: inherit; font-size: var(--text-xs); cursor: pointer; display: inline-flex; align-items: center; gap: var(--space-1); }
+  .seg button[aria-checked="true"] { background: rgb(var(--color-surface-hover)); color: rgb(var(--color-fg)); }
+  .seg button:focus-visible { outline: 2px solid rgb(var(--color-focus)); outline-offset: 1px; }
+  .stage-demo { display: flex; align-items: center; justify-content: center; height: 120px; border-radius: var(--radius-control); background: rgb(var(--stage-bg)); }
+  .stage-demo span { width: 54px; height: 96px; border-radius: var(--radius-xs); background: rgb(var(--stage-frame)); box-shadow: var(--shadow-raised); }
+  .tracks { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); }
+  .tracks div { height: 22px; border-radius: var(--radius-xs); color: rgb(var(--color-fg-on-media)); font-size: var(--text-2xs); font-weight: 600; padding: 0 var(--space-2); display: flex; align-items: center; }
+  body.embed .wrap { padding: var(--space-3); }
+  body.embed .only-full { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="pg">
+    <div><div class="eyebrow">AI Video Studio · design system</div><h1>Mẫu giao diện</h1>
+      <div class="sub">Token ở <code>studio/theme/tokens.css</code>, thành phần ở <code>studio/theme/components.css</code>. Màn mới chỉ dùng token và lớp <code>ui-*</code>; thành phần mới có mẫu ở đây trước (DESIGN.md).</div></div>
+    <div class="seg only-full" role="radiogroup" aria-label="Nền giao diện" id="th-seg"></div>
+  </header>
+
+  <section class="box"><h2>Nền: sáng và tối</h2>
+    <div class="sub">Cùng tên vai trò <code>--color-*</code>, chỉ giá trị đổi (khối <code>:root[data-theme="light"]</code>). <code>theme-boot.js</code> đặt <code>&lt;html data-theme&gt;</code> trước khi vẽ; lựa chọn lưu <code>localStorage['avs.theme']</code> = <code>system</code> (mặc định) | <code>light</code> | <code>dark</code>. Khung xem trước, màu track và engine không đổi theo nền.</div>
+    <div class="sub">Đang dùng: <b id="th-now"></b></div>
+  </section>
+
+  <section class="box"><h2>Tầng 2 · vai trò</h2>
+    <div class="sub">Dùng <code>rgb(var(--color-x))</code> hoặc có độ trong <code>rgb(var(--color-x) / .2)</code>.</div>
+    <div class="sw-grid" id="sw-role"></div></section>
+
+  <section class="box"><h2>Tương phản</h2>
+    <div class="sub">Tính tại chỗ từ token của nền đang xem. Chữ ≥ 4.5:1, viền / icon điều khiển ≥ 3:1. Dòng đỏ là dưới ngưỡng.</div>
+    <div class="ui-table-shell"><table class="ct" id="ct"><thead><tr><th>Cặp</th><th>Mẫu</th><th>Tỉ lệ</th><th>Ngưỡng</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="box"><h2>Thành phần</h2>
+    <h3>Nút</h3>
+    <div class="row"><button class="ui-btn ui-btn--primary">Xuất</button><button class="ui-btn ui-btn--secondary">Lưu</button><button class="ui-btn ui-btn--ghost">Bỏ qua</button><button class="ui-btn ui-btn--danger">Xoá</button><button class="ui-btn ui-btn--secondary ui-btn--icon" aria-label="Thêm"><i class="ti ti-dots"></i></button><button class="ui-btn ui-btn--primary" disabled>Đang tắt</button></div>
+    <h3>Nhãn</h3>
+    <div class="row"><span class="ui-chip">Mặc định</span><span class="ui-chip ui-chip--ok">Đạt</span><span class="ui-chip ui-chip--warn">Cần xem</span><span class="ui-chip ui-chip--bad">Lỗi</span><span class="ui-brand-tag">82X</span></div>
+    <h3>Tab</h3>
+    <div class="ui-tabs" role="tablist"><button class="ui-tab" role="tab" aria-selected="true">Thuộc tính</button><button class="ui-tab" role="tab" aria-selected="false">Lớp</button><button class="ui-tab" role="tab" aria-selected="false">Claude</button></div>
+    <h3>Ô nhập</h3>
+    <div class="grid2">
+      <label class="ui-field"><span class="ui-label">Tên dự án</span><input class="ui-input" value="Review tai nghe"><span class="ui-hint">Gợi ý dưới ô nhập</span></label>
+      <label class="ui-field"><span class="ui-label">Khổ</span><select class="ui-input"><option>9:16</option><option>16:9</option></select></label>
+    </div>
+    <h3>Lựa chọn</h3>
+    <div class="row"><button class="ui-choice" aria-checked="true">Cơ bản</button><button class="ui-choice" aria-checked="false">Chuyên nghiệp</button></div>
+    <h3>Thông báo</h3>
+    <div class="stack">
+      <div class="ui-banner ui-banner--ok">Đã xuất 3 khổ.</div>
+      <div class="ui-banner ui-banner--warn">Thiếu nhạc nền ở cảnh 2.</div>
+      <div class="ui-banner ui-banner--err">Không đọc được video nguồn.</div>
+    </div>
+    <h3>Trạng thái</h3>
+    <div class="grid2"><div class="ui-state ui-state--empty"><i class="ti ti-movie ui-state__icon"></i><div class="ui-state__title">Chưa có video</div></div><div class="ui-state ui-state--error"><i class="ti ti-alert-triangle ui-state__icon"></i><div class="ui-state__title">Lỗi khi tải</div></div></div>
+    <h3>Bảng</h3>
+    <div class="ui-table-shell"><table class="ui-table"><thead><tr><th>Bản xuất</th><th>Khổ</th><th class="ui-num">Thời lượng</th></tr></thead>
+      <tbody><tr><td>review_v3.mp4</td><td>9:16</td><td class="ui-num">0:42</td></tr><tr><td>review_v3_169.mp4</td><td>16:9</td><td class="ui-num">0:42</td></tr></tbody></table></div>
+    <h3>Popup</h3>
+    <div class="row"><button class="ui-btn ui-btn--secondary" id="open-modal">Mở popup mẫu</button><div class="ui-toast ui-toast--ok">Đã lưu</div></div>
+  </section>
+
+  <section class="box"><h2>Không đổi theo nền</h2>
+    <div class="sub">Khung xem trước xám trung tính (<code>--stage-*</code>) để không lệch cảm nhận màu video; khối track tối, chữ trắng (<code>--track-1..8</code>, <code>--color-fg-on-media</code>).</div>
+    <div class="grid2"><div class="stage-demo"><span></span></div><div class="tracks" id="tracks"></div></div>
+  </section>
+
+  <section class="box only-full"><h2>Tầng 1 · bảng màu</h2>
+    <div class="sub">Không dùng thẳng trong màn; chỉ tầng vai trò trỏ vào.</div>
+    <div class="sw-grid" id="sw-pal"></div></section>
+
+  <section class="box only-full"><h2>Hai nền cạnh nhau</h2>
+    <div class="sub">Cùng trang này, ép nền bằng <code>?theme=</code> (không đổi lựa chọn đã lưu).</div>
+    <div class="frames"><iframe title="Nền sáng" data-src="ui.html?theme=light&amp;embed=1" loading="lazy"></iframe><iframe title="Nền tối" data-src="ui.html?theme=dark&amp;embed=1" loading="lazy"></iframe></div>
+  </section>
+</div>
+
+<div class="ui-modal-backdrop" id="modal" hidden><div class="ui-modal" role="dialog" aria-modal="true" aria-labelledby="mt">
+  <h2 id="mt">Popup mẫu</h2><div class="sub">Nền <code>--color-surface-raised</code>, lớp sau <code>--color-scrim</code>.</div>
+  <div class="row"><button class="ui-btn ui-btn--primary" id="close-modal">Đóng</button></div></div></div>
+
+<script>
+'use strict';
+(() => {
+  const $ = s => document.querySelector(s), root = document.documentElement, T = window.AVSTheme;
+  const params = new URLSearchParams(location.search), embed = params.has('embed');
+  if (embed) document.body.classList.add('embed');
+  const LABEL = { system: 'Hệ thống', light: 'Sáng', dark: 'Tối' }, ICON = { system: 'ti-device-desktop', light: 'ti-sun', dark: 'ti-moon' };
+  const val = name => getComputedStyle(root).getPropertyValue(name).trim();
+  const rgbOf = name => val(name).split(/[\s,/]+/).slice(0, 3).map(Number);
+
+  const ROLES = ['--color-canvas', '--color-surface', '--color-surface-raised', '--color-surface-muted', '--color-surface-hover',
+    '--color-line', '--color-line-strong', '--color-line-hover', '--color-line-control',
+    '--color-fg', '--color-fg-muted', '--color-fg-subtle',
+    '--color-accent', '--color-accent-hover', '--color-accent-text', '--color-accent-text-strong', '--color-focus', '--color-drop',
+    '--color-success', '--color-success-text', '--color-warning', '--color-warning-text', '--color-danger', '--color-danger-text',
+    '--color-info', '--color-highlight', '--color-audio', '--color-playhead', '--color-overlay', '--color-brand-red'];
+  const PAL = [...[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map(n => '--navy-' + n),
+    ...[50, 100, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 950].map(n => '--neutral-' + n),
+    '--success-300', '--success-400', '--success-700', '--success-800', '--warning-200', '--warning-400', '--warning-700', '--warning-800',
+    '--danger-300', '--danger-400', '--danger-500', '--danger-600', '--danger-700', '--brand-red'];
+
+  function swatches(el, names) {
+    el.replaceChildren(...names.map(n => {
+      const d = document.createElement('div'); d.className = 'sw';
+      const i = document.createElement('i'); i.style.setProperty('background', `rgb(var(${n}))`);
+      const c = document.createElement('code'); c.textContent = n;
+      const v = document.createElement('span'); v.className = 'v'; v.textContent = val(n);
+      d.append(i, c, v); return d;
+    }));
+  }
+
+  // WCAG 2 relative luminance
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  // [chữ / viền, nền, ngưỡng]
+  const PAIRS = [
+    ['--color-fg', '--color-canvas', 4.5], ['--color-fg', '--color-surface', 4.5], ['--color-fg', '--color-surface-muted', 4.5],
+    ['--color-fg-muted', '--color-surface', 4.5], ['--color-fg-muted', '--color-surface-muted', 4.5],
+    ['--color-fg-subtle', '--color-surface', 4.5], ['--color-fg-subtle', '--color-canvas', 4.5],
+    ['--color-accent-text', '--color-surface', 4.5], ['--color-accent-text', '--color-canvas', 4.5], ['--color-accent-text-strong', '--color-surface', 4.5],
+    ['--color-accent-fg', '--color-accent', 4.5], ['--color-accent-fg', '--color-accent-hover', 4.5],
+    ['--color-success-text', '--color-surface', 4.5], ['--color-warning-text', '--color-surface', 4.5], ['--color-danger-text', '--color-surface', 4.5],
+    ['--color-canvas', '--color-warning', 3], ['--color-line-control', '--color-surface', 3], ['--color-focus', '--color-surface', 3],
+    ['--color-playhead', '--color-canvas', 3], ['--color-fg-on-media', '--track-1', 4.5], ['--color-fg-on-media', '--track-3', 4.5],
+  ];
+  function contrast() {
+    const rows = PAIRS.map(([f, b, min]) => {
+      const r = ratio(rgbOf(f), rgbOf(b)), tr = document.createElement('tr');
+      const td = (t, cls) => { const c = document.createElement('td'); if (cls) c.className = cls; c.textContent = t; return c; };
+      const demo = document.createElement('td'), s = document.createElement('span');
+      s.className = 'demo'; s.textContent = 'Aa Chữ mẫu';
+      s.style.setProperty('color', `rgb(var(${f}))`); s.style.setProperty('background', `rgb(var(${b}))`);
+      demo.append(s);
+      tr.append(td(`${f} trên ${b}`), demo, td(r.toFixed(2) + ':1', 'n ' + (r >= min ? 'ok' : 'fail')), td('≥ ' + min));
+      tr.dataset.pair = `${f}|${b}`; tr.dataset.ratio = r.toFixed(2); tr.dataset.ok = String(r >= min);
+      return tr;
+    });
+    $('#ct tbody').replaceChildren(...rows);
+    window.AVS_UI_CONTRAST = PAIRS.map(([f, b, min]) => ({ fg: f, bg: b, min, ratio: +ratio(rgbOf(f), rgbOf(b)).toFixed(2) }));
+  }
+
+  function tracks() {
+    const names = ['video', 'cảnh', 'phụ đề', 'thêm', 'đường graphic', 'graphic', 'b-roll', 'âm thanh'];
+    $('#tracks').replaceChildren(...names.map((n, i) => { const d = document.createElement('div'); d.textContent = `--track-${i + 1} · ${n}`; d.style.setProperty('background', `rgb(var(--track-${i + 1}))`); return d; }));
+  }
+
+  function seg() {
+    const el = $('#th-seg'); if (!el || !T) return;
+    el.replaceChildren(...T.PREFS.map(p => {
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(T.pref === p));
+      b.innerHTML = `<i class="ti ${ICON[p]}"></i><span>${LABEL[p]}</span>`; b.onclick = () => T.set(p); return b;
+    }));
+  }
+
+  function paint() {
+    const mode = root.getAttribute('data-theme');
+    $('#th-now').textContent = `${LABEL[mode] || mode}` + (embed ? ' (ép bằng ?theme=)' : T && T.pref === 'system' ? ' (theo hệ thống)' : '');
+    swatches($('#sw-role'), ROLES); swatches($('#sw-pal'), PAL); contrast(); tracks(); seg();
+  }
+  paint();
+  if (!embed) {
+    document.addEventListener('avs:theme', paint); document.addEventListener('avs:themepref', paint);
+    for (const f of document.querySelectorAll('iframe[data-src]')) f.src = f.dataset.src;
+  }
+  $('#open-modal').onclick = () => { $('#modal').hidden = false; $('#close-modal').focus(); };
+  $('#close-modal').onclick = () => { $('#modal').hidden = true; };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#modal').hidden = true; });
+})();
+</script>
+</body>
+</html>

@@ -32,7 +32,7 @@
   .sc-note a { color: inherit; } .sc-steps a, .sc-link { color: rgb(var(--color-accent-text-strong)); }
   h3.sc-h0 { margin: 0; } .sc-yt-ic { color: var(--pc); }
   .sc-form label { display: block; font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); margin: var(--space-2) 0 var(--space-1); } .sc-form input, .sc-form select, .sc-form textarea { width: 100%; }
-  .sc-form input[type=date], .sc-form input[type=time] { background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); padding: var(--space-2); color: rgb(var(--color-fg)); color-scheme: dark; outline: none; }
+  .sc-form input[type=date], .sc-form input[type=time] { background: rgb(var(--color-surface)); border: 1px solid rgb(var(--color-line-strong)); border-radius: var(--radius-control); padding: var(--space-2); color: rgb(var(--color-fg)); outline: none; }
   .sc-form textarea.sc-mono { font: var(--text-2xs) var(--font-mono); }
   .sc-form label.sc-v { display: grid; margin: 0; font-size: inherit; color: inherit; } .sc-form .sc-v input { width: auto; }
   .sc-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-2); } .sc-g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 var(--space-2); }
@@ -48,7 +48,7 @@
   .sc-wk .dh.today { color: rgb(var(--color-accent-text)); font-weight: 700; } .sc-wk .dh b { display: block; font-size: var(--text-md); color: rgb(var(--color-fg)); } .sc-wk .dh.today b { color: rgb(var(--color-accent-text)); }
   .sc-wk .hours { position: relative; height: ${(H1 - H0) * PX}px; } .sc-wk .hours div { position: absolute; top: var(--y); right: var(--space-2); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); transform: translateY(-6px); }
   .sc-col { position: relative; height: ${(H1 - H0) * PX}px; border-left: 1px solid rgb(var(--color-line)); cursor: copy; }
-  .sc-col.past { background: repeating-linear-gradient(135deg, transparent 0 6px, rgb(var(--color-white) / .015) 6px 12px); }
+  .sc-col.past { background: repeating-linear-gradient(135deg, transparent 0 6px, rgb(var(--color-overlay) / .03) 6px 12px); }
   .sc-col .hl { position: absolute; top: var(--y); left: 0; right: 0; border-top: 1px solid rgb(var(--color-line)); pointer-events: none; }
   .sc-col .slot { position: absolute; top: var(--y); left: 0; right: 0; border-top: 1px dashed rgb(var(--color-accent-text) / .5); pointer-events: none; }
   .sc-col .slot span { position: absolute; right: var(--space-1); top: -1px; font-size: var(--text-2xs); color: rgb(var(--color-accent-text)); }
