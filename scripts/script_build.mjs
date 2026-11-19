@@ -111,8 +111,8 @@ export async function buildSheet(sc, o = {}) {
   const segs = sc?.segments || [], src = o.src || {}, taken = new Set(), rows = [];
   let mood = null, moodFrom = null;
   for (let k = 0; k < segs.length; k++) {
-    const s = segs[k], t0 = s.t0 ?? null, t1 = s.t1 ?? null;
-    const row = { seg: k, t0, t1, kind: s.kind, say: s.say, ...(s.spoken === false ? { spoken: false } : {}) };
+    const s = segs[k], t0 = s.t0 ?? s.at?.t0 ?? null, t1 = s.t1 ?? s.at?.t1 ?? null; // chưa căn: mốc giây của kịch bản bảng (M197)
+    const row = { seg: k, t0, t1, kind: s.kind, say: s.say, ...(s.spoken === false ? { spoken: false } : {}), ...(s.note?.length ? { note: [...s.note] } : {}) };
     // mood: dấu MOOD áp cho đoạn đó và các đoạn sau tới dấu MOOD kế (kế thừa khi dựng bảng, không chép vào script.json)
     if (s.mood) { mood = s.mood; moodFrom = k; }
     row.mood = mood != null
@@ -144,7 +144,10 @@ export async function buildSheet(sc, o = {}) {
   }
   return { version: SHEET_VERSION, script_updated: sc?.updated || null, at: new Date().toISOString(), rows: mergeSheet(rows, o.prev) };
 }
-/** Giữ phần người dùng đã sửa của bảng cũ: hàng khoá giữ cả hàng; ô `user` giữ khi lời của hàng không đổi (so norm(say)). */
+/**
+ * Giữ phần người dùng đã sửa của bảng cũ: hàng khoá giữ cả hàng; ô `user` và ô chỉ dẫn đã Nhận (`from: claude` + `by`, M197) giữ khi lời
+ * của hàng không đổi (so norm(say)).
+ */
 export function mergeSheet(rows, prev) {
   const old = Array.isArray(prev?.rows) ? prev.rows : [];
   if (!old.length) return rows;
@@ -154,9 +157,10 @@ export function mergeSheet(rows, prev) {
     if (!p) return r;
     if (p.lock) return { ...p, seg: r.seg, t0: r.t0, t1: r.t1, kind: r.kind };
     const out = { ...r };
-    for (const f of ['mood', 'music', 'aroll']) if (p[f]?.from === 'user') out[f] = p[f];
+    const kept = x => x?.from === 'user' || (x?.from === 'claude' && !!x.by); // ô claude của chỉ dẫn (M197, có `by`); ô Dựng lại ô trống (M194) thì không
+    for (const f of ['mood', 'music', 'aroll', 'focus', 'transition']) if (kept(p[f])) out[f] = p[f];
     for (const f of ['broll', 'sfx', 'screen']) {
-      const mine = (p[f] || []).filter(x => x?.from === 'user'); if (!mine.length) continue;
+      const mine = (p[f] || []).filter(kept); if (!mine.length) continue;
       const id = x => (f === 'broll' ? key(x.q) : f === 'sfx' ? key(x.q || x.name) : key(x.text));
       const ids = new Set(mine.map(id));
       out[f] = [...(r[f] || []).filter(x => x.from === 'mark' && !ids.has(id(x))), ...mine];

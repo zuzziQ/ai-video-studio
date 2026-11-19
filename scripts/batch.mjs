@@ -93,9 +93,10 @@ export function parseXLSX(buf) {
   }
   return rows;
 }
-export function parseSheet(file) {
-  const buf = fs.readFileSync(file);
-  const raw = /\.xlsx$/i.test(file) || buf.readUInt32LE(0) === 0x04034b50 ? parseXLSX(buf) : parseCSV(buf.toString('utf8'));
+export const parseSheet = file => parseSheetBuf(fs.readFileSync(file), file);
+/** Bảng tính trong bộ nhớ (file tải lên, S27 M197 kịch bản dạng bảng) → { columns, rows } như parseSheet. */
+export function parseSheetBuf(buf, name = '') {
+  const raw = /\.xlsx$/i.test(name) || (buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50) ? parseXLSX(buf) : parseCSV(buf.toString('utf8'));
   const lines = raw.filter(r => r.some(c => String(c).trim() !== ''));
   if (!lines.length) throw new Error('bảng tính trống');
   const columns = lines[0].map((c, i) => String(c).trim() || `cot_${i + 1}`);

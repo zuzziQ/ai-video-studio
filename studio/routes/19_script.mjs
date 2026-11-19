@@ -11,11 +11,19 @@
 //   POST /api/script/sheet {stock}   → { ok, sheet }      dựng lại bảng (stock: có tìm stock qua mạng; mặc định chỉ Kho / thư viện / b-roll động)
 //   POST /api/script/suggest {text}  → { ok, text, added } Claude chèn dấu vào chính chữ đó (checkSuggested: không được sửa lời);
 //                                      không lưu: người dùng Nhận / Bỏ trong ô Kịch bản rồi mới Lưu
+//   S27 M197 (scripts/script_table.mjs): kịch bản dạng bảng và chỉ dẫn dựng
+//   POST /api/script/table (thân = file .xlsx / .csv, ≤ 10 MB; header x-file-name) → { columns, rows, roles, unknown, text, segs, timed, warn }
+//                                    (unknown: cột có chữ chưa nhận ra vai trò → người dùng gán trong ô Kịch bản)
+//   POST /api/script/table/text {columns, rows, roles} → { text, segs, timed, warn }   dựng lại chữ theo vai trò người dùng gán
+//   POST /api/script/directives {claude} → { cells (+ label), rest, claude }   ô đề xuất từ [GHI CHÚ] của kịch bản đã lưu: luật thuần,
+//                                    + Claude cho phần luật chưa hiểu khi claude = true (lỗi Claude không mất ô của luật: claude.error)
+//   POST /api/script/directives/accept {cells} → { ok, added, sheet }   ghi ô đã Nhận vào .studio/build_sheet.json (from 'claude')
 // Như mọi /api/*, cần token phiên + cùng origin (studio/security.mjs).
 import fs from 'node:fs';
 import os from 'node:os';
 import { applyScript, docxText, gateScript, readScript, removeScript, stageScript, writeScript, MAX_TEXT } from '../../scripts/script_doc.mjs';
-import { checkSuggested, dropSheet, readSheet, sheetFor, suggestPrompt } from '../../scripts/script_build.mjs';
+import { checkSuggested, dropSheet, readSheet, sheetFor, suggestPrompt, writeSheet } from '../../scripts/script_build.mjs';
+import { ROLES, acceptCells, cellText, checkCell, checkClaudeCells, directiveDraft, directivePrompt, readTable, tableToScript } from '../../scripts/script_table.mjs';
 
 const MAX_DOCX = 10 << 20;
 function rawBody(req, max) {
@@ -26,6 +34,7 @@ function rawBody(req, max) {
   });
 }
 
+const aspectOf = tl => (tl.width && tl.height ? (tl.width < tl.height ? 'dọc 9:16' : tl.width === tl.height ? 'vuông 1:1' : 'ngang 16:9') : '');
 const readCat = async f => { try { return JSON.parse(fs.readFileSync(new URL('../../assets/' + f, import.meta.url), 'utf8')); } catch { return []; } };
 // bảng dựng lỗi không chặn việc lưu kịch bản (Kho đọc lỗi, catalog hỏng…): trả lỗi kèm kết quả
 async function rebuild(dir, tl, captions, o = {}) { try { return await sheetFor(dir, { tl, captions, ...o }); } catch (e) { return { error: String(e.message || e).slice(0, 200), rows: [] }; } }
@@ -38,6 +47,18 @@ export default ctx => async (req, res, p) => {
       const text = docxText(await rawBody(req, MAX_DOCX));
       if (!text.trim()) return J({ error: 'File .docx không có chữ' }, 400);
       return J({ text });
+    }
+    if (p === '/api/script/table' && req.method === 'POST') {
+      const name = decodeURIComponent(String(req.headers['x-file-name'] || '')).slice(0, 200);
+      if (name && !/\.(xlsx|csv|tsv|txt)$/i.test(name)) return J({ error: 'Chỉ nhận file .xlsx hoặc .csv (Excel cũ .xls: lưu lại thành .xlsx)' }, 400);
+      const t = readTable(await rawBody(req, MAX_DOCX), name);
+      return J(t);
+    }
+    if (p === '/api/script/table/text' && req.method === 'POST') {
+      const b = await ctx.body(req);
+      const columns = Array.isArray(b.columns) ? b.columns.map(String).slice(0, 60) : [], rows = Array.isArray(b.rows) ? b.rows.slice(0, 1000).filter(r => r && typeof r === 'object') : [];
+      const roles = Object.fromEntries(columns.map(c => [c, ROLES.includes(b.roles?.[c]) ? b.roles[c] : null]));
+      return J(tableToScript(columns, rows, roles));
     }
     if (p === '/api/script/stage' && req.method === 'POST') {
       const b = await ctx.body(req);
@@ -76,7 +97,7 @@ export default ctx => async (req, res, p) => {
       if (text.length > 20000) return J({ error: 'Kịch bản dài quá để gợi ý dấu (tối đa 20 000 ký tự)' }, 400);
       const { timeline: tl } = ctx.readProject();
       const [music, sfx] = await Promise.all([readCat('music/catalog.json'), readCat('sfx/catalog.json')]);
-      const prompt = suggestPrompt(text, { brand: tl.brand?.name || '', field: String(b.field || '').slice(0, 80), aspect: tl.width && tl.height ? (tl.width < tl.height ? 'dọc 9:16' : tl.width === tl.height ? 'vuông 1:1' : 'ngang 16:9') : '',
+      const prompt = suggestPrompt(text, { brand: tl.brand?.name || '', field: String(b.field || '').slice(0, 80), aspect: aspectOf(tl),
         moods: [...new Set(music.map(x => x.mood))], sfx: [...new Set(sfx.map(x => x.name.replace(/_d+$/, '')))] });
       const L = ctx.llm || await import('../../scripts/llm.mjs');
       let last = null;
@@ -87,6 +108,35 @@ export default ctx => async (req, res, p) => {
         if (out.text.length > MAX_TEXT) return J({ error: 'Kết quả dài quá' }, 400);
         return J({ ok: true, text: out.text, added: out.added });
       } catch (e) { return J({ error: last && !last.ok ? last.error : String(e.message || e).slice(0, 300) }, last && !last.ok ? 422 : 502); }
+    }
+    if (p === '/api/script/directives') {
+      const b = await ctx.body(req), sc = readScript(dir);
+      if (!sc) return J({ error: 'Dự án chưa có kịch bản' }, 400);
+      const { cells, ask } = directiveDraft(sc), n = sc.segments.length;
+      let claude = null;
+      if (b.claude && ask.length) {
+        const { timeline: tl } = ctx.readProject(), L = ctx.llm || await import('../../scripts/llm.mjs');
+        try {
+          const got = await L.askJSON(directivePrompt(ask, { brand: tl.brand?.name || '', aspect: aspectOf(tl) }), { shape: 'object', retries: 1, model: 'sonnet', task: 'text', cwd: os.tmpdir(), timeout: 240000,
+            timeoutMsg: 'Claude quá 4 phút chưa trả lời. Thử lại sau.', retryHint: m => `
+
+Lần trước chưa dùng được (${m}). Trả về DUY NHẤT JSON {"cells": [...]}.`,
+            validate: v => checkClaudeCells(v, ask, n) });
+          cells.push(...got); claude = { cells: got.length };
+        } catch (e) { claude = { error: String(e.message || e).slice(0, 200) }; }
+      }
+      return J({ cells: cells.map(c => checkCell(c, n)).filter(Boolean).map(c => ({ ...c, label: cellText(c) })), rest: ask.length, claude });
+    }
+    if (p === '/api/script/directives/accept') {
+      const b = await ctx.body(req), sc = readScript(dir);
+      if (!sc) return J({ error: 'Dự án chưa có kịch bản' }, 400);
+      const cells = (Array.isArray(b.cells) ? b.cells : []).slice(0, 400).map(c => checkCell(c, sc.segments.length)).filter(Boolean);
+      if (!cells.length) return J({ error: 'Không có ô hợp lệ để nhận' }, 400);
+      let sheet = readSheet(dir);
+      if (!sheet) { const { timeline: tl, captions } = ctx.readProject(); sheet = await rebuild(dir, tl, captions); if (sheet.error) return J({ error: sheet.error }, 500); }
+      const r = acceptCells(sheet, cells);
+      writeSheet(dir, r.sheet);
+      return J({ ok: true, added: r.added, sheet: { rows: r.sheet.rows.length } });
     }
     if (p === '/api/script/clear') {
       const caps = removeScript(dir); dropSheet(dir);
