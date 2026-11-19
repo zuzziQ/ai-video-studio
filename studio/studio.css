@@ -79,8 +79,8 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgb(var(--
 .nkho { display: flex; gap: var(--space-2); align-items: flex-start; margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); font-size: var(--text-xs); line-height: 1.5; color: rgb(var(--color-fg-muted)); }
 .nkho > .ti { flex: none; margin-top: 2px; } .nkho span { min-width: 0; overflow-wrap: anywhere; } .nkho small { color: rgb(var(--color-fg-subtle)); }
 .nkho.warn { border-color: rgb(var(--color-warning) / .6); background: rgb(var(--color-warning) / .08); color: rgb(var(--color-fg)); }
-/* đang tạo video mới: dự án cũ đã đóng, không để thấy timeline cũ sau hộp tiến trình */
-body.np-busy > *:not(#modal):not(.toast) { visibility: hidden; }
+/* đang tạo video mới (S26 M185: chạy nền trong khay việc, không hộp chặn): dự án cũ đã đóng, che trình chỉnh sửa bằng chỗ chờ #np-wait; thanh trái (Tự lái) và trang chủ vẫn dùng được */
+body.np-busy #right, body.np-busy #tlwrap, body.np-busy #center > :not(#np-wait) { visibility: hidden; }
 /* trạng thái lưu chỉ là biểu tượng (thanh trên chật); chữ "Đã lưu" / "Chưa lưu" ở title + aria-label */
 .status { font-size: 0; color: rgb(var(--color-success)); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; cursor: default; }
 .status::before { font-family: "tabler-icons"; font-size: 16px; line-height: 1; content: "\f84d"; }

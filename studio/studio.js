@@ -95,6 +95,8 @@ const strip = (k, v) => (k === 'cid' ? undefined : v);
 const snapshot = () => JSON.stringify({ TL, CAP }, strip);
 let lastPush = { key: '', at: 0 };
 function pushUndo(key = '') {
+  // S26 M185: AI dựng / áp gợi ý QC đang chạy sẽ ghi lại timeline lúc xong: chặn mọi sửa mới (thêm từ thư viện, lệnh…) trước khi nó đổi TL
+  if (window.Studio?.jobs?.locked()) { toast('Đang chạy ' + Studio.jobs.running() + ': chờ xong rồi sửa (xem khay việc)'); throw Object.assign(new Error('Đang có việc ghi lại timeline'), { avsLocked: true }); }
   const now = Date.now();
   if (key && key === lastPush.key && now - lastPush.at < 900) { lastPush.at = now; return; }
   lastPush = { key, at: now };
@@ -1515,6 +1517,7 @@ window.addEventListener('keydown', e => {
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); autoOff = false; return saveNow(); }
   if (typing) return;
+  if (window.Studio?.jobs?.locked() && !(e.key === ' ' || e.key === 'Escape' || (!mod && /^[=+\-]$/.test(e.key)) || (!mod && e.shiftKey && e.key.toLowerCase() === 'z'))) return; // S26 M185: khoá sửa timeline khi việc nền chạy
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); return duplicateSel(); }
   if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); return splitAtPlayhead(); }
@@ -1549,6 +1552,7 @@ function saveNow(force, quiet) { const p = saveQ.then(() => saveOnce(force, quie
 async function saveOnce(force, quiet) {
   if (readOnly) { projectBusy(); return false; } // dự án đang mở ở tab khác (S18 M131)
   if (newBusy) return false; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
+  if (window.Studio?.jobs?.locked()) { if (!quiet) toast('Đang chạy ' + Studio.jobs.running() + ': lưu sau khi xong'); return false; } // S26 M185: việc nền sắp ghi lại timeline.json
   // dir: server từ chối khi đã sang dự án khác (S17 M126). base: mốc lưu lần cuối mà trang này biết (S18 M131: cùng dự án ở hai cửa sổ)
   const seq = editSeq;
   let r;
@@ -1566,7 +1570,7 @@ async function saveOnce(force, quiet) {
 const AUTOSAVE_MS = 4000;
 let autoT = 0, autoOff = false;
 function autoBusy(typing = true) {
-  if (!TL || readOnly || newBusy || drag || window.Studio?._restoring || window.Studio?.review?.active) return true;
+  if (!TL || readOnly || newBusy || drag || window.Studio?._restoring || window.Studio?.review?.active || window.Studio?.jobs?.locked()) return true; // S26 M185: AI dựng / áp gợi ý QC đang ghi timeline.json: không tự lưu đè
   const a = document.activeElement;
   return typing && !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !/^(checkbox|radio|button|range|color)$/.test(a.type || ''));
 }
@@ -1647,16 +1651,12 @@ $('#export').addEventListener('click', () => {
     const from = $('#xfrom').value, to = $('#xto').value;
     const xo = { quality: document.querySelector('[name=xq]:checked').value, from: from === '' ? undefined : +from, to: to === '' ? undefined : +to };
     const r = await api('/api/export', { ...xo, aspects: [...document.querySelectorAll('[name=xasp]:checked')].map(i => i.value), deliver: $('#xgive').checked });
-    if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
-    modal(`<h3>Đang xuất video…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="xcancel">Dừng</button></div>`);
-    $('#xcancel').onclick = () => api('/api/job/cancel', {});
-    pollJob(async j => {
-      if (j.state !== 'done') return modal(`<h3>Lỗi khi xuất</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      // S14 M112: ghi .studio/exports.json + hộp Xuất xong có trình phát trong Studio (features/55_exports.js); không có thì hộp cũ
-      if (Studio.exports && await Studio.exports.done(j, xo).catch(() => false)) return;
-      modal(`<h3><i class="ti ti-circle-check ui-text-ok"></i> Xuất xong</h3><p class="path">${esc(j.out)}</p>${(j.outs || []).length > 1 ? `<div class="xouts">${j.outs.map(o => `<div><b>${esc(o.aspect)}</b> <a href="${PB()}${esc(o.out)}" target="_blank">${esc(o.out.split('/').pop())}</a><small>${esc(o.note || '')}</small></div>`).join('')}</div>` : ''}${j.delivered?.length ? `<p class="muted"><i class="ti ti-package"></i> Đã giao ${j.delivered.length} file vào Thành phẩm: ${j.delivered.map(f => esc(f.split(/[\\/]/).pop())).join(', ')}</p>` : j.deliverError ? `<p class="ui-text-warn"><i class="ti ti-alert-triangle"></i> Chưa giao được vào Thành phẩm: ${esc(j.deliverError)}</p>` : ''}<div class="actions"><button onclick="api('/api/reveal',{path:'${esc(j.out)}'})"><i class="ti ti-folder"></i> ${/Mac/.test(navigator.platform) ? 'Hiện trong Finder' : 'Hiện trong thư mục'}</button>${j.delivered?.length ? `<button id="xkho"><i class="ti ti-package"></i> Mở Thành phẩm</button>` : ''}<a href="${PB()}${esc(j.out)}" target="_blank"><button class="primary"><i class="ti ti-player-play"></i> Mở video</button></a><button onclick="closeModal()">Đóng</button></div>`);
-      if ($('#xkho')) $('#xkho').onclick = () => api('/api/thanhpham/open', { path: j.delivered[0] }).then(r => r.ok || toast(r.error || 'Không mở được Thành phẩm'));
-    });
+    if (!r.ok) return Studio.jobs ? Studio.jobs.refuse(r) : toast(r.error || 'Đang có tác vụ khác chạy');
+    // S26 M185: chạy nền trong khay việc (features/05_jobs.js), không hộp giữa màn hình: sửa tiếp được, server render bản đã lưu lúc bấm Xuất
+    closeModal();
+    Studio.jobs.track({ kind: 'export', title: 'Xuất video', note: Studio.jobs.exportNote,
+      // S14 M112: ghi .studio/exports.json; kết quả (Xem / Hiện trong thư mục / Mở Thành phẩm) lấy từ features/55_exports.js
+      onDone: async j => (Studio.exports && await Studio.exports.finish(j, xo).catch(() => null)) || { text: j.out ? String(j.out).split('/').pop() : 'Xong', acts: [{ label: /Mac/.test(navigator.platform) ? 'Hiện trong Finder' : 'Hiện trong thư mục', icon: 'ti-folder', on: () => api('/api/reveal', { path: j.out }) }, { label: 'Mở video', icon: 'ti-player-play', primary: true, on: () => window.open(PB() + j.out) }] } });
   };
 });
 // ---------- bộ chọn video dùng chung của bước Nguồn (S12 M98): Video mới, Video dài ----------
@@ -1785,11 +1785,13 @@ async function openNewProject() {
     if (TL && dirty) { await saveNow(); if (dirty) return toast('Chưa lưu được dự án đang mở — chưa tạo video mới'); }
     const r = await api('/api/new', { video: vp.value, dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
       pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined });
-    if (!r.ok) return toast(r.error || 'Đang có tác vụ khác chạy');
-    // dự án cũ đã đóng phía server: che trình chỉnh sửa, không để thấy (hay lưu) timeline cũ trong lúc tạo
-    newBusy = true; dirty = false; document.body.classList.add('np-busy');
-    modal(`<h3>Đang tạo dự án mới…</h3><div class="muted">${esc(khoLabel(kho) || '')}</div><div id="jobstep" class="muted"></div><div class="bar"><i></i></div><pre id="joblog"></pre>`);
-    pollJob(j => { if (j.state === 'done') location.reload(); else modal(`<h3>Lỗi</h3><p>${esc(j.step)}</p><pre>${esc(j.log.slice(-1500))}</pre><div class="actions"><button onclick="location.reload()">Đóng</button></div>`); });
+    if (!r.ok) return Studio.jobs.refuse(r);
+    // dự án cũ đã đóng phía server: che trình chỉnh sửa (chỗ chờ #np-wait), không để thấy (hay lưu) timeline cũ trong lúc tạo.
+    // S26 M185: chạy nền trong khay việc, không hộp chặn cả trang: trang chủ và Tự lái vẫn dùng được; xong thì chuyển như cũ (X-AVS-Opened)
+    newBusy = true; dirty = false; document.body.classList.add('np-busy'); closeModal();
+    Studio.jobs.track({ kind: 'new', title: 'Tạo dự án mới', note: khoLabel(kho) || '',
+      onDone: () => { location.reload(); return { text: 'Đang mở dự án mới…' }; },
+      onFail: j => { newBusy = false; document.body.classList.remove('np-busy'); return { text: j.step || 'Chưa tạo được dự án mới', acts: [{ label: 'Tải lại trang', icon: 'ti-refresh', on: () => location.reload() }] }; } });
   };
 }
 function toast(m) {

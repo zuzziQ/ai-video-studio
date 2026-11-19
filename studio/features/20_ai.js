@@ -163,28 +163,31 @@
     const af = S.autofill?.afterMode() || '';
     if (!await S.saveNow()) return;
     const r = await S.api('/api/ai/edit', body);
-    if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
-    S.modal(`<h3><i class="ti ti-sparkles"></i> AI đang dựng…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="aicancel">Dừng</button></div>`);
-    $('#aicancel').onclick = () => S.api('/api/job/cancel', {});
-    S.pollJob(async j => {
-      if (j.state !== 'done') {
+    if (!r.ok) return S.jobs.refuse(r);
+    S.closeModal();
+    // S26 M185: chạy nền trong khay việc (features/05_jobs.js): khoá sửa timeline + tạm dừng tự lưu tới khi xong; xong thì thẻ có Xem kết quả / Hoàn tác, không tự bật hộp
+    S.jobs.track({ kind: 'ai', title: 'AI dựng giúp', lock: true,
+      onFail: j => {
         // S26 M182: lỗi in một lần: bỏ các dòng log lặp lại câu lỗi ở trên; chưa đăng nhập thì có lối mở Kiểm tra máy
         const step = String(j.step || '').trim(), norm = t => t.replace(/^(LỖI|ERROR):?\s*/i, '').trim();
         const rest = (j.log || '').split('\n').filter(l => l.trim() && !l.startsWith('@@') && !(step && (norm(l.trim()) === step || step.includes(norm(l.trim())) || norm(l.trim()).includes(step)))).join('\n').slice(-1200);
         const login = /đăng nhập|Claude Code/.test(step + rest);
-        S.modal(`<h3>AI dựng chưa được</h3><p>${esc(step)}</p>${rest ? `<pre>${esc(rest)}</pre>` : ''}<div class="actions">${login ? '<button id="ai-setup2">Mở Kiểm tra máy</button>' : ''}<button onclick="closeModal()">Đóng</button></div>`);
-        return $('#ai-setup2')?.addEventListener('click', () => { S.closeModal(); S.openSetup?.(); });
-      }
-      const plan = await S.api('/api/ai/plan');
-      if (plan.error) return S.toast(plan.error);
-      lastPlan = plan; applyPlan(plan);
-      // M108: Thêm b-roll / Thêm âm thanh = Tự động chạy nối ngay, cùng bước hoàn tác với bản dựng AI
-      const out = af ? await S.autofill.run(af, { noUndo: true }) : undefined;
-      // S19 M134: bản AI giao (đã lưu) để "Học từ chỉnh sửa" so với các lần bạn sửa sau
-      try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này, không chặn */ }
-      showResult(plan, af ? (out || { error: true }) : null);
-      if (panel === 'wf-aihelp') renderAi();
-    });
+        return { text: 'AI dựng chưa được: ' + step, acts: login ? [{ label: 'Mở Kiểm tra máy', icon: 'ti-stethoscope', on: () => S.openSetup?.() }] : [] };
+      },
+      onDone: async j => {
+        const plan = await S.api('/api/ai/plan');
+        if (plan.error) return { error: true, text: plan.error };
+        lastPlan = plan; applyPlan(plan);
+        // M108: Thêm b-roll / Thêm âm thanh = Tự động chạy nối ngay, cùng bước hoàn tác với bản dựng AI
+        const out = af ? await S.autofill.run(af, { noUndo: true }) : undefined;
+        // S19 M134: bản AI giao (đã lưu) để "Học từ chỉnh sửa" so với các lần bạn sửa sau
+        try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này, không chặn */ }
+        if (panel === 'wf-aihelp') renderAi();
+        const n = (plan.scenes || plan.graphics || []).length;
+        return { text: 'Đã dựng xong' + (n ? ` · ${n} graphic` : '') + '. Sửa được trên timeline; Hoàn tác trả về bản trước.', toast: 'AI dựng xong: bấm “Xem kết quả” ở khay việc',
+          acts: [{ label: 'Xem kết quả', icon: 'ti-eye', primary: true, on: () => showResult(plan, af ? (out || { error: true }) : null) },
+            { label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác bản dựng AI'); if (panel === 'wf-aihelp') renderAi(); return 'close'; } }] };
+      } });
   }
   // S22 M153: AI dựng từ thanh Hỏi Claude (75_ask.js): không có hộp chọn, dùng mặc định (giữ gói, mật độ vừa) + yêu cầu của người dùng.
   // Áp kế hoạch KHÔNG đẩy bước hoàn tác: thanh Hỏi Claude trả timeline về như cũ rồi đưa bản mới qua Studio.review (Nhận = một ⌘Z).
@@ -195,18 +198,18 @@
       density: DENS.some(d => d[0] === o.density) ? o.density : 'vua', extra: String(o.extra || '').slice(0, 300), skip: [] };
     if (!await S.saveNow()) return { error: 'Chưa lưu được dự án' };
     const r = await S.api('/api/ai/edit', body);
-    if (!r.ok) return { error: r.error || 'Đang có tác vụ khác chạy' };
-    S.modal(`<h3><i class="ti ti-sparkles"></i> AI đang dựng…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="aicancel">Dừng</button></div>`);
-    $('#aicancel').onclick = () => S.api('/api/job/cancel', {});
-    return new Promise(ok => S.pollJob(async j => {
-      S.closeModal();
-      if (j.state !== 'done') return ok({ error: j.step || 'AI dựng chưa được' });
-      const plan = await S.api('/api/ai/plan');
-      if (plan.error) return ok({ error: plan.error });
-      prevPlan = lastPlan; planDropped = false; lastPlan = plan; applyPlan(plan, { noUndo: true });
-      if (panel === 'wf-aihelp') renderAi();
-      ok({ plan });
-    }));
+    if (!r.ok) { S.jobs.refuse(r); return { error: r.error || 'Đang có tác vụ khác chạy' }; }
+    // S26 M185: chạy nền trong khay việc (khoá sửa timeline); kết quả trả cho thanh Hỏi Claude qua Promise như cũ
+    return new Promise(ok => S.jobs.track({ kind: 'ai', title: 'AI dựng (Hỏi Claude)', lock: true,
+      onFail: j => { ok({ error: j.step || 'AI dựng chưa được' }); return { text: j.step || 'AI dựng chưa được' }; },
+      onDone: async j => {
+        const plan = await S.api('/api/ai/plan');
+        if (plan.error) { ok({ error: plan.error }); return { error: true, text: plan.error }; }
+        prevPlan = lastPlan; planDropped = false; lastPlan = plan; applyPlan(plan, { noUndo: true });
+        if (panel === 'wf-aihelp') renderAi();
+        ok({ plan });
+        return { text: 'Đã dựng xong: xem và nhận ở thanh Hỏi Claude' };
+      } }).then(r => { if (!r.ok && r.job?.state !== 'done') ok({ error: r.job?.step || 'AI dựng đã dừng' }); }));
   }
   // hai tuỳ chọn chạy nối sau AI dựng (lưu ở 80_autofill.js); pre: tiền tố id ô (panel / hộp)
   const afterOpts = pre => S.autofill ? `<div class="ai-after"><label class="ai-row ai-click"><input type="checkbox" id="${pre}-broll" class="ai-nf" ${S.autofill.opts.ai_broll ? 'checked' : ''}><span>Thêm b-roll <span class="muted">· chữ nổi, emoji, ảnh của bạn đúng lúc nói</span></span></label>
@@ -308,7 +311,20 @@
     if (!await S.saveNow()) { box.innerHTML = '<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa lưu được dự án — chưa kiểm tra.</p>'; $('#aiqcgo').hidden = false; return; }
     if (fix) S.pushUndo();
     const r = await S.api('/api/qc/quick', { times: ts, fix });
-    if (!r.ok) { box.innerHTML = `<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa kiểm tra nhanh được: ${esc(r.error || 'lỗi')}</p>`; $('#aiqcgo').hidden = false; return; }
+    if (!r.ok) { if (/tác vụ/.test(r.error || '')) S.jobs.refuse(r); box.innerHTML = `<p class="muted"><i class="ti ti-alert-triangle"></i> Chưa kiểm tra nhanh được: ${esc(r.error || 'lỗi')}</p>`; $('#aiqcgo').hidden = false; return; }
+    if (fix) { // S26 M185: sửa ngay ghi lại timeline.json: chạy nền trong khay việc, khoá sửa timeline tới khi xong, thẻ kết quả có Xem kết quả / Hoàn tác
+      S.closeModal();
+      S.jobs.track({ kind: 'qc', title: 'Sửa vị trí graphic', lock: true,
+        onFail: j => ({ text: j.step || 'Sửa vị trí chưa xong' }),
+        onDone: async () => {
+          await S.reload();
+          const q = await S.api('/api/qc/quick').catch(() => null);
+          return { text: q && q.fixed != null ? `Đã sửa ${q.fixed}/${q.before} chỗ${(q.issues || []).length ? `, còn ${q.issues.length} chỗ bộ giải không tự dời được` : ''}` : 'Đã sửa vị trí graphic', toast: 'Đã sửa vị trí graphic: ⌘Z để hoàn tác',
+            acts: [{ label: 'Xem kết quả', icon: 'ti-eye', primary: true, on: () => (lastPlan ? showResult(lastPlan, null) : S.toast('Xem ở bước Kiểm tra')) },
+              { label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác'); return 'close'; } }] };
+        } });
+      return;
+    }
     $('#aiqstop').onclick = () => S.api('/api/job/cancel', {});
     S.pollJob(async j => {
       if (fix && j.state === 'done') await S.reload();

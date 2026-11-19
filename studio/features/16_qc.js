@@ -76,21 +76,26 @@
   async function runQc({ fix = false, claude = true, after, only, fail } = {}) {
     if (dirty() && !await S.saveNow()) return fail?.('Chưa lưu được dự án');
     const r = await S.api('/api/qc/run', { fix, claude, ...(only ? { only } : {}) });
-    if (!r.ok) { S.toast(r.error || 'Đang có tác vụ khác chạy'); return fail?.(r.error || 'Đang có tác vụ khác chạy'); }
-    S.modal(`<h3><i class="ti ti-shield-check"></i> ${only ? `Đang áp dụng ${only.length} gợi ý sửa…` : fix ? 'Đang kiểm tra & tự sửa…' : 'Đang kiểm tra chất lượng…'}</h3>
-      <div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre>
-      <p class="muted">Render ảnh bằng engine, đo chữ/mặt/phụ đề, trộn thử âm thanh${claude ? ', rồi Claude xem các khung hình (30–120 giây)' : ''}.</p>`);
-    S.pollJob(async j => {
-      if (j.state !== 'done') {
-        if (fail) { S.closeModal(); return fail(j.error || j.step || 'Kiểm tra chưa xong'); }
-        return S.modal(`<h3>Lỗi kiểm tra</h3><p>${esc(j.error || j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      }
-      await load();
-      if (fix) await S.reload();
-      if (after) return after(last);
-      showResult();
-      rerender();
-    });
+    if (!r.ok) { S.jobs.refuse(r); return fail?.(r.error || 'Đang có tác vụ khác chạy'); }
+    // S26 M185: chạy nền trong khay việc (features/05_jobs.js), không hộp giữa màn hình. Sửa / áp gợi ý ghi lại timeline.json lúc xong:
+    // khoá sửa timeline + tạm dừng tự lưu tới khi xong. Xong thì thẻ có Xem kết quả (mở lại hộp kết quả bên dưới) và Hoàn tác sửa.
+    const title = only ? `Áp dụng ${only.length} gợi ý sửa` : fix ? 'Kiểm tra & tự sửa' : 'Kiểm tra chất lượng';
+    if (only || fix) S.closeModal(); // hộp kết quả cũ không còn đúng: việc đã sang khay (Xem kết quả mở lại bản mới)
+    return S.jobs.track({ kind: 'qc', title, lock: !!(fix || only), note: claude ? 'Render ảnh bằng engine, đo chữ/mặt/phụ đề, trộn thử âm thanh, rồi Claude xem các khung hình (30–120 giây)' : '',
+      onFail: j => { fail?.(j.error || j.step || 'Kiểm tra chưa xong'); return { text: j.error || j.step || 'Kiểm tra chưa xong' }; },
+      onDone: async () => {
+        await load();
+        if (fix) await S.reload();
+        const q = last, acts = [{ label: 'Xem kết quả', icon: 'ti-eye', primary: true, on: () => { showResult(); } }];
+        if (q?.fix && q.can_undo && !q.undone) acts.push({ label: 'Hoàn tác sửa', icon: 'ti-arrow-back-up', on: async () => {
+          const u = await S.api('/api/qc/undo', {}); if (u.error) return S.toast(u.error);
+          await S.reload(); await load(); S.toast('Đã hoàn tác các sửa đổi của QC'); rerender(); return 'close'; } });
+        const text = !q ? 'Xong' : !q.issues.length ? 'Không thấy vấn đề nào'
+          : q.fix ? `Đã sửa ${q.issues.filter(i => i.fixed).length}/${q.counts?.initial ?? q.issues.length} vấn đề${q.counts?.high ? ` · còn ${q.counts.high} lỗi nặng` : ''}`
+          : `${q.issues.length} vấn đề${q.counts?.high ? ` · ${q.counts.high} nặng` : ''}`;
+        if (after) after(last); else rerender();
+        return { text, acts, toast: `${title}: ${text}` };
+      } }).then(r => { if (!r.ok && r.job?.state !== 'error') fail?.('Đã dừng'); }); // huỷ / tạm dừng: không để Promise của thanh Hỏi Claude treo
   }
 
   // ---------- result dialog ----------
@@ -215,13 +220,11 @@
     const kind = o.kind || $('#vakind')?.value || 'hook', exp = o.export ?? $('#vaexp')?.checked;
     if (dirty() && !await S.saveNow()) return;
     const r = await S.api('/api/variants/run', { n: 3, kind, export: !!exp });
-    if (!r.ok) return S.toast(r.error || 'Đang có tác vụ khác chạy');
-    S.modal(`<h3><i class="ti ti-versions"></i> Đang tạo 3 phiên bản…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre>
-      <p class="muted">Mỗi phiên bản là một dự án riêng nằm cạnh dự án này${exp ? ', có xuất video (720p) để so sánh' : ''}.</p>`);
-    S.pollJob(async j => {
-      if (j.state !== 'done') return S.modal(`<h3>Lỗi tạo phiên bản</h3><p>${esc(j.error || j.step)}</p><pre>${esc((j.log || '').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
-      await loadVa(); showVariants(); rerender();
-    });
+    if (!r.ok) return S.jobs.refuse(r);
+    // S26 M185: khay việc; mỗi phiên bản là một dự án riêng nên không khoá timeline
+    S.jobs.track({ kind: 'variants', title: 'Tạo 3 phiên bản', note: `Mỗi phiên bản là một dự án riêng nằm cạnh dự án này${exp ? ', có xuất video (720p) để so sánh' : ''}.`,
+      onFail: j => ({ text: j.error || j.step || 'Lỗi tạo phiên bản' }),
+      onDone: async () => { await loadVa(); rerender(); return { text: 'Đã tạo xong 3 phiên bản', acts: [{ label: 'So sánh', icon: 'ti-versions', primary: true, on: () => showVariants() }] }; } });
   }
   const vfile = (dir, f) => avsUrl(`/api/variants/file?dir=${encodeURIComponent(dir)}&f=${encodeURIComponent(f)}`);
   function showVariants() {
