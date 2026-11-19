@@ -27,6 +27,17 @@ export function aspectLabel(w, h) {
 }
 /** Tên dự án để đặt tên bản giao: thư mục dự án (trong Du an/ là tên người dùng đặt). */
 export const projectName = dir => path.basename(path.resolve(dir));
+/** Tên đọc được để đặt tên thành phẩm (S26 M184): ưu tiên tiêu đề có dấu; không có thì tên thư mục bỏ đuôi băm "-31827a" và số thứ tự "01_". */
+export function readableName(dir, tl) {
+  const t = String(tl?.title || '').replace(/\s+/g, ' ').trim();
+  if (t) return t;
+  const b = projectName(dir).replace(/-[0-9a-f]{6}$/, '').replace(/^\d+_/, '').replace(/[-_]+/g, ' ').trim();
+  return b || projectName(dir);
+}
+/** Giờ máy "09h21" để phân biệt lần xuất sau thay cho "(2)". */
+export const clockLabel = (d = new Date()) => `${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`;
+// Tên lần đầu; trùng thì dùng tên kèm giờ (alt), vẫn trùng nữa thì freeName thêm (2).
+const pickName = (d, it) => { const n = it.name || path.basename(it.src); return it.alt && fs.existsSync(path.join(d, n)) ? it.alt : n; };
 
 /** Tên file hiển thị an toàn, giữ đuôi: "<base><ext>" (base tối đa 70 đơn vị UTF-16, không cắt đôi emoji; rỗng → "Thanh pham"). */
 export function fileName(base, ext) {
@@ -161,7 +172,7 @@ export function deliverProject(dir, items, o = {}) {
   const { w, d, todo } = prepare(dir, items, o), done = [];
   for (const it of todo) {
     const from = stamp(it.src);
-    try { done.push({ src: it.src, from, ...placeSync(w, it.src, d, it.name || path.basename(it.src)) }); } catch (e) { done.push({ src: it.src, error: e.message }); }
+    try { done.push({ src: it.src, from, ...placeSync(w, it.src, d, pickName(d, it)) }); } catch (e) { done.push({ src: it.src, error: e.message }); }
   }
   return finish(dir, w, d, done);
 }
@@ -170,7 +181,7 @@ export async function deliverProjectAsync(dir, items, o = {}) {
   const { w, d, todo } = prepare(dir, items, o), done = [];
   for (const it of todo) {
     const from = stamp(it.src);
-    try { done.push({ src: it.src, from, ...(await placeAsync(w, it.src, d, it.name || path.basename(it.src))) }); } catch (e) { done.push({ src: it.src, error: e.message }); }
+    try { done.push({ src: it.src, from, ...(await placeAsync(w, it.src, d, pickName(d, it))) }); } catch (e) { done.push({ src: it.src, error: e.message }); }
   }
   return finish(dir, w, d, done);
 }
@@ -180,11 +191,12 @@ export async function deliverProjectAsync(dir, items, o = {}) {
  * outs: [{ src, w, h } | { src, aspect: '9:16' }]; o.range: { from, to } khi chỉ xuất một đoạn.
  */
 export function exportItems(dir, outs, o = {}) {
-  const name = o.name || projectName(dir), r = o.range, n = v => String(+(+v).toFixed(1));
+  const name = o.name || readableName(dir, o.tl), r = o.range, n = v => String(+(+v).toFixed(1));
   const part = r && (r.from != null || r.to != null) ? ` đoạn ${n(r.from ?? 0)}-${r.to != null ? n(r.to) : 'hết'}s` : '';
   return outs.map(x => {
     const asp = x.aspect ? String(x.aspect).replace(':', 'x') : aspectLabel(x.w, x.h);
-    return { src: x.src, name: fileName(`${name}${asp ? ' ' + asp : ''}${part}`, path.extname(x.src) || '.mp4') };
+    const ext = path.extname(x.src) || '.mp4', stem = `${name}${asp ? ' ' + asp : ''}${part}`;
+    return { src: x.src, name: fileName(stem, ext), alt: fileName(`${stem} ${clockLabel(o.now)}`, ext) };
   });
 }
 export const deliverExports = (dir, outs, o = {}) => deliverProject(dir, exportItems(dir, outs, o), o);

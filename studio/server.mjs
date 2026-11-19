@@ -113,7 +113,9 @@ function readProject() {
 function khoOf(tl) {
   try { const ws = workspaceOfProject(cur().dir, tl); return { brand: ws.brand || '', title: ws.title, root: ws.root, found: ws.found }; } catch { return null; }
 }
-const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19); // snapshot lịch sử: UTC, sắp theo tên (giữ 60 bản mới nhất)
+// Tên file xuất theo giờ máy (không phải UTC), dạng 2026-11-19T09-21-39: khớp đồng hồ người dùng (S26 M184)
+const localStamp = (d = new Date()) => { const z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}-${z(d.getMinutes())}-${z(d.getSeconds())}`; };
 function writeNotes(tl, captions) {
   const out = [];
   const fmt = t => (t == null ? '' : `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`);
@@ -132,7 +134,7 @@ function writeNotes(tl, captions) {
   else if (fs.existsSync(f)) fs.unlinkSync(f);
   return out.length;
 }
-function save({ timeline, captions, dir, base, force }) {
+function save({ timeline, captions, dir, base, force, auto }) {
   // S17 M126: trình chỉnh sửa gửi kèm thư mục dự án nó đang sửa; khác dự án đang mở (tab cũ còn mở sau "Video mới" hay mở dự án
   // khác) thì từ chối, không ghi timeline cũ đè lên dự án mới. Không gửi dir (script cũ) thì như trước.
   if (dir != null) {
@@ -151,12 +153,18 @@ function save({ timeline, captions, dir, base, force }) {
   const capFile = typeof tl.captions === 'string' ? tl.captions : (captions?.length ? 'work/captions.json' : null);
   if (capFile) { fs.mkdirSync(path.dirname(P(capFile)), { recursive: true }); fs.writeFileSync(P(capFile), JSON.stringify(captions || [], null, 1)); tl.captions = capFile; }
   fs.writeFileSync(cur().tlFile, JSON.stringify(tl, null, 1));
-  fs.mkdirSync(path.join(cur().dir, '.studio/history'), { recursive: true });
-  const snap = path.join(cur().dir, '.studio/history', `${stamp()}.json`);
-  fs.writeFileSync(snap, JSON.stringify({ timeline: tl, captions }));
-  // keep the newest 60 snapshots
-  const all = fs.readdirSync(path.dirname(snap)).sort();
-  for (const f of all.slice(0, Math.max(0, all.length - 60))) fs.unlinkSync(path.join(path.dirname(snap), f));
+  const hd = path.join(cur().dir, '.studio/history');
+  fs.mkdirSync(hd, { recursive: true });
+  // S26 M184: tự lưu (auto) chỉ ghi snapshot khi bản gần nhất đã cũ hơn 2 phút, để 60 bản lịch sử không bị lấp trong vài phút
+  let fresh = false;
+  if (auto === true) { const last = fs.readdirSync(hd).filter(f => f.endsWith('.json')).sort().pop(); try { fresh = !!last && Date.now() - fs.statSync(path.join(hd, last)).mtimeMs < 120000; } catch { /* không đọc được: ghi */ } }
+  if (!fresh) {
+    const snap = path.join(hd, `${stamp()}.json`);
+    fs.writeFileSync(snap, JSON.stringify({ timeline: tl, captions }));
+    // keep the newest 60 snapshots
+    const all = fs.readdirSync(hd).sort();
+    for (const f of all.slice(0, Math.max(0, all.length - 60))) fs.unlinkSync(path.join(hd, f));
+  }
   return { ok: true, notes: writeNotes(tl, captions || []), saved: fs.statSync(cur().tlFile).mtimeMs };
 }
 
@@ -343,7 +351,7 @@ async function exportVideo({ quality = '1080', from, to, aspects, profile, deliv
     if (!fs.existsSync(mix)) throw new Error('Trộn âm thanh không tạo ra file ' + path.relative(cur().dir, mix));
   }
   fs.mkdirSync(P('out'), { recursive: true });
-  const out = `out/${path.basename(cur().dir)}_${stamp()}.mp4`;
+  const out = `out/${path.basename(cur().dir)}_${localStamp()}.mp4`;
   rmSync(P(out), { force: true }); // same minute, same name: never render over a copy already hard-linked into Thanh pham/ (M100)
   job.step = 'Render khung hình';
   const total = (to ?? tl.duration) - (from ?? 0);

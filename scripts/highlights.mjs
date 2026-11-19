@@ -192,6 +192,18 @@ function snap(words, sil, w0, w1, total) {
   return [r3(Math.max(0, t0)), r3(Math.min(total, Math.max(t1, b.e)))];
 }
 
+// S26 M184: snap thêm khoảng đệm quanh câu nên clip có thể vượt --max (12 s → 14 s). Ép về ≤ max: bỏ bớt câu cuối, còn một câu thì lùi từ cuối.
+export function fitMax(words, sil, sents, f, t, w1, max, total) {
+  let w0 = sents[f].w0, [t0, t1] = snap(words, sil, w0, w1, total);
+  while (r2(t1 - t0) > max + 1e-6) {
+    if (t > f && w1 === sents[t].w1) { t--; w1 = sents[t].w1; }
+    else if (w1 > w0) w1--;
+    else break;
+    [t0, t1] = snap(words, sil, w0, w1, total);
+  }
+  return { t, w1, t0, t1 };
+}
+
 export async function findHighlights(src, o) {
   const info = probe(src);
   if (!info.audio) throw new Error('Video không có tiếng — không tìm được đoạn nói hay.');
@@ -219,10 +231,12 @@ export async function findHighlights(src, o) {
     while (d() < o.min && t < sents.length - 1 && sents[t + 1].e - sents[f].s <= o.max) t++;
     while (d() > o.max && t > f) t--;
     if (d() < o.min * .75 || d() > o.max * 1.15) continue;
-    const [t0, t1] = snap(words, sil, sents[f].w0, sents[t].w1, info.dur);
+    const fit = fitMax(words, sil, sents, f, t, sents[t].w1, o.max, info.dur);
+    t = fit.t; const { t0, t1 } = fit;
+    if (r2(t1 - t0) < o.min * .75 || r2(t1 - t0) > o.max + 1e-6) continue;
     cands.push({ from: f, to: t, t0, t1, dur: r2(t1 - t0), score: Math.max(0, Math.min(100, Math.round(+c.score || 50))),
       title: String(c.title || '').trim().slice(0, 80) || sents[f].text.slice(0, 60), hook: String(c.hook || '').trim().slice(0, 60),
-      reason: String(c.reason || '').trim(), text: sents.slice(f, t + 1).map(s => s.text).join(' '), w0: sents[f].w0, w1: sents[t].w1 });
+      reason: String(c.reason || '').trim(), text: sents.slice(f, t + 1).map(s => s.text).join(' '), w0: sents[f].w0, w1: fit.w1 });
   }
   const dedupe = list => {
     const keep = [];
