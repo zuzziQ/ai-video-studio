@@ -231,6 +231,27 @@
   // S26 M182: như isUserMusic của scripts/ai_edit.mjs: nhạc bạn chọn/chỉnh (_orig, file, Kho, mood khác 'tech') được giữ, nhạc khởi đầu chưa ai đụng thì AI thay
   const userM = m => !!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech')));
   const bedOf = (f, m) => f(m) && m.t0 <= .05 && m.t1 >= TL.duration - .1;
+  // S27 M195: như sheetMusic của scripts/ai_edit.mjs: nền nhạc theo kịch bản (mảng khúc _sheet) thay nền tự sinh (_ai/_auto/_sheet/nhạc
+  // khởi đầu) và cất chúng vào _was của khúc đầu; nhạc người dùng giữ; khúc _sheet đã chỉnh tay (_orig) → giữ cả nền.
+  const DUCK0 = { on: true, amount_db: -10, attack: 60, release: 400, hold: 250 }; // cùng số với scripts/audio_defaults.mjs DEFAULT_DUCK
+  function sheetMusic(music, plan, dur) {
+    music = music || [];
+    if (music.some(m => m._sheet != null && m._orig)) return { music, kept: 'orig' };
+    const full = Array.isArray(plan) || !!plan, keepUser = music.some(m => userM(m) && m.t0 <= .05 && m.t1 >= dur - .1);
+    const gone = m => !userM(m) && (m._ai || m._auto || m._sheet != null || (full && m.t0 <= .05 && m.t1 >= dur - .1));
+    const stay = music.filter(m => !gone(m)), was = music.filter(gone).flatMap(m => (m._sheet != null ? m._was || [] : [m]));
+    if (keepUser || !plan) return { music: stay, kept: keepUser ? 'user' : null };
+    const beds = (Array.isArray(plan) ? plan : [{ ...plan, t0: 0, t1: dur }]).filter(m => m.t0 < dur - .05).map(m => ({ ...m, t1: Math.min(m.t1, dur) }));
+    if (beds.length) { beds[beds.length - 1].t1 = dur; if (was.length) beds[0]._was = was; }
+    return { music: [...stay, ...beds], kept: null };
+  }
+  // nhạc của kế hoạch cho người đọc (như musicLabel của ai_edit.mjs): "hype → sad (2 khúc)", bài Kho, "—" khi không có
+  function musicText(music) {
+    const list = Array.isArray(music) ? music : music ? [music] : [];
+    if (!list.length) return Array.isArray(music) ? 'tắt' : '—';
+    const names = list.map(m => (m.kho ? `${m.title || m.kho} (Kho)` : String(m.mood || '').replace(/_\d+$/, ''))).filter((x, i, a) => x && x !== a[i - 1]);
+    return names.join(' → ') + (list.length > 1 ? ` (${list.length} khúc)` : '');
+  }
   // S27 M194: như applyPlan của scripts/ai_edit.mjs (scripts/tests/s27_m194.test.mjs so hai bản trên cùng đầu vào). Kế hoạch theo
   // kịch bản (plan.script) thay cả mục _sheet cũ chưa sửa tay; mục _sheet bạn sửa tay giữ, mục mới cùng đoạn cùng loại không thêm lần nữa.
   // Kế hoạch không kèm kịch bản giữ mục _sheet và nền nhạc của nó.
@@ -247,8 +268,12 @@
     TL.audio = TL.audio || {};
     // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
     // S19 M134: plan.music null = thói quen "không nhạc": bỏ nhạc _ai/_auto, không thêm (nhạc file / tay giữ nguyên, bài học ai-video-studio-020)
-    const keepM = (TL.audio.music || []).some(m => bedOf(userM, m) || (!merged && bedOf(x => x._sheet != null, m)));
-    TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [JSON.parse(JSON.stringify({ ...plan.music, t1: TL.duration }))] : [])];
+    const keepM = (TL.audio.music || []).some(m => bedOf(userM, m) || (!merged && m._sheet != null && !m.hidden)); // M195: nền theo kịch bản nhiều khúc
+    if (merged && (Array.isArray(plan.music) || (TL.audio.music || []).some(m => m._sheet != null && m._orig))) {
+      const r = sheetMusic(TL.audio.music, JSON.parse(JSON.stringify(plan.music ?? null)), TL.duration);
+      TL.audio.music = r.music;
+      if (!r.kept && plan.music && (!TL.audio.duck || typeof TL.audio.duck !== 'object')) TL.audio.duck = { ...DUCK0 }; // tự hạ nhạc dưới giọng
+    } else TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [JSON.parse(JSON.stringify({ ...plan.music, t1: TL.duration }))] : [])];
     TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x))).map(x => JSON.parse(JSON.stringify(x)))];
     let n = 0;
     for (const e of plan.captions) {
@@ -283,7 +308,7 @@
   function planCard(plan, full) {
     const kinds = {}; for (const s of plan.scenes.filter(s => !s._base)) kinds[S.typeName(s.type)] = (kinds[S.typeName(s.type)] || 0) + 1;
     return `<div class="ai-card"><h4><i class="ti ti-sparkles ai-c-acc"></i> ${esc(plan.hook || 'Bản dựng AI')}</h4>
-      <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(plan.music?.kho ? `${plan.music.title || plan.music.kho} (Kho)` : plan.music?.mood || '—')}</span><span>${plan.sfx.length} SFX</span></div>
+      <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(musicText(plan.music))}</span><span>${plan.sfx.length} SFX</span></div>
       ${plan.summary ? `<p>${esc(plan.summary)}</p>` : ''}
       ${placedNote(plan.placed)}
       ${plan.learned?.length ? `<p class="muted" title="${esc(plan.learned.join('\n'))}"><i class="ti ti-school"></i> Đã áp ${plan.learned.length} thói quen của thương hiệu${plan._dict ? ` · sửa chính tả ${plan._dict} từ` : ''}.</p>` : ''}

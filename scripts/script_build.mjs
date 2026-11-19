@@ -9,9 +9,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fold, norm, parseScript, stripMarks, readScript } from './script_doc.mjs';
+import { fold, norm, parseScript, stripMarks, readScript, musicText } from './script_doc.mjs';
 import { rmSync } from './fs_rm.mjs';
 import { ruleCells } from './script_table.mjs';
+import { DEFAULT_MUSIC_GAIN } from './audio_defaults.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const r2 = v => Math.round(v * 100) / 100;
@@ -291,6 +292,79 @@ export function sheetMood(sheet) {
   for (const r of sheet?.rows || []) if (chosen(r.mood) && r.mood.v && r.t0 != null && r.spoken !== false) sec.set(r.mood.v, (sec.get(r.mood.v) || 0) + Math.max(.1, (r.t1 ?? r.t0) - r.t0));
   return [...sec].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 }
+/**
+ * S27 M195: bảng dựng → một nền nhạc gồm nhiều khúc nối liền (cùng dạng music_auto của auto_sfx.py; mix_audio.py phát `offset`,
+ * `xfade`, `fade_in`, `fade_out`). Hàm thuần. Mood kế thừa theo hàng (hàng trước dấu MOOD đầu lấy mood chốt đầu tiên), gộp hàng kề
+ * cùng mood, tối đa một lần đổi bài mỗi 10 s (ngắn hơn thì dời mốc đổi tới ranh giới đoạn kế, ghi vào `notes`), dấu NHẠC: `tat` → khoảng
+ * lặng (fade 0,5 s), `bat` → nhạc lại, `doi` → khúc mới cùng mood (bài khác cùng mood nếu có, không thì `offset` khác), `to` / `nho` →
+ * gain ±4 dB (−30…−10), `kho` / `kho:<tên>` → khúc có `pick` (ai_edit sheetMain tìm bài trong Kho).
+ * rows: hàng của bảng; dur: thời lượng video; catalog: [{name, mood, dur}] (assets/music/catalog.json);
+ * o: { gain, base, notes: [] (ghi chú dời / bỏ lần đổi), miss: {} (yêu cầu MOOD chưa làm được → lý do) }.
+ * → [{t0, t1, mood, gain, offset, xfade, fade_in, fade_out, _ai: true, _sheet: <seg mở khúc>, _script: {id, kind, text, note}, pick?}]
+ *   | undefined (bảng không chốt nhạc). `_script.id` = `<đoạn có dấu>:mood` (trùng yêu cầu MOOD của scriptRequests) hoặc `<đoạn>:music`.
+ */
+export const SHEET_GAP = 10;
+export function musicFromSheet(rows, dur, catalog = [], o = {}) {
+  const notes = o.notes || [], miss = o.miss || {}, base = Number.isFinite(+o.gain) ? +o.gain : DEFAULT_MUSIC_GAIN;
+  const rs = (rows || []).filter(r => r && r.t0 != null && r.spoken !== false && r.t0 < dur - .05).sort((a, b) => a.t0 - b.t0);
+  const ctl = r => (r.music && r.music.from !== 'auto' && r.music.v && r.music.v !== 'bed' ? r.music.v : null);
+  const first = rs.find(r => chosen(r.mood) && r.mood.v)?.mood.v;
+  if (!first && !rs.some(ctl)) return undefined;
+  const cat = (catalog || []).map(x => ({ name: x.name || x.mood, mood: x.mood || x.name, dur: +x.dur || 60 })).filter(x => x.name);
+  const names = m => cat.filter(x => x.mood === m).map(x => x.name);
+  const moodOk = m => !!m && (!cat.length || names(m).length > 0);
+  let mood = moodOk(first) ? first : moodOk(o.base) ? o.base : cat[0]?.mood || first || o.base || 'tech';
+  const len = n => cat.find(x => x.name === n)?.dur || 60, pos = new Map(), out = [];
+  const gainAt = lv => Math.max(-30, Math.min(-10, base + lv * 4));
+  const isKho = c => /^kho(:|$)/.test(c || '');
+  const fr = rs.find(r => r.mood?.v === first && chosen(r.mood));
+  let cur = null, on = true, level = 0, pend = null, src = fr ? { seg: fr.mood.inherit ?? fr.seg, text: fr.mood.text || first } : null;
+  const own = r => (chosen(r.mood) && moodOk(r.mood.v) && r.mood.inherit == null ? { seg: r.seg, text: r.mood.text || r.mood.v } : null);
+  const open = (t, m, seg, how = {}) => {
+    const list = names(m), name = how.name || list[0] || m, off = how.offset ?? (pos.get(name) || 0), s = how.src || src;
+    const _script = how.ctl ? { id: `${seg}:music`, kind: 'NHẠC', text: musicText(how.ctl), note: `nhạc ${m}${how.ctl.startsWith('kho') ? ' (Kho)' : ''} từ ${r2(t)} s` }
+      : { id: `${s ? s.seg : seg}:mood`, kind: 'MOOD', text: cut(s?.text || m, 80), note: `nhạc nền mood ${m} từ ${r2(t)} s` };
+    cur = { t0: r2(t), mood: name, base: m, gain: gainAt(level), offset: r2(off % len(name)), xfade: .8, fade_in: how.fade ?? .8, _ai: true, _sheet: seg, _script, ...(how.pick ? { pick: how.pick } : {}) };
+  };
+  const close = (t, fade = .8, xfade = .8) => {
+    if (!cur) return;
+    Object.assign(cur, { t1: r2(t), fade_out: fade, xfade });
+    pos.set(cur.mood, cur.offset + (cur.t1 - cur.t0));
+    if (cur.t1 - cur.t0 >= .3) out.push(cur);
+    cur = null;
+  };
+  for (let i = 0; i < rs.length; i++) {
+    const r = rs[i], t = i ? r.t0 : 0, c = ctl(r), want = chosen(r.mood) && moodOk(r.mood.v) ? r.mood.v : null, mine = own(r);
+    const prevSrc = src; if (mine) src = mine;
+    if (c === 'to' || c === 'nho') level = Math.max(-5, Math.min(5, level + (c === 'to' ? 1 : -1)));
+    if (c === 'tat') { if (cur) close(t, .5, 0); on = false; if (want) mood = want; pend = null; continue; }
+    if (!on && !c) { if (want) mood = want; continue; } // đang tắt: chờ dấu NHẠC kế (bật / đổi / kho…)
+    if (!cur) { on = true; if (want) mood = want; open(t, mood, r.seg, { fade: i ? .5 : .3, ...(isKho(c) ? { pick: c, offset: 0 } : {}), ...(c && i ? { ctl: c } : {}) }); continue; }
+    const target = want || pend?.m || cur.base, doi = c === 'doi' || (!!pend?.doi && target === cur.base);
+    if (isKho(c)) { close(t); open(t, target, r.seg, { pick: c, offset: 0, ctl: c }); mood = target; pend = null; continue; }
+    if (target !== cur.base || doi) {
+      if (t - cur.t0 < SHEET_GAP - .01 || dur - t < 5) { // quá gần lần đổi trước / cuối video: dời tới ranh giới đoạn kế
+        if (pend?.m !== target) notes.push(`Nhạc: đoạn ${r.seg + 1} (${r.t0.toFixed(1)} s) cách lần đổi trước dưới ${SHEET_GAP} s, dời mốc đổi nhạc tới đoạn kế`);
+        pend = { m: target, doi, src: want ? src : pend?.src || src, ctl: c === 'doi' ? c : pend?.ctl, seg: pend?.seg ?? r.seg }; if (mine) src = prevSrc; continue;
+      }
+      if (pend && !want && c !== 'doi') notes.push(`Nhạc: đổi sang “${target}” ở ${t.toFixed(1)} s (đoạn ${r.seg + 1})`);
+      const prev = cur, alt = names(target).find(n => n !== prev.mood);
+      close(t);
+      const how = pend ? { src: pend.src, ...(pend.ctl ? { ctl: pend.ctl } : {}) } : c === 'doi' ? { ctl: c } : {};
+      if (target === prev.base) open(t, target, r.seg, { ...how, ...(alt ? { name: alt } : { name: prev.mood, offset: (pos.get(prev.mood) || 0) + len(prev.mood) * .5 }) });
+      else open(t, target, r.seg, how);
+      mood = target; pend = null; continue;
+    }
+    pend = null; // mood quay lại như khúc đang phát: bỏ lần đổi đang chờ
+    if (gainAt(level) !== cur.gain) { const p = cur; close(t, .3, .3); open(t, p.base, r.seg, { name: p.mood, offset: pos.get(p.mood), fade: .3, ctl: c, ...(p.pick ? { pick: p.pick } : {}) }); }
+  }
+  if (pend && cur) {
+    notes.push(`Nhạc: bỏ lần đổi sang “${pend.m}” ở cuối video (khúc ngắn hơn ${SHEET_GAP} s)`);
+    if (pend.src && !pend.ctl && `${pend.src.seg}:mood` !== cur._script?.id) miss[`${pend.src.seg}:mood`] = `gần lần đổi nhạc trước (dưới ${SHEET_GAP} s) và không còn đoạn nào sau đó để đổi`;
+  }
+  close(dur, 1.5, .8);
+  return out.map(({ base: _b, ...m }) => m);
+}
 /** Hàng mà bảng tự dựng (có CHỮ, hoặc B-ROLL đã có nguồn): AI dựng không đặt graphic chồng giờ các hàng này. → Set<seg> */
 export const builtSegs = sheet => new Set((sheet?.rows || []).filter(r => r.t0 != null && r.spoken !== false
   && ((r.screen || []).some(x => String(x?.text || '').trim()) || (r.broll || []).some(b => b && (b.pick || b.src === 'ai') && !b.miss))).map(r => r.seg));
@@ -321,7 +395,7 @@ export function scriptRequests(sheet) {
  * o: { design: [DW, DH], media: { [mediaKey]: { seq } | { path } } (media đã đưa vào dự án), mediaErr: { [mediaKey]: lý do },
  *      dynIds: Set id b-roll động, dynCat: Map id → mục catalog b-roll động (A-ROLL bỏ: b-roll động phủ toàn khung) }
  * → { text: [cảnh chữ thô], dyn: [cảnh b-roll động thô], photos: [cảnh ảnh / clip đủ media], sfx: [{name, t, _sheet, _script}],
- *     music: {mood, gain, _sheet, _script} | undefined, dropped: [lý do], miss: { [id yêu cầu]: lý do }, clips: [] (A-roll là M196) }
+ *     music: [khúc] | undefined (nền nhiều khúc, musicFromSheet M195), notes: [ghi chú nhạc], dropped: [lý do], miss: { [id yêu cầu]: lý do }, clips: [] (A-roll là M196) }
  */
 export function sheetToPlan(sheet, tl = {}, o = {}) {
   const vert = (tl.height || 1920) > (tl.width || 1080), [, DH] = o.design || (vert ? [720, 1280] : [1280, 720]);
@@ -365,12 +439,11 @@ export function sheetToPlan(sheet, tl = {}, o = {}) {
       out.sfx.push({ name: x.name, t: r2(Math.max(0, Math.min(dur - .2, x.at ?? t0))), ...tag(`sfx:${i}`, 'SFX', x.q || x.name, `tiếng “${x.name}”`, x.from) });
     });
   }
-  const mood = sheetMood(sheet);
-  if (mood) {
-    const rows = sheet.rows || [], r = rows.find(x => chosen(x.mood) && x.mood.v === mood && x.mood.inherit == null) || rows.find(x => x.mood?.v === mood);
-    const seg = r?.seg ?? 0;
-    out.music = { mood, gain: -20, _sheet: seg, _script: { id: `${seg}:mood`, kind: 'MOOD', text: cut(r?.mood?.text || mood, 80), note: `nhạc nền mood ${mood} cho cả video` } };
-  }
+  // S27 M195: nhạc theo đoạn: một nền nhiều khúc (musicFromSheet; undefined = kịch bản không chốt nhạc, giữ nhạc đang có)
+  const end = Number.isFinite(dur) ? dur : Math.max(0, ...(sheet?.rows || []).map(r => r.t1 ?? r.t0 ?? 0));
+  out.notes = [];
+  const music = end > 0 ? musicFromSheet(sheet?.rows, end, o.catalog, { notes: out.notes, miss: out.miss, base: o.mood }) : undefined;
+  if (music) out.music = music;
   return out;
 }
 /** A-ROLL bỏ đã làm khi đoạn có cảnh phủ cả khung (ảnh / b-roll động `full`). Gắn vào kế hoạch đã dựng để scriptReport đếm. */
@@ -380,9 +453,9 @@ export const coverIds = scenes => new Set(scenes.filter(s => s._sheet != null &&
  * phủ khung), yêu cầu nào chưa và vì sao. → { total, done, req: [{ id, seg, t0, kind, text, ok, why? }] }
  */
 export function scriptReport(reqs, { scenes = [], sfx = [], music = null } = {}, miss = {}) {
-  const have = new Set([...scenes, ...sfx, ...(music ? [music] : [])].map(x => x?._script?.id).filter(Boolean));
+  const have = new Set([...scenes, ...sfx, ...[].concat(music || [])].map(x => x?._script?.id).filter(Boolean)); // M195: nhạc nhiều khúc
   for (const id of coverIds(scenes)) have.add(id);
-  const why = q => miss[q.id] || (q.kind === 'MOOD' ? 'một nền nhạc cho cả video: chưa đổi nhạc giữa chừng'
+  const why = q => miss[q.id] || (q.kind === 'MOOD' ? 'chưa đổi được nhạc ở đoạn này'
     : q.kind === 'CHỮ' ? 'chữ chưa đặt được (chồng cảnh khác hoặc quá dài)' : 'chưa dựng được');
   const req = reqs.map(q => (have.has(q.id) ? { ...q, ok: true } : { ...q, ok: false, why: why(q) }));
   return { total: req.length, done: req.filter(x => x.ok).length, req };

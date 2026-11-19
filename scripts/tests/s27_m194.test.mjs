@@ -63,7 +63,8 @@ test('sheetToPlan: chữ, b-roll (Kho / động, A-ROLL bỏ phủ hết đoạn
   // A-ROLL bỏ: hai cảnh chia đều cả đoạn 4–9 s
   assert.equal(p.photos[0].t0, 4); assert.equal(p.dyn[0].t0 + p.dyn[0].dur, 9);
   assert.equal(p.sfx.length, 1); assert.equal(p.sfx[0]._script.id, '0:sfx:0');
-  assert.equal(p.music.mood, 'suspense'); assert.equal(p.music._script.id, '0:mood'); assert.equal(p.music._script.text, 'hồi hộp');
+  // S27 M195: nhạc là nền nhiều khúc; cả kịch bản một mood → một khúc phủ cả video, ghi chú trỏ dấu MOOD của đoạn 1
+  assert.equal(p.music.length, 1); assert.equal(p.music[0].mood, 'suspense'); assert.equal(p.music[0]._script.id, '0:mood'); assert.equal(p.music[0]._script.text, 'hồi hộp');
   assert.deepEqual(Object.keys(p.miss).sort(), ['2:broll:0', '2:sfx:0']);
   assert.match(p.miss['2:broll:0'], /Kho không có cảnh khớp/);
   // không media cho ô Kho → miss có lý do, không cảnh rỗng
@@ -93,7 +94,7 @@ test('planFromSheet + mergeScript: qua validate, cảnh Claude chồng cảnh th
   const sp = E.planFromSheet(sheet0(), CTX(), MEDIA);
   assert.ok(sp.scenes.length === 3 && sp.scenes.every(s => s._ai && Number.isInteger(s._sheet) && s._script?.id && !s._base));
   assert.ok(sp.sfx.every(x => x._ai && x._sheet === 0 && x._script?.id === '0:sfx:0'));
-  assert.equal(sp.music.mood, 'suspense'); assert.equal(sp.music._script.id, '0:mood');
+  assert.equal(sp.music[0].mood, 'suspense'); assert.equal(sp.music[0]._script.id, '0:mood');
   const plan = scriptPlan();
   assert.ok(plan.scenes[0]._base, 'cảnh nền của gói đứng đầu');
   assert.ok(!plan.scenes.some(s => s.type === 'stat' && s.t0 === 5), 'stat 5–6 s chồng đoạn A-ROLL bỏ 4–9 s');
@@ -102,7 +103,7 @@ test('planFromSheet + mergeScript: qua validate, cảnh Claude chồng cảnh th
   assert.ok(!plan.dropped.some(d => /^kịch bản: dấu B-ROLL/.test(d)), 'lời thiếu dấu của Claude thay bằng báo cáo');
   assert.ok(!plan.sfx.some(x => x.name === 'ding'), 'SFX của Claude trùng lúc SFX theo dấu');
   assert.ok(plan.sfx.some(x => x.name === 'pop' && x.t === 3));
-  assert.equal(plan.music.mood, 'suspense'); assert.equal(plan.music._script.id, '0:mood');
+  assert.equal(plan.music[0].mood, 'suspense'); assert.equal(plan.music[0]._script.id, '0:mood');
 });
 
 // bản client của applyPlan (studio/features/20_ai.js) chạy trong node trên cùng đầu vào

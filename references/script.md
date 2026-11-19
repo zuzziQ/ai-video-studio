@@ -99,14 +99,20 @@ QC `buildMarkIssues` trong `scripts/ai_qc.mjs`; test `scripts/tests/s27_m194.tes
   b-roll động; `--no-stock` bỏ stock), prompt nhận `sheetPrompt` (ô `(chốt)` là ràng buộc cứng, hàng "DỰNG SẴN" Claude không đặt graphic chồng),
   Claude lấp phần còn lại; `sheetMedia` đưa media của ô B-roll vào dự án (Kho `useFromKho`, thư viện `useIn`, stock `fetchMedia`, ảnh AI
   `genImage` khi dấu ghi `| ảnh AI` và có khoá), `planFromSheet` = `sheetToPlan` rồi `validate` (chữ và b-roll động hai lượt riêng),
-  `mergeScript` gộp vào kế hoạch của Claude (cảnh / SFX của Claude chồng dấu bị bỏ, nhạc mang mood dấu MOOD), đặt né mặt (`placePlan`) một lần.
+  `mergeScript` gộp vào kế hoạch của Claude (cảnh / SFX của Claude chồng dấu bị bỏ, nhạc = nền nhiều khúc theo dấu), đặt né mặt (`placePlan`) một lần.
   Một `.studio/ai_plan.json`, Studio áp một lần: **một bước hoàn tác**.
 - Mục dựng theo dấu mang `_ai: true`, `_sheet: <seg>` và `_script` { id ("<đoạn>:chu|broll|sfx:<i>", "<đoạn>:mood"), kind, text, note, auto? }.
   `plan.script` = { total, done, req: [{ id, seg, t0, kind, text, ok, why? }] }; A-ROLL bỏ đạt khi đoạn có cảnh phủ cả khung.
 - `applyPlan` (server `ai_edit.mjs` = client `20_ai.js`, test so hai bản): kế hoạch có `plan.script` thay mục `_sheet` cũ chưa sửa tay; mục
   bạn sửa tay (`_orig`) giữ và mục mới cùng đoạn cùng loại không thêm; kế hoạch không kèm kịch bản giữ mục `_sheet` và nền nhạc của nó; nhạc
-  người dùng chọn luôn thắng; luôn một nền nhạc. A-ROLL `bỏ`: b-roll của đoạn chia đều phủ cả đoạn. Nhạc nhiều khúc theo đoạn là `M195`,
-  take / cỡ khung A-roll là `M196`.
+  người dùng chọn luôn thắng; luôn một nền nhạc. A-ROLL `bỏ`: b-roll của đoạn chia đều phủ cả đoạn. Take / cỡ khung A-roll là `M196`.
+- **Nhạc theo đoạn** (`M195`): `musicFromSheet` (`script_build.mjs`) dựng **một nền nhiều khúc** nối liền phủ cả video (`offset`, `xfade` 0,8 s,
+  mood kế thừa theo hàng, gộp hàng kề cùng mood, tối đa một lần đổi / 10 s: gần hơn thì dời tới ranh giới đoạn kế, sát cuối thì bỏ, ghi vào
+  `plan.dropped` + `miss` của MOOD; NHẠC `tắt` / `bật` / `đổi` / `to` / `nhỏ` (±4 dB, −30…−10) / `kho …`), gain `DEFAULT_MUSIC_GAIN`, mỗi khúc
+  `_ai`, `_sheet`, `_script` (`<đoạn>:mood` hoặc `<đoạn>:music`). `sheetMusic` (`ai_edit.mjs` = client `20_ai.js`) thay nền `_ai` / `_auto` /
+  `_sheet` / nhạc khởi đầu và cất vào `_was` của khúc đầu (`dropSheetMusic` trả lại), nhạc người dùng giữ song song, khúc `_sheet` chỉnh tay
+  (`_orig`) → giữ cả nền; đặt `audio.duck = DEFAULT_DUCK` khi chưa có. `music_auto` (Tự động) và nhạc phong cách của Tự lái bỏ qua nền `_sheet`.
+  Bài Kho: dấu `kho …` → `khoMusicPick`, còn lại `khoMusic` theo mood từng khúc. Thẻ AI dựng ghi "hype → sad (2 khúc)".
 - **Ghi chú** (`23_scriptnotes.js`, hook `Studio._tip` / `Studio._itop` / `Studio._blk` của `studio.js`): tooltip khối "Kịch bản: [B-ROLL: …] ·
   Đã dựng: …"; chọn khối → dòng ghi chú đầu Thuộc tính, **Sửa tay** (`Studio.openSect`) và **Hỏi Claude** (`Studio.ask`, câu hỏi điền sẵn,
   chưa gửi). Dòng "Theo kịch bản: x/y yêu cầu đã dựng · n cần xem" ở panel AI dựng (`Studio.scriptNotes.line(plan)`): bấm = tua tới yêu cầu
