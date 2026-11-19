@@ -2,8 +2,9 @@
 //   Studio.aroll.line()  dòng gọn trong hộp AI dựng (20_ai.js): "3 đoạn nói ngoài kịch bản · Xem để cắt" và, khi dự án có ≥ 2 clip quay
 //                        (nguồn có tiếng khác nhau), "2 take · Dựng A-roll theo kịch bản" → job nền script_takes → "Áp" (một bước hoàn tác).
 //   Lời ngoài kịch bản: hộp danh sách, mặc định không chọn đoạn nào, nghe thử từng đoạn, "Cắt các đoạn đã chọn" đi qua Studio.ai.cutRanges
-//   (cắt ripple, một bước hoàn tác), lưu rồi căn lại kịch bản (/api/aroll/realign). Không chạy trong Tự lái.
-//   Mỗi clip A-roll đã dựng mang _sheet (đoạn kịch bản) + _take (số take): ghi chú kịch bản trên khối dùng chung cơ chế _sheet.
+//   (cắt ripple, một bước hoàn tác), lưu rồi đọc lại danh sách (/api/aroll/realign, không ghi script.json). Không chạy trong Tự lái.
+//   Mỗi clip A-roll đã dựng mang _sheet (đoạn kịch bản) + _take (số take): ghi chú kịch bản trên khối dùng chung cơ chế _sheet;
+//   tooltip khối qua Studio._tip khi có. Danh sách lời ngoài kịch bản server tính lại từ phụ đề hiện tại (cắt rồi ⌘Z thì hiện lại).
 (() => {
   const S = window.Studio, { $, esc } = S;
   const css = document.createElement('style');
@@ -11,8 +12,7 @@
 .ar-line i{font-size:14px}.ar-line b{color:var(--color-fg);font-weight:600}.ar-line.warn i{color:var(--color-warning)}
 .ar-list{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:var(--space-1);margin:var(--space-2) 0}
 .ar-it{display:grid;grid-template-columns:auto auto 1fr auto;gap:var(--space-2);align-items:start;padding:var(--space-1) var(--space-2);border:1px solid var(--color-line-strong);border-radius:var(--radius-control)}
-.ar-it .t{font-variant-numeric:tabular-nums;color:var(--color-fg-muted);white-space:nowrap}.ar-it .x{min-width:0;overflow-wrap:anywhere}
-.ar-tk{font-size:9px;padding:0 3px;margin-left:4px;border-radius:3px;background:var(--color-line-strong)}`;
+.ar-it .t{font-variant-numeric:tabular-nums;color:var(--color-fg-muted);white-space:nowrap}.ar-it .x{min-width:0;overflow-wrap:anywhere}`;
   document.head.appendChild(css);
   const A = { st: null, busy: false, timer: null, at: 0 };
   const s1 = v => (+v || 0).toFixed(1).replace('.', ',');
@@ -104,8 +104,8 @@
     const a = b.dataset.ar;
     if (a === 'off') openOff(); else if (a === 'takes') startTakes(); else if (a === 'apply') apply(); else if (a === 'plan') showPlan();
   });
-  // khối clip trên timeline: nhãn take nhỏ (T2) cho clip do A-roll theo kịch bản dựng
-  S._blk.push(c => (c.kind === 'clip' && c.obj._take ? `<span class="ar-tk" title="Take ${c.obj._take} · đoạn kịch bản ${(c.obj._sheet ?? 0) + 1}">T${c.obj._take}</span>` : ''));
+  // tooltip khối clip (Studio._tip, khi có): take nào, đoạn kịch bản nào
+  S._tip?.push?.(c => (c.kind === 'clip' && c.obj._take ? ` · take ${c.obj._take}, đoạn kịch bản ${(c.obj._sheet ?? 0) + 1}` : ''));
   S.aroll = { line, refresh, apply, get state() { return A.st; } };
   // AI dựng hiện dòng này khi mở hộp; tải trạng thái khi dự án mở và sau mỗi lần lưu kịch bản
   S.onReady?.(refresh);

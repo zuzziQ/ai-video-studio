@@ -6,11 +6,12 @@
 //   POST /api/aroll/takes {model} → { ok, item }  xếp job nền `script_takes` cho dự án đang mở (chỉ thư mục của dự án, không nhận đường dẫn)
 //   POST /api/aroll/applied      → { ok }  Studio đã áp kế hoạch: script.json nhận segments/align theo take, sao lưu lời nhận dạng của
 //                                  các take (captions_noscript.json + heardDur) để sửa kịch bản lần sau căn đúng
-//   POST /api/aroll/realign      → { ok, offscript }  sau khi cắt lời ngoài kịch bản (đã lưu): căn lại kịch bản với phụ đề đã cắt
+//   POST /api/aroll/realign      → { ok, offscript }  sau khi cắt (đã lưu): danh sách tính lại từ phụ đề đã cắt; không ghi script.json
+//                                  (⌘Z rồi lưu thì đoạn hiện lại; lưu kịch bản / Tạo lời thoại vẫn căn lại như cũ)
 // Không chạy trong Tự lái: chọn take và cắt lời ngoài kịch bản cần người duyệt.
 import fs from 'node:fs';
 import path from 'node:path';
-import { applyScript, heardOf, readScript } from '../../scripts/script_doc.mjs';
+import { alignScript, heardOf, readScript } from '../../scripts/script_doc.mjs';
 import { offscriptCuts, plansFile, projectTakes, readTakesPlan } from '../../scripts/script_takes.mjs';
 import { addItem, loadQueue } from '../../scripts/queue.mjs';
 
@@ -19,6 +20,12 @@ const MODELS = ['small', 'medium', 'large-v3-turbo', 'large-v3'];
 const same = (a, b) => path.resolve(String(a || '')).toLowerCase() === path.resolve(String(b || '')).toLowerCase();
 export function lastJob(dir) {
   try { return loadQueue().items.filter(x => x.kind === 'script_takes' && same(x.input, dir)).pop() || null; } catch { return null; }
+}
+// lời ngoài kịch bản tính lại từ phụ đề đang có trên timeline mỗi lần đọc (không ghi script.json): cắt rồi ⌘Z thì đoạn hiện lại
+export function liveOffscript(sc, tl, captions) {
+  if (!sc?.segments?.length || tl?.speech?.none) return [];
+  const heard = heardOf(captions || []); if (!heard.length) return [];
+  return offscriptCuts(alignScript(sc.segments, heard).align.offscript, heard, { dur: tl.duration || Infinity });
 }
 export function planSummary(plan, sc) {
   if (!plan?.clips?.length) return null;
@@ -33,7 +40,7 @@ export default ctx => async (req, res, p) => {
     const dir = ctx.project.dir;
     if (p === '/api/aroll' && req.method === 'GET') {
       const sc = readScript(dir), { timeline: tl, captions } = ctx.readProject();
-      const offscript = sc?.align ? offscriptCuts(sc.align.offscript, heardOf(captions), { dur: tl.duration || Infinity }) : [];
+      const offscript = liveOffscript(sc, tl, captions);
       const j = lastJob(dir);
       return J({ script: !!sc, offscript, takes: projectTakes(dir, tl).map((t, i) => ({ n: i + 1, name: t.name })),
         job: j && { id: j.id, state: j.state, step: j.step, progress: j.progress, error: j.error }, plan: planSummary(readTakesPlan(dir), sc) });
@@ -60,10 +67,7 @@ export default ctx => async (req, res, p) => {
     }
     if (p === '/api/aroll/realign') {
       const { timeline: tl, captions } = ctx.readProject();
-      const r = applyScript(dir, { tl, caps: captions });
-      if (!r) return J({ error: 'Dự án chưa có kịch bản' }, 400);
-      const sc = readScript(dir);
-      return J({ ok: true, offscript: sc?.align ? offscriptCuts(sc.align.offscript, heardOf(captions), { dur: tl.duration || Infinity }) : [] });
+      return J({ ok: true, offscript: liveOffscript(readScript(dir), tl, captions) });
     }
     return false;
   } catch (e) { return J({ error: String(e.message || e).slice(0, 300) }, e.status || 500); }

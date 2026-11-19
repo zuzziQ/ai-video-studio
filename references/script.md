@@ -157,7 +157,7 @@ dòng gọn trong hộp AI dựng. Không chạy trong Tự lái (chọn take v�
 - **Lời ngoài kịch bản**: `offscriptCuts(align.offscript, lời trên timeline)` → khoảng nên cắt, mép nới `PAD` = 0,15 s về phía lặng nhưng không lấn
   từ kề bên; bỏ đoạn đã không còn ở mốc đó (timeline đổi) và đoạn có mốc từ vỡ kiểu Whisper bịa (`brokenShape`: từ > 3 s, ≥ 40 % từ dài 0,
   mật độ < 0,8 từ/s; bài học `ai-video-studio-041`). Hộp "Xem để cắt" không tick sẵn; cắt = `Studio.ai.cutRanges` (một bước hoàn tác), lưu rồi
-  `/api/aroll/realign` căn lại kịch bản.
+  danh sách tính lại.
 - **Nhiều take**: mỗi nguồn có tiếng khác nhau trong `TL.clips` là một take, xếp theo giờ file (mtime) rồi thứ tự trên timeline; `clip N` / `take N`
   đếm từ 1 theo thứ tự đó. Job `script_takes` (`scripts/queue.mjs`) nhận dạng lời từng take một lần (cache `.studio/takes/<hash>.json`, hash =
   cỡ + 1 MB đầu + 1 MB cuối + mô hình) và dò mặt trên khung của take; `alignTakes` căn mọi đoạn với mọi take theo cửa sổ (lần quay lại cùng câu

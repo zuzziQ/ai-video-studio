@@ -163,3 +163,14 @@ test('Studio: route + feature A-roll, không chọn sẵn đoạn cắt, không 
   const ap = fs.readFileSync(path.join(ROOT, 'scripts', 'autopilot.mjs'), 'utf8');
   assert.ok(!/script_takes|offscriptCuts/.test(ap), 'Tự lái không chọn take, không cắt lời ngoài kịch bản');
 });
+
+test('liveOffscript: tính lại từ phụ đề hiện tại, không ghi script.json — cắt rồi ⌘Z thì đoạn hiện lại (lỗi QA M196)', async () => {
+  const { liveOffscript } = await import('../../studio/routes/24_aroll.mjs');
+  const heard = talk([[S1], [OFF, 1.0], [S2, 1.0]]), sc = { segments: parseScript(`${S1}\n\n${S2}`) }, tl = { duration: 30 };
+  const caps = [{ t0: 0, t1: 30, words: heard }];
+  assert.equal(liveOffscript(sc, tl, caps).length, 1);
+  const cut = [{ t0: 0, t1: 30, words: heard.filter(w => !OFF.split(' ').includes(w.w)) }];
+  assert.equal(liveOffscript(sc, tl, cut).length, 0, 'đã cắt');
+  assert.equal(liveOffscript(sc, tl, caps).length, 1, '⌘Z: phụ đề trở về thì đoạn hiện lại');
+  assert.deepEqual(liveOffscript(sc, { duration: 30, speech: { none: true } }, caps), []);
+});
