@@ -113,7 +113,8 @@ function touch(obj, key) {
   if (!obj._orig) obj._orig = JSON.parse(JSON.stringify(obj, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
 }
 const setStatus = (t, d) => { const s = $('#status'); s.textContent = t; s.title = d ? `${t} (⌘S để lưu)` : t; s.setAttribute('aria-label', t); s.classList.toggle('dirty', d); };
-function markDirty() { dirty = true; setStatus('Chưa lưu', true); }
+let editSeq = 0; // S26 M184: đếm lần sửa; lưu xong mà có sửa mới trong lúc gửi thì vẫn "Chưa lưu"
+function markDirty() { dirty = true; editSeq++; setStatus('Chưa lưu', true); autoSaveSoon(); }
 function changed(inspector = false) {
   markDirty();
   if (T > TL.duration) { T = TL.duration; $('#time').textContent = fmt(T); }
@@ -1512,7 +1513,7 @@ window.addEventListener('keydown', e => {
   const ae = document.activeElement; // S23 M160 (PR 185): thanh trượt (Núm) giữ mũi tên / Home / End cho chính nó
   const typing = window.KeysCore ? KeysCore.fieldOwnsKey(ae, e.key) : /INPUT|TEXTAREA|SELECT/.test(ae?.tagName) && ae.type !== 'checkbox' && ae.type !== 'range';
   const mod = e.metaKey || e.ctrlKey;
-  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); return saveNow(); }
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); autoOff = false; return saveNow(); }
   if (typing) return;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); return duplicateSel(); }
@@ -1544,17 +1545,37 @@ async function api(path, body) {
 // S18 M131: trả true khi đã lưu. Các lần lưu xếp hàng (Ctrl+S khi lần trước còn bay): lần sau gửi mốc `saved` lần trước vừa nhận,
 // không báo xung đột giả với chính cửa sổ này. Chỗ gọi rồi chạy việc phía server / tải lại timeline phải dừng khi false.
 let saveQ = Promise.resolve(true);
-function saveNow(force) { const p = saveQ.then(() => saveOnce(force), () => saveOnce(force)); saveQ = p.catch(() => false); return p; }
-async function saveOnce(force) {
+function saveNow(force, quiet) { const p = saveQ.then(() => saveOnce(force, quiet), () => saveOnce(force, quiet)); saveQ = p.catch(() => false); return p; }
+async function saveOnce(force, quiet) {
   if (readOnly) { projectBusy(); return false; } // dự án đang mở ở tab khác (S18 M131)
   if (newBusy) return false; // đang tạo video mới: dự án cũ đã đóng phía server (S17 M126)
   // dir: server từ chối khi đã sang dự án khác (S17 M126). base: mốc lưu lần cuối mà trang này biết (S18 M131: cùng dự án ở hai cửa sổ)
-  const r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir, base: META?.saved, ...(force ? { force: true } : {}) });
-  if (r.ok) { dirty = false; if (META) META.saved = r.saved; setStatus('Đã lưu', false); toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); return true; }
+  const seq = editSeq;
+  let r;
+  try { r = await api('/api/save', { timeline: TL, captions: CAP, dir: META?.dir, base: META?.saved, ...(force ? { force: true } : {}), ...(quiet ? { auto: true } : {}) }); }
+  catch (e) { if (quiet) { autoOff = true; return false; } throw e; } // mất kết nối khi tự lưu: dừng tự lưu, giữ "Chưa lưu"
+  if (r.ok && editSeq !== seq) { autoOff = false; if (META) META.saved = r.saved; loadHistory(); autoSaveSoon(); return true; } // sửa thêm trong lúc gửi: còn "Chưa lưu", hẹn lưu tiếp
+  if (r.ok) { autoOff = false; dirty = false; if (META) META.saved = r.saved; setStatus('Đã lưu', false); if (!quiet) toast(r.notes ? `Đã lưu · ${r.notes} ghi chú cho Claude` : 'Đã lưu'); loadHistory(); return true; }
+  if (quiet) { autoOff = true; return false; } // tự lưu gặp xung đột / lỗi: không bật hộp thoại, giữ "Chưa lưu"; Ctrl+S sẽ hỏi (S26 M184)
   if (r.conflict) saveConflict();
   else toast('Lỗi lưu: ' + (r.error || ''));
   return false;
 }
+// S26 M184: tự lưu. Sau AUTOSAVE_MS không thao tác khi còn "Chưa lưu", và ngay khi tab bị ẩn. Dùng đúng saveNow (kiểm xung đột 409 sẵn có),
+// không toast: chỉ chỉ báo "Đã lưu". Không lưu khi đang gõ dở, đang kéo, đang xem lại (Studio.review), đang tạo video mới, đang khôi phục.
+const AUTOSAVE_MS = 4000;
+let autoT = 0, autoOff = false;
+function autoBusy(typing = true) {
+  if (!TL || readOnly || newBusy || drag || window.Studio?._restoring || window.Studio?.review?.active) return true;
+  const a = document.activeElement;
+  return typing && !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !/^(checkbox|radio|button|range|color)$/.test(a.type || ''));
+}
+function autoSaveSoon() {
+  clearTimeout(autoT);
+  if (autoOff) return; // lần tự lưu trước thất bại (xung đột): chờ người dùng lưu tay
+  autoT = setTimeout(() => { if (!dirty) return; if (autoBusy()) return autoSaveSoon(); saveNow(false, true); }, AUTOSAVE_MS);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden && dirty && !autoOff && !autoBusy(false)) { clearTimeout(autoT); saveNow(false, true); } });
 // Bản trên đĩa mới hơn bản trang này đã tải: hỏi giữ bản nào, không âm thầm đè. Chưa chọn thì vẫn "chưa lưu".
 function saveConflict() {
   modal(`<h3><i class="ti ti-alert-triangle"></i> Dự án vừa được lưu ở chỗ khác</h3>
@@ -1565,7 +1586,7 @@ function saveConflict() {
   $('#scf-over').onclick = () => { closeModal(); saveNow(true); };
   $('#scf-no').onclick = closeModal;
 }
-$('#save').addEventListener('click', () => saveNow());
+$('#save').addEventListener('click', () => { autoOff = false; saveNow(); });
 $('#undo').addEventListener('click', undo);
 $('#redo').addEventListener('click', redo);
 async function loadHistory() {

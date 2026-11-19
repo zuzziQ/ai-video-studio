@@ -174,9 +174,9 @@ test('server: cùng dự án ở hai cửa sổ — lưu với mốc cũ → 409
 
 test('trình duyệt: saveNow trả đã lưu hay chưa, xếp hàng; chỗ gọi rồi chạy việc phía server không bỏ qua kết quả', () => {
   const js = fs.readFileSync(path.join(SKILL, 'studio/studio.js'), 'utf8');
-  assert.match(js, /function saveNow\(force\) \{ const p = saveQ\.then/, 'lần lưu sau chờ lần trước (mốc saved mới), không xung đột giả với chính cửa sổ này');
-  assert.match(js, /META\.saved = r\.saved;[^\n]*return true; \}\n {2}if \(r\.conflict\) saveConflict\(\);/);
-  assert.match(js, /\$\('#save'\)\.addEventListener\('click', \(\) => saveNow\(\)\)/, 'event không lọt vào tham số force');
+  assert.match(js, /function saveNow\(force(, quiet)?\) \{ const p = saveQ\.then/, 'lần lưu sau chờ lần trước (mốc saved mới), không xung đột giả với chính cửa sổ này');
+  assert.match(js, /META\.saved = r\.saved;[^\n]*return true; \}\n( {2}if \(quiet\)[^\n]*\n)? {2}if \(r\.conflict\) saveConflict\(\);/);
+  assert.match(js, /\$\('#save'\)\.addEventListener\('click', \(\) => (saveNow\(\)\)|\{ autoOff = false; saveNow\(\); \}\))/, 'event không lọt vào tham số force');
   const bad = [];
   for (const f of ['studio/studio.js', 'studio/library.js', ...fs.readdirSync(path.join(SKILL, 'studio/features')).filter(x => x.endsWith('.js')).map(x => 'studio/features/' + x)])
     fs.readFileSync(path.join(SKILL, f), 'utf8').split('\n').forEach((l, i) => { if (/(^|[;{]\s*)await (S\.|Studio\.)?saveNow\??\.?\(\)(\.catch\([^)]*\))?;/.test(l) && !/dirty\)? *\{? *if|if \((S\.|Studio\.)?dirty\)/.test(l)) bad.push(`${f}:${i + 1}`); });

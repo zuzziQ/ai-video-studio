@@ -62,17 +62,18 @@ test('render lại cùng tên: sổ không trả bản giao cũ; bản async + x
   assert.ok(!fs.readdirSync(r.dir).some(f => f.includes('.part.')), 'không còn file tạm');
 });
 
-test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file tạm, không còn .part, trùng tên ra (2), bản sync và async', async () => {
+test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file tạm, không còn .part, trùng tên ra giờ máy, bản sync và async', async () => {
   const ws = chung(), d = project(ws, 'Chep Khac O');
   const a = W(path.join(d, 'out', 'a.mp4'), 'mot'), b = W(path.join(d, 'out', 'b.mp4'), 'hai');
-  const real = fs.linkSync;
+  const real = fs.linkSync; let tn = ''; // tn: tên có giờ máy của lần giao thứ hai (khai báo trước để dùng ở các lần sau)
   // liên kết từ out/ sang Kho lỗi như khác ổ; liên kết file tạm → tên thật (cùng thư mục) vẫn chạy
   const m = mock.method(fs, 'linkSync', (s, t) => { if (!String(s).includes('.part.')) throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }); return real(s, t); });
   try {
     const r1 = K.deliverExports(d, [{ src: a, w: 1080, h: 1920 }], { date: DATE });
     const r2 = await K.deliverExportsAsync(d, [{ src: b, w: 1080, h: 1920 }], { date: DATE });
     assert.deepEqual([r1.items[0].how, r2.items[0].how], ['copy', 'copy']);
-    assert.deepEqual([r1.items[0].dst, r2.items[0].dst].map(f => path.basename(f)), ['Chep Khac O 9x16.mp4', 'Chep Khac O 9x16 (2).mp4']);
+    const [n1, n2] = [r1.items[0].dst, r2.items[0].dst].map(f => path.basename(f));
+    assert.equal(n1, 'Chep Khac O 9x16.mp4'); assert.match(n2, /^Chep Khac O 9x16 \d\dh\d\d\.mp4$/); tn = n2.slice(0, -4);
     assert.deepEqual([r1.items[0].dst, r2.items[0].dst].map(f => fs.readFileSync(f, 'utf8')), ['mot', 'hai']);
     assert.ok(!fs.readdirSync(r1.dir).some(f => f.includes('.part.')), 'không còn file tạm');
     assert.equal(K.deliveredOf(d, 'out/a.mp4'), r1.items[0].dst, 'bản chép: sổ so cỡ + mtime của nguồn');
@@ -81,7 +82,7 @@ test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file t�
   const m2 = mock.method(fs, 'linkSync', () => { throw Object.assign(new Error('not supported'), { code: 'EPERM' }); });
   try {
     const r3 = K.deliverExports(d, [{ src: a, w: 1080, h: 1920 }], { date: DATE });
-    assert.equal(r3.items[0].how, 'copy'); assert.equal(path.basename(r3.items[0].dst), 'Chep Khac O 9x16 (3).mp4');
+    assert.equal(r3.items[0].how, 'copy'); assert.equal(path.basename(r3.items[0].dst), `${tn} (2).mp4`);
     assert.equal(fs.readFileSync(r3.items[0].dst, 'utf8'), 'mot');
     assert.ok(!fs.readdirSync(r3.dir).some(f => f.includes('.part.')));
     // tên thật bị một lần giao khác lấy mất đúng lúc (giữ chỗ 'wx' báo EEXIST) → sang tên kế, không ghi đè
@@ -89,8 +90,8 @@ test('nhánh chép (khác ổ / ổ không có liên kết cứng): qua file t�
     const m3 = mock.method(fs, 'openSync', (p, fl, ...x) => { if (fl === 'wx' && !raced) { raced = true; open0(p, 'w'); fs.writeFileSync(p, 'cua nguoi khac'); throw Object.assign(new Error('exists'), { code: 'EEXIST' }); } return open0(p, fl, ...x); });
     try {
       const r4 = K.deliverExports(d, [{ src: b, w: 1080, h: 1920 }], { date: DATE });
-      assert.equal(path.basename(r4.items[0].dst), 'Chep Khac O 9x16 (5).mp4');
-      assert.equal(fs.readFileSync(path.join(r4.dir, 'Chep Khac O 9x16 (4).mp4'), 'utf8'), 'cua nguoi khac');
+      assert.equal(path.basename(r4.items[0].dst), `${tn} (4).mp4`);
+      assert.equal(fs.readFileSync(path.join(r4.dir, `${tn} (3).mp4`), 'utf8'), 'cua nguoi khac');
     } finally { m3.mock.restore(); }
   } finally { m2.mock.restore(); }
 });
@@ -107,12 +108,12 @@ test('bản giao bị xoá rồi dự án khác giao trùng tên: sổ của d�
   assert.ok(K.deliveredKeys(b).has(K.fileKey(rb)));
 });
 
-test('trùng tên: lần giao sau thành "(2)", không ghi đè bản đã giao', () => {
+test('trùng tên: lần giao sau thêm giờ máy, không ghi đè bản đã giao', () => {
   const ws = chung(), d = project(ws, 'Trung Ten');
   const a = W(path.join(d, 'out', 'a.mp4'), '1'), b = W(path.join(d, 'out', 'b.mp4'), '2');
   const r1 = K.deliverExports(d, [{ src: a, w: 1080, h: 1920 }], { date: DATE }), r2 = K.deliverExports(d, [{ src: b, w: 1080, h: 1920 }], { date: DATE });
   assert.equal(path.basename(r1.items[0].dst), 'Trung Ten 9x16.mp4');
-  assert.equal(path.basename(r2.items[0].dst), 'Trung Ten 9x16 (2).mp4');
+  assert.match(path.basename(r2.items[0].dst), /^Trung Ten 9x16 \d\dh\d\d\.mp4$/); // S26 M184: giờ máy thay "(2)"
   assert.equal(fs.readFileSync(r1.items[0].dst, 'utf8'), '1');
   assert.equal(K.readLedger(d).length, 2);
 });
