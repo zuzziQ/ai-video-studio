@@ -4,8 +4,8 @@
 //   Studio.scriptStage.mount(el)  panel Tự lái: giữ chữ cho video kế tiếp; .take() → id kịch bản chờ ('' khi để trống)
 // S27 M193: dấu dựng [MOOD] [NHẠC] [A-ROLL] [SFX] (+ "| nguồn" của B-ROLL, "| kiểu" của CHỮ); nút "Gợi ý dấu" (chỉ khi có Claude):
 // Claude chèn dấu vào chính chữ đó, hiện so sánh (dấu thêm tô màu), người dùng Nhận hết / Bỏ rồi mới Lưu. Bảng dựng: .studio/build_sheet.json.
-// S27 M197: mở .xlsx / .csv (kịch bản theo đoạn giây): server tự nhận cột, cột lạ thì hiện bảng chọn vai trò cột; hàng thành đoạn
-// có [MỐC: …] [GHI CHÚ: …]. Kịch bản đã lưu có chỉ dẫn: nút "Chỉ dẫn → bảng dựng" (luật + Claude) → chọn ô Nhận / Bỏ.
+// S27 M197: mở .xlsx / .csv (kịch bản theo đoạn giây): server tự nhận cột (cột lạ thành ghi chú), chỉ khi không nhận ra cột lời mới
+// hiện bảng chọn vai trò cột; hàng thành đoạn có [MỐC: …] [GHI CHÚ: …]. Chỉ dẫn không cần bước Nhận / Bỏ: AI dựng làm theo.
 (() => {
   const { $, esc } = Studio;
   const css = document.createElement('style');
@@ -26,12 +26,7 @@
   .sc-map .sc-col { min-width: 0; overflow-wrap: anywhere; }
   .sc-map .sc-col small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sc-map .is-new { color: rgb(var(--color-warning)); }
-  .sc-map select { width: 100%; min-width: 0; }
-  .sc-cells { list-style: none; margin: var(--space-2) 0 0; padding: 0; max-height: 300px; overflow: auto; font-size: var(--text-xs); }
-  .sc-cells li { margin: 0 0 var(--space-1); }
-  .sc-cells label { display: flex; gap: var(--space-2); align-items: baseline; min-width: 0; }
-  .sc-cells label > span { min-width: 0; overflow-wrap: anywhere; }
-  .sc-cells small { display: block; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }`;
+  .sc-map select { width: 100%; min-width: 0; }`;
   document.head.appendChild(css);
   const HINT = 'Không bắt buộc. Dấu tuỳ chọn: <code>[HOOK]</code> mở đầu · <code>[CHỮ: …]</code> chữ trên màn hình · <code>[B-ROLL: …]</code> hình minh hoạ · <code>[CTA]</code> kêu gọi. Không dấu: dòng trống tách đoạn. Mẫu quyết định giao diện, kịch bản quyết định chữ.'
     + '<details><summary>Dấu dựng</summary><code>[MOOD: hồi hộp]</code> nhạc từ đoạn này trở đi · <code>[NHẠC: tắt|bật|đổi|to|nhỏ|kho tên bài]</code> · <code>[A-ROLL: cận mặt|trung|rộng|clip 2|bỏ]</code> · '
@@ -63,9 +58,9 @@
     const r = await fetch('/api/script/table', { method: 'POST', body: f, headers: { 'x-file-name': encodeURIComponent(f.name) } }).then(x => x.json()).catch(e => ({ error: e.message }));
     if (r.error) throw new Error(r.error); return r;
   }
-  const tableToast = t => Studio.toast(`Đã đọc ${t.segs} đoạn${t.timed ? `, ${t.timed} đoạn có mốc giây` : ''}${t.warn?.length ? ` · ${t.warn[0]}` : ''}: xem lại rồi bấm Lưu`);
+  const tableToast = t => Studio.toast(`Đọc ${t.segs} đoạn${t.timed ? ', có mốc giây' : ''}${t.notes ? `, ${t.notes} chỉ dẫn dựng` : ''}${t.warn?.length ? ` · ${t.warn[0]}` : ''}`);
   async function fileText(f) {
-    if (isTable(f)) { const t = await tableOf(f); if (t.unknown?.length) Studio.toast(`Bỏ qua cột chưa nhận ra: ${t.unknown.slice(0, 3).join(', ')}`); return t.text; }
+    if (isTable(f)) { const t = await tableOf(f); tableToast(t); return t.text; }
     if (/\.docx$/i.test(f.name)) {
       const r = await fetch('/api/script/docx', { method: 'POST', body: f }).then(x => x.json()).catch(e => ({ error: e.message }));
       if (r.error) throw new Error(r.error); return r.text;
@@ -84,7 +79,7 @@
   }
 
   // ---------- bước Nguồn: kịch bản của dự án đang mở ----------
-  let P = { dir: null, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null, dirs: null };
+  let P = { dir: null, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null };
   const fmtPct = v => Math.round(v * 100) + '%';
   function statusOf(d) {
     const sc = d?.script; if (!sc) return '';
@@ -101,7 +96,7 @@
       ${segs.some(s => s.at) ? li(false, 'ti-clock-hour-4', `Mốc giây từ bảng: ${segs.filter(s => s.at).length} đoạn${A?.mode === 'whisper' ? ' (giờ theo lời nói)' : ''}`) : ''}
       ${(A?.drift || []).slice(0, 3).map(x => li(true, 'ti-clock-exclamation', `Đoạn ${x.seg + 1} lệch mốc bảng ${x.d > 0 ? '+' : ''}${x.d}s (bảng ${x.sheet}s, nói ${x.heard}s)`)).join('')}
       ${A?.drift?.length > 3 ? li(true, 'ti-clock-exclamation', `… và ${A.drift.length - 3} đoạn lệch nữa`) : ''}
-      ${segs.some(s => s.note?.length) ? li(false, 'ti-notes', `${segs.reduce((n, s) => n + (s.note?.length || 0), 0)} chỉ dẫn dựng: bấm “Chỉ dẫn → bảng dựng”`) : ''}
+      ${segs.some(s => s.note?.length) ? li(false, 'ti-notes', `${segs.reduce((n, s) => n + (s.note?.length || 0), 0)} chỉ dẫn dựng: AI dựng làm theo`) : ''}
       ${segs.some(s => s.raw?.length) ? li(true, 'ti-alert-triangle', `Dấu chưa hiểu: ${esc(segs.flatMap(s => s.raw || []).slice(0, 3).join(' '))}`) : ''}
       ${P.sheet ? li(!!P.sheet.error, 'ti-table', P.sheet.error ? `Bảng dựng lỗi: ${esc(P.sheet.error)}` : `Bảng dựng: ${P.sheet.rows} đoạn${P.sheet.miss ? ` · ${P.sheet.miss} ô chưa có nguồn` : ''} <button class="ai-lnk" data-sc="sheet">Mở bảng dựng</button>`) : ''}</ul>`;
   }
@@ -119,35 +114,21 @@
       return;
     }
     if (P.table) return renderTable(el);
-    if (P.dirs) return renderDirs(el);
     const { ta, pick } = frame(el, { text, status: P.data ? statusOf(P.data) : '',
-      extra: `${sc?.segments?.some(s => s.note?.length) ? `<button data-sc="dirs" title="Chuyển ghi chú / chỉ dẫn của kịch bản thành ô bảng dựng (luật${P.ai ? ' + Claude' : ''}); bạn chọn ô nào nhận" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === 'dirs' ? 'ti-loader-2 spin' : 'ti-arrows-transfer-down'}"></i>Chỉ dẫn → bảng dựng</button>` : ''}
-        ${P.ai ? `<button data-sc="suggest" title="Claude chèn dấu MOOD, B-ROLL, SFX, CHỮ… vào chính chữ này, không sửa lời" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === 'suggest' ? 'ti-loader-2 spin' : 'ti-sparkles'}"></i>Gợi ý dấu</button>` : ''}
+      extra: `${P.ai ? `<button data-sc="suggest" title="Claude chèn dấu MOOD, B-ROLL, SFX, CHỮ… vào chính chữ này, không sửa lời" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === 'suggest' ? 'ti-loader-2 spin' : 'ti-sparkles'}"></i>Gợi ý dấu</button>` : ''}
         ${sc ? '<button data-sc="clear" title="Bỏ kịch bản, lấy lại phụ đề nhận dạng tự động"><i class="ti ti-trash"></i>Bỏ</button>' : ''}
         <button class="primary" data-sc="save" ${P.busy ? 'disabled' : ''}><i class="ti ${P.busy === true ? 'ti-loader-2 spin' : 'ti-device-floppy'}"></i>${sc ? 'Lưu lại' : 'Dùng kịch bản'}</button>` });
     ta.oninput = () => { P.draft = ta.value; };
     pick.onchange = async () => {
       const f = pick.files[0]; if (!f) return;
       try {
-        if (isTable(f)) { // bảng: cột lạ thì hỏi vai trò trước khi đổ chữ vào ô
+        if (isTable(f)) { // bảng: chỉ hỏi vai trò cột khi không nhận ra cột lời / thoại
           const t = await tableOf(f); P.name = f.name;
-          if (t.unknown?.length || !Object.values(t.roles).includes('say')) { P.table = t; renderCard(); return; }
+          if (t.ask) { P.table = t; renderCard(); return; }
           P.draft = t.text; renderCard(); tableToast(t); return;
         }
         P.draft = await fileText(f); P.name = f.name; renderCard();
       } catch (e) { Studio.toast(e.message); }
-    };
-    const dv = el.querySelector('[data-sc="dirs"]');
-    if (dv) dv.onclick = async () => {
-      P.busy = 'dirs'; renderCard();
-      try {
-        const r = await Studio.api('/api/script/directives', { claude: P.ai });
-        if (r.error) throw new Error(r.error);
-        if (r.claude?.error) Studio.toast(`Claude chưa chuyển được phần chỉ dẫn còn lại: ${r.claude.error}`);
-        if (!r.cells.length) Studio.toast(r.rest ? 'Chưa chuyển được chỉ dẫn nào thành ô bảng dựng' : 'Kịch bản không có chỉ dẫn dựng');
-        else P.dirs = { cells: r.cells, keep: r.cells.map(() => true), rest: r.rest, claude: r.claude };
-      } catch (e) { Studio.toast(e.message); }
-      P.busy = false; renderCard();
     };
     el.querySelector('[data-sc="save"]').onclick = async () => {
       const t = (P.draft ?? ta.value).trim(); if (!t) return Studio.toast('Kịch bản đang trống');
@@ -189,7 +170,7 @@
   function renderTable(el) {
     const t = P.table, sample = c => String(t.rows.find(r => String(r[c] ?? '').trim())?.[c] || '').slice(0, 60);
     const opts = c => '<option value="">— chưa gán —</option>' + Object.entries(ROLE_VI).map(([k, v]) => `<option value="${k}" ${t.roles[c] === k ? 'selected' : ''}>${esc(v)}</option>`).join('');
-    el.innerHTML = `<div class="sc-box"><p class="sc-hint"><i class="ti ti-table"></i> ${esc(P.name)}: ${t.rows.length} hàng. Gán vai trò cho cột${t.unknown.length ? ' chưa nhận ra (tô vàng)' : ''}; cột “Bỏ qua” / chưa gán không dùng.</p>
+    el.innerHTML = `<div class="sc-box"><p class="sc-hint"><i class="ti ti-table"></i> ${esc(P.name)}: ${t.rows.length} hàng. Chưa nhận ra cột lời / thoại: chọn cột nào là lời${t.unknown.length ? ' (cột tô vàng đang tạm là ghi chú)' : ''}.</p>
       <div class="sc-map" role="group" aria-label="Vai trò cột của bảng">${t.columns.map((c, i) => `<div class="sc-col ${t.unknown.includes(c) ? 'is-new' : ''}">${esc(c)}<small>${esc(sample(c)) || '(trống)'}</small></div>
         <select data-col="${i}" aria-label="Vai trò cột ${esc(c)}">${opts(c)}</select>`).join('')}</div>
       <div class="sc-row"><span class="sc-gap"></span><button data-sc="tb-drop"><i class="ti ti-x"></i>Bỏ</button>
@@ -207,26 +188,6 @@
       P.busy = false; renderCard();
     };
   }
-  // ô bảng dựng đề xuất từ chỉ dẫn: tick ô muốn nhận
-  function renderDirs(el) {
-    const d = P.dirs, segs = P.data?.script?.segments || [], n = d.keep.filter(Boolean).length;
-    const head = d.claude?.cells != null ? ` (Claude thêm ${d.claude.cells})` : d.rest ? ` · ${d.rest} đoạn có chỉ dẫn luật chưa hiểu${P.ai ? '' : ' (cần Claude)'}` : '';
-    el.innerHTML = `<div class="sc-box"><p class="sc-hint"><i class="ti ti-arrows-transfer-down"></i> ${d.cells.length} ô bảng dựng từ chỉ dẫn${head}. Lời giữ nguyên.</p>
-      <ul class="sc-cells">${d.cells.map((c, i) => `<li><label><input type="checkbox" data-i="${i}" ${d.keep[i] ? 'checked' : ''}><span>Đoạn ${c.seg + 1}: ${esc(c.label)} <small>${c.by === 'claude' ? 'Claude' : 'luật'}${c.note ? ` · “${esc(c.note.slice(0, 80))}”` : ''} · ${esc(String(segs[c.seg]?.say || '').slice(0, 50))}</small></span></label></li>`).join('')}</ul>
-      <div class="sc-row"><span class="sc-gap"></span><button data-sc="dv-drop"><i class="ti ti-x"></i>Bỏ</button>
-      <button class="primary" data-sc="dv-take" ${n && !P.busy ? '' : 'disabled'}><i class="ti ti-check"></i>Nhận ${n} ô</button></div></div>`;
-    el.querySelectorAll('input[data-i]').forEach(x => { x.onchange = () => { d.keep[+x.dataset.i] = x.checked; renderDirs(el); }; });
-    el.querySelector('[data-sc="dv-drop"]').onclick = () => { P.dirs = null; renderCard(); };
-    el.querySelector('[data-sc="dv-take"]').onclick = async () => {
-      P.busy = true; renderDirs(el);
-      try {
-        const r = await Studio.api('/api/script/directives/accept', { cells: d.cells.filter((_, i) => d.keep[i]) });
-        if (r.error) throw new Error(r.error);
-        P.dirs = null; Studio.toast(`Đã thêm ${r.added} ô vào bảng dựng`); loadSheet();
-      } catch (e) { Studio.toast(e.message); }
-      P.busy = false; renderCard();
-    };
-  }
   // tóm tắt bảng dựng cho dòng trạng thái (sửa từng ô ở panel Bảng dựng, studio/features/23_buildsheet.js, M194)
   function loadSheet() {
     const dir = P.dir;
@@ -240,7 +201,7 @@
   Studio.scriptCard = {
     mount(el) {
       const dir = Studio.META?.dir || '';
-      if (P.dir !== dir) { P = { dir, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null, dirs: null }; }
+      if (P.dir !== dir) { P = { dir, data: null, busy: false, draft: null, name: '', sugg: null, ai: false, sheet: null, table: null }; }
       P.el = el; renderCard();
       if (!P.data) Studio.api('/api/script').then(r => { if (P.dir === dir && !r.error) { P.data = r; renderCard(); if (r.script) loadSheet(); } }).catch(() => {});
       claudeOk().then(ok => { if (P.dir === dir && ok !== P.ai) { P.ai = ok; renderCard(); } });

@@ -76,7 +76,7 @@ giá trị (`[âm]`) và ngoặc khác (`[cười]`) vẫn là lời nói. `stri
 
 **Bảng dựng** `<dự án>/.studio/build_sheet.json` `{ version: 1, script_updated, at, rows: [{ seg, t0, t1, kind, say, mood {v, text, from,
 inherit?}, music {v, from}, aroll {frame, take, file?, off?, from}, broll [{q, src, pick, alts, miss?, pending?, from}], sfx [{name, q, at
-(giây), pos, miss?, from}], screen [{text, kind, from}], lock }] }`. `from`: `mark|claude|auto|user`. Tự dựng lại mỗi lần lưu kịch bản
+(giây), pos, miss?, from}], screen [{text, kind, from}], lock }] }`. `from`: `mark|claude|auto|user|note` (`note`: chỉ dẫn [GHI CHÚ], mục 9). Tự dựng lại mỗi lần lưu kịch bản
 (`POST /api/script`), `POST /api/script/sheet {stock}` dựng lại tay; Bỏ kịch bản xoá bảng. Dựng lại giữ ô `user` khi lời của hàng không
 đổi (so `norm(say)`), giữ nguyên hàng `lock`. B-roll: Kho (`searchKho`, bỏ file đã vào `media/`) → thư viện (`broll_lib.search`) → stock
 (chỉ khi `stock: true`) → b-roll động `assets/broll/catalog.json` (luôn có); nguồn ép ở dấu chỉ dùng nguồn đó (không có thì `miss`).
@@ -132,13 +132,14 @@ Thiết kế: `docs/plans/S27-dung-theo-kich-ban.md` mục 7. Mã: `scripts/scri
 | `transition`, `note` | Chuyển cảnh; Ghi chú, Chỉ dẫn, Notes | `[GHI CHÚ: …]` |
 | `mood`, `sfx`, `skip` | Nhạc / Mood; SFX / Âm thanh; STT, Mã cảnh | `[MOOD: …]`, `[SFX: …]`, bỏ |
 
-Cột có chữ mà chưa nhận ra (`unknown`) → ô Kịch bản hiện bảng chọn vai trò cột; `POST /api/script/table/text {columns, rows, roles}`
-dựng lại chữ. Chữ vào ô (chưa lưu), người dùng sửa rồi Lưu như kịch bản thường. `[MỐC]` / `[GHI CHÚ]` không giá trị là chữ thường;
+Cột có chữ mà chưa nhận ra (`unknown`) tự thành ghi chú. Chỉ khi không nhận ra cột lời / thoại (`ask`) ô Kịch bản mới hiện bảng chọn
+vai trò cột (`POST /api/script/table/text {columns, rows, roles}` dựng lại chữ); còn lại báo một dòng "Đọc N đoạn, có mốc giây, M chỉ dẫn dựng". Chữ vào ô (chưa lưu), người dùng sửa rồi Lưu như kịch bản thường. `[MỐC]` / `[GHI CHÚ]` không giá trị là chữ thường;
 mốc không đọc được vào `raw[]`. Đoạn: `at {t0, t1}`, `note[]`; căn: `align.sheet` (số đoạn có mốc), `align.drift [{seg, sheet, heard, d}]`.
 
-**Chỉ dẫn → bảng dựng** (nút hiện khi kịch bản đã lưu có `[GHI CHÚ]`): `POST /api/script/directives {claude}` → ô đề xuất. `ruleCells`:
-chuyển cảnh (mờ dần / trượt / phóng / lia / nhiễu / cắt), focus / phóng vào sản phẩm hoặc người nói, cận / trung / toàn cảnh, tìm thêm
-source / video / cảnh (B-roll stock + từ khoá), thêm ví dụ (graphic ví dụ, chỉ dẫn mơ hồ thì lấy ý từ lời). Vế luật không hiểu gửi Claude
-một lần (`directivePrompt`, `checkClaudeCells`: chỉ 5 loại ô, đúng đoạn được hỏi, ≤ 3 ô mỗi đoạn). `POST /api/script/directives/accept
-{cells}` ghi ô đã tick vào bảng dựng (`acceptCells`): `aroll.frame`, `focus`, `transition`, `broll[]` (`miss: Cần tìm nguồn`), `screen[]`
-kind `vidu`, đều `from: claude`, `by: luat|claude`. Không bao giờ sửa lời.
+**Chỉ dẫn dựng** (không có bước Nhận / Bỏ): `[GHI CHÚ]` giữ nguyên văn trong đoạn (`note[]`, cả ở hàng bảng dựng). Mỗi lần dựng bảng,
+`ruleCells` chuyển ngầm các mẫu câu hay gặp: chuyển cảnh (mờ dần / trượt / phóng / lia / nhiễu / cắt) → `transition {v}`, focus / phóng vào
+sản phẩm hoặc người nói → `focus {on, target}`, cận / trung / toàn cảnh → `aroll.frame` (chỉ khi ô còn `auto`), tìm thêm source / video /
+cảnh → `broll[]` (Kho → thư viện → stock khi bật → động), thêm ví dụ → `screen[]` kind `vidu` (chỉ dẫn mơ hồ thì lấy ý từ lời). Mọi ô này
+`from: note` + `note` = câu gốc người dùng viết (ghi chú "Kịch bản yêu cầu …" trên timeline đọc lại); không đè ô `mark` / `user`.
+`sheetPrompt` gửi AI dựng các ô đó (`(theo chỉ dẫn)`) và mọi câu gốc dạng "KỊCH BẢN YÊU CẦU (nguyên văn, làm theo khi dựng)", nên câu luật
+chưa hiểu Claude làm theo lúc dựng. Không bao giờ sửa lời.

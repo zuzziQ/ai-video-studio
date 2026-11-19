@@ -12,18 +12,16 @@
 //   POST /api/script/suggest {text}  → { ok, text, added } Claude chèn dấu vào chính chữ đó (checkSuggested: không được sửa lời);
 //                                      không lưu: người dùng Nhận / Bỏ trong ô Kịch bản rồi mới Lưu
 //   S27 M197 (scripts/script_table.mjs): kịch bản dạng bảng và chỉ dẫn dựng
-//   POST /api/script/table (thân = file .xlsx / .csv, ≤ 10 MB; header x-file-name) → { columns, rows, roles, unknown, text, segs, timed, warn }
-//                                    (unknown: cột có chữ chưa nhận ra vai trò → người dùng gán trong ô Kịch bản)
-//   POST /api/script/table/text {columns, rows, roles} → { text, segs, timed, warn }   dựng lại chữ theo vai trò người dùng gán
-//   POST /api/script/directives {claude} → { cells (+ label), rest, claude }   ô đề xuất từ [GHI CHÚ] của kịch bản đã lưu: luật thuần,
-//                                    + Claude cho phần luật chưa hiểu khi claude = true (lỗi Claude không mất ô của luật: claude.error)
-//   POST /api/script/directives/accept {cells} → { ok, added, sheet }   ghi ô đã Nhận vào .studio/build_sheet.json (from 'claude')
+//   POST /api/script/table (thân = file .xlsx / .csv, ≤ 10 MB; header x-file-name) → { columns, rows, roles, unknown, ask, text, segs, timed, notes, warn }
+//                                    (cột lạ tự thành ghi chú; ask: không nhận ra cột lời → người dùng gán cột trong ô Kịch bản)
+//   POST /api/script/table/text {columns, rows, roles} → { text, segs, timed, notes, warn }   dựng lại chữ theo vai trò người dùng gán
+//   Chỉ dẫn [GHI CHÚ] không có bước Nhận / Bỏ: lưu kịch bản thì buildSheet chuyển ngầm thành ô (from note), AI dựng đọc nguyên văn.
 // Như mọi /api/*, cần token phiên + cùng origin (studio/security.mjs).
 import fs from 'node:fs';
 import os from 'node:os';
 import { applyScript, docxText, gateScript, readScript, removeScript, stageScript, writeScript, MAX_TEXT } from '../../scripts/script_doc.mjs';
-import { checkSuggested, dropSheet, readSheet, sheetFor, suggestPrompt, writeSheet } from '../../scripts/script_build.mjs';
-import { ROLES, acceptCells, cellText, checkCell, checkClaudeCells, directiveDraft, directivePrompt, readTable, tableToScript } from '../../scripts/script_table.mjs';
+import { checkSuggested, dropSheet, readSheet, sheetFor, suggestPrompt } from '../../scripts/script_build.mjs';
+import { ROLES, readTable, tableToScript } from '../../scripts/script_table.mjs';
 
 const MAX_DOCX = 10 << 20;
 function rawBody(req, max) {
@@ -51,7 +49,7 @@ export default ctx => async (req, res, p) => {
     if (p === '/api/script/table' && req.method === 'POST') {
       const name = decodeURIComponent(String(req.headers['x-file-name'] || '')).slice(0, 200);
       if (name && !/\.(xlsx|csv|tsv|txt)$/i.test(name)) return J({ error: 'Chỉ nhận file .xlsx hoặc .csv (Excel cũ .xls: lưu lại thành .xlsx)' }, 400);
-      const t = readTable(await rawBody(req, MAX_DOCX), name);
+      const t = await readTable(await rawBody(req, MAX_DOCX), name);
       return J(t);
     }
     if (p === '/api/script/table/text' && req.method === 'POST') {
@@ -108,35 +106,6 @@ export default ctx => async (req, res, p) => {
         if (out.text.length > MAX_TEXT) return J({ error: 'Kết quả dài quá' }, 400);
         return J({ ok: true, text: out.text, added: out.added });
       } catch (e) { return J({ error: last && !last.ok ? last.error : String(e.message || e).slice(0, 300) }, last && !last.ok ? 422 : 502); }
-    }
-    if (p === '/api/script/directives') {
-      const b = await ctx.body(req), sc = readScript(dir);
-      if (!sc) return J({ error: 'Dự án chưa có kịch bản' }, 400);
-      const { cells, ask } = directiveDraft(sc), n = sc.segments.length;
-      let claude = null;
-      if (b.claude && ask.length) {
-        const { timeline: tl } = ctx.readProject(), L = ctx.llm || await import('../../scripts/llm.mjs');
-        try {
-          const got = await L.askJSON(directivePrompt(ask, { brand: tl.brand?.name || '', aspect: aspectOf(tl) }), { shape: 'object', retries: 1, model: 'sonnet', task: 'text', cwd: os.tmpdir(), timeout: 240000,
-            timeoutMsg: 'Claude quá 4 phút chưa trả lời. Thử lại sau.', retryHint: m => `
-
-Lần trước chưa dùng được (${m}). Trả về DUY NHẤT JSON {"cells": [...]}.`,
-            validate: v => checkClaudeCells(v, ask, n) });
-          cells.push(...got); claude = { cells: got.length };
-        } catch (e) { claude = { error: String(e.message || e).slice(0, 200) }; }
-      }
-      return J({ cells: cells.map(c => checkCell(c, n)).filter(Boolean).map(c => ({ ...c, label: cellText(c) })), rest: ask.length, claude });
-    }
-    if (p === '/api/script/directives/accept') {
-      const b = await ctx.body(req), sc = readScript(dir);
-      if (!sc) return J({ error: 'Dự án chưa có kịch bản' }, 400);
-      const cells = (Array.isArray(b.cells) ? b.cells : []).slice(0, 400).map(c => checkCell(c, sc.segments.length)).filter(Boolean);
-      if (!cells.length) return J({ error: 'Không có ô hợp lệ để nhận' }, 400);
-      let sheet = readSheet(dir);
-      if (!sheet) { const { timeline: tl, captions } = ctx.readProject(); sheet = await rebuild(dir, tl, captions); if (sheet.error) return J({ error: sheet.error }, 500); }
-      const r = acceptCells(sheet, cells);
-      writeSheet(dir, r.sheet);
-      return J({ ok: true, added: r.added, sheet: { rows: r.sheet.rows.length } });
     }
     if (p === '/api/script/clear') {
       const caps = removeScript(dir); dropSheet(dir);

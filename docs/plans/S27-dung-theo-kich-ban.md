@@ -216,15 +216,20 @@ khi đụng `auto_sfx.py`, `node .rag/sync.js --check`; mở Studio thử luồn
 ## 7. Kịch bản dạng bảng (Excel / CSV) và chỉ dẫn dựng (`M197`)
 
 Chủ repo 2026-11-19: phần lớn kịch bản viết cho source là file Excel chia theo đoạn giây, mỗi đoạn có lời và chỉ dẫn chữ tự do
-("tìm thêm source này", "chuyển cảnh như này", "focus vào sản phẩm / người nói", "thêm ví dụ khi giới thiệu cái này").
+("tìm thêm source này", "chuyển cảnh như này", "focus vào sản phẩm / người nói", "thêm ví dụ khi giới thiệu cái này"). Đơn giản hoá
+cùng ngày: người dùng chỉ nhập kịch bản rồi bấm AI dựng, không cài đặt thêm, không bước Nhận / Bỏ.
 
 - **Bảng → chữ kịch bản** (`scripts/script_table.mjs`): chữ kịch bản vẫn là bản duy nhất người dùng sửa và lưu; bảng chỉ là cách nhập.
-  Mỗi hàng một đoạn (dòng trống tách); cột nhận theo tên không dấu, cột lạ hỏi người dùng gán. Mốc giây → `[MỐC: …]`, chỉ dẫn →
-  `[GHI CHÚ: …]` (hai dấu mới, không phải lời nói). Hình / source có chữ người nói + cỡ khung → `[A-ROLL]`, còn lại → `[B-ROLL]`
-  ("tìm …" → `| stock`, tên file → `| tệp`).
+  Mỗi hàng một đoạn (dòng trống tách); cột nhận theo tên không dấu, cột có chữ mà chưa nhận ra tự thành ghi chú. Bảng chọn cột chỉ
+  hiện khi không nhận ra cột lời / thoại; còn lại chỉ báo một dòng "Đọc N đoạn, có mốc giây, M chỉ dẫn dựng". Mốc giây → `[MỐC: …]`,
+  chỉ dẫn → `[GHI CHÚ: …]` nguyên văn (hai dấu mới, không phải lời nói). Hình / source có chữ người nói + cỡ khung → `[A-ROLL]`, còn
+  lại → `[B-ROLL]` ("tìm …" → `| stock`, tên file → `| tệp`).
 - **Mốc giây**: segment có `at {t0, t1}`. Không lời nghe được (video không lời, mẫu trước khi quay): giờ của đoạn = mốc bảng, đoạn không mốc
   chia khoảng trống. Có lời: giờ theo lời nói thắng, `align.drift` liệt kê đoạn lệch mốc > 2 s. Chưa căn: bảng dựng lấy `t0/t1` từ mốc.
-- **Chỉ dẫn → ô bảng dựng**: luật thuần trước, Claude chỉ nhận các vế luật chưa hiểu (một lần gọi cho cả kịch bản, chỉ gửi lời + chỉ dẫn).
-  Ô: `aroll.frame`, `focus {on: product|speaker, target}`, `transition {v}`, `broll[]` cần tìm (`miss`), `screen[]` kind `vidu`; mọi ô
-  `from: claude` (+ `by: luat|claude`). Người dùng tick Nhận; `mergeSheet` giữ ô chỉ dẫn (`from: claude` có `by`) như ô `user` khi lời của hàng không đổi.
-  `focus` / `transition` mới chỉ nằm trong bảng; áp lên timeline do panel Bảng dựng (`M194`) và mục sau quyết định.
+- **Chỉ dẫn → ô bảng dựng ngầm**: mỗi lần dựng bảng (`buildSheet`, lưu kịch bản), luật thuần (`ruleCells`) chuyển mẫu câu hay gặp thành ô
+  `from: note` + `note` (nguyên văn câu người dùng viết): `transition {v}`, `focus {on: product|speaker, target}`, `aroll.frame` (chỉ khi
+  ô còn `auto`), `broll[]` (tìm theo thứ tự nguồn thường), `screen[]` kind `vidu`. Không đè ô của dấu / người dùng; ô sinh lại từ kịch
+  bản mỗi lần dựng (không cần `mergeSheet` giữ). Hàng giữ `note[]` đủ mọi câu; `sheetPrompt` đưa vào AI dựng dòng "KỊCH BẢN YÊU CẦU
+  (nguyên văn, làm theo khi dựng)" nên phần luật chưa hiểu Claude làm theo lúc dựng, không gọi Claude riêng.
+- **Hiện lại câu gốc**: khối AI dựng theo kịch bản có ghi chú "Kịch bản yêu cầu … · Đã dựng …" khi trỏ / chọn trên timeline (phiên `M194`
+  đổi sang không có panel Bảng dựng): đọc `note` của ô, hoặc `note[]` của hàng.

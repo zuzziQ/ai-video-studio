@@ -2,11 +2,10 @@
 //   Bảng → chữ kịch bản có dấu (scripts/script_doc.mjs): mỗi hàng một đoạn; mốc giây → [MỐC: 0:05–0:12], lời → chữ nói,
 //   chữ trên màn hình → [CHỮ: …], hình / source → [A-ROLL: …] hoặc [B-ROLL: …], nhạc → [MOOD: …], âm → [SFX: …],
 //   chuyển cảnh / ghi chú → [GHI CHÚ: …]. Chữ kịch bản là bản người dùng sửa và lưu như mọi kịch bản khác.
-//   Chỉ dẫn ([GHI CHÚ]) → ô bảng dựng đề xuất: luật thuần cho các mẫu câu hay gặp, phần còn lại hỏi Claude; người dùng Nhận / Bỏ,
-//   ô nhận ghi vào .studio/build_sheet.json với from 'claude' (mergeSheet giữ qua các lần dựng lại). Không bao giờ sửa lời.
-// Hàm thuần (trừ readTable / acceptCells đọc ghi file). Bộ đọc .xlsx / .csv dùng lại của scripts/batch.mjs, không thêm thư viện.
+//   Chỉ dẫn ([GHI CHÚ]) giữ nguyên văn trong đoạn; không có bước Nhận / Bỏ (chủ repo 2026-11-19): buildSheet (script_build.mjs) chạy
+//   ruleCells ngầm cho các mẫu câu hay gặp (ô `from: note`, kèm câu gốc), phần luật chưa hiểu AI dựng đọc trong prompt (sheetPrompt).
+//   Không bao giờ sửa lời. Hàm thuần; bộ đọc .xlsx / .csv dùng lại của scripts/batch.mjs (nạp khi đọc bảng), không thêm thư viện.
 import { fold, fmtTimeRange, parseTimeRange } from './script_doc.mjs';
-import { parseSheetBuf } from './batch.mjs';
 
 export const ROLES = ['time', 'start', 'end', 'say', 'screen', 'visual', 'transition', 'mood', 'sfx', 'note', 'skip'];
 export const ROLE_VI = { time: 'Thời gian', start: 'Giây bắt đầu', end: 'Giây kết thúc', say: 'Lời / thoại', screen: 'Chữ trên màn hình',
@@ -70,7 +69,7 @@ export function visualMark(text) {
  */
 export function tableToScript(columns, rows, roles = {}) {
   const of = r => columns.filter(c => roles[c] === r), val = (row, r) => of(r).map(c => String(row[c] ?? '').trim()).filter(Boolean);
-  const warn = [], paras = []; let timed = 0;
+  const warn = [], paras = []; let timed = 0, notes = 0;
   rows.forEach((row, i) => {
     const marks = [];
     let at = null;
@@ -83,8 +82,8 @@ export function tableToScript(columns, rows, roles = {}) {
     for (const v of val(row, 'visual')) for (const l of lines(v)) marks.push(visualMark(l));
     for (const v of val(row, 'screen')) for (const l of lines(v)) marks.push(`[CHỮ: ${l}]`);
     for (const v of val(row, 'sfx')) for (const l of lines(v)) marks.push(`[SFX: ${l}]`);
-    for (const v of val(row, 'transition')) marks.push(`[GHI CHÚ: chuyển cảnh ${clean(v).replace(/^chuyển cảnh:?\s*/i, '')}]`);
-    for (const v of val(row, 'note')) marks.push(`[GHI CHÚ: ${clean(v)}]`);
+    for (const v of val(row, 'transition')) { marks.push(`[GHI CHÚ: chuyển cảnh ${clean(v).replace(/^chuyển cảnh:?\s*/i, '')}]`); notes++; }
+    for (const v of val(row, 'note')) { marks.push(`[GHI CHÚ: ${clean(v)}]`); notes++; }
     const say = val(row, 'say').join('\n').replace(/\r/g, '').replace(/\n{2,}/g, '\n').trim();
     if (!say && !marks.length) return;
     paras.push([marks.join(' '), say].filter(Boolean).join('\n'));
@@ -94,20 +93,24 @@ export function tableToScript(columns, rows, roles = {}) {
   // mốc đi lùi: thường do gõ nhầm hoặc cột gán nhầm
   const ts = paras.map(p => /\[MỐC: ([^\]]+)\]/.exec(p)?.[1]).filter(Boolean).map(x => parseTimeRange(x).t0);
   for (let i = 1; i < ts.length; i++) if (ts[i] < ts[i - 1]) { warn.push(`Mốc giây đi lùi ở đoạn ${i + 1} (${ts[i]} s sau ${ts[i - 1]} s)`); break; }
-  return { text: paras.join('\n\n'), segs: paras.length, timed, warn };
+  return { text: paras.join('\n\n'), segs: paras.length, timed, notes, warn };
 }
 
-/** Bytes .xlsx / .csv → { columns, rows, roles, unknown, text, segs, timed, warn }. rows cắt ở `max` hàng. */
-export function readTable(buf, name = '', { max = 1000 } = {}) {
+/**
+ * Bytes .xlsx / .csv → { columns, rows, roles, unknown, ask, text, segs, timed, notes, warn }. rows cắt ở `max` hàng.
+ * Cột có chữ mà chưa nhận ra tự thành ghi chú (chỉ dẫn, giữ nguyên văn); `ask` = true chỉ khi không nhận ra cột lời / thoại.
+ */
+export async function readTable(buf, name = '', { max = 1000 } = {}) {
+  const { parseSheetBuf } = await import('./batch.mjs');
   const { columns, rows: all } = parseSheetBuf(buf, name);
   const rows = all.slice(0, max), { roles, unknown } = guessRoles(columns, rows);
+  for (const c of unknown) roles[c] = 'note';
   const out = tableToScript(columns, rows, roles);
   if (all.length > max) out.warn.unshift(`Bảng có ${all.length} hàng, chỉ lấy ${max} hàng đầu`);
-  return { columns, rows, roles, unknown, ...out };
+  return { columns, rows, roles, unknown, ask: !Object.values(roles).includes('say'), ...out };
 }
 
 // ---------- chỉ dẫn dựng → ô bảng dựng ----------
-export const CELL_TYPES = ['aroll', 'focus', 'transition', 'broll', 'graphic'];
 const TRANS = [[/mo dan|fade|hoa tan|dissolve|mo/, 'fade'], [/truot|slide|lia|pan/, 'slide'], [/zoom|phong|day vao/, 'zoom'], [/whip|xoay|quet|lac/, 'whip'], [/glitch|nhieu|nhay/, 'glitch'], [/cat|cut|cung/, 'cut']];
 const PRODUCT = /san pham|\bsp\b|product|hop|chai|lo |goi |mon an|mon |may |dien thoai|logo|bao bi/;
 const SPEAKER = /nguoi noi|\bmc\b|speaker|khuon mat|mat nguoi|host|nhan vat|guong mat/;
@@ -116,8 +119,8 @@ const EXAMPLE = /(?:them|chen|dua|cho|lay|neu)(?: vao)?(?: (?:mot|1|vai|cac))? (
 const vague = s => !key(s) || /^(khi )?(gioi thieu|noi|nhac) (ve |toi |den )?(cai|cho|doan|y|phan) (nay|do|kia)$|^(cai|cho|doan) (nay|do)$/.test(key(s));
 const snip = s => String(s || '').split(/\s+/).slice(0, 10).join(' ');
 /**
- * Một chỉ dẫn chữ tự do (+ lời của đoạn) → { cells, rest }. cells: ô đề xuất { type, …, note, by: 'luat' }; rest: các vế không luật nào
- * hiểu (gửi Claude). Luật: chuyển cảnh (kiểu), focus sản phẩm / người nói, cỡ khung A-roll, tìm source (B-roll stock + từ khoá),
+ * Một chỉ dẫn chữ tự do (+ lời của đoạn) → { cells, rest }. cells: ô { type: aroll|focus|transition|broll|graphic, …, note (vế gốc),
+ * by: 'luat' }; rest: các vế không luật nào hiểu (AI dựng đọc nguyên văn). Luật: chuyển cảnh (kiểu), focus sản phẩm / người nói, cỡ khung A-roll, tìm source (B-roll stock + từ khoá),
  * thêm ví dụ (graphic ví dụ).
  */
 export function ruleCells(note, say = '') {
@@ -143,89 +146,4 @@ export function ruleCells(note, say = '') {
     if (cells.length === at) rest.push(p);
   }
   return { cells: cells.map(c => ({ ...c, by: 'luat' })), rest };
-}
-/** Kịch bản đã lưu → ô đề xuất theo luật của mọi đoạn có [GHI CHÚ] + các vế còn lại cho Claude. */
-export function directiveDraft(sc) {
-  const cells = [], ask = [];
-  (sc?.segments || []).forEach((s, seg) => {
-    if (!s.note?.length) return;
-    const r = ruleCells(s.note.join('. '), s.say);
-    cells.push(...r.cells.map(c => ({ seg, ...c })));
-    if (r.rest.length) ask.push({ seg, say: String(s.say).slice(0, 240), note: r.rest.join('. ').slice(0, 400) });
-  });
-  return { cells, ask };
-}
-/** Prompt Claude: chỉ lời + chỉ dẫn chưa hiểu của từng đoạn. Trả { "cells": [{ seg, type, … }] }. */
-export function directivePrompt(ask, { brand = '', aspect = '' } = {}) {
-  return `Bạn là dựng phim video ngắn${brand ? ` cho thương hiệu "${brand}"` : ''}${aspect ? `, khổ ${aspect}` : ''}. Mỗi đoạn dưới đây có lời người nói và chỉ dẫn dựng viết tay.
-Chuyển chỉ dẫn thành ô bảng dựng. KHÔNG viết lại lời nói. Chỉ dùng các loại ô:
-- {"seg": n, "type": "aroll", "frame": "can|trung|rong"}  cỡ khung người nói
-- {"seg": n, "type": "focus", "on": "product|speaker", "target": "<vật cần phóng vào, ngắn>"}
-- {"seg": n, "type": "transition", "v": "cut|fade|slide|zoom|whip|glitch|auto"}  chuyển cảnh vào đoạn này
-- {"seg": n, "type": "broll", "q": "<từ khoá tìm cảnh minh hoạ, tiếng Việt cụ thể>", "src": "stock|kho"}
-- {"seg": n, "type": "graphic", "kind": "vidu", "text": "<chữ ngắn của graphic ví dụ, ≤ 12 từ>"}
-Tối đa 3 ô mỗi đoạn; chỉ dẫn không chuyển được thì bỏ qua (không bịa). Trả về DUY NHẤT JSON {"cells": [...]}.
-
-CÁC ĐOẠN:
-${JSON.stringify(ask.slice(0, 80), null, 1)}`;
-}
-const FRAMES = new Set(['can', 'trung', 'rong']), TRANS_V = new Set(['cut', 'fade', 'slide', 'zoom', 'whip', 'glitch', 'auto']);
-const s80 = v => clean(v).slice(0, 80);
-/** Chuẩn hoá một ô (của luật, Claude hay trình duyệt gửi lên) → ô hợp lệ hoặc null. `segs`: số đoạn của kịch bản. */
-export function checkCell(c, segs) {
-  if (!c || typeof c !== 'object' || !CELL_TYPES.includes(c.type)) return null;
-  const seg = Number(c.seg); if (!Number.isInteger(seg) || seg < 0 || seg >= segs) return null;
-  const by = c.by === 'luat' ? 'luat' : 'claude', note = c.note ? clean(c.note).slice(0, 300) : undefined, base = { seg, type: c.type, by, ...(note ? { note } : {}) };
-  if (c.type === 'aroll') return FRAMES.has(c.frame) ? { ...base, frame: c.frame } : null;
-  if (c.type === 'focus') return ['product', 'speaker'].includes(c.on) ? { ...base, on: c.on, target: s80(c.target || '') } : null;
-  if (c.type === 'transition') return { ...base, v: TRANS_V.has(c.v) ? c.v : 'auto' };
-  if (c.type === 'broll') return s80(c.q) ? { ...base, q: s80(c.q), src: c.src === 'kho' ? 'kho' : 'stock' } : null;
-  if (c.type === 'graphic') return s80(c.text) ? { ...base, kind: 'vidu', text: s80(c.text) } : null;
-  return null;
-}
-/** Kết quả Claude → các ô hợp lệ (tối đa 3 mỗi đoạn, chỉ đoạn có trong `ask`). Ném lỗi khi không phải { cells: [] }. */
-export function checkClaudeCells(v, ask, segs) {
-  if (!v || !Array.isArray(v.cells)) throw new Error('Claude không trả về {"cells": [...]}');
-  const ok = new Set(ask.map(a => a.seg)), per = new Map(), out = [];
-  for (const c of v.cells) {
-    const x = checkCell({ ...c, by: 'claude', note: ask.find(a => a.seg === Number(c?.seg))?.note }, segs);
-    if (!x || !ok.has(x.seg) || (per.get(x.seg) || 0) >= 3) continue;
-    per.set(x.seg, (per.get(x.seg) || 0) + 1); out.push(x);
-  }
-  return out;
-}
-
-const TRANS_VI = { cut: 'cắt thẳng', fade: 'mờ dần', slide: 'trượt', zoom: 'phóng', whip: 'lia nhanh', glitch: 'nhiễu', auto: 'tự chọn' };
-/** Ô → chữ ngắn cho người dùng. */
-export function cellText(c) {
-  if (c.type === 'aroll') return `A-roll ${{ can: 'cận mặt', trung: 'trung', rong: 'rộng' }[c.frame]}`;
-  if (c.type === 'focus') return c.on === 'speaker' ? 'Focus người nói' : `Phóng vào sản phẩm${c.target ? `: ${c.target}` : ''}`;
-  if (c.type === 'transition') return `Chuyển cảnh ${TRANS_VI[c.v] || c.v}`;
-  if (c.type === 'broll') return `B-roll cần tìm: ${c.q}`;
-  if (c.type === 'graphic') return `Graphic ví dụ: ${c.text}`;
-  return c.type;
-}
-/**
- * Áp các ô đã Nhận vào bảng dựng (thuần: trả bảng mới + số ô thêm). Ô mang from 'claude' (+ by: luat|claude); ô trùng bỏ qua.
- * aroll → row.aroll.frame · focus → row.focus · transition → row.transition · broll → row.broll[] (chưa có nguồn: miss)
- * · graphic → row.screen[] kind 'vidu'.
- */
-export function acceptCells(sheet, cells) {
-  const rows = (sheet?.rows || []).map(r => ({ ...r })); let added = 0;
-  for (const c of cells) {
-    const row = rows.find(r => r.seg === c.seg); if (!row || row.lock) continue;
-    const tag = { from: 'claude', by: c.by, ...(c.note ? { note: c.note } : {}) };
-    if (c.type === 'aroll') { if (row.aroll?.frame === c.frame && row.aroll?.from === 'claude') continue; row.aroll = { ...(row.aroll || {}), frame: c.frame, ...tag }; }
-    else if (c.type === 'focus') { if (row.focus?.on === c.on && row.focus?.target === c.target) continue; row.focus = { on: c.on, target: c.target, ...tag }; }
-    else if (c.type === 'transition') { if (row.transition?.v === c.v) continue; row.transition = { v: c.v, ...tag }; }
-    else if (c.type === 'broll') {
-      if ((row.broll || []).some(b => key(b.q) === key(c.q))) continue;
-      row.broll = [...(row.broll || []), { q: c.q, src: c.src, pick: null, alts: [], miss: 'Cần tìm nguồn', ...tag }];
-    } else if (c.type === 'graphic') {
-      if ((row.screen || []).some(x => key(x.text) === key(c.text))) continue;
-      row.screen = [...(row.screen || []), { text: c.text, kind: 'vidu', ...tag }];
-    } else continue;
-    added++;
-  }
-  return { sheet: { ...(sheet || {}), rows }, added };
 }
