@@ -99,7 +99,8 @@ export function makePrompt(input) {
   return `Bạn là nhà thiết kế đồ hoạ video ngắn. Dựng một ELEMENT RIÊNG (box, nền box chữ, khung, nhãn giá, thẻ…) theo mô tả, dưới dạng spec khai báo.
 Khổ video ${ar} (${input.frame.w}×${input.frame.h}); element thường chiếm 30–80 % bề ngang. ${input.style ? `Style video đang dùng: ${input.style}.` : ''}
 ${brand}
-${SCHEMA}
+${input.taste ? `Gu của thương hiệu (người dùng đã giữ / hay xoá): ${String(input.taste).slice(0, 300)}
+` : ''}${SCHEMA}
 ${input.base ? 'Element đang có (sửa theo yêu cầu, giữ những gì không được nhắc):\n' + JSON.stringify(input.base) + '\n' : ''}${dataBlock('Mô tả của người dùng', input.ask)}
 ${input.text ? dataBlock('Chữ đang hiện trong element', input.text) + '\n' : ''}${refsNote(input)}Đưa 3 PHƯƠNG ÁN khác nhau rõ (bố cục / hình nền / hoạt ảnh), mỗi phương án 2–6 lớp, chữ tiếng Việt có dấu. Lớp chữ chính dùng "{text}" và cho "text" mẫu ngắn.
 Trả về DUY NHẤT JSON: {"variants":[{"name":"≤ 24 ký tự","why":"một câu","text":"chữ mẫu cho {text}","spec":{…}}, …3 mục]}`;

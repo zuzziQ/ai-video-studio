@@ -7,7 +7,7 @@
 //   POST /api/ai/fillers {words,pause,fillers,claude}  → scripts/fillers.py; with claude:true it runs as job "fillers", result at GET /api/ai/fillers
 import fs from 'node:fs'; import path from 'node:path'; import { execFile } from 'node:child_process';
 import { rmSync } from '../../scripts/fs_rm.mjs';
-import { habitsFor, saveDelivered, getProfile } from '../../scripts/profile.mjs';
+import { habitsFor, saveDelivered, getProfile, learnedOf } from '../../scripts/profile.mjs';
 import { workspaceOfProject } from '../../scripts/workspace.mjs';
 
 export default ctx => {
@@ -35,10 +35,11 @@ export default ctx => {
       // S19 M134: thói quen của thương hiệu (scripts/profile.mjs habitsFor) → ai_edit.mjs áp vào prompt và kết quả
       const h = habitsFor(brandOf(), { skip: keys(b.skip) }), a = h.adjust;
       if (h.active) {
-        o.learned = { brand: h.name, notes: h.items.filter(i => !i.off && !keys(b.skip).includes(i.key)).map(i => i.note), extra: h.extra, drop: a.drop_src || [],
-          music: a.music === 'off' ? 'off' : '', music_gain: a.music_gain || 0, caption_style: a.caption_style || '', dict: h.dict };
+        o.learned = learnedOf(h, keys(b.skip));
+        if (a.pace && o.density === 'vua') o.density = a.pace; // S27 M192: nhịp hay chọn ở mẫu dựng sẵn (mật độ mặc định mới đổi)
         if (a.ai_step) o.density = { day: 'vua', vua: 'thua' }[o.density] || o.density;
         if (a.pack && o.pack === 'auto') o.pack = a.pack;
+        else if (a.pick_pack && o.pack === 'auto') o.pack = a.pick_pack;
       }
       // S19 M138: nhạc riêng của thương hiệu (Phong cách dựng → Nhạc nền = Nhạc trong Kho); thói quen "không nhạc" vẫn thắng
       try { const m = getProfile(brandOf()).music; if (typeof m === 'string' && (m === 'kho' || m.startsWith('kho:')) && o.learned?.music !== 'off') o.music_pick = m; } catch { /* phong cách lỗi: nhạc AI chọn */ }

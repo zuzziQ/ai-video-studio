@@ -22,11 +22,11 @@ import { AVS_HOME } from '../security.mjs';
 const brandIds = home => { try { return (JSON.parse(fs.readFileSync(path.join(home, 'brands.json'), 'utf8')).brands || []).map(b => b.id); } catch { return []; } };
 
 export default ctx => {
-  let M = null, L = null, A = null, seq = 0, cur = null;
+  let M = null, L = null, A = null, P = null, seq = 0, cur = null;
   const LAST = { rec: null };
   process.once('exit', () => { if (cur?.proc) killTree(cur.proc); });
   const imp = rel => import(pathToFileURL(path.join(ctx.SKILL || path.resolve(import.meta.dirname, '../..'), rel)).href);
-  const load = async () => { M ??= await imp('scripts/elem_make.mjs'); L ??= await imp('scripts/llm.mjs'); A ??= await imp('scripts/assist.mjs'); };
+  const load = async () => { M ??= await imp('scripts/elem_make.mjs'); L ??= await imp('scripts/llm.mjs'); P ??= await imp('scripts/profile.mjs'); A ??= await imp('scripts/assist.mjs'); };
   const timeout = () => (+process.env.AVS_ASSIST_TIMEOUT_S > 0 ? +process.env.AVS_ASSIST_TIMEOUT_S : 180) * 1000;
 
   async function ask(input, me, rec) {
@@ -65,7 +65,10 @@ export default ctx => {
         if (req.method !== 'POST') return J({ error: 'Chỉ nhận GET / POST' }, 405);
         const b = await ctx.body(req), brand = String(b?.brand ?? '');
         if (brand && !brandIds(home).includes(brand)) return J({ error: 'Không thấy thương hiệu' }, 404);
-        return J({ ok: true, item: M.saveLib(home, brand, b) });
+        const isNew = !(typeof b?.id === 'string' && M.listLib(home, brand).some(x => x.id === b.id)), item = M.saveLib(home, brand, b);
+        // S27 M192: element Claude dựng được Nhận (mục mới) = gu của thương hiệu; lỗi ghi không chặn việc lưu
+        if (isNew) try { P.recordElem(brand || P.CHUNG, item.name); } catch (e) { console.error('elem taste:', e.message); }
+        return J({ ok: true, item });
       }
       if (p === '/api/elem/lib/delete') {
         if (req.method !== 'POST') return J({ error: 'Chỉ nhận POST' }, 405);
@@ -84,6 +87,7 @@ export default ctx => {
     if (req.method !== 'POST') return J({ error: 'Chỉ nhận GET / POST' }, 405);
     let input;
     try { input = M.checkMakeInput(await ctx.body(req)); } catch (e) { return J({ error: e.message }, e.status || 400); }
+    input.taste = P.elemTaste(input.brand_id || P.CHUNG); // S27 M192: gu element của thương hiệu, đã giới hạn độ dài
     if (cur) return J({ error: 'Claude đang dựng element. Đợi xong hoặc bấm Huỷ rồi thử lại.' }, 409);
     const rec = { state: 'running', run: ++seq, step: 'Bắt đầu', progress: 0, started: Date.now(), ask: input.ask, edit: !!input.base };
     const me = cur = { run: rec.run, proc: null, cancelled: false };

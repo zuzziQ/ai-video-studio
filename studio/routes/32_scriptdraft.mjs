@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { parseScript, MAX_TEXT } from '../../scripts/script_doc.mjs';
 import { ASPECTS, DRAFT_ID, VARIANTS, clampWps, draftDir, draftsDir, estimateTimes, resultFile, saveTemplateFile, shotList, toTemplate } from '../../scripts/script_draft.mjs';
 import { addItem, loadQueue } from '../../scripts/queue.mjs';
+import { CHUNG, recordPick, saveDelivered } from '../../scripts/profile.mjs';
 
 const readJSON = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const wr = (f, o) => { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(o, null, 1)); fs.renameSync(t, f); };
@@ -37,6 +38,14 @@ export function checkDraftInput(b, known = () => false) {
   return { draft: { text, name, brand, aspect, wps }, est: estimateTimes(segs, { wps }) };
 }
 
+// S27 M192: phương án được dùng / lưu thành mẫu = gu của thương hiệu (các phương án còn lại là bị bỏ); dự án dùng phương án có bản
+// AI giao (.studio/ai_result.json) để sửa tay sau đó cũng được học. Lỗi ghi gu không chặn việc dùng phương án.
+function taste(d, id, info, r, dest = '') {
+  try {
+    if (dest) saveDelivered(dest, 'draft');
+    recordPick(d.brand || CHUNG, { draft: id, pick: info, others: (r?.variants || []).filter(x => x.k !== info.k && !x.error) });
+  } catch (e) { console.error('draft taste:', e.message); }
+}
 export default ctx => async (req, res, p) => {
   if (p !== '/api/draft' && !p.startsWith('/api/draft/')) return false;
   const J = (o, c) => (ctx.json(res, o, c), true);
@@ -84,6 +93,7 @@ export default ctx => async (req, res, p) => {
       fs.cpSync(vd, dest, { recursive: true, filter: s => !/[\\/]\.studio[\\/](draft_stills|history)([\\/]|$)/.test(s) });
       try { fs.copyFileSync(path.join(dir, 'shots.txt'), path.join(dest, 'Danh sach quay.txt')); } catch { /* chưa có danh sách quay */ }
       const t2 = { ...tl, draft: { ...(tl.draft || {}), from: id, variant: info.name } }; wr(path.join(dest, 'timeline.json'), t2);
+      taste(d, id, info, r, dest);
       ctx.openProject(dest);
       return J({ ok: true, dir: dest });
     }
@@ -92,6 +102,7 @@ export default ctx => async (req, res, p) => {
       const tpl = toTemplate(tl, { name: String(b.name || '').trim() || `${d.name} · ${info.name}`, brand: d.brand, variant: info, shots: shotList(sc?.segments || [], sheet), text: d.text });
       const T = path.join(ctx.SKILL, 'templates'), tid = saveTemplateFile(path.join(T, 'user'), T, tpl);
       try { fs.mkdirSync(path.join(T, 'previews'), { recursive: true }); fs.copyFileSync(path.join(vd, '.studio', 'draft_stills', '1.jpg'), path.join(T, 'previews', `${tid}.jpg`)); } catch { /* không có khung: mẫu không ảnh bìa */ }
+      taste(d, id, info, r);
       return J({ ok: true, id: tid });
     }
     return false;

@@ -410,6 +410,14 @@ export function applyLearned(plan, L) {
     plan.scenes = plan.scenes.filter(s => s._base || !drop.some(k => KIND_OF[k](s.type)));
     if (plan.scenes.length < before) plan.dropped.push(`bỏ ${before - plan.scenes.length} cảnh theo thói quen của thương hiệu`);
   }
+  // S27 M192: khối / SFX người dùng hay xoá (gu thương hiệu) bỏ khỏi kế hoạch, trừ mục theo kịch bản (_sheet: dấu người dùng viết)
+  const avoid = new Set(Array.isArray(L.avoid) ? L.avoid : []), avoidSfx = new Set(Array.isArray(L.avoid_sfx) ? L.avoid_sfx : []);
+  if (avoid.size) {
+    const before = plan.scenes.length;
+    plan.scenes = plan.scenes.filter(s => s._base || s._sheet != null || !avoid.has(s.type));
+    if (plan.scenes.length < before) plan.dropped.push(`bỏ ${before - plan.scenes.length} khối người dùng hay xoá (gu thương hiệu)`);
+  }
+  if (avoidSfx.size && Array.isArray(plan.sfx)) plan.sfx = plan.sfx.filter(x => x._sheet != null || !avoidSfx.has(String(x.name || '').replace(/_\d+$/, '')));
   if (L.music === 'off') plan.music = null;
   else if (plan.music && Number.isFinite(+L.music_gain) && +L.music_gain) plan.music.gain = Math.max(-30, Math.min(-8, +(plan.music.gain + +L.music_gain).toFixed(1)));
   if (typeof L.caption_style === 'string' && L.caption_style) plan.caption_style = L.caption_style;
@@ -525,6 +533,8 @@ async function main() {
   if (!src) { console.error('usage: node scripts/ai_edit.mjs <project_dir|timeline.json> [--out plan.json] [--goal …] [--pack keep|auto|id] [--density thua|vua|day] [--apply]'); process.exit(2); }
   const o = { goal: opt('--goal', ''), tone: opt('--tone', ''), pack: opt('--pack', 'auto'), density: opt('--density', 'vua'), extra: opt('--extra', '') };
   const optFile = opt('--opts'); if (optFile) Object.assign(o, readJson(optFile) || {});
+  // S27 M192: --taste <thương hiệu> (mẫu dựng sẵn): gu đã học của thương hiệu, như opts.learned của 20_ai.mjs
+  if (opt('--taste') && !o.learned) { const P = await import('./profile.mjs'); o.learned = P.learnedOf(P.habitsFor(opt('--taste'))); }
   const { dir, tlFile, tl, caps } = loadProject(src);
   if (!caps.length) throw new Error('Dự án chưa có phụ đề (cần lời thoại để AI đọc).');
   say(.05, 'Đọc danh sách gói style từ engine');
