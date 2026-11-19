@@ -1739,7 +1739,8 @@ async function openNewProject(opt = {}) {
   // S26 M188: trang chủ mở hộp này từ thẻ thương hiệu (opt.brand) thì chọn sẵn thương hiệu đó.
   // Thương hiệu, gói style và khổ hình đã chọn ở hướng dẫn đầu / brand kit: lấy sẵn, không hỏi lại. Muốn khác thì mở "Đổi".
   const ls = { get: (k, d) => { try { return localStorage.getItem('avs.' + k) || d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('avs.' + k, v); } catch {} } };
-  const [onb, brands] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => [])]);
+  const [onb, brands, tpls] = await Promise.all([api('/api/onboarding').catch(() => null), api('/api/brands').catch(() => []),
+    TEMPLATES ? Promise.resolve(TEMPLATES) : api('/api/templates').catch(() => [])]);
   for (let i = 0; i < 20 && !packs().length; i++) await new Promise(r => setTimeout(r, 150)); // khung preview còn đang nạp engine
   const BR = Array.isArray(brands) ? brands : [], PK = packs().filter(p => p.recipe);
   const cur = TL ? META?.kho || null : null; // Kho của dự án đang mở (server đọc từ .kho.json / brand kit)
@@ -1749,6 +1750,7 @@ async function openNewProject(opt = {}) {
   const OR = [['auto', 'Theo video'], ['vertical', 'Dọc 9:16 (Reels, TikTok, Shorts)'], ['horizontal', 'Ngang 16:9 (YouTube)']];
   modal(`<h3><i class="ti ti-video-plus"></i> Tạo dự án từ video thô</h3>
     <div id="nkho" class="nkho"><i class="ti ti-building-warehouse"></i><span></span></div>
+    <label class="check ntpl" id="ntplrow" hidden><input type="checkbox" id="ntpl" checked> <span></span></label>
     <label class="lbl">Video</label><div id="nvp"></div>
     <label class="lbl">Tiêu đề / chủ đề (dùng cho intro)</label><input id="ntitle" placeholder="VD: 3 mẹo dùng ChatGPT">
     <details id="nopts"><summary><span class="muted">Dùng thiết lập sẵn:</span> <b id="nsum"></b> <span class="muted">· Đổi</span></summary>
@@ -1777,7 +1779,15 @@ async function openNewProject(opt = {}) {
   const vp = videoPicker($('#nvp'), { brand: brand0, onKho: k => { kho = k; khoLine(); }, onChange: (p, name) => { if (p && !$('#ntitle').value) { $('#ntitle').value = String(name || '').replace(/\.\w+$/, ''); dirPh(); } } });
   const dirPh = () => { const b = BR.find(x => x.id === $('#nbrand').value); $('#ndir').placeholder = `Kho ${b ? (b.title || b.name) : 'Chung'} › Du an › ${$('#ntitle').value.trim() || 'tên video'}`; };
   $('#ntitle').oninput = dirPh; dirPh();
-  $('#nbrand').onchange = () => { const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; kho = null; khoLine(); vp.setBrand($('#nbrand').value); dirPh(); sum(); };
+  // S27 M189: mẫu chọn ở trang chủ (opt.tpl, cho đúng thương hiệu đó) hoặc mẫu mặc định của thương hiệu: áp sau khi dự án mở
+  const TP_ = Array.isArray(tpls) ? tpls : [];
+  const tplFor = id => { const want = opt.tpl && id === (opt.brand ?? id) ? opt.tpl : BR.find(x => x.id === id)?.tpl; return TP_.find(t => t.id === want) || null; };
+  const tplLine = () => {
+    const t = tplFor($('#nbrand').value), row = $('#ntplrow'); row.hidden = !t;
+    if (t) row.querySelector('span').textContent = `Áp mẫu “${t.name || t.id}” sau khi tạo${t.id === opt.tpl ? '' : ' (mẫu mặc định của thương hiệu)'}`;
+  };
+  tplLine();
+  $('#nbrand').onchange = () => { tplLine(); const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; kho = null; khoLine(); vp.setBrand($('#nbrand').value); dirPh(); sum(); };
   $('#nopts').onchange = sum; sum(); khoLine();
   $('#ngo').onclick = async () => {
     if (!vp.value) return toast('Chọn video trước');
@@ -1785,6 +1795,7 @@ async function openNewProject(opt = {}) {
     ls.set('newPack', pack); ls.set('newModel', $('#nmodel').value);
     // lưu dự án đang mở trước khi server đóng nó; lưu hỏng thì dừng, không bỏ mất chỉnh sửa
     if (TL && dirty) { await saveNow(); if (dirty) return toast('Chưa lưu được dự án đang mở — chưa tạo video mới'); }
+    const useTpl = !$('#ntplrow').hidden && $('#ntpl').checked ? tplFor($('#nbrand').value)?.id || '' : '';
     const r = await api('/api/new', { video: vp.value, dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
       pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined });
     if (!r.ok) return Studio.jobs.refuse(r);
@@ -1792,7 +1803,7 @@ async function openNewProject(opt = {}) {
     // S26 M185: chạy nền trong khay việc, không hộp chặn cả trang: trang chủ và Tự lái vẫn dùng được; xong thì chuyển như cũ (X-AVS-Opened)
     newBusy = true; dirty = false; document.body.classList.add('np-busy'); closeModal();
     Studio.jobs.track({ kind: 'new', title: 'Tạo dự án mới', note: khoLabel(kho) || '',
-      onDone: () => { location.reload(); return { text: 'Đang mở dự án mới…' }; },
+      onDone: () => { if (useTpl) try { sessionStorage.setItem('avs-apply-tpl', useTpl); } catch { /* không có sessionStorage: bỏ qua mẫu */ } location.reload(); return { text: 'Đang mở dự án mới…' }; },
       onFail: j => { newBusy = false; document.body.classList.remove('np-busy'); return { text: j.step || 'Chưa tạo được dự án mới', acts: [{ label: 'Tải lại trang', icon: 'ti-refresh', on: () => location.reload() }] }; } });
   };
 }
@@ -1834,7 +1845,7 @@ document.addEventListener('click', e => { const t = e.target.closest?.('.tip'); 
 const Studio = window.Studio = {
   get TL() { return TL; }, set TL(v) { TL = v; }, purl: rel => PB() + rel, get pbase() { return PB(); }, saveTabUI, get dirty() { return dirty; }, get CAP() { return CAP; }, set CAP(v) { CAP = v; }, get META() { return META; },
   get T() { return T; }, get PPS() { return PPS; }, get win() { return win; }, get sel() { return sel; }, get DW() { return DW; }, get DH() { return DH; },
-  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, newProject, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
+  $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, newProject, openTemplates: openTemplatesFor, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
   select, sect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
@@ -1959,4 +1970,6 @@ async function boot() {
   };
   if (f.contentWindow?.renderFrame) ready(); else f.addEventListener('load', ready);
 }
+// S27 M189: mẫu chọn ở hộp Video mới áp sau bản khởi đầu của gói (setTimeout: chạy sau khối _starter ở trên), ⌘Z về bản khởi đầu
+Studio.onReady(() => setTimeout(applyPendingTemplate, 0));
 boot();

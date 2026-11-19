@@ -78,6 +78,8 @@ input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgb(var(--
 /* hộp Video mới: dòng Thương hiệu · Kho, nhắc khi khác dự án đang mở */
 .nkho { display: flex; gap: var(--space-2); align-items: flex-start; margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); font-size: var(--text-xs); line-height: 1.5; color: rgb(var(--color-fg-muted)); }
 .nkho > .ti { flex: none; margin-top: 2px; } .nkho span { min-width: 0; overflow-wrap: anywhere; } .nkho small { color: rgb(var(--color-fg-subtle)); }
+/* S27 M189: dòng "Áp mẫu … sau khi tạo" của hộp Video mới */
+label.check.ntpl { margin: 0 0 var(--space-3); } label.check.ntpl[hidden] { display: none; }
 .nkho.warn { border-color: rgb(var(--color-warning) / .6); background: rgb(var(--color-warning) / .08); color: rgb(var(--color-fg)); }
 /* đang tạo video mới (S26 M185: chạy nền trong khay việc, không hộp chặn): dự án cũ đã đóng, che trình chỉnh sửa bằng chỗ chờ #np-wait; thanh trái (Tự lái) và trang chủ vẫn dùng được */
 body.np-busy #right, body.np-busy #tlwrap, body.np-busy #center > :not(#np-wait) { visibility: hidden; }
@@ -709,6 +711,8 @@ body.libdrag #stagebox, body.libdrag #tlinner { outline: 1px dashed rgb(var(--co
 .tdkw { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); font-size: var(--text-xs); color: rgb(var(--color-fg-subtle)); }
 .help.warn { color: rgb(var(--color-warning)); display: flex; gap: var(--space-2); align-items: flex-start; }
 .tdact { margin-top: auto; padding-top: var(--space-4); }
+/* S27 M189: thương hiệu của mẫu, mẫu mặc định */
+.tdbrand { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); } .tdbrand select { width: 100%; } .tdbrand button { align-self: flex-start; }
 .tdact .big { width: 100%; justify-content: center; height: var(--h-lg); padding: 0 var(--space-4); font-size: var(--text-sm); font-weight: 700; border-radius: var(--radius-control); }
 @media (max-width: 820px) { .tdet { flex-direction: column; overflow-y: auto; } .tdv, .tdet.h .tdv { width: 100%; } .tdv video { max-height: 50vh; } }
 

@@ -75,16 +75,25 @@ function renderComps() {
 }
 
 // ---------- Mẫu (templates) ----------
+// S27 M189: mẫu của thương hiệu. Thương hiệu ngữ cảnh = thương hiệu (Kho) của dự án đang mở, hoặc thương hiệu trang chủ truyền vào
+// (Studio.openTemplates({ brand })). Mẫu có brand_id trùng đứng đầu, có nhóm "Của <thương hiệu>"; brand.tpl = mẫu mặc định.
+let BRANDS = [], TPL_BRAND = null;
+const ctxBrand = () => (TPL_BRAND ?? META?.kho?.brand) || '';
+const brandById = id => BRANDS.find(b => b.id === id) || null;
+const brandTitle = b => b ? b.title || b.name || b.id : '';
+const brandCat = () => { const b = brandById(ctxBrand()); return b ? `Của ${brandTitle(b)}` : ''; };
+const tplCats = () => { const bc = brandCat(); return bc ? [TPL_CATS[0], bc, ...TPL_CATS.slice(1)] : TPL_CATS; };
 async function loadTemplates() {
-  try { TEMPLATES = await api('/api/templates'); } catch { TEMPLATES = []; }
-  if (!Array.isArray(TEMPLATES)) TEMPLATES = [];
+  const [t, b] = await Promise.all([api('/api/templates').catch(() => []), api('/api/brands').catch(() => [])]);
+  TEMPLATES = Array.isArray(t) ? t : []; BRANDS = Array.isArray(b) ? b : [];
   if (panel === 'tpl') renderPanel();
 }
 function panelTemplates() {
   $('#libact').innerHTML = `<button class="mini" data-tplact="gallery" title="Mở thư viện mẫu cỡ lớn"><i class="ti ti-layout-grid"></i> Xem lớn</button><button class="mini icon" data-tplact="save" title="Lưu dự án hiện tại thành mẫu"><i class="ti ti-bookmark-plus"></i></button>`;
   const all = TEMPLATES || [];
   const list = tplFilter(tplCat, query);
-  $('#libbody').innerHTML = chips(TPL_CATS.map(c => [c, c]), tplCat, 'cat') +
+  if (!tplCats().includes(tplCat)) tplCat = 'Tất cả';
+  $('#libbody').innerHTML = chips(tplCats().map(c => [c, c]), tplCat, 'cat') +
     (TEMPLATES == null ? '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang tải mẫu…</div>'
       : !all.length ? empty('ti-layout-grid-add', 'Chưa có mẫu nào', 'Mẫu sẽ xuất hiện ở đây khi có trong thư mục templates/. Bạn có thể bấm “Lưu thành mẫu” để biến dự án này thành mẫu đầu tiên.')
         : !list.length ? empty('ti-filter-off', 'Không có mẫu trong mục này', 'Chọn mục khác hoặc xoá ô tìm.')
@@ -92,7 +101,7 @@ function panelTemplates() {
         <div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" data-dbg="${esc(t.preview?.jpg || '')}">
           ${t.preview?.jpg ? '' : `<span class="ph">${esc(pk(t.pack)?.icon || '🎬')}</span>`}
           ${t.preview?.mp4 ? `<video muted loop playsinline preload="none" data-src="${t.preview.mp4}"></video>` : ''}
-          <span class="badge">${esc(t.aspect || '9:16')}</span>${t.user ? '<span class="badge l">Của tôi</span>' : ''}
+          <span class="badge">${esc(t.aspect || '9:16')}</span>${tplBadge(t)}
           <button class="use" data-use="${esc(t.id)}"><i class="ti ti-wand"></i> Dùng mẫu</button>
         </div>
         <div class="tn">${esc(t.name || t.id)}</div><div class="tc2">${esc(catName(t))} · ${esc(pk(t.pack)?.name || t.pack || '')}</div></div>`).join('')}</div>`);
@@ -101,28 +110,36 @@ function panelTemplates() {
 const CAT_ID = { 'BĐS': 'bds', 'Khoá học': 'khoahoc', 'Review': 'review', 'Chia sẻ': 'chiase', 'Tin tức': 'tintuc', 'Bán hàng': 'banhang', 'Doanh nghiệp': 'doanhnghiep', 'AI': 'ai', 'Khác': 'khac' };
 const catName = t => Object.keys(CAT_ID).find(k => CAT_ID[k] === t.category || k === t.category) || 'Khác';
 const pk = id => packs().find(p => p.id === id);
-const tplFilter = (cat, q) => (TEMPLATES || []).filter(t => cat === 'Tất cả' || catName(t) === cat)
-  .filter(t => !q || [t.name, t.desc, t.pack, pk(t.pack)?.name, catName(t), ...(t.tags || [])].join(' ').toLowerCase().includes(q.toLowerCase()));
+const ownTpl = t => !!t.brand_id && t.brand_id === ctxBrand();
+const inCat = (t, cat) => cat === 'Tất cả' || (cat === brandCat() ? ownTpl(t) : catName(t) === cat);
+// mẫu của thương hiệu đang làm đứng đầu, mẫu mặc định đầu tiên (sort ổn định giữ thứ tự còn lại)
+const tplRank = t => (brandById(ctxBrand())?.tpl === t.id ? 0 : ownTpl(t) ? 1 : 2);
+const tplFilter = (cat, q) => (TEMPLATES || []).filter(t => inCat(t, cat))
+  .filter(t => !q || [t.name, t.desc, t.pack, pk(t.pack)?.name, catName(t), brandTitle(brandById(t.brand_id)), ...(t.tags || [])].join(' ').toLowerCase().includes(q.toLowerCase()))
+  .sort((a, b) => tplRank(a) - tplRank(b));
+const tplBadge = t => brandById(ctxBrand())?.tpl === t.id ? '<span class="badge l"><i class="ti ti-star-filled"></i> Mặc định</span>'
+  : ownTpl(t) ? `<span class="badge l" title="${esc(brandTitle(brandById(t.brand_id)))}">Thương hiệu</span>` : t.user ? '<span class="badge l">Của tôi</span>' : '';
 const TP = { cat: 'Tất cả', q: '', aspect: '', list: [], cur: null };
 function tplPop(html, wide) {
   let el = $('#tplpop');
-  if (!el) { el = document.createElement('div'); el.id = 'tplpop'; document.body.appendChild(el); el.addEventListener('click', tplPopClick); el.addEventListener('mouseover', tplHover(true)); el.addEventListener('mouseout', tplHover(false)); }
+  if (!el) { el = document.createElement('div'); el.id = 'tplpop'; document.body.appendChild(el); el.addEventListener('click', tplPopClick); el.addEventListener('change', e => { const s = e.target.closest('[data-tpbrand]'); if (s) tplSetBrand(s.dataset.tpbrand, s.value); }); el.addEventListener('mouseover', tplHover(true)); el.addEventListener('mouseout', tplHover(false)); }
   el.innerHTML = `<div class="tpbox ${wide ? 'wide' : ''}">${html}</div>`; el.hidden = false;
 }
-function closeTplPop() { const el = $('#tplpop'); if (el) { el.querySelectorAll('video').forEach(v => v.pause()); el.hidden = true; el.innerHTML = ''; } }
+function closeTplPop() { TPL_BRAND = null; const el = $('#tplpop'); if (el) { el.querySelectorAll('video').forEach(v => v.pause()); el.hidden = true; el.innerHTML = ''; } }
 function tplCardHtml(t) {
   return `<div class="tpc" data-open="${esc(t.id)}"><div class="tv ${(t.aspect || '9:16') === '16:9' ? 'h' : ''}" data-dbg="${esc(t.preview?.jpg || '')}">
     ${t.preview?.mp4 ? `<video muted loop playsinline preload="none" data-src="${t.preview.mp4}"></video>` : `<span class="ph">${esc(pk(t.pack)?.icon || '🎬')}</span>`}
-    <span class="badge">${esc(t.aspect || '9:16')}</span>${t.user ? '<span class="badge l">Của tôi</span>' : ''}</div>
+    <span class="badge">${esc(t.aspect || '9:16')}</span>${tplBadge(t)}</div>
     <div class="tn">${esc(t.name || t.id)}</div><div class="tc2">${esc(catName(t))} · ${esc(pk(t.pack)?.name || t.pack || '')}</div></div>`;
 }
 function openTplGallery() {
   TP.list = tplFilter(TP.cat, TP.q).filter(t => !TP.aspect || (t.aspect || '9:16') === TP.aspect);
-  const count = c => c === 'Tất cả' ? (TEMPLATES || []).length : (TEMPLATES || []).filter(t => catName(t) === c).length;
+  if (!tplCats().includes(TP.cat)) TP.cat = 'Tất cả';
+  const count = c => (TEMPLATES || []).filter(t => inCat(t, c)).length;
   const box = $('#tplpop .tpbox.wide');
   const body = `<div class="tpgrid">${TP.list.length ? TP.list.map(tplCardHtml).join('') : empty('ti-filter-off', 'Không có mẫu phù hợp', 'Đổi danh mục hoặc xoá ô tìm.')}</div>`;
   if (box && box.querySelector('.tpgrid')) {   // giữ ô tìm đang gõ, chỉ vẽ lại danh mục + lưới
-    box.querySelector('.tpcats').innerHTML = TPL_CATS.map(c => `<button class="chip ${TP.cat === c ? 'on' : ''}" data-tpcat="${esc(c)}">${esc(c)} <span>${count(c)}</span></button>`).join('');
+    box.querySelector('.tpcats').innerHTML = tplCats().map(c => `<button class="chip ${TP.cat === c ? 'on' : ''}" data-tpcat="${esc(c)}">${esc(c)} <span>${count(c)}</span></button>`).join('');
     box.querySelector('.tpasp').innerHTML = [['', 'Mọi khổ'], ['9:16', 'Dọc 9:16'], ['16:9', 'Ngang 16:9']].map(([v, l]) => `<button class="${TP.aspect === v ? 'on' : ''}" data-tpasp="${v}">${l}</button>`).join('');
     box.querySelector('.tpgrid').outerHTML = body; box.querySelector('.tpn').textContent = `${TP.list.length} mẫu`; return;
   }
@@ -154,19 +171,51 @@ function openTplDetail(id, list) {
       ${t.tags?.length ? `<div class="tdkw">${t.tags.map(x => `<span>#${esc(x)}</span>`).join('')}</div>` : ''}
       ${h !== (DW > DH) ? `<div class="help warn"><i class="ti ti-alert-triangle"></i> Mẫu này làm cho khổ ${h ? 'ngang 16:9' : 'dọc 9:16'}, dự án đang là ${DW > DH ? 'ngang 16:9' : 'dọc 9:16'}. ${tip('Vẫn dùng được: bố cục tự đổi theo khổ dự án.')}</div>` : ''}
       <div class="help">Giữ nguyên video và lời nói; hoàn tác bằng ⌘Z. ${tip('Mẫu chỉ thay graphic, phụ đề, nhạc, hiệu ứng; video và lời nói của bạn giữ nguyên. Bấm Hoàn tác (⌘Z) nếu không ưng.')}</div>
-      <div class="tdact"><button class="primary big" data-tpuse="${esc(t.id)}"><i class="ti ti-wand"></i> Dùng mẫu này</button></div>
+      ${tplBrandRow(t)}
+      <div class="tdact"><button class="primary big" data-tpuse="${esc(t.id)}"><i class="ti ti-wand"></i> ${TL ? 'Dùng mẫu này' : 'Tạo video với mẫu này'}</button></div>
     </div></div>`, false);
+}
+// S27 M189: gán mẫu của tôi cho thương hiệu; đặt / bỏ mẫu mặc định của thương hiệu đang làm (brand kit `tpl`)
+function tplBrandRow(t) {
+  const cb = brandById(ctxBrand()), isDef = cb?.tpl === t.id;
+  const own = t.user ? `<label class="lbl">Thương hiệu của mẫu</label><select data-tpbrand="${esc(t.id)}"><option value="">Không thuộc thương hiệu nào</option>${BRANDS.map(b => `<option value="${esc(b.id)}" ${b.id === t.brand_id ? 'selected' : ''}>${esc(brandTitle(b))}</option>`).join('')}</select>` : '';
+  const def = cb ? `<button class="ghost" data-tpdef="${esc(t.id)}" title="${isDef ? 'Video mới của thương hiệu này không đề nghị mẫu nào nữa' : 'Hộp Video mới của thương hiệu này đề nghị áp mẫu này'}"><i class="ti ${isDef ? 'ti-star-off' : 'ti-star'}"></i> ${isDef ? 'Bỏ mẫu mặc định' : `Đặt làm mẫu mặc định của ${esc(brandTitle(cb))}`}</button>` : '';
+  return own || def ? `<div class="tdbrand">${own}${def}</div>` : '';
+}
+async function tplSetBrand(id, brand) {
+  const r = await api('/api/templates/brand', { id, brand }).catch(e => ({ error: e.message }));
+  if (r.error) return toast(r.error);
+  const t = (TEMPLATES || []).find(x => x.id === id); if (t) { if (brand) t.brand_id = brand; else delete t.brand_id; }
+  toast(brand ? `Đã gán mẫu cho ${brandTitle(brandById(brand))}` : 'Mẫu không còn thuộc thương hiệu nào');
+  if (panel === 'tpl') renderPanel(); openTplDetail(id);
+}
+async function tplSetDefault(id) {
+  const cb = brandById(ctxBrand()); if (!cb) return;
+  const tpl = cb.tpl === id ? '' : id;
+  const r = await api('/api/brands/save', { brand: { id: cb.id, tpl } }).catch(e => ({ error: e.message }));
+  if (r.error) return toast(r.error);
+  if (tpl) cb.tpl = tpl; else delete cb.tpl;
+  toast(tpl ? `Mẫu mặc định của ${brandTitle(cb)}: video mới sẽ đề nghị áp mẫu này` : 'Đã bỏ mẫu mặc định');
+  if (panel === 'tpl') renderPanel(); openTplDetail(id);
 }
 function tplPopClick(e) {
   const t = e.target, q = s => t.closest(s);
   let b;
+  if ((b = q('[data-tpdef]'))) return tplSetDefault(b.dataset.tpdef);
   if (t.id === 'tplpop' || q('[data-tpclose]')) return closeTplPop();
   if ((b = q('[data-tpcat]'))) { TP.cat = b.dataset.tpcat; return openTplGallery(); }
   if ((b = q('[data-tpasp]'))) { TP.aspect = b.dataset.tpasp; return openTplGallery(); }
   if (q('[data-tpback]')) { TP.back = false; $('#tplpop').innerHTML = ''; return openTplGallery(); }
   if ((b = q('[data-tpnav]'))) return tplNav(+b.dataset.tpnav);
   if ((b = q('[data-open]'))) return openTplDetail(b.dataset.open);
-  if ((b = q('[data-tpuse]'))) { const tp = (TEMPLATES || []).find(x => x.id === b.dataset.tpuse); closeTplPop(); if (tp) applyTemplate(tp); }
+  if ((b = q('[data-tpuse]'))) {
+    const tp = (TEMPLATES || []).find(x => x.id === b.dataset.tpuse), br = ctxBrand(), fromHome = TPL_BRAND != null; closeTplPop(); if (!tp) return;
+    // mở từ trang chủ mà chưa mở dự án, hoặc dự án đang mở thuộc thương hiệu khác: tạo video mới cho thương hiệu này,
+    // mẫu áp sau khi dự án mở (applyPendingTemplate); cùng thương hiệu thì áp ngay vào dự án đang mở
+    if (fromHome) Studio.hideHome?.();
+    if (!TL || (fromHome && br !== (META?.kho?.brand || ''))) return Studio.newProject({ brand: br, tpl: tp.id });
+    applyTemplate(tp);
+  }
 }
 function tplNav(d) { const n = TP.list.length; if (n < 2) return; const i = TP.list.findIndex(x => x.id === TP.cur); openTplDetail(TP.list[(i + d + n) % n].id); }
 const tplHover = on => e => {
@@ -237,6 +286,7 @@ async function applyTemplate(tpl) {
   toast(`Đã áp dụng mẫu “${tpl.name || tpl.id}”`);
 }
 async function saveAsTemplate() {
+  if (!BRANDS.length) BRANDS = await api('/api/brands').then(b => (Array.isArray(b) ? b : [])).catch(() => []);
   const p = packs().find(x => x.id === TL.pack);
   modal(`<h3><i class="ti ti-bookmark-plus"></i> Lưu dự án thành mẫu</h3>
     <label class="lbl">Tên mẫu</label><input id="tname" value="${esc(META.name || '')}">
@@ -244,13 +294,14 @@ async function saveAsTemplate() {
     <div><label class="lbl">Ảnh bìa tại</label><input id="tt" type="number" step=".1" value="${r2(T)}"></div></div>
     <label class="lbl">Mô tả ngắn</label><input id="tdesc" placeholder="VD: Giới thiệu căn hộ, nhạc sang, CTA gọi điện">
     <label class="lbl">Thẻ (cách nhau dấu phẩy)</label><input id="ttags" placeholder="bđs, căn hộ">
+    <label class="lbl">Thuộc thương hiệu</label><select id="tbrand"><option value="">Không thuộc thương hiệu nào</option>${BRANDS.map(b => `<option value="${esc(b.id)}" ${b.id === ctxBrand() ? 'selected' : ''}>${esc(brandTitle(b))}</option>`).join('')}</select>
     <p class="muted">Mẫu giữ: gói ${esc(p?.name || TL.pack || '—')}, kiểu phụ đề, nhạc, brand kit, hiệu ứng và các graphic bạn tự thêm (graphic của bản dựng tự động sẽ được dựng lại theo video mới).</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="tsave">Lưu mẫu</button></div>`);
   $('#tsave').onclick = async () => {
     if (dirty && !await saveNow()) return;
     const clean = s => JSON.parse(JSON.stringify(s, (k, v) => (k === 'cid' || k === '_orig' || k === '_recipe' || k === '_tpl' || k === 'note' ? undefined : v)));
     const tpl = { name: $('#tname').value.trim() || 'Mẫu của tôi', category: $('#tcat').value, aspect: DW > DH ? '16:9' : '9:16', pack: TL.pack || '',
-      desc: $('#tdesc').value.trim(), tags: $('#ttags').value.split(',').map(s => s.trim()).filter(Boolean),
+      brand_id: $('#tbrand').value || undefined, desc: $('#tdesc').value.trim(), tags: $('#ttags').value.split(',').map(s => s.trim()).filter(Boolean),
       caption_style: TL.caption_style ?? '', music: TL.audio?.music?.[0]?.mood || '', brand: TL.brand || undefined,
       fx: (TL.fx || []).filter(f => !f._recipe).map(clean), scenes: (TL.scenes || []).filter(s => !s._recipe).map(clean), base_dur: TL.duration };
     modal(`<h3>Đang lưu mẫu…</h3><div class="muted">Render ảnh bìa</div><div class="bar bar--busy"><i></i></div>`);
@@ -258,6 +309,23 @@ async function saveAsTemplate() {
     closeModal();
     if (r.ok) { toast('Đã lưu mẫu ' + r.id); TEMPLATES = null; tplCat = 'Tất cả'; openPanel('tpl'); } else toast('Lỗi: ' + (r.error || ''));
   };
+}
+
+// S27 M189: trang chủ mở thư viện mẫu cỡ lớn theo một thương hiệu (cả khi chưa mở dự án); mẫu chờ áp sau khi tạo video mới.
+async function openTemplatesFor(o = {}) {
+  await loadTemplates();
+  TPL_BRAND = typeof o.brand === 'string' ? o.brand : null;
+  TP.cat = brandCat() && (TEMPLATES || []).some(ownTpl) ? brandCat() : 'Tất cả'; TP.q = ''; TP.aspect = ''; TP.back = false;
+  $('#tplpop')?.remove(); openTplGallery();
+}
+const PENDING_TPL = 'avs-apply-tpl';
+function applyPendingTemplate() {
+  let id = ''; try { id = sessionStorage.getItem(PENDING_TPL) || ''; sessionStorage.removeItem(PENDING_TPL); } catch { /* không có sessionStorage */ }
+  if (!id || !TL) return;
+  (TEMPLATES ? Promise.resolve() : loadTemplates()).then(() => {
+    const tp = (TEMPLATES || []).find(x => x.id === id);
+    if (tp) applyTemplate(tp); else toast('Không còn mẫu đã chọn, dự án mở không áp mẫu');
+  });
 }
 
 // ---------- Media: tab Kho (tài nguyên của thương hiệu, S12 · M99) · Dự án này (media/) · B-roll động ----------
