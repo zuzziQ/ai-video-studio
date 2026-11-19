@@ -119,10 +119,26 @@
       <p class="muted ai-note">Cảnh do AI tạo được đánh dấu; chạy lại sẽ chỉ thay các cảnh AI chưa bị bạn chỉnh. Cảnh bạn đã sửa hoặc tự thêm được giữ nguyên.</p>
       <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="aigo"><i class="ti ti-sparkles"></i> Dựng</button></div>`);
     $('#aig').value = { course: 'Khoá học', realestate: 'Bất động sản', review: 'Review', share: 'Chia sẻ' }[cur] || 'Khác';
+    $('#aig').onchange = () => { $('#aig').dataset.touched = '1'; };
+    presetGoal(); checkClaude();
     $('#aid').onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; for (const x of $('#aid').children) x.classList.toggle('on', x === b); };
     $('#aipk').onfocus = () => { document.querySelector('[name=aip][value=pick]').checked = true; };
     $('#aigo').onclick = startAi;
     loadHabits();
+  }
+  // S26 M182 (#15): mục tiêu chọn sẵn theo lĩnh vực của hướng dẫn đầu (purpose của /api/onboarding), nếu chưa có thì theo gói như cũ
+  const PURPOSE_GOAL = { bds: 'Bất động sản', khoahoc: 'Khoá học', banhang: 'Bán hàng', review: 'Review', chiase: 'Chia sẻ' };
+  async function presetGoal() {
+    const ob = await S.api('/api/onboarding').catch(() => null), g = PURPOSE_GOAL[ob?.purpose], el = $('#aig');
+    if (g && el && el.dataset.touched !== '1') el.value = g;
+  }
+  // S26 M182 (#5): kiểm Claude ngay khi mở hộp (cùng nguồn với Kiểm tra máy), báo trước khi người dùng điền hết rồi mới bị từ chối
+  async function checkClaude() {
+    const r = await S.api('/api/setup/check').catch(() => null), c = r?.items?.find(i => i.id === 'claude'), box = $('#ai-habits');
+    if (!c || c.status === 'ok' || !box) return;
+    const w = document.createElement('div'); w.className = 'ai-card'; w.id = 'ai-noclaude';
+    w.innerHTML = `<h4><i class="ti ti-alert-triangle ai-c-bad"></i> Claude Code chưa sẵn sàng</h4><p>AI dựng cần Claude Code (cài và đăng nhập một lần). <button class="ai-lnk" id="ai-setup">Mở Kiểm tra máy</button></p>`;
+    box.before(w); w.querySelector('#ai-setup').onclick = () => { S.closeModal(); S.openSetup?.(); };
   }
   // S19 M134: thói quen đã học của thương hiệu của dự án (GET /api/ai/habits); bỏ chọn = tắt điều đó cho lần dựng này
   let HAB = null;
@@ -151,7 +167,14 @@
     S.modal(`<h3><i class="ti ti-sparkles"></i> AI đang dựng…</h3><div id="jobstep" class="muted">Bắt đầu</div><div class="bar"><i></i></div><pre id="joblog"></pre><div class="actions"><button id="aicancel">Dừng</button></div>`);
     $('#aicancel').onclick = () => S.api('/api/job/cancel', {});
     S.pollJob(async j => {
-      if (j.state !== 'done') return S.modal(`<h3>AI dựng chưa được</h3><p>${esc(j.step)}</p><pre>${esc((j.log || '').split('\n').filter(l => !l.startsWith('@@')).join('\n').slice(-1200))}</pre><div class="actions"><button onclick="closeModal()">Đóng</button></div>`);
+      if (j.state !== 'done') {
+        // S26 M182: lỗi in một lần: bỏ các dòng log lặp lại câu lỗi ở trên; chưa đăng nhập thì có lối mở Kiểm tra máy
+        const step = String(j.step || '').trim(), norm = t => t.replace(/^(LỖI|ERROR):?\s*/i, '').trim();
+        const rest = (j.log || '').split('\n').filter(l => l.trim() && !l.startsWith('@@') && !(step && (norm(l.trim()) === step || step.includes(norm(l.trim())) || norm(l.trim()).includes(step)))).join('\n').slice(-1200);
+        const login = /đăng nhập|Claude Code/.test(step + rest);
+        S.modal(`<h3>AI dựng chưa được</h3><p>${esc(step)}</p>${rest ? `<pre>${esc(rest)}</pre>` : ''}<div class="actions">${login ? '<button id="ai-setup2">Mở Kiểm tra máy</button>' : ''}<button onclick="closeModal()">Đóng</button></div>`);
+        return $('#ai-setup2')?.addEventListener('click', () => { S.closeModal(); S.openSetup?.(); });
+      }
       const plan = await S.api('/api/ai/plan');
       if (plan.error) return S.toast(plan.error);
       lastPlan = plan; applyPlan(plan);
@@ -209,7 +232,10 @@
     TL.audio = TL.audio || {};
     // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
     // S19 M134: plan.music null = thói quen "không nhạc": bỏ nhạc _ai/_auto, không thêm (nhạc file / tay giữ nguyên, bài học ai-video-studio-020)
-    TL.audio.music = [...(TL.audio.music || []).filter(m => !m._ai && !m._auto && !(plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1)), ...(plan.music ? [{ ...plan.music, t1: TL.duration }] : [])];
+    // S26 M182: như isUserMusic của scripts/ai_edit.mjs: nhạc bạn chọn/chỉnh (_orig, file, Kho, mood khác 'tech') được giữ, nhạc khởi đầu chưa ai đụng thì AI thay
+    const userM = m => !!m._orig || (!m._ai && !m._auto && (!!m.file || !!m.kho || !!m.title || (!!m.mood && m.mood !== 'tech')));
+    const keepM = (TL.audio.music || []).some(m => userM(m) && m.t0 <= .05 && m.t1 >= TL.duration - .1);
+    TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || !(m._ai || m._auto || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [{ ...plan.music, t1: TL.duration }] : [])];
     TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai), ...plan.sfx.map(x => ({ ...x }))];
     let n = 0;
     for (const e of plan.captions) {

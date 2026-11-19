@@ -626,6 +626,9 @@ def music_auto(caps, words, audio):
     music = audio.get("music", []) or []
     if any(m.get("file") for m in music if not m.get("_auto")):
         return "bỏ qua nhạc tự động (đã có nhạc riêng của bạn)"
+    # S26 M182: nền nhạc người dùng đã chỉnh tay (_orig do Studio ghi khi sửa mood / gain, kể cả trên nền _auto cũ): giữ nguyên
+    if any(m.get("_orig") for m in music):
+        return "bỏ qua nhạc tự động (giữ nhạc bạn chọn)"
     if tl.get("pack") == "beatslide" or tl.get("beats"):
         return "bỏ qua nhạc tự động (video dựng theo nhịp nhạc)"
     # M62: the "AI dựng giúp" bed (_ai) is replaced too (kept in _was), else two full-length beds played at once.
