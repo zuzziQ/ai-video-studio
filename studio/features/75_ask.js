@@ -112,6 +112,7 @@
   }
   const scope = () => AC.scopeOf({ step: step(), sel: selInfo(), range: AS.range, region: AS.region, qc: !!S.qc?.last });
   const info = () => ({ dw: S.DW || 720, dh: S.DH || 1280, duration: S.TL?.duration || 0, clips: S.TL?.clips?.length || 0, scenes: S.TL?.scenes?.length || 0, captions: (S.CAP || []).length, pack: S.TL?.pack || '', beats: window.BeatsCore?.brief(S.TL?.audio?.music, S.TL?.duration) || null, // S28 M210
+    presets: S.presets?.brief() || null, // S29 M211: preset người dùng / thương hiệu (gu M192)
     ...(step() === 'check' && S.qc?.brief ? { qc: S.qc.brief() } : {}) });
   const elemShown = sc => sc?.kind === 'elem' && S.elemAi && (S.elemAi.cid === sc.cid || S.review?.owner === 'elem_ai') && S.elemAi.st !== 'idle';
 

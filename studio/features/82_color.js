@@ -36,7 +36,7 @@
     const all = scope === 'clip' ? 'Áp cho tất cả clip' : scope === 'scene' ? 'Áp cho mọi b-roll và ảnh phủ' : '';
     const help = scope === 'efx' ? `<div class="help">Áp lên mọi lớp bên dưới trong đoạn. ${S.tip('Phủ lên chọn ở tab Hiệu ứng; thanh Cường độ của khối kéo cả bộ về gốc.')}</div>` : '';
     return `<div id="colpanel">${sect('Bộ lọc', `<div class="flmini">${sw}</div>${str}`, 'ti-color-filter')}${sect('Điều chỉnh', `${adj}${help}
-      <div class="acts"><button data-colreset><i class="ti ti-restore"></i> Đặt lại màu</button>${all ? `<button data-colall ${o.filter ? '' : 'disabled'}><i class="ti ti-copy-check"></i> ${all}</button>` : ''}</div>`, 'ti-adjustments')}</div>`;
+      <div class="acts"><button data-colreset><i class="ti ti-restore"></i> Đặt lại màu</button>${all ? `<button data-colall ${o.filter ? '' : 'disabled'}><i class="ti ti-copy-check"></i> ${all}</button>` : ''}</div>`, 'ti-adjustments')}${S.presets ? sect('Của tôi', S.presets.block('color'), 'ti-bookmark') : ''}</div>`;
   }
   S.colorPanel = (o, thumb, scope) => panel(o, thumb ?? thumbAt(o.t0 ?? o.start ?? S.T, o), scope);
 
@@ -90,7 +90,8 @@
     if (!url || !S.assist || !S.imagePayload) throw new Error('Chưa có trợ lý AI');
     const image = await S.imagePayload(url, { max: 512, type: 'image/jpeg', quality: 0.85 });
     const hab = await S.api('/api/ai/habits').catch(() => null);
-    const taste = (Array.isArray(hab?.items) ? hab.items : []).filter(x => x && !x.off && x.note).map(x => String(x.note)).slice(0, 8);
+    const mine = (S.presets?.brief() || []).filter(x => x.kind === 'color').slice(0, 3).map(x => `Preset màu người dùng đã lưu "${x.name}": ${JSON.stringify(x.value)}`); // S29 M211
+    const taste = [...mine, ...(Array.isArray(hab?.items) ? hab.items : []).filter(x => x && !x.off && x.note).map(x => String(x.note))].slice(0, 8);
     const b = S.TL.brand || {};
     const r = await S.assist('color', { image, taste, current: c.filter || {}, brand: { name: b.name || b.title, primary: b.primary, accent: b.accent, dark: b.dark, light: b.light, voice: b.voice } }, { onStep });
     const v = r?.fields?.[0]?.value;

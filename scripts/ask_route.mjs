@@ -7,6 +7,7 @@
 import { createRequire } from 'node:module';
 
 export const AskCore = createRequire(import.meta.url)('../studio/features/75_ask.core.js');
+const PresetsCore = createRequire(import.meta.url)('../studio/features/84_presets.core.js'); // S29 M211
 
 export class AskError extends Error {
   constructor(msg, status = 400) { super(msg); this.name = 'AskError'; this.status = status; }
@@ -34,7 +35,7 @@ export function checkInput(raw) {
   if (!scope) throw bad('Cài đặt không có thanh Hỏi Claude');
   const n = (v, max) => Math.max(0, Math.min(max, Math.round(+v || 0)));
   const ctx = { duration: Math.round(Math.max(0, Math.min(36000, +I.duration || 0)) * 10) / 10, clips: n(I.clips, 999), scenes: n(I.scenes, 9999), captions: n(I.captions, 99999), pack: str(I.pack, 40), text: sel?.text || '',
-    qc: scope.step === 'check' ? qc : null, dw, dh, image: false, beats: checkBeats(I.beats) };
+    qc: scope.step === 'check' ? qc : null, dw, dh, image: false, beats: checkBeats(I.beats), presets: PresetsCore.checkBrief(I.presets) };
   return { scope, ask, ctx };
 }
 // S28 M210: nhịp nhạc (BeatsCore.brief của 33_beats.core.js): { bpm, strong: [giây] } — tối đa 40 mốc phách mạnh
@@ -72,11 +73,17 @@ function paramText(p) {
   if (!e.length) return 'không có tham số';
   return e.map(([k, d]) => `${k}: ${d.t === 'enum' ? d.values.join(' | ') : d.t === 'num' ? `số ${d.min}–${d.max}` : `chữ ≤ ${d.max} ký tự`}`).join('; ');
 }
+// S29 M211 (gu thương hiệu M192): preset người dùng đã lưu — chọn chuyển cảnh / hoạt ảnh / màu thì ưu tiên đúng loại + tham số của preset
+function presetText(list) {
+  if (!list?.length) return '';
+  return dataBlock('Preset người dùng đã lưu (gu riêng; mục "của thương hiệu" là gu của thương hiệu đang mở)', PresetsCore.briefLines(list)) +
+    '\nKhi việc cần chọn chuyển cảnh, hoạt ảnh hoặc màu: nếu một preset trên hợp nội dung thì dùng đúng type và tham số của preset đó (ưu tiên preset của thương hiệu) thay vì tự chọn loại khác.\n';
+}
 export function routerPrompt(input) {
   const list = AskCore.actionsOf(input.scope);
   return `Bạn là trợ lý của một phần mềm dựng video ngắn. Người dùng gõ một câu; chọn ĐÚNG MỘT việc trong danh sách dưới đây để phần mềm tự chạy.
 ${scopeText(input)}
-${input.ctx.text ? dataBlock('Chữ của element', input.ctx.text) + '\n' : ''}Danh sách việc (chỉ được chọn id có ở đây):
+${input.ctx.text ? dataBlock('Chữ của element', input.ctx.text) + '\n' : ''}${presetText(input.ctx.presets)}Danh sách việc (chỉ được chọn id có ở đây):
 ${list.map(a => `- ${a.id}: ${a.what} Tham số: ${paramText(a.params)}.`).join('\n')}
 ${dataBlock('Câu của người dùng', input.ask)}
 Nếu không việc nào khớp, hoặc người dùng chỉ hỏi để hiểu, chọn "answer" và trả lời ngắn (≤ 3 câu, tiếng Việt có dấu) trong "reply".
