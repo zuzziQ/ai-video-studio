@@ -97,7 +97,7 @@ test('mainTrack mới (engine.js đọc FX) dựng ra đúng HTML như mainTrack
     for (let t = 1.9; t < 3.6; t += 0.0137) assert.equal(newMain(t, 'x', 'y'), oldMain(t, 'x', 'y'), `${type} dur ${dur} t ${t}`);
   }
   assert.match(eng, /const TRANS = FX\.transFns\(\);/);
-  assert.match(eng, /const LUT = FX\.lutCss\(\);/);
+  assert.match(eng, /const clipFilter = c => FX\.colorFx\(c\.filter\)\.filter;/); // S29 M208: không còn bản chép LUT
   assert.doesNotMatch(eng, /slide_l: k =>/, 'engine.js không còn chép danh sách chuyển cảnh');
 });
 

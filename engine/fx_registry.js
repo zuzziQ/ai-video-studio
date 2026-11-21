@@ -7,7 +7,7 @@
 //            fn, ai: { mood, nhip, khi_nao, tranh } } — `ai` là mô tả cho Claude chọn theo nội dung câu nói, không chọn bừa.
 //   chuyển cảnh: fn(k, params) → [inStyle, outStyle] (k 0→1 trong đoạn chuyển; in = clip mới, out = clip trước chạy dưới nền);
 //                overlay(k) → HTML phủ lên trên (chỉ flash). Hàm thuần: cùng k cho cùng chuỗi (glitch dùng rnd tất định).
-//   LUT: css = chuỗi CSS filter; fn(k, params) → css (k chưa dùng, để M208 làm cường độ).
+//   LUT: css = chuỗi CSS filter; fn(k) → css ở cường độ k 0–1 (S29 M208; ghép với Adjust ở colorFx).
 //   hoạt ảnh (M205): anim_in (= text_in) / anim_out / anim_loop — hàm thuần + animOf / animAt, dùng chung cho chữ, hình, element, sticker.
 // Thêm một loại = thêm một mục ở đây; danh sách của Studio, prompt Claude và bảng references/clips.md (node scripts/fx_doc.mjs) đọc từ đó.
 'use strict';
@@ -371,7 +371,8 @@
   // Style thêm cho hình khối / element / sticker (không có từng ký tự): transform, filter, hệ số mờ, clip lộ từ trái
   const clipCss = r => (r.clip < 1 ? `clip-path:inset(-50% ${((1 - r.clip) * 100).toFixed(1)}% -50% -50%);` : '');
 
-  const lut = (id, label, group, icon, css, ai) => ({ id, label, group, icon, params: {}, css, fn: () => css, ai });
+  // S29 M208: fn(k) = cường độ 0–1 (k ≥ 1 → đúng chuỗi cũ), xem lutAt
+  const lut = (id, label, group, icon, css, ai) => ({ id, label, group, icon, params: {}, css, fn: (k = 1) => lutAt(id, k), ai });
   const LUT = [
     lut('warm', 'Ấm', 'tone', 'ti-sun', 'sepia(.22) saturate(1.2) hue-rotate(-8deg)',
       { mood: 'ấm áp, gần gũi', nhip: '—', khi_nao: 'đồ ăn, gia đình, chia sẻ, nội thất', tranh: 'da người đã vàng sẵn' }),
@@ -390,6 +391,81 @@
     lut('pop', 'Pop', 'tone', 'ti-confetti', 'saturate(1.6) contrast(1.15) brightness(1.04)',
       { mood: 'trẻ, sôi động', nhip: '—', khi_nao: 'giải trí, review đồ chơi, quảng cáo nhanh', tranh: 'thương hiệu sang trọng' }),
   ];
+
+  // ---- S29 M208: màu — cường độ LUT + Adjust; một nguồn cho engine (clip chính, b-roll / ảnh phủ, khối Điều chỉnh) và Studio ----
+  // filter = { preset?, strength? (0–100, thiếu = 100), brightness, contrast, saturate, hue, temp, blur (trường cũ),
+  //            exposure, highlights, shadows, sharpen, fade, vignette, grain (mới) }; thiếu = trung tính.
+  // colorFx(f, { t, mix, svg, blur }) → { filter (CSS), defs (SVG <filter>: vùng sáng / tối, nét), over (defs + vignette + hạt) }.
+  //   Chỉ trường cũ → filter đúng chuỗi cũ, over rỗng: timeline cũ dựng ra y hệt. mix 0–1 kéo mọi giá trị về trung tính (khối Điều chỉnh).
+  //   svg: false → bỏ url(#…) (thumbnail Studio, module tự vẽ a-roll: không có chỗ đặt defs). Hàm thuần theo t (hạt theo số khung).
+  const NEUTRAL = { sepia: 0, grayscale: 0, invert: 0, saturate: 1, contrast: 1, brightness: 1, 'hue-rotate': 0, blur: 0 };
+  const n4 = v => +(+v).toFixed(4);
+  function lutAt(id, k = 1) {
+    const d = LUT.find(x => x.id === id);
+    if (!d) return '';
+    if (!(k < 1)) return d.css;
+    if (!(k > 0)) return '';
+    return d.css.replace(/([a-z-]+)\((-?[\d.]+)(deg|px)?\)/g, (m, fn, v, u = '') => { const n = NEUTRAL[fn] ?? 0; return `${fn}(${n4(n + (v - n) * k)}${u})`; });
+  }
+  const ADJ = [
+    ['exposure', 'Phơi sáng', -1, 1, .01, 0], ['brightness', 'Độ sáng', .5, 1.5, .01, 1], ['contrast', 'Tương phản', .5, 1.5, .01, 1],
+    ['saturate', 'Bão hoà', 0, 2, .01, 1], ['temp', 'Nhiệt độ', -1, 1, .01, 0], ['hue', 'Sắc độ', -180, 180, 1, 0, '°'],
+    ['highlights', 'Vùng sáng', -1, 1, .01, 0], ['shadows', 'Vùng tối', -1, 1, .01, 0], ['sharpen', 'Nét', 0, 1, .01, 0],
+    ['fade', 'Fade', 0, 1, .01, 0], ['vignette', 'Vignette', 0, 1, .01, 0], ['grain', 'Hạt', 0, 1, .01, 0], ['blur', 'Làm mờ', 0, 20, .5, 0, 'px'],
+  ].map(([id, label, min, max, step, def, unit = '']) => ({ id, label, min, max, step, def, unit }));
+  // kẹp một bộ filter theo bảng (preset lạ → bỏ, strength 0–100); dùng cho dữ liệu Claude / dán
+  function colorClean(f) {
+    const out = {};
+    if (!f || typeof f !== 'object') return out;
+    if (f.preset && LUT.some(x => x.id === f.preset)) out.preset = f.preset;
+    if (out.preset && f.strength != null && Number.isFinite(+f.strength)) out.strength = Math.round(Math.min(100, Math.max(0, +f.strength)));
+    for (const a of ADJ) {
+      const v = f[a.id];
+      if (v == null || v === '' || !Number.isFinite(+v)) continue;
+      const x = Math.round(Math.min(a.max, Math.max(a.min, +v)) * 100) / 100;
+      if (x !== a.def) out[a.id] = x;
+    }
+    return out;
+  }
+  function colorFx(f, o = {}) {
+    f = f && typeof f === 'object' ? f : {};
+    const mix = o.mix ?? 1, t = o.t || 0;
+    const v = (id, n) => { const x = f[id]; return x == null ? null : mix === 1 ? x : n4(n + (+x - n) * mix); };
+    let s = f.preset ? lutAt(f.preset, ((f.strength ?? 100) / 100) * mix) : '';
+    // trường cũ: đúng thứ tự và cách in của engine.js clipFilter trước M208
+    const br = v('brightness', 1), ct = v('contrast', 1), sa = v('saturate', 1), hue = v('hue', 0), temp = v('temp', 0), bl = v('blur', 0);
+    if (br != null) s += ` brightness(${br})`;
+    if (ct != null) s += ` contrast(${ct})`;
+    if (sa != null) s += ` saturate(${sa})`;
+    if (hue) s += ` hue-rotate(${hue}deg)`;
+    if (temp) s += temp > 0 ? ` sepia(${(temp * .5).toFixed(2)})` : ` hue-rotate(${(temp * 25).toFixed(0)}deg)`;
+    if (bl && o.blur !== false) s += ` blur(${bl}px)`;
+    // mới
+    const ex = +v('exposure', 0) || 0, fd = +v('fade', 0) || 0, hl = +v('highlights', 0) || 0, sh = +v('shadows', 0) || 0, sp = +v('sharpen', 0) || 0;
+    if (ex) s += ` brightness(${n4(2 ** ex)})`;
+    if (fd > 0) s += ` contrast(${n4(1 - .3 * fd)}) brightness(${n4(1 + .06 * fd)}) saturate(${n4(1 - .15 * fd)})`;
+    let defs = '';
+    if ((hl || sh || sp > 0) && o.svg !== false) {
+      const id = 'avscg' + [hl, sh, sp].map(x => Math.round(x * 1000)).join('_').replace(/-/g, 'm');
+      // đường cong tông: hai đầu giữ nguyên, vùng tối nặng ở 1/3 dưới, vùng sáng nặng ở 1/3 trên
+      const tv = Array.from({ length: 11 }, (_, i) => { const x = i / 10, w = 4 * x * (1 - x); return n4(Math.min(1, Math.max(0, x + .45 * w * (sh * (1 - x) + hl * x)))); }).join(' ');
+      const tone = hl || sh ? `<feComponentTransfer>${['R', 'G', 'B'].map(c => `<feFunc${c} type="table" tableValues="${tv}"/>`).join('')}</feComponentTransfer>` : '';
+      const a = n4(sp * .8), sharp = sp > 0 ? `<feConvolveMatrix order="3" kernelMatrix="0 ${-a} 0 ${-a} ${n4(1 + 4 * a)} ${-a} 0 ${-a} 0" preserveAlpha="true" edgeMode="duplicate"/>` : '';
+      defs = `<svg width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true"><filter id="${id}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">${tone}${sharp}</filter></svg>`;
+      s += ` url(#${id})`;
+    }
+    const vg = +v('vignette', 0) || 0, gr = +v('grain', 0) || 0;
+    let over = defs;
+    if (vg > 0) over += `<div class="full" style="pointer-events:none;background:radial-gradient(ellipse at 50% 50%, transparent ${(60 - 25 * vg).toFixed(1)}%, rgba(0,0,0,${(.85 * vg).toFixed(3)}) 100%)"></div>`;
+    if (gr > 0) {
+      const j = Math.floor(t * 24);
+      over += `<div class="full" style="pointer-events:none;mix-blend-mode:overlay;opacity:${(.6 * gr).toFixed(3)};background-image:${NOISE};background-size:256px 256px;background-position:${Math.round(rnd(j) * 256)}px ${Math.round(rnd(j + 9) * 256)}px"></div>`;
+    }
+    return { filter: s, defs, over };
+  }
+  const colorCss = (f, o = {}) => colorFx(f, { ...o, svg: false }).filter;
+  // mô tả cho Claude (trợ lý "color", scripts/assist.mjs)
+  const colorGuide = () => `Bộ lọc (preset): ${aiGuide('lut', ' | ')}.\nAdjust (thiếu = trung tính): ${ADJ.map(a => `${a.id} ${a.label.toLowerCase()} ${a.min}…${a.max} (trung tính ${a.def})`).join('; ')}.`;
 
   // ---- S28 M206: nhóm `fx` — khối của track Hiệu ứng (TL.efx) + 10 hiệu ứng nhấn cũ (TL.fx, engine.js fxWrap vẽ như trước) ----
   // Khối mới: TL.efx = [{ type, start, end, params: { intensity, speed, range }, target: 'all'|'main', hidden?, locked? }].
@@ -478,6 +554,10 @@
         return { wrap: h => `<div class="full" style="filter:grayscale(${f3(p.intensity)})">${h}</div><div class="full" style="pointer-events:none;-webkit-mask-image:${m};mask-image:${m}">${noCid(h)}</div>` };
       },
       ai: { mood: 'nhấn chủ thể, nghệ thuật', nhip: '—', khi_nao: 'giữ màu sản phẩm / người ở giữa khung, nền thành đen trắng (gần đúng: theo vùng, không theo màu)', tranh: 'chủ thể lệch mép' } },
+    // S29 M208: khối Điều chỉnh — bộ màu (b.filter, như clip.filter) áp lên mọi lớp bên dưới trong đoạn; Cường độ kéo cả bộ về trung tính
+    { id: 'adjust', label: 'Điều chỉnh', group: 'color', icon: 'ti-adjustments', color: true, params: { intensity: INT(1) },
+      fn: (lt, p, dur, b) => { const r = colorFx(b?.filter, { t: lt, mix: p.intensity }); return { filter: r.filter.trim(), over: r.over }; },
+      ai: { mood: 'đồng bộ màu cả đoạn', nhip: '—', khi_nao: 'chỉnh màu một lần cho mọi clip, b-roll, ảnh phủ trong đoạn', tranh: 'chỉ một clip cần chỉnh (dùng tab Màu của clip)' } },
   ];
   // Thực thi khối mới tại t: html = các lớp bên dưới; trả lớp gói + filter / transform + HTML phủ (engine.js gộp vào wrapper)
   function fxApply(items, t, html) {
@@ -485,7 +565,7 @@
     for (const b of items) {
       const d = FXS.find(x => x.id === b.type);
       if (!d?.fn) continue;
-      const r = d.fn(t - b.start, params('fx', b.type, b.params), b.end - b.start) || {};
+      const r = d.fn(t - b.start, params('fx', b.type, b.params), b.end - b.start, b) || {};
       if (r.wrap) html = r.wrap(html);
       if (r.transform) tr += ' ' + r.transform;
       if (r.filter) fl += ' ' + r.filter;
@@ -528,6 +608,8 @@
     // studio (dạng mảng cũ của clips.js / library.js)
     transTypes: () => TRANS.map(x => [x.id, x.label, x.icon]),
     filters: () => [['', 'Gốc'], ...LUT.map(x => [x.id, x.label])],
+    // S29 M208: màu (engine.js clipFilter / clipBox / colorWrap, studio/clips.js clipFilterCss, features/82_color.js)
+    ADJ, lutAt, colorFx, colorCss, colorClean, colorGuide,
     animList: () => TEXT_IN.map(x => [x.id, x.label]),
     // S28 M206: track Hiệu ứng (engine.js fxWrap / mainFx, studio/features/81_fxtrack*.js, 75_ask.core.js)
     FXS, fxApply,

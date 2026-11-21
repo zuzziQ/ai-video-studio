@@ -104,7 +104,7 @@ test('registry nhóm fx: 10 nhấn cũ + ≥ 10 khối mới, ≤ 3 thanh, hàm 
   for (const x of fresh) {
     assert.equal(typeof x.fn, 'function', x.id);
     for (const n of Object.keys(x.params)) assert.ok(['intensity', 'speed', 'range'].includes(n), `${x.id}.${n}`);
-    const b = { type: x.id, start: 1, end: 4, params: {} };
+    const b = { type: x.id, start: 1, end: 4, params: {}, ...(x.color ? { filter: { exposure: .3, vignette: .4 } } : {}) }; // S29 M208: khối Điều chỉnh mang bộ màu
     for (const t of [1, 1.37, 2.5, 3.99]) {
       const r1 = FX.fxApply([b], t, '<p data-cid="s1">x</p>'), r2 = FX.fxApply([b], t, '<p data-cid="s1">x</p>');
       assert.deepEqual(r1, r2, `${x.id} t ${t}`);

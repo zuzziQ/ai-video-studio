@@ -400,7 +400,7 @@ function capText(c) { return c.words.map(w => (w.hl ? `*${w.w}*` : w.w) + (w.br 
 
 // Clip inspector (main track): Cơ bản / Tốc độ / Âm thanh / Màu / Chuyển cảnh.
 function clipTabs(c) {
-  const o = c.obj, k = clipLayout()[c.idx], f = o.filter || {}, still = typeof o.src === 'string';
+  const o = c.obj, k = clipLayout()[c.idx], still = typeof o.src === 'string';
   const rng = (fld, v, a, b, st, lab, unit = '', show = x => x) => `<div class="slrow"><span>${lab}</span><input type="range" data-cf="${fld}" min="${a}" max="${b}" step="${st}" value="${v}"><b data-v="${fld}">${show(v)}${unit}</b></div>`;
   const thumb = clipFrameUrl(o, srcAt(k, k.t0 + Math.min(.5, (k.t1 - k.t0) / 2)));
   return [
@@ -418,10 +418,7 @@ function clipTabs(c) {
         <div class="help">Phụ đề, graphic giãn/co theo clip; phía sau tự dồn. ${tip('Tiếng đổi tốc độ theo clip nhưng giữ cao độ.')}</div>`, 'ti-brand-speedtest'))],
     ['audio', 'Âm thanh', sect('Âm lượng clip', still || !o.audio ? '<div class="help">Clip này không có tiếng.</div>'
       : `${rng('volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, 'Âm lượng', '%')}<div class="acts"><button data-cact="mute" class="${o.mute ? 'on' : ''}"><i class="ti ${o.mute ? 'ti-volume-off' : 'ti-volume'}"></i> ${o.mute ? 'Đang tắt tiếng' : 'Tắt tiếng'}</button></div>`, 'ti-volume')],
-    ['color', 'Màu', sect('Bộ lọc', `<div class="flmini">${FILTERS.map(([v, l]) => `<button class="${(f.preset || '') === v ? 'on' : ''}" data-cpreset="${v}"><span data-dbg="${esc(thumb)}" data-dfx="${esc(v ? LUT_CSS[v] : 'none')}"></span><small>${l}</small></button>`).join('')}</div>`, 'ti-color-filter') +
-      sect('Điều chỉnh', `${rng('brightness', f.brightness ?? 1, .5, 1.5, .01, 'Độ sáng')}${rng('contrast', f.contrast ?? 1, .5, 1.5, .01, 'Tương phản')}${rng('saturate', f.saturate ?? 1, 0, 2, .01, 'Bão hoà')}
-        ${rng('temp', f.temp ?? 0, -1, 1, .01, 'Nhiệt độ')}${rng('hue', f.hue ?? 0, -180, 180, 1, 'Sắc độ', '°')}${rng('blur', f.blur ?? 0, 0, 20, .5, 'Làm mờ', 'px')}
-        <div class="acts"><button data-cact="resetcolor"><i class="ti ti-restore"></i> Đặt lại màu</button></div>`, 'ti-adjustments')],
+    ['color', 'Màu', Studio.colorPanel ? Studio.colorPanel(o, thumb, 'clip') : ''], // S29 M208: features/82_color.js (bộ lọc + cường độ + Adjust)
     ['trans', 'Chuyển cảnh', Studio.transUI ? Studio.transUI.insp(c) /* S29 M203: 83_transui.js */ : c.idx === 0 ? sect('', `<div class="help">Clip đầu tiên không có chuyển cảnh vào. ${tip('Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối giữa hai clip.')}</div>`)
       : sect('Chuyển cảnh vào clip này', `<div class="trgrid sm"><button class="tr ${o.transition ? '' : 'on'}" data-ctr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
         ${TRANS_TYPES.map(([kk, l, ic]) => `<button class="tr ${o.transition?.type === kk ? 'on' : ''}" data-ctr="${kk}"><span class="demo t-${kk}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
@@ -463,6 +460,7 @@ function inspTabs(c) {
   if (o.type === 'frame_grid') basic += sect('Khung video', `<span class="lbl">Làm mờ video (px)</span>${num('blur', typeof o.blur === 'number' ? o.blur : Array.isArray(o.blur) ? o.blur[o.blur.length - 1].v : 0)}<span class="lbl">Vào cảnh</span><select data-f="enter">${opt([['cut', 'Cắt'], ['blur', 'Mờ dần'], ['zoom', 'Phóng to']], o.enter || 'cut')}</select>`);
   basic += timeBlock(c);
   return [['basic', 'Cơ bản', basic], ...(Studio.animTab && ['photo', 'broll'].includes(o.type) ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204
+    ...(Studio.colorPanel && ['photo', 'broll'].includes(o.type) ? [['color', 'Màu', Studio.colorPanel(o, null, 'scene')]] : []), // S29 M208
     ['pos', 'Vị trí', posBlock(c) || sect('', `<div class="help">Thành phần này không kéo thả được trên preview. ${tip('Sửa vị trí trong tab Nâng cao (JSON).')}</div>`)],
     ['json', 'Nâng cao', sect('Tham số đầy đủ (JSON)', `<textarea class="code" data-f="json">${esc(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' || k === 'lines' || k === 'nodes' ? undefined : v), 1))}</textarea>
       <div class="acts"><button data-act="json" class="primary"><i class="ti ti-check"></i> Áp dụng JSON</button></div>`, 'ti-code')]];

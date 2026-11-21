@@ -23,7 +23,7 @@ Có `TL.clips` (mảng không rỗng) thì engine dựng video nền từ các c
 | `reverse` | phát ngược: giây nguồn = `out` − tiến độ. Engine đọc chuỗi khung theo thứ tự ngược (không tạo file đảo, `C40`); tiếng `areverse` khi xuất, xem trước tắt tiếng |
 | `hold` | clip đứng hình (Freeze) dài `hold` giây, giữ khung tại `in` (= `out`), im lặng. Studio chèn bằng nút Freeze (3 s tại playhead, tách clip nếu cần) |
 | `volume`, `mute` | âm lượng (0–2), tắt tiếng |
-| `filter` | `preset` (bảng *Bộ lọc* bên dưới) + `brightness`, `contrast`, `saturate` (1 = giữ nguyên), `hue` (độ), `temp` (−1…1), `blur` (px) |
+| `filter` | `preset` (bảng *Bộ lọc* bên dưới) + `strength` (cường độ 0–100, thiếu = 100) + `brightness`, `contrast`, `saturate` (1 = giữ nguyên), `hue` (độ), `temp` (−1…1), `blur` (px); S29 `M208` thêm `exposure` (−1…1), `highlights` / `shadows` (−1…1, SVG `feComponentTransfer`), `sharpen`, `fade`, `vignette`, `grain` (0…1). Cùng dạng cho cảnh `broll` / `photo` (`scene.filter`) và khối Điều chỉnh `TL.efx` `{type:'adjust', filter, params:{intensity}}`. Công thức một nguồn: `engine/fx_registry.js` `FX.colorFx` |
 | `flip` | lật ngang |
 | `fit` | `cover` (mặc định), `contain`, `blurfill` (vừa khung, nền là chính nó làm mờ, dùng cho clip ngang trong video dọc) |
 | `zoom`, `ox`, `oy` | phóng to 1–3 quanh điểm ox/oy (%) |

@@ -177,11 +177,20 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     if (p.loop === 'none') delete o.anim_loop; else if (p.loop) o.anim_loop = p.speed ? { type: p.loop, speed: p.speed } : { type: p.loop };
     return true;
   }
+  // S29 M208: Claude chọn màu cho clip đang chọn — trợ lý 'color' (scripts/assist.mjs) đọc khung + gu thương hiệu, Studio.color.pick
+  //   (82_color.js) trả bộ filter; colorApply đặt bộ đó lên bản timeline (thẻ Nhận / Bỏ). Không tham số: Claude tự chọn hết.
+  A.color_pick = { what: 'Claude xem khung của clip đang chọn và gu thương hiệu rồi chọn màu: bộ lọc + cường độ + vài thanh Adjust (phơi sáng, vùng sáng / tối, nét, fade, vignette, hạt…). Dùng khi người dùng muốn chỉnh màu, làm đẹp màu, đổi tông, hợp thương hiệu.', params: {} };
+  function colorApply(tl, idx, filter) {
+    const c = tl.clips?.[idx], f = FX.colorClean ? FX.colorClean(filter) : null;
+    if (!c || !f || !Object.keys(f).length) return false;
+    c.filter = f;
+    return true;
+  }
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', ...(scope.ek === 'line' || scope.ek === 'scene' ? ['elem_anim'] : []), 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
-        : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'clip_speed', 'clip_anim', 'open_panel'] : ['clip_speed', 'clip_anim', 'open_panel'])
+        : scope.kind === 'clip' ? [...(scope.idx > 0 ? ['clip_transition'] : []), 'clip_speed', 'clip_anim', 'color_pick', 'open_panel']
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
@@ -208,7 +217,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
         q('3 biến thể', 'elem_variants', {}, 'ti-layout-grid'), ...(scope.knobs ? [q('Gợi ý núm', 'elem_knobs', {}, 'ti-adjustments-horizontal')] : [])].slice(0, 4);
       case 'clip': return [...(scope.idx > 0 ? [q('Chuyển cảnh mờ dần', 'clip_transition', { type: 'fade', dur: 0.4 }, 'ti-transition-right'),
         q('Chuyển cảnh lia nhanh', 'clip_transition', { type: 'whip', dur: 0.3 }, 'ti-wind')] : []),
-      q('Bộ lọc màu', 'open_panel', { panel: 'filter' }, 'ti-color-filter'), q('B-roll phủ', 'open_panel', { panel: 'wf-broll' }, 'ti-photo-plus')];
+      q('Claude chọn màu', 'color_pick', {}, 'ti-color-filter'), q('B-roll phủ', 'open_panel', { panel: 'wf-broll' }, 'ti-photo-plus')]; // S29 M208
       // M154: nút AI trùng của panel thành gợi ý ở đây (nút chính của panel vẫn giữ)
       default: switch (scope.step) {
         case 'prep': return [q('Dựng bộ thương hiệu', 'brand_ai', {}, 'ti-palette'), q('Viết mô tả sản phẩm', 'product_ai', {}, 'ti-package'),
@@ -397,6 +406,8 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     const ca = a?.TL?.clips || [], cb = b?.TL?.clips || [];
     const nt = cb.filter((c, i) => i > 0 && key(c.transition) !== key(ca[i]?.transition)).length;
     if (nt) out.push(`${nt} chỗ nối chuyển cảnh`);
+    const nf = cb.filter((c, i) => key(c.filter) !== key(ca[i]?.filter)).length; // S29 M208
+    if (nf) out.push(`màu ${nf} clip`);
     const ne = delta(a?.TL?.efx, b?.TL?.efx).add.length + delta(a?.TL?.fx, b?.TL?.fx).add.length; // S28 M206
     if (ne) out.push(`+${ne} hiệu ứng`);
     return out.slice(0, 6);
@@ -417,7 +428,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, colorApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
     logEntry, logPush, logParse, changeSummary, regionOf, frameAt, ANIM_GUIDE, elemAnimApply }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;

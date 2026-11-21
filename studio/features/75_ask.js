@@ -520,6 +520,14 @@
         const nm = [p.in && `vào ${p.in}`, p.out && (p.out === 'none' ? 'bỏ ra' : `ra ${p.out}`), p.loop && (p.loop === 'none' ? 'bỏ lặp' : `lặp ${p.loop}`)].filter(Boolean).join(', ') || 'giữ nguyên';
         return pureReview(`Hoạt ảnh ${nm} cho ${sc.chip}`, Math.max(0, sc.t0 - 0.2), sc.t1 || sc.t0 + 3, tl => AC.elemAnimApply(tl, sc.cid, p));
       }
+      case 'color_pick': { // S29 M208: Claude chọn màu (82_color.js → trợ lý 'color'), xem lại giữa clip rồi Nhận / Bỏ
+        if (!S.color?.pick) return setOut('error', { err: 'Chưa có công cụ Màu' });
+        setOut('working', { step: 'Claude đang xem khung để chọn màu…' });
+        let r; try { r = await S.color.pick(sc.idx, s => { AS.step = s; paint(true); }); } catch (e) { return setOut('error', { err: e.message, errKind: e.kind }); }
+        const lut = r.filter.preset ? `${FX.get('lut', r.filter.preset)?.label} ${r.filter.strength ?? 100}%` : 'không bộ lọc';
+        const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3;
+        return pureReview(`Màu ${lut} cho ${sc.chip}${r.why ? ' · ' + r.why : ''}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => AC.colorApply(tl, sc.idx, r.filter));
+      }
       case 'clip_speed': { // S29 M207: tốc độ / Freeze / đảo ngược qua 59_speed.js, xem lại trước khi nhận (ripple đổi cả phụ đề)
         if (!S.speed) return setOut('error', { err: 'Chưa có công cụ Tốc độ' });
         const nm = { normal: `Tốc độ ${p.speed ?? 1}×`, freeze: 'Freeze', reverse: 'Đảo ngược', forward: 'Bỏ phát ngược' }[p.mode] || `Tốc độ ${SpeedMap.PRESET_VI[p.mode] || p.mode}`;
