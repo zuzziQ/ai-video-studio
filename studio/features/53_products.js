@@ -49,8 +49,23 @@
     if (!p?.id || !S.TL) return false;
     S.pushUndo('product'); S.TL.ads = adsWithProduct(S.TL.ads, p); S.changed();
     if (active()) render();
+    fill();
     return true;
   }
+  // M18: khối sản phẩm máy dựng (công thức gói, AI dựng, Tự lái) lấy tên, giá, ảnh từ hồ sơ dự án đang trỏ (53_products.core.js).
+  // Gọi khi mở dự án, sau "Dựng tự động theo gói" (studio.js applyRecipe) và khi gắn hồ sơ. Mỗi khối điền một lần (cờ _prod).
+  // one: một khối người dùng bấm "Điền lại theo hồ sơ" (87_prodimg.js) → điền riêng khối đó, kể cả khối tự thêm / đã điền
+  async function fill(one) {
+    const C = window.ProductsCore, id = cur();
+    if (!C || !id || (!one && !C.needsFill(S.TL?.scenes, id))) return 0;
+    const r = await S.api('/api/products/' + encodeURIComponent(id)).catch(() => null);
+    if (!r || r.error || cur() !== id) return 0;
+    const h = C.heroOf(r, { logo: S.TL.brand?.logo }); // hồ sơ chưa có ảnh (references/products.md): đổi ảnh ở Thuộc tính, 87_prodimg.js
+    const n = one ? +C.fillScene(one, h, undefined, true) : C.fillScenes(S.TL.scenes, h);
+    if (n) { S.changed(true); S.toast(`Graphic sản phẩm lấy tên, giá theo hồ sơ “${r.name}”`); }
+    return n;
+  }
+  S.onReady(() => setTimeout(fill, 0)); // sau khối _starter của studio.js (áp công thức gói lần mở đầu)
   function use(id) {
     const p = LIST.find(x => x.id === id); if (!p) return;
     attach(p);
@@ -190,6 +205,6 @@
     AI.start(); $('#pb-aiwrap')?.scrollIntoView({ block: 'nearest' });
     return { started: true };
   }
-  S.products = { list: () => (LIST ? Promise.resolve(LIST) : load()), reload: load, ai, attach, current: cur };
+  S.products = { list: () => (LIST ? Promise.resolve(LIST) : load()), reload: load, ai, attach, current: cur, fill };
   S.addPanel('products', 'ti-package', 'Sản phẩm', () => { render(); load(); });
 })();

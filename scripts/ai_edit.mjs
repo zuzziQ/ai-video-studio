@@ -27,6 +27,7 @@ const say = (p, s) => console.log(`@@ ${p.toFixed(2)} ${s}`);
 const r2 = v => Math.round(v * 100) / 100;
 const BeatsCore = createRequire(import.meta.url)('../studio/features/33_beats.core.js');
 const FxTrackCore = createRequire(import.meta.url)('../studio/features/81_fxtrack.core.js'); // S28 M210: hiệu ứng theo nhịp
+const ProductsCore = createRequire(import.meta.url)('../studio/features/53_products.core.js'); // M18: graphic sản phẩm theo hồ sơ
 // S28 M210: phách mạnh (giờ video) của nền nhạc người dùng có nhịp (Studio → tab Nhịp); AI dựng giữ nền đó nên cảnh hít vào phách mạnh
 export function beatGrid(tl) {
   const m = tl?.audio?.music || [];
@@ -97,6 +98,8 @@ function compact(o, top = true) {
   return typeof o === 'string' && o.length > 60 ? o.slice(0, 57) + '…' : o;
 }
 const usesMedia = ex => /"(?:src|media|image)":""|"(?:media|broll|ui)\/[^"]+\.(?:jpe?g|png|mp4)"|"src":"media\//.test(JSON.stringify(ex));
+// M18: dự án có hồ sơ sản phẩm (o.product) thì khối hero sản phẩm dùng được: tên, giá, ảnh điền từ hồ sơ (ProductsCore.fillScene)
+const usable = (it, o) => !usesMedia(it.ex) || (!!o?.product && it.type === 'rv_product');
 
 export function buildPrompt({ tl, caps, cat, lib, o, script, sheet }) {
   const vertical = (tl.height || 1920) > (tl.width || 1080);
@@ -104,7 +107,7 @@ export function buildPrompt({ tl, caps, cat, lib, o, script, sheet }) {
   const want = keep ? (o.pack === 'keep' ? tl.pack || 'slate' : o.pack) : null;
   const packs = cat.packs.filter(p => p.id === want || (!keep && !SPECIAL.has(p.id) && !(vertical && p.horizontal)) || p.id === 'basic');
   const items = new Map();
-  for (const p of packs) for (const it of p.items) if (!usesMedia(it.ex)) items.set(it.type, { ...it, pack: p.id });
+  for (const p of packs) for (const it of p.items) if (usable(it, o)) items.set(it.type, { ...it, pack: p.id });
   const n = { thua: [5, 7], vua: [8, 11], day: [12, 15] }[o.density] || [8, 11];
   const transcript = caps.map((c, i) => `C${i} [${c.t0.toFixed(2)}–${c.t1.toFixed(2)}] ` + c.words.map((w, j) => `${j}:${w.w}`).join(' ')).join('\n');
   const topics = [...new Set(lib.broll.map(x => x.topic))].join(', ');
@@ -141,7 +144,7 @@ LUẬT KỊCH BẢN (bắt buộc, thắng các mục bên dưới khi mâu thu�
 ` : '';
   return `Bạn là editor video ngắn tiếng Việt chuyên nghiệp. Hãy lên bản dựng cho video người nói (talking-head) ${vertical ? 'dọc 9:16' : 'ngang 16:9'}, dài ${tl.duration}s.
 Mục tiêu video: ${o.goal || 'khác'}. Giọng điệu: ${o.tone || 'tự nhiên'}. Mật độ graphic: ${n[0]}–${n[1]} cảnh.${o.extra ? `\nYêu cầu thêm của người dùng: ${o.extra}` : ''}${o.learned?.extra ? `\nThói quen đã học của thương hiệu ${o.learned.brand || ''} (người dùng hay sửa bản AI như vậy, làm theo): ${o.learned.extra}` : ''}
-Brand: ${JSON.stringify(tl.brand || {})}
+Brand: ${JSON.stringify(tl.brand || {})}${ProductsCore.promptBlock(o.product)}
 
 # Lời thoại (mỗi dòng là một phụ đề C<chỉ số> [giây bắt đầu–kết thúc], từng từ dạng <chỉ số từ>:<từ>; ${script ? 'chữ theo kịch bản của người dùng' : 'giọng nói nhận dạng tự động nên có thể sai chính tả'})
 ${transcript}
@@ -335,7 +338,7 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
   const P = cat.packs.find(p => p.id === pack);
   const caption_style = cat.captionStyles.includes(raw.caption_style) ? raw.caption_style : (P.caption || tl.caption_style || 'slate');
   const items = new Map();
-  for (const p of cat.packs) if (p.id === pack || p.id === 'basic') for (const it of p.items) if (!usesMedia(it.ex)) items.set(it.type, it);
+  for (const p of cat.packs) if (p.id === pack || p.id === 'basic') for (const it of p.items) if (usable(it, o)) items.set(it.type, it);
   const wordT = (c, w) => { const cap = caps[+c]; if (!cap) return null; const ws = cap.words; return (ws[Math.min(ws.length - 1, Math.max(0, +w || 0))] || {}).s ?? cap.t0; };
   // captions: same word count, timings untouched
   const capOut = [];
@@ -349,6 +352,8 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     capOut.push({ i, t0: cap.t0, n: cap.words.length, words });
   }
   const said = saidNumbers(caps); // numbers the speaker said (recognised words, not Claude's caption edits: those could "make" a number)
+  // M18: giá, claim đã duyệt của hồ sơ sản phẩm là nguồn đã kiểm, coi như đã nói
+  if (o.product) for (const n of saidNumbers([{ words: ProductsCore.factText(o.product).split(/\s+/).map(w => ({ w })) }])) said.add(n);
   // scenes: known types only, start on a word, clamp to the video, no overlaps
   const used = new Set(), sc = [];
   for (const s of Array.isArray(raw.scenes) ? raw.scenes : []) {
@@ -366,6 +371,7 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     const ex = shiftRel(it.ex, t0, t1);
     const scene = { ...ex, ...shiftRel(params, t0, t1), type: s.type, t0, t1, _ai: true, ...(fromSheet ? sheetTag(s) : {}) };
     fixBroll(scene, lib, used);
+    if (o.product) ProductsCore.fillScene(scene, o.product); // tên, giá, ảnh của hồ sơ thắng chữ Claude viết
     const made = inventedNumbers(scene, said);
     if (made.length) { dropped.push(`cảnh ${s.type} @${t0}s: số liệu "${made.slice(0, 3).join('", "')}" không có trong lời thoại`); continue; }
     sc.push(scene);
@@ -568,6 +574,8 @@ async function main() {
   // S27 M192: --taste <thương hiệu> (mẫu dựng sẵn): gu đã học của thương hiệu, như opts.learned của 20_ai.mjs
   if (opt('--taste') && !o.learned) { const P = await import('./profile.mjs'); o.learned = P.learnedOf(P.habitsFor(opt('--taste'))); }
   const { dir, tlFile, tl, caps } = loadProject(src);
+  // M18: hồ sơ sản phẩm của dự án (timeline.ads.product) → graphic sản phẩm đúng tên, giá, ảnh; hồ sơ mất thì dựng như cũ
+  if (!o.product) try { const { productHero } = await import('./products.mjs'); o.product = productHero(dir, tl); } catch (e) { console.log('Hồ sơ sản phẩm: ' + e.message); }
   if (!caps.length) throw new Error('Dự án chưa có phụ đề (cần lời thoại để AI đọc).');
   say(.05, 'Đọc danh sách gói style từ engine');
   const cat = await engineCatalog(tl, caps, dir);
