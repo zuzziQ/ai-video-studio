@@ -68,6 +68,10 @@
   .onb-chips { display: flex; flex-wrap: wrap; gap: 8px; } .onb-chips button { flex-direction: row; padding: 8px 12px; }
   .onb-note { margin: 16px 0 0; padding: 12px; border-radius: var(--r); background: var(--bg1); border: 1px solid var(--line); font-size: 12px; color: var(--tx2); display: flex; gap: 8px; line-height: 1.5; }
   .onb-note .ti { color: var(--tx3); }
+  .onb-saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .onb-saved li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r); background: var(--bg1); border: 1px solid var(--line); font-size: 13px; line-height: 1.45; }
+  .onb-saved li > div { flex: 1; min-width: 0; overflow-wrap: anywhere; } .onb-saved small { display: block; color: var(--tx3); font-size: 12px; margin-top: 2px; }
+  .onb-saved .ti { color: rgb(var(--color-success)); margin-top: 2px; } .onb-saved li.warn .ti { color: rgb(var(--color-warning)); }
   #onb-home { position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: var(--bg0); }
   #onb-home .in { max-width: 880px; margin: 0 auto; padding: 48px 16px 32px; }
   #onb-home .hd { display: flex; align-items: flex-start; gap: 12px; } #onb-home .hd .grow { flex: 1; }
@@ -193,6 +197,7 @@
 
   function render() {
     const box = document.querySelector('#onb-wiz .onb-card'); if (!box || !W) return;
+    if (W.done) return renderDone(box);
     const s = W.step, n = W.last + 1, heads = [
       W.mode === 'new' ? ['Thương hiệu mới', 'Mỗi thương hiệu có tên, logo, màu và Kho riêng. Màu chủ đạo tự lấy từ logo.']
         : W.mode === 'edit' ? ['Sửa thương hiệu', 'Đổi tên, logo, màu hay thông tin liên hệ; video mới của thương hiệu này dùng bản đã lưu.']
@@ -209,6 +214,32 @@
     box.querySelector('[data-o=back]')?.addEventListener('click', () => { W.step--; render(); });
     box.querySelector('[data-o=next]').onclick = next;
     [wireBrand, wireAssets, wirePurpose][s](box);
+  }
+  // <pure:onbsaved> màn kết thúc: mỗi dòng = đã lưu gì + xem lại ở đâu (panel của bước Chuẩn bị). test scripts/tests/onboarding_saved.test.mjs
+  // o = { brand, applied, product: {name, attached, other} | null, kho: {exists, root} | null, project: dự án đang mở }
+  function savedRows(o) {
+    const rows = [], at = (label, panel) => ({ where: `Chuẩn bị → ${label}`, panel: o.project ? panel : '' });
+    if (o.brand) rows.push({ icon: 'ti-briefcase', ok: true, text: `Thương hiệu “${o.brand}” đã lưu${o.applied ? ', áp vào dự án đang mở' : ''}.`, ...at('Thương hiệu', 'brands') });
+    const p = o.product;
+    if (p) rows.push({ icon: 'ti-package', ok: true, ...at('Sản phẩm', 'products'),
+      text: `Sản phẩm “${p.name}” đã lưu${p.attached ? ', dự án đang mở dùng hồ sơ này khi Kiểm tra chất lượng' : p.other ? '. Dự án đang mở trỏ hồ sơ khác: đổi bằng “Dùng cho dự án”' : o.project ? '' : '. Mở một dự án rồi bấm “Dùng cho dự án”'}.` });
+    if (o.kho?.exists) rows.push({ icon: 'ti-folder', ok: true, text: `Kho: ${o.kho.root}`, ...at('Kho', 'kho') });
+    else if (o.brand) rows.push({ icon: 'ti-folder-off', ok: false, lead: 'Tạo ở', ...(o.project ? at('Kho', 'kho') : { where: 'Trang chủ → thẻ thương hiệu → Sửa', panel: '' }),
+      text: 'Chưa tạo Kho: thư mục chứa video, ảnh, nhạc của thương hiệu chưa có trên máy.' });
+    return rows;
+  }
+  // </pure:onbsaved>
+  function renderDone(box) {
+    const project = !!(Studio.TL && Studio._isReady && Studio.workflow?.focus);
+    const rows = savedRows({ brand: W.kit?.title || W.name, applied: W.applied, product: W.saved?.product || null, kho: W.kho?.ws || null, project });
+    box.innerHTML = `<div class="onb-head"><p class="onb-kick">Đã lưu</p><h2 id="onb-title">Xong phần chuẩn bị</h2><p>Mọi thứ dưới đây đã ghi trên máy. Xem lại hay sửa bất cứ lúc nào.</p></div>
+      <div class="onb-body"><ul class="onb-saved">${rows.map(r => `<li class="${r.ok ? '' : 'warn'}"><i class="ti ${r.icon}"></i><div><span>${esc(r.text)}</span>
+        <small>${r.lead || 'Xem lại ở'} ${esc(r.where)}</small></div>${r.panel ? `<button class="mini" data-go="${r.panel}">Mở</button>` : ''}</li>`).join('')}</ul></div>
+      <div class="onb-foot"><span class="grow"></span><button class="primary" data-o="next"><i class="ti ti-check"></i> Xong</button></div>`;
+    box.querySelector('[data-o=next]').onclick = next;
+    box.querySelectorAll('[data-go]').forEach(b => (b.onclick = () => {
+      const id = b.dataset.go; closeWizard(); hideHome(); Studio.workflow.focus(id);
+    }));
   }
   const err = m => { const e = document.getElementById('onb-err'); if (e) e.innerHTML = m ? `<i class="ti ti-alert-circle"></i> ${esc(m)}` : ''; };
   // S22 M156 (C26): ô của hướng dẫn chỉ còn nhãn + placeholder; lời giải thích vào (i) cạnh nhãn (Studio.tip của M155 nếu đã có).
@@ -287,7 +318,7 @@
     // "Đang dùng": with a project open, apply the kit to it the same way the Thương hiệu panel does (undoable).
     if (Studio.TL && Studio._isReady) {
       const r = await api('/api/brands/apply', { id: b.id });
-      if (!r.error) { Studio.pushUndo('brandkit'); Studio.TL.brand = { ...(Studio.TL.brand || {}), ...r.brand }; Studio.changed(); }
+      if (!r.error) { Studio.pushUndo('brandkit'); Studio.TL.brand = { ...(Studio.TL.brand || {}), ...r.brand }; Studio.changed(); W.applied = true; }
     }
   }
 
@@ -408,7 +439,12 @@
       const r = await api('/api/products/save', { product: { name: p.name.trim(), brand: W.kit?.title || '', claims, price: p.price.trim(), faq: p.faq, industry: p.industry, notes: p.price.trim() ? `Giá: ${p.price.trim()}` : '' } });
       if (r.error) throw new Error(r.error);
       W.product = { name: '', price: '', strengths: '', faq: [], industry: '' }; W.pImage = null; W.pUrl = ''; W.pAi = null;
-      toast(`Đã lưu sản phẩm “${r.name}”`);
+      // dự án đang mở chưa trỏ hồ sơ nào: dùng hồ sơ vừa lưu (như "Dùng cho dự án" của panel Sản phẩm, hoàn tác được)
+      const open = !!(Studio.TL && Studio._isReady), other = open && Studio.TL.ads?.product && Studio.TL.ads.product !== r.id;
+      const attached = open && !other && (Studio.TL.ads?.product === r.id || !!Studio.products?.attach?.(r));
+      W.saved = { ...W.saved, product: { id: r.id, name: r.name, attached, other: !!other } };
+      Studio.products?.reload?.();
+      toast(attached ? `Đã lưu sản phẩm “${r.name}” và dùng cho dự án đang mở` : `Đã lưu sản phẩm “${r.name}”`);
     } else if (p.price.trim() || p.strengths.trim()) throw new Error('Nhập tên sản phẩm, hoặc xoá giá và điểm mạnh để bỏ qua.');
     if (!W.mode) await saveState({ step: 2 });
   }
@@ -436,6 +472,7 @@
 
   async function next() {
     if (!W || W.busy) return;
+    if (W.done) return finish();
     err(''); W.busy = true; render();
     const s = W.step;
     try {
@@ -445,6 +482,11 @@
     } catch (e) { if (W) { W.busy = false; render(); err(e.message || 'Có lỗi, thử lại.'); } return; }
     W.busy = false;
     if (s < W.last) { W.step++; render(); return; }
+    // màn kết thúc: đã lưu gì, xem lại ở đâu (Kho chưa đọc vì vào thẳng bước Mục đích: đọc để báo đúng "Chưa tạo Kho")
+    if (W.kit && !W.kho?.ws) await khoLoad();
+    if (W) { W.done = true; render(); }
+  }
+  function finish() {
     if (W.mode) { const t = W.kit?.title || W.name; closeWizard(); toast(`Đã lưu thương hiệu ${t}`); return openHome(); }
     const pid = W.purpose; closeWizard();
     toast('Xong! Mở lại hướng dẫn bằng nút nhà trên thanh trên.');

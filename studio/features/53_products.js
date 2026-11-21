@@ -41,12 +41,19 @@
   const cur = () => S.TL?.ads?.product;
   async function load() { const r = await S.api('/api/products').catch(() => []); LIST = Array.isArray(r) ? r : []; if (active()) render(); return LIST; }
 
+  // <pure:adsproduct> TL.ads sau khi trỏ dự án tới hồ sơ p (giữ ngành đã chọn); test scripts/tests/onboarding_saved.test.mjs
+  const adsWithProduct = (ads, p) => { const a = ads || {}; return { ...a, on: true, product: p.id, ...(p.industry && !a.industry ? { industry: p.industry } : {}) }; };
+  // </pure:adsproduct>
+  // gắn hồ sơ p ({id, name, industry}) vào dự án đang mở (hoàn tác được); 02_onboarding.js gọi qua Studio.products.attach
+  function attach(p) {
+    if (!p?.id || !S.TL) return false;
+    S.pushUndo('product'); S.TL.ads = adsWithProduct(S.TL.ads, p); S.changed();
+    if (active()) render();
+    return true;
+  }
   function use(id) {
     const p = LIST.find(x => x.id === id); if (!p) return;
-    S.pushUndo('product');
-    const a = S.TL.ads || {};
-    S.TL.ads = { ...a, on: true, product: id, ...(p.industry && !a.industry ? { industry: p.industry } : {}) };
-    S.changed(); render();
+    attach(p);
     S.toast(`Dự án dùng hồ sơ “${p.name}”: Kiểm tra chất lượng sẽ đối chiếu claim của hồ sơ`);
   }
   function unuse() { S.pushUndo('product'); const { product, ...a } = S.TL.ads || {}; S.TL.ads = a; S.changed(); render(); S.toast('Dự án không còn trỏ tới hồ sơ sản phẩm'); }
@@ -183,6 +190,6 @@
     AI.start(); $('#pb-aiwrap')?.scrollIntoView({ block: 'nearest' });
     return { started: true };
   }
-  S.products = { list: () => (LIST ? Promise.resolve(LIST) : load()), reload: load, ai };
+  S.products = { list: () => (LIST ? Promise.resolve(LIST) : load()), reload: load, ai, attach, current: cur };
   S.addPanel('products', 'ti-package', 'Sản phẩm', () => { render(); load(); });
 })();
