@@ -1,6 +1,7 @@
 """Tight silence cut (reference: gaps <= 0.16 s) + optional removal of repeated takes.
 
-usage: python cut.py <raw.mp4> <words.json> <out_dir> [--drop 12-30,88-95] [--pad 0.06] [--join 0.12]
+usage: python cut.py <raw.mp4> <words.json> <out_dir> [--drop 12-30,88-95] [--pad 0.06] [--join 0.12] [--keep]
+  --keep  keep the whole clip (no cut, words unchanged): only re-encode to CFR (Studio "Video mới" by hand, M201).
   --drop  word-index ranges (inclusive) to delete, e.g. a fluffed take you re-said later.
 Writes out_dir/aroll.mp4 (30 fps CFR) and out_dir/words.json remapped onto the cut timeline.
 """
@@ -21,6 +22,7 @@ ap.add_argument("--drop", default="")
 ap.add_argument("--pad", type=float, default=0.06)
 ap.add_argument("--join", type=float, default=0.12)
 ap.add_argument("--fps", type=int, default=30)
+ap.add_argument("--keep", action="store_true")
 a = ap.parse_args()
 
 words = json.load(open(a.words))
@@ -28,7 +30,7 @@ drop = set()
 for r in filter(None, a.drop.split(",")):
     lo, hi = (int(x) for x in r.split("-"))
     drop.update(range(lo, hi + 1))
-kept = [(i, w) for i, w in enumerate(words) if i not in drop]
+kept = [] if a.keep else [(i, w) for i, w in enumerate(words) if i not in drop]
 
 # Speech islands: each word padded, merged when the gap is shorter than --join.
 spans = []
@@ -56,7 +58,9 @@ def probe(entries, sel=None):
     return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
 
 
-# No speech found (silent / music-only clip): keep the whole clip instead of an empty select.
+# No speech found (silent / music-only clip) or --keep: keep the whole clip instead of an empty select.
+if a.keep:
+    out_words = [{"w": w["w"], "s": w["s"], "e": w["e"], **({"p": w["p"]} if "p" in w else {})} for w in words]
 if not spans:
     acc = float(probe("format=duration") or 0)
     spans = [[0.0, acc]]
