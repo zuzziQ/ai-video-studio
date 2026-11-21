@@ -502,6 +502,10 @@
         const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(r ? `${nm} trong ${sc.chip}` : `${nm} mọi chỗ nối`, r ? r.a : 0, r ? r.b : Math.min(dur, 8), tl => AC.transitionsApply(tl, p, r));
       }
+      case 'fx_add': { // S28 M206: khối track Hiệu ứng, xem lại trên khung trước khi nhận
+        const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = `Hiệu ứng ${AC.EFX_VI[p.type] || p.type}`, at = S.T || 0;
+        return pureReview(r ? `${nm} trong ${sc.chip}` : `${nm} tại ${AC.stamp(at)}`, r ? r.a : at, r ? r.b : at + 2, tl => AC.fxAddApply(tl, p, r, at));
+      }
       case 'clip_transition': {
         const nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(`${nm} vào ${sc.chip}`, Math.max(0, sc.t0 - 0.6), sc.t0 + 0.8, tl => AC.clipTransitionApply(tl, sc.idx, p));

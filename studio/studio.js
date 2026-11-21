@@ -44,7 +44,8 @@ new MutationObserver(recs => { for (const r of recs) for (const n of r.addedNode
   .observe(document.documentElement, { childList: true, subtree: true });
 
 // ---------- vocabulary ----------
-const TRACKS = [['cap', 'Phụ đề', 'ti-badge-cc'], ['add', 'Chữ thêm', 'ti-letter-t'], ['gline', 'Chữ graphic', 'ti-text-size'], ['gfx', 'Graphic', 'ti-sparkles'],
+const TRACKS = [['efx', 'Hiệu ứng', 'ti-wand'], ['cap', 'Phụ đề', 'ti-badge-cc'], // S28 M206: efx = track Hiệu ứng (features/81_fxtrack.js)
+  ['add', 'Chữ thêm', 'ti-letter-t'], ['gline', 'Chữ graphic', 'ti-text-size'], ['gfx', 'Graphic', 'ti-sparkles'],
   ['broll', 'B-roll', 'ti-photo'], ['scene', 'Cảnh', 'ti-layout-board'], ['video', 'Video chính', 'ti-movie'], ['audio', 'Âm thanh', 'ti-music'], ['wave', 'Giọng', 'ti-wave-sine']];
 const TCOL = { scene: 'rgb(var(--track-2))', cap: 'rgb(var(--track-3))', add: 'rgb(var(--track-4))', gline: 'rgb(var(--track-5))', gfx: 'rgb(var(--track-6))', broll: 'rgb(var(--track-7))', audio: 'rgb(var(--track-8))', video: 'rgb(var(--track-1))' };
 const TRK = Object.fromEntries(TRACKS.map(([k]) => [k, { lock: false, hide: false }]));
@@ -138,6 +139,7 @@ function previewTL(src = TL) { // S28 M202: src = TL tạm của xem thử chuy�
   // Track "hide" toggles only affect the preview, never the saved timeline.
   if (TRK.video.hide) for (const c of o.clips || []) c.filter = { ...(c.filter || {}), brightness: 0 };
   if (TRK.cap.hide) o.caption_style = 'none';
+  if (TRK.efx.hide) for (const k of ['fx', 'grade', 'efx']) for (const x of o[k] || []) x.hidden = true; // S28 M206
   (o.scenes || []).forEach(s => {
     if (s.type === 'text' ? TRK.add.hide : TRK[trackOf(s)]?.hide) s.hidden = true;
     if (s.type !== 'text' && TRK.gline.hide) for (const L of s.lines || []) L.hidden = true;
@@ -1250,7 +1252,7 @@ function renderTimeline() {
       continue;
     }
     const list = comps.filter(c => c.track === key).sort((a, b) => a.t0 - b.t0);
-    if (!list.length && !['cap', 'audio'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
+    if (!list.length && !['cap', 'audio', 'efx'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
     const n = lanes(list), h = Math.max(28, n * 24 + 5);
     th += `<div class="track${lk}${hd}" data-track="${key}" data-dh="${h}">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} ${c.obj.locked ? 'lockd' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
       data-dl="${c.t0 * PPS}" data-dw="${Math.max(8, (c.t1 - c.t0) * PPS - 2)}" data-dt="${3 + c.lane * 24}" data-dbc="${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}${esc(Studio._tip.map(f => f(c) || '').join(''))}">
