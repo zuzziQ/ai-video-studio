@@ -11,6 +11,9 @@ import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
+
+const ProductsCore = createRequire(import.meta.url)('../studio/features/53_products.core.js');
 
 export const INDUSTRIES = ['general', 'cosmetics', 'supplements', 'food', 'finance', 'health_device'];
 export const STATUSES = ['approved', 'pending', 'prohibited', 'expired'];
@@ -130,4 +133,13 @@ export function deleteProduct(id, dir = productsDir()) {
   if (!fs.existsSync(f)) throw new ProductError(`không thấy hồ sơ sản phẩm “${id}”`, 404);
   rmSync(f);
   return { ok: true };
+}
+
+/** M18: dữ liệu graphic sản phẩm của dự án (timeline.ads.product) cho ai_edit / Tự lái; null khi dự án không trỏ hồ sơ.
+ *  Logo lấy của bộ thương hiệu dự án đang dùng. Hồ sơ mất / id sai: ném lỗi như loadProduct. */
+export function productHero(dir, tl, pdir = productsDir()) {
+  const id = tl?.ads?.product;
+  if (typeof id !== 'string' || !id) return null;
+  const p = loadProduct(id, pdir);
+  return ProductsCore.heroOf(p, { logo: tl.brand?.logo || '' });
 }

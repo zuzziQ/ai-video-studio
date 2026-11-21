@@ -30,6 +30,8 @@ import { workspaceFor, ensureWorkspace, workspaceOfProject, sub, safeName } from
 import { deliverProject } from './kho_deliver.mjs';
 import { recordExport, updateExport } from './exports_log.mjs';
 import { applyScript, loadScriptArg, readScript, writeScript } from './script_doc.mjs';
+import { createRequire } from 'node:module';
+const ProductsCore = createRequire(import.meta.url)('../studio/features/53_products.core.js'); // M18: graphic sản phẩm theo hồ sơ
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const S = f => path.join(SKILL, 'scripts', f);
@@ -237,6 +239,16 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
 
   // S16 M119: transcribe.py không thấy lời thật (nhạc, tiếng ồn sự kiện) → new_project ghi timeline.speech.none
   // S17 M123: không lời nhưng có kịch bản (phụ đề chia đều theo đoạn) thì AI dựng / b-roll vẫn đọc được chữ
+  // M18: khối sản phẩm máy dựng (công thức gói, template, AI dựng) lấy tên, giá, ảnh từ hồ sơ của dự án (timeline.ads.product, bước brand gắn)
+  const fillProduct = async () => {
+    try {
+      const { tl, caps, capFile } = loadTL(dir);
+      const { productHero } = await import('./products.mjs'), h = productHero(dir, tl);
+      const n = h ? ProductsCore.fillScenes(tl.scenes, h) : 0;
+      if (n) saveTL(dir, tl, caps, capFile);
+      return n ? ` · ${n} graphic sản phẩm theo hồ sơ ${h.name}` : '';
+    } catch (e) { return ` · chưa điền graphic sản phẩm (${e.message.slice(0, 80)})`; }
+  };
   const noSpeech = () => { const { tl, caps } = loadTL(dir); return !caps.length || (!!tl.speech?.none && !readScript(dir)?.align); };
   const impl = {
     async new() {
@@ -318,7 +330,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
           const f = await fitProject(dir, { claude: prof.ai !== false, say: (p, s) => sayS(.3 + .65 * p, s) });
           fit = ` · bám lời thoại: ${f.texts} chữ, ${f.images} ảnh`;
         } catch (e) { fit = ` · chưa bám lời thoại (${e.message})`; }
-        return 'template ' + m + fit;
+        return 'template ' + m + fit + await fillProduct();
       }
       if (!prof.ai) return { skip: 'tắt trong phong cách dựng' };
       const extra = [prof.extra, prof.cta && `Kết video bằng lời kêu gọi: "${prof.cta}".`].filter(Boolean).join(' ');
@@ -332,7 +344,7 @@ export async function autopilot(input, { profile: profId, brand: brandArg, produ
       if (prof.caption_style) { const { tl, caps, capFile } = loadTL(dir); tl.caption_style = prof.caption_style; saveTL(dir, tl, caps, capFile); summary += ` · phụ đề ${prof.caption_style}`; }
       const plan = rd(P('.studio/ai_plan.json'));
       res.ai = plan ? { pack: plan.pack, scenes: plan.scenes?.length, hook: plan.hook, summary: plan.summary } : null;
-      return summary || 'xong';
+      return (summary || 'xong') + await fillProduct();
     },
     async broll() {
       if (!prof.broll_density || prof.broll_density === 'off') return { skip: 'tắt trong phong cách dựng' };

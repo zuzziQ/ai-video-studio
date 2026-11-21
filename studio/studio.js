@@ -648,6 +648,7 @@ function applyRecipe(packId, title, replace = false) {
   if (r.music) { TL.audio = TL.audio || {}; TL.audio.music = [{ t0: 0, t1: TL.duration, mood: r.music, gain: -10 }];
     if (TL.audio.duck == null || TL.audio.duck === true) TL.audio.duck = { on: true, amount_db: -10, attack: 60, release: 400, hold: 250 }; } // cùng số với scripts/audio_defaults.mjs (S26 M181)
   needInit = true; changed(true); toast(`Đã dựng theo gói ${p.name}: ${(r.scenes || []).length} thành phần`);
+  Studio.products?.fill?.(); // M18: khối sản phẩm của công thức lấy tên, giá, ảnh từ hồ sơ dự án (53_products.js)
 }
 function applyField(f, v, el) {
   const c = sel, o = c?.obj;
