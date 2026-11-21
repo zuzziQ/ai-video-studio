@@ -1770,7 +1770,7 @@ async function openNewProject(opt = {}) {
     <div class="row2"><div><label class="lbl">Khổ hình</label><select id="norient">${OR.map(([v, l]) => `<option value="${v}" ${v === orient0 ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div><label class="lbl">Độ chính xác nhận giọng</label><select id="nmodel">${[['large-v3-turbo', 'large-v3-turbo (chính xác, khuyên dùng)'], ['small', 'small (nhanh, sai nhiều hơn)'], ['large-v3', 'large-v3 (chậm nhất)']].map(([v, l]) => `<option value="${v}" ${v === ls.get('newModel', 'large-v3-turbo') ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <label class="lbl">Thư mục dự án (để trống = Kho của thương hiệu, thư mục Du an)</label><input id="ndir" placeholder=""></details>
-    <p class="muted">Tự làm: nhận giọng → cắt khoảng lặng → cắt khung → phụ đề → bản dựng theo gói (intro, graphic theo từ khoá, CTA, nhạc). Sau đó bạn (hoặc Claude) chỉnh tiếp.${TL ? ` Dự án đang mở (<b>${esc(META.name)}</b>) được lưu rồi đóng lại; video mới mở trong một dự án riêng.` : ''}</p>
+    <p class="muted">Studio chỉ nhận giọng để làm phụ đề nháp, không tự cắt hay thêm graphic, nhạc. Ở bước Dựng bạn chọn việc cần làm (cắt chỗ thừa, B-roll, nhạc, graphic…). Muốn AI làm hết theo mẫu: <button type="button" class="wf-lnk" id="nap">dùng Tự lái</button>.${TL ?` Dự án đang mở (<b>${esc(META.name)}</b>) được lưu rồi đóng lại; video mới mở trong một dự án riêng.` : ''}</p>
     <div class="actions"><button onclick="closeModal()">Huỷ</button><button class="primary" id="ngo">Tạo</button></div>`);
   const sum = () => {
     const b = BR.find(x => x.id === $('#nbrand').value), pv = document.querySelector('[name=npack]:checked')?.value, p = PK.find(x => x.id === pv);
@@ -1800,6 +1800,8 @@ async function openNewProject(opt = {}) {
   tplLine();
   $('#nbrand').onchange = () => { tplLine(); const v = packFor($('#nbrand').value), r = document.querySelector(`[name=npack][value="${CSS.escape(v)}"]`); if (r) r.checked = true; kho = null; khoLine(); vp.setBrand($('#nbrand').value); dirPh(); sum(); };
   $('#nopts').onchange = sum; sum(); khoLine();
+  // S27 M201: hai cách rõ ràng: tự làm (hộp này) hoặc Tự lái (panel Tự lái, không có ở mức đang dùng thì trang chủ có thẻ Tự lái)
+  $('#nap').onclick = () => { closeModal(); const ap = document.querySelector('#rail [data-p="autopilot"]'); if (ap) ap.click(); else Studio.openHome?.(); };
   $('#ngo').onclick = async () => {
     if (!vp.value) return toast('Chọn video trước');
     const pack = document.querySelector('[name=npack]:checked')?.value || 'slate';
@@ -1808,7 +1810,7 @@ async function openNewProject(opt = {}) {
     if (TL && dirty) { await saveNow(); if (dirty) return toast('Chưa lưu được dự án đang mở — chưa tạo video mới'); }
     const useTpl = !$('#ntplrow').hidden && $('#ntpl').checked ? tplFor($('#nbrand').value)?.id || '' : '';
     const r = await api('/api/new', { video: vp.value, dir: $('#ndir').value.trim() || undefined, model: $('#nmodel').value,
-      pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined });
+      pack, title: $('#ntitle').value.trim(), orient: $('#norient').value, brand: $('#nbrand').value || undefined, manual: true });
     if (!r.ok) return Studio.jobs.refuse(r);
     // dự án cũ đã đóng phía server: che trình chỉnh sửa (chỗ chờ #np-wait), không để thấy (hay lưu) timeline cũ trong lúc tạo.
     // S26 M185: chạy nền trong khay việc, không hộp chặn cả trang: trang chủ và Tự lái vẫn dùng được; xong thì chuyển như cũ (X-AVS-Opened)
@@ -1980,7 +1982,9 @@ async function boot() {
       const built = (TL.scenes || []).some(s => s._auto || s._ai || s._qc || s._recipe) || (TL.audio?.sfx || []).length > 0;
       // S26 M181: tiêu đề chỉ là tên file (title_auto) thì thẻ tiêu đề của gói lấy câu đầu lời thoại, không hiện "video-goc"
       const capTitle = () => { const w = CAP.slice(0, 3).flatMap(c => (c.words || []).map(x => x.w).concat(c.words ? [] : String(c.text || '').split(/\s+/))).filter(Boolean).slice(0, 7).join(' '); return w ? w[0].toUpperCase() + w.slice(1) : ''; };
-      if (!built) { if (st.title) { TL.title = st.title; if (st.title_auto) TL.title_auto = true; } pushUndo(); applyRecipe(st.pack, (st.title_auto && capTitle()) || st.title, true); saveNow(); }
+      // S27 M201: Video mới tự làm (st.manual, scripts/new_project.mjs) không tự dựng theo gói: chỉ giữ tiêu đề, bước Dựng hỏi cần làm gì
+      if (!built && st.manual) { if (st.title) { TL.title = st.title; if (st.title_auto) TL.title_auto = true; } saveNow(); }
+      else if (!built) { if (st.title) { TL.title = st.title; if (st.title_auto) TL.title_auto = true; } pushUndo(); applyRecipe(st.pack, (st.title_auto && capTitle()) || st.title, true); saveNow(); }
     }
   };
   if (f.contentWindow?.renderFrame) ready(); else f.addEventListener('load', ready);

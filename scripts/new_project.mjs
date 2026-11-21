@@ -3,7 +3,8 @@
 //                                     [--orient vertical|horizontal|auto] [--brand <id>]
 // Không có project_dir: kèm --brand → <Kho của thương hiệu>/Du an/<tên>; không kèm → cạnh video (như bản cũ).
 // Steps: whisper (transcribe.py) → cut silences (cut.py) → 30 fps frames → face position (find_face.py) → captions (captions.py)
-// → timeline.json (frame_grid + title_card, music bed). Progress lines "@@ <0..1> <step>" on stdout; exit ≠ 0 + Vietnamese error.
+// → timeline.json (frame_grid + title_card, music bed). manual:true (hộp Video mới của Studio, M201): không cắt khoảng lặng
+// (cut.py --keep), không nhạc nền, `_starter.manual` để Studio không tự dựng theo gói; người dùng chọn việc ở bước Dựng. Progress lines "@@ <0..1> <step>" on stdout; exit ≠ 0 + Vietnamese error.
 import fs from 'node:fs';
 import { rmSync } from './fs_rm.mjs';
 import os from 'node:os';
@@ -59,7 +60,7 @@ export function videoOrient(src) {
  *      kho=true (không có dir → <Kho>/Du an/<tên>; false = cạnh video như bản cũ) }
  * env: { run(cmd, argv, onLine) → Promise, onStep(text, progress) }
  */
-export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 'slate', title = '', orient = 'vertical', lang, brand, kho = true },{ run = runCmd, onStep = () => {} } = {}) {
+export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 'slate', title = '', orient = 'vertical', lang, brand, kho = true, manual = false },{ run = runCmd, onStep = () => {} } = {}) {
   const src = path.resolve(String(video).trim().replace(/^["']|["']$/g, '').replace(/^~(?=[\\/]|$)/, os.homedir()));
   if (!fs.existsSync(src)) throw new Error(`không thấy video ${src}`);
   if (orient === 'auto') orient = videoOrient(src);
@@ -82,14 +83,14 @@ export async function newProject({ video, dir, model = 'large-v3-turbo', pack = 
   const why = forbiddenDir(d); // check before whisper runs, not after minutes of work
   if (why) throw new Error(`Không tạo dự án ở ${d}: ${why} — chọn thư mục dự án khác`);
   fs.mkdirSync(path.join(d, 'work/frames'), { recursive: true });
-  try { return await build(d, ws, { src, model, pack, title, orient, lang, kit }, { run, onStep }); }
+  try { return await build(d, ws, { src, model, pack, title, orient, lang, kit, manual: manual === true }, { run, onStep }); }
   catch (e) {
     // thư mục Studio tự đặt trong Du an/: lỗi giữa chừng thì không để lại thư mục rỗng (chỉ đúng một cấp dưới Du an/, chưa có timeline)
     if (ws && path.dirname(d) === sub(ws, 'projects') && !['', '.', '..'].includes(path.basename(d)) && !fs.existsSync(path.join(d, 'timeline.json'))) rmSync(d, { recursive: true, force: true });
     throw e;
   }
 }
-async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { run, onStep }) {
+async function build(d, ws, { src, model, pack, title, orient, lang, kit, manual }, { run, onStep }) {
   const sha = hashFile(src).catch(() => null); // song song với whisper: video vài GB không làm chậm thêm
   const S = f => path.join(SKILL, 'scripts', f);
   onStep('Nhận dạng giọng nói (whisper)', .05);
@@ -97,9 +98,10 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
   // S16 M119: transcribe.py đã bỏ lời whisper bịa; không còn lời thật → dự án "không lời" (không phụ đề, không cắt theo lời)
   let speech = null;
   try { const m = JSON.parse(fs.readFileSync(path.join(d, 'work/words_raw.json.meta.json'), 'utf8')); if (m && m.speech === false) speech = { none: true, dropped: (m.dropped || []).length, ...(m.noAudio ? { noAudio: true } : {}) }; } catch { /* bản cũ của transcribe.py: không có meta */ }
-  onStep(speech ? 'Video không có lời nói: giữ nguyên cả clip' : 'Cắt khoảng lặng', .45);
+  // S27 M201: tự làm (manual) thì giữ nguyên cả clip, chỉ đổi sang 30 fps; cắt là việc người dùng chọn ở bước Dựng (Cắt chỗ thừa)
+  onStep(speech || manual ? 'Chuẩn bị video (giữ nguyên cả clip)' : 'Cắt khoảng lặng', .45);
   rmSync(path.join(d, 'work/aroll.mp4'), { force: true }); // M54: không ghi đè tại chỗ (có thể là liên kết cứng của bản anh em)
-  await run(PY, ['-I', '-X', 'utf8', S('cut.py'), src, path.join(d, 'work/words_raw.json'), path.join(d, 'work')]);
+  await run(PY, ['-I', '-X', 'utf8', S('cut.py'), src, path.join(d, 'work/words_raw.json'), path.join(d, 'work'), ...(manual ? ['--keep'] : [])]);
   onStep(`Trích khung hình ${orient === 'horizontal' ? '16:9' : '9:16'}`, .6);
   const [FW, FH] = orient === 'horizontal' ? [1280, 720] : [720, 1280];
   // stale frames from an interrupted earlier run would make the clip longer than the audio
@@ -120,7 +122,7 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
   const dur = +(fs.readdirSync(path.join(d, 'work/frames')).length / 30).toFixed(2);
   const tl = {
     width: orient === 'horizontal' ? 1920 : 1080, height: orient === 'horizontal' ? 1080 : 1920, fps: 30, duration: +(dur + 2.5).toFixed(2),
-    pack, _starter: { pack, title, dur: +(dur + 2.5).toFixed(2), ...(titleFromFile(title, src) ? { title_auto: true } : {}) },
+    pack, _starter: { pack, title, dur: +(dur + 2.5).toFixed(2), ...(titleFromFile(title, src) ? { title_auto: true } : {}), ...(manual ? { manual: true } : {}) },
     aroll: { frames: 'work/frames/%05d.jpg' }, face, ...(faceTr ? { face_track: faceTr } : {}),
     caption_style: 'slate', captions: 'work/captions.json', ...(speech ? { speech } : {}),
     scenes: [
@@ -129,7 +131,7 @@ async function build(d, ws, { src, model, pack, title, orient, lang, kit }, { ru
       ...(pack === 'slate' ? [{ type: 'frame_grid', t0: 0, t1: dur, badge: false, ...(orient === 'horizontal' ? { card: { x: 120, y: 70, w: 1040, h: 585, r: 8 } } : {}) }] : []),
       { type: 'title_card', t0: dur, t1: +(dur + 2.5).toFixed(2), question: 'Bạn thấy sao?', ...(orient === 'horizontal' ? { y: 210 } : {}) },
     ],
-    audio: defaultAudio(+(dur + 2.5).toFixed(2)),
+    audio: manual ? { ...defaultAudio(+(dur + 2.5).toFixed(2)), music: [] } : defaultAudio(+(dur + 2.5).toFixed(2)), // M201: nhạc là việc Thêm nhạc và SFX
   };
   // Brand kit chosen in the onboarding / "Video mới" dialog: applied here so the project does not ask for it again.
   if (kit) { const { brandFields } = await import('./batch.mjs'); tl.brand = { ...brandFields(kit, d), kit: kit.id }; }
