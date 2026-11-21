@@ -57,7 +57,8 @@
     h += `<div class="row"><div><span class="lbl">Bắt đầu (s)</span><input type="number" data-efxt="start" step="0.01" value="${r2(b.start)}"></div>
       <div><span class="lbl">Kết thúc (s)</span><input type="number" data-efxt="end" step="0.01" value="${r2(b.end)}"></div></div>
       <div class="acts"><button class="efx-peek ${P?.real ? 'on' : ''}" data-efxpeek aria-pressed="${!!P?.real}"><i class="ti ti-player-play"></i> Xem thử ±1 s</button></div>`;
-    return [['basic', 'Hiệu ứng', S.sect(esc(b.label), h, b.icon)]];
+    const col = b.src === 'efx' && d?.color && S.colorPanel ? [['color', 'Màu', S.colorPanel(o, null, 'efx')]] : []; // S29 M208: khối Điều chỉnh
+    return [['basic', 'Hiệu ứng', S.sect(esc(b.label), h, b.icon)], ...col];
   }
   const cur = () => (S.sel?.kind === 'efx' ? S.sel : null);
   const lockedMsg = () => { S.toast('Khối đang khoá · ⌥⇧L để mở khoá'); return true; };

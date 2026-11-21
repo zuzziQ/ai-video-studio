@@ -49,7 +49,7 @@ test('ffArgs: -q:v 5, cạnh ngắn 540, số khung đầu giữ như bản gố
 
 // đoạn engine.js từ `let TL` tới hết clipPath (chọn chuỗi khung) chạy trong vm, không cần DOM
 function engine(withProxy = true) {
-  const js = read('../../engine/engine.js'), i = js.indexOf('let TL = null;'), j = js.indexOf('\nconst LUT');
+  const js = read('../../engine/engine.js'), i = js.indexOf('let TL = null;'), j = js.indexOf('\nconst clipFilter');
   assert.ok(i > 0 && j > i, 'engine.js: tìm được đoạn TL … clipPath');
   const src = js.slice(i, j) + '\n;globalThis.__E = { fmtSeq, srcFrame, setTL: t => { TL = t; } };';
   const ctx = vm.createContext({ window: {}, console, CDN: '', SpeedMap: require('../../engine/speed.js'), ...(withProxy ? { PreviewProxy: PP } : {}) });

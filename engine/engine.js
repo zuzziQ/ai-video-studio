@@ -99,17 +99,17 @@ function srcFrame(c, srcT, cut) {
   return fmtSeq(cut && c.cutouts ? c.cutouts : c.src.seq, n);
 }
 function clipPath(t, cut) { const k = clipAt(t); return k ? srcFrame(k.c, k.src, cut) : ''; }
-const LUT = FX.lutCss(); // S28 M202: engine/fx_registry.js
-function clipFilter(c) {
-  const f = c.filter || {};
-  let s = f.preset ? LUT[f.preset] || '' : '';
-  if (f.brightness != null) s += ` brightness(${f.brightness})`;
-  if (f.contrast != null) s += ` contrast(${f.contrast})`;
-  if (f.saturate != null) s += ` saturate(${f.saturate})`;
-  if (f.hue) s += ` hue-rotate(${f.hue}deg)`;
-  if (f.temp) s += f.temp > 0 ? ` sepia(${(f.temp * .5).toFixed(2)})` : ` hue-rotate(${(f.temp * 25).toFixed(0)}deg)`;
-  if (f.blur) s += ` blur(${f.blur}px)`;
-  return s;
+// S29 M208: màu của clip / cảnh (LUT có cường độ + Adjust) ở engine/fx_registry.js FX.colorFx; trường cũ in đúng chuỗi cũ.
+// filter (CSS, có url(#…) cho vùng sáng / tối, nét) gắn vào ảnh; over (defs SVG + vignette + hạt) đặt trong hộp clip (clipBox).
+const clipFilter = c => FX.colorFx(c.filter).filter;
+const colorOver = (c, t) => (c.filter ? FX.colorFx(c.filter, { t }).over : '');
+// b-roll / ảnh phủ có s.filter: lọc cả lớp; vignette / hạt phủ ở lớp trên cùng của cảnh (front, không có thì back), cảnh dạng thẻ chỉ lọc
+function colorWrap(s, r, t) {
+  const c = FX.colorFx(s.filter, { t });
+  if (!c.filter && !c.over) return;
+  const card = (s.type === 'photo' && s.mode === 'card') || (s.type === 'broll' && (s.layout || 'full') !== 'full');
+  const top = r.front ? 'front' : 'back';
+  for (const k of ['back', 'front']) if (r[k]) r[k] = `<div class="full" style="filter:${c.filter || 'none'}">${r[k]}</div>${k === top ? (card ? c.defs : c.over) : ''}`;
 }
 // Auto-reframe (references/reframe-dub.md): clip.reframe = [{t, ox, oy}] = face centre (% of the source) keyed by SOURCE time,
 // clip.ar = source width/height. Pans the cover crop so the face sits centred (x) / at 42% height (y); off with clip.reframe_off.
@@ -182,7 +182,7 @@ function clipBox(c, srcT, t, extraFilter = '', style = '') {
   const rf = reframeCss(c, srcT);
   const tr = `${c.flip ? 'scaleX(-1) ' : ''}scale(${c.zoom || 1})`;
   const img = `<img src="${url(srcFrame(c, srcT))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:${c.fit === 'contain' || c.fit === 'blurfill' ? 'contain' : 'cover'};
-    transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">`;
+    transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">${colorOver(c, t)}`;
   const bg = c.fit === 'blurfill' ? `<img src="${url(srcFrame(c, srcT))}" style="position:absolute;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;filter:blur(30px) brightness(.7)">` : '';
   // Background replace: person cutout (clip.cutouts) over blur / colour / image / nothing; frames without a cutout show the plain frame.
   if (c.cutouts && c.bg?.type) {
@@ -191,7 +191,7 @@ function clipBox(c, srcT, t, extraFilter = '', style = '') {
       : b.type === 'color' ? `<div class="full" style="background:${b.color || '#151515'}"></div>`
       : b.type === 'image' && b.src ? `<img src="${media(b.src, t)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : '';
     const cut = `<img src="${url(srcFrame(c, srcT, true))}" onerror="this.onerror=null;this.src='${raw}'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:${fit};
-      transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">`;
+      transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">${colorOver(c, t)}`;
     return `<div class="full" style="overflow:hidden;${style}${maskCss(c.mask)}">${under}${cut}</div>`;
   }
   const inner = `<div class="full" style="overflow:hidden;${style}${maskCss(c.mask)}">${bg}${img}</div>`;
@@ -227,7 +227,7 @@ function arollFilter(t) {
   const base = gradeBase(t);
   // Modules that draw TL.aroll themselves still pick up the clip's colour grade.
   const k = CLIPS.length ? clipAt(t) : null;
-  return k ? `${base} ${clipFilter(k.c)}` : base;
+  return k ? `${base} ${FX.colorCss(k.c.filter)}` : base; // không có chỗ đặt defs SVG: bỏ vùng sáng / tối, nét
 }
 function arollTransform(t) {
   const z = activeIn(TL.zoom, t).pop();
@@ -433,6 +433,7 @@ function compose(t) {
     const h = hand.includes(s0), s = h ? { ...s0, t1: s0.t1 + ENV.fin } : s0, fn = MODULES[s.type];
     if (!fn) { console.warn('unknown module', s.type); continue; }
     const r = fn(s, t, t - s.t0) || {};
+    if (s.filter && ANIM_SCENES.has(s.type)) colorWrap(s, r, t); // S29 M208
     if (s.kf?.length || s.mask) { r.back = sceneFx(s, r.back, t); r.front = sceneFx(s, r.front, t); r.cover = false; }
     else if (s.anim && ANIM_SCENES.has(s.type)) { // S28 M204: hoạt ảnh không keyframe/mặt nạ; đoạn Vào / Ra để lộ a-roll bên dưới
       r.back = sceneFx(s, r.back, t); r.front = sceneFx(s, r.front, t);

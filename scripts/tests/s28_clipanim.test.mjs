@@ -23,6 +23,7 @@ const ctx = () => ({
   FX, clamp, STAGE_WH: [720, 1280],
   url: p => `u(${p})`, srcFrame: (c, s, cut) => `${cut ? 'cut' : 'f'}-${c.name}-${s.toFixed(3)}`,
   reframeCss: (c, s) => (c.reframe ? `--rf:1;object-position:${(40 + s).toFixed(2)}% 42%;transform-origin:50% 42%` : ''),
+  colorOver: () => '', // S29 M208: clip không có filter → không phủ gì
   gradeBase: t => `g${t.toFixed(2)}`, maskCss: m => (m ? `mask:${m.shape};` : ''), media: b => `m-${b}`,
   kfAt: (kf, t) => ({ x: t * 10, y: 0, scale: 1 + t / 10, rot: 0, opacity: 1 }), kfTr: v => `kf(${v.x.toFixed(2)},${v.scale.toFixed(3)})`,
 });

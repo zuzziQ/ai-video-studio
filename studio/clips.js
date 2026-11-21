@@ -33,16 +33,8 @@ function clipFrameUrl(c, st) {
   const fps = c.src.fps || 30, n = Math.min(c.src.count || 1e9, Math.max(1, Math.floor(st * fps + 1e-6) + 1));
   return '/project/' + c.src.seq.replace(/%0(\d)d/, (_, w) => String(n).padStart(+w, '0'));
 }
-function clipFilterCss(c) {
-  const f = c?.filter || {};
-  let s = f.preset ? LUT_CSS[f.preset] || '' : '';
-  if (f.brightness != null) s += ` brightness(${f.brightness})`;
-  if (f.contrast != null) s += ` contrast(${f.contrast})`;
-  if (f.saturate != null) s += ` saturate(${f.saturate})`;
-  if (f.hue) s += ` hue-rotate(${f.hue}deg)`;
-  if (f.temp) s += f.temp > 0 ? ` sepia(${(f.temp * .5).toFixed(2)})` : ` hue-rotate(${(f.temp * 25).toFixed(0)}deg)`;
-  return s || 'none';
-}
+// S29 M208: một nguồn với engine (FX.colorFx): thumbnail bỏ blur và lớp SVG (vùng sáng / tối, nét) như trước
+function clipFilterCss(c) { return FX.colorCss(c?.filter, { blur: false }) || 'none'; }
 
 // Old single-take projects → one clip covering the A-roll (TL.aroll stays for compatibility).
 function migrateClips() {
