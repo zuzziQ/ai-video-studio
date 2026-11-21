@@ -195,7 +195,7 @@ const GRADES = {
 };
 const activeIn = (list, t) => (list || []).filter(r => t >= r.t0 && t < r.t1);
 
-function gradeBase(t) { const g = activeIn(TL.grade, t).pop(); return GRADES[g ? g.mode : 'normal'] || g.mode; }
+function gradeBase(t) { const g = activeIn(TL.grade, t).filter(r => !r.hidden).pop(); return GRADES[g ? g.mode : 'normal'] || g.mode; } // S28 M206: khối ẩn trên track Hiệu ứng
 function arollFilter(t) {
   const base = gradeBase(t);
   // Modules that draw TL.aroll themselves still pick up the clip's colour grade.
@@ -414,14 +414,24 @@ function compose(t) {
     if (r.front) front.push(r.front);
     if (t < s0.t1 && (s.hideCaptions ?? (r.hideCaptions || DEFAULT_HIDE_CAPS.has(s.type)))) hideCaps = true;
   }
-  return fxWrap(t, (cover ? '' : arollImg(t) + burnMask()) + back.join('') + (person ? personLayer(t) : '') + front.join('')) + (hideCaps ? '' : captionHTML(t));
+  return fxWrap(t, (cover ? '' : mainFx(t, arollImg(t)) + burnMask()) + back.join('') + (person ? personLayer(t) : '') + front.join('')) + (hideCaps ? '' : captionHTML(t));
 }
 
 // Whole-frame transition accents: timeline.fx = [{ t, type, dur?, amp? }] — captions stay steady on top.
-const FX_DUR = { shake: .35, punch: .25, zoom_in: .6, whip: .3, blur_in: .35, glitch: .3, flash: .25, rgb: .3, push: 2, mono: 1.5 };
+// S28 M206: thời lượng mặc định + nhãn ở engine/fx_registry.js (nhóm fx, legacy); TL.efx = khối mới của track Hiệu ứng (FX.fxApply).
+const FX_DUR = FX.accentDur();
+const efxAt = (t, target) => (TL.efx || []).filter(e => !e.hidden && (e.target === 'main' ? 'main' : 'all') === target && t >= e.start && t < e.end);
+// target 'main': chỉ video chính (dưới graphic, b-roll, chữ); không có khối thì trả html y nguyên
+function mainFx(t, html) {
+  const ex = efxAt(t, 'main');
+  if (!ex.length) return html;
+  const r = FX.fxApply(ex, t, html);
+  return `<div class="full" style="transform:${r.tr || 'none'};filter:${r.fl || 'none'};transform-origin:50% 45%">${r.html}</div>${r.over}`;
+}
 function fxWrap(t, html) {
-  const list = (TL.fx || []).filter(f => t >= f.t && t < f.t + (f.dur ?? FX_DUR[f.type] ?? .3));
-  if (!list.length) return html;
+  const list = (TL.fx || []).filter(f => !f.hidden && t >= f.t && t < f.t + (f.dur ?? FX_DUR[f.type] ?? .3));
+  const ex = efxAt(t, 'all');
+  if (!list.length && !ex.length) return html;
   let tr = '', fl = '', over = '';
   for (const f of list) {
     const d = f.dur ?? FX_DUR[f.type] ?? .3, k = (t - f.t) / d, j = Math.floor(t * 30);
@@ -445,6 +455,7 @@ function fxWrap(t, html) {
     }
     if (f.type === 'flash') over += `<div class="full" style="background:#fff;opacity:${(1 - E.outCubic(k)).toFixed(3)}"></div>`;
   }
+  if (ex.length) { const r = FX.fxApply(ex, t, html); html = r.html; tr += r.tr; fl += r.fl; over += r.over; }
   return `<div class="full" style="transform:${tr || 'none'};filter:${fl || 'none'};transform-origin:50% 45%">${html}</div>${over}`;
 }
 

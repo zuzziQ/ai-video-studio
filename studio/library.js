@@ -454,6 +454,7 @@ function libDragItem(el) {
   if ((b = el.closest('[data-tp]'))) return ['text', b.dataset.tp];
   if ((b = el.closest('[data-st]'))) return ['sticker', b.dataset.st];
   if ((b = el.closest('[data-fx]'))) return ['fx', b.dataset.fx];
+  if ((b = el.closest('[data-efxadd]'))) return ['efx', b.dataset.efxadd]; // S28 M206: hiệu ứng khung hình → track Hiệu ứng
   if ((b = el.closest('.mcell[data-m]'))) return ['media', b.dataset.m];
   if ((b = el.closest('.mcell[data-k]'))) return ['kho', b.dataset.k];
   return null;
@@ -470,6 +471,7 @@ function libInsert(d, where, o = {}) {
   if (d.kind === 'text') return addText(+d.id >= 0 ? TEXT_PRESETS[+d.id] : undefined, at);
   if (d.kind === 'sticker') return STICKERS.includes(d.id) && addSticker(d.id, at);
   if (d.kind === 'fx') { const [i, j] = d.id.split(':').map(Number); return packs()[i]?.items[j] && addPackItem(i, j, at); }
+  if (d.kind === 'efx') return window.Studio?.fxtrack?.add(d.id, where === 'timeline' ? o.t : undefined); // S28 M206 (81_fxtrack.js)
   const how = where === 'stage' ? 'overlay' : DropCore.mediaHow(o.track);
   if (d.kind === 'kho') { const it = KHOM?.items?.[+d.id]; return it && useKho(it, how, where === 'timeline' ? o.t : undefined); }
   const m = MEDIA[+d.id]; if (!m) return;
@@ -650,7 +652,7 @@ function panelFx() {
       return `<button class="fx" data-fx="${i}:${j}" draggable="true" title="${esc(it.label)} · ${esc(it.type)}"><span class="fth ${DW > DH ? 'h' : ''}">${has(k) ? `<img loading="lazy" src="/studio/thumbs/${k}.jpg" onerror="this.remove()" draggable="false">` : ''}<em>${esc(p.icon || '✦')}</em></span><small>${esc(it.label)}</small></button>`;
     }).join('')}</div></div>`;
   }).join('');
-  $('#libbody').innerHTML = (packs().length ? '' : '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang nạp engine…</div>') + (groups || (packs().length ? empty('ti-search-off', 'Không tìm thấy hiệu ứng', '') : ''));
+  $('#libbody').innerHTML = (window.Studio?.fxtrack?.panelHtml(q) || '') + (packs().length ? '' : '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang nạp engine…</div>') + (groups || (packs().length ? empty('ti-search-off', 'Không tìm thấy hiệu ứng', '') : ''));
 }
 // Pack demo items point at sample files (broll/01.jpg, ui/…png) most projects don't have → use the project's own images instead.
 const DEMO_MEDIA = /^(broll|ui)\/[\w.-]+\.(jpe?g|png|webp)$/i;

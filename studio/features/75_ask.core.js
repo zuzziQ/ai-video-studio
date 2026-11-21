@@ -127,9 +127,16 @@
   const SPEED_MODES = ['montage', 'hero', 'bullet', 'jump_cut', 'flash_in', 'flash_out', 'normal', 'freeze', 'reverse', 'forward'];
   A.clip_speed = { what: 'Đổi tốc độ clip đang chọn: preset đường cong (montage, hero = nhanh–chậm–nhanh khoe khoảnh khắc, bullet = chậm sâu ở giữa, jump_cut, flash_in, flash_out), normal = tốc độ đều speed×, freeze = đứng hình dur giây tại playhead (nhấn câu đinh), reverse = phát ngược, forward = bỏ phát ngược.',
     params: { mode: { t: 'enum', values: SPEED_MODES }, speed: { t: 'num', min: 0.25, max: 4 }, dur: { t: 'num', min: 0.5, max: 10 } } };
+  // S28 M206: hiệu ứng khung hình trên track Hiệu ứng (nhóm fx của engine/fx_registry.js; áp bằng FxTrackCore.addApply, 81_fxtrack.core.js)
+  const FT = root.FxTrackCore || (typeof require === 'function' ? require('./81_fxtrack.core.js') : null);
+  const EFX = FX.ids('fx');
+  const EFX_VI = Object.fromEntries(FX.list('fx').map(x => [x.id, x.label.toLocaleLowerCase('vi')]));
+  A.fx_add = { what: `Thêm một khối hiệu ứng khung hình lên track Hiệu ứng: phạm vi đoạn → phủ đúng đoạn, cả video → tại playhead (dur giây). intensity / speed / range 0–1 (speed của pulse = nhịp mỗi giây); target main = chỉ video chính, all = cả khung. Nhấn ngắn (shake, punch, flash…) đặt đúng câu / nhịp cần nhấn. Chọn type theo nội dung: ${FX.aiGuide('fx', ' | ')}.`,
+    params: { type: { t: 'enum', values: EFX }, dur: { t: 'num', min: 0.1, max: 30 }, intensity: { t: 'num', min: 0, max: 1 }, speed: { t: 'num', min: 0.1, max: 4 }, range: { t: 'num', min: 0, max: 1 }, target: { t: 'enum', values: ['all', 'main'] } } };
+  const fxAddApply = (tl, p, range, at) => (FT ? FT.addApply(tl, p, range, at) : 0);
   function actionsOf(scope) {
     if (!scope) return [];
-    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'elem_create']
+    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
         : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'clip_speed', 'open_panel'] : ['clip_speed', 'open_panel'])
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
@@ -198,7 +205,7 @@
     if (!act) { if (id && id !== 'answer') warnings.push(`việc "${clip(id, 24)}" không có trong phạm vi này`); id = 'answer'; act = list.find(a => a.id === 'answer'); }
     const params = act ? cleanParams(act.params, pickKey(o, ['params', 'args', 'parameters', 'arguments']), warnings) : {};
     // thiếu tham số bắt buộc → về trả lời bằng chữ, không đoán
-    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], clip_transition: ['type'], clip_speed: ['mode'], open_panel: ['panel'] }[id] || [];
+    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], fx_add: ['type'], clip_transition: ['type'], clip_speed: ['mode'], open_panel: ['panel'] }[id] || [];
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
@@ -238,8 +245,8 @@
     let lo = Infinity, hi = -Infinity;
     const hit = (t0, t1) => { if (Number.isFinite(+t0)) { lo = Math.min(lo, +t0); hi = Math.max(hi, Number.isFinite(+t1) ? +t1 : +t0); } };
     const key = sameKey;
-    const diff = (xa = [], xb = []) => { const s = new Set(xa.map(key)); for (const x of xb) if (!s.has(key(x))) hit(x.t0 ?? x.t, x.t1 ?? x.t0 ?? x.t); };
-    diff(a.TL?.scenes, b.TL?.scenes); diff(a.CAP, b.CAP); diff(a.TL?.audio?.sfx, b.TL?.audio?.sfx); diff(a.TL?.audio?.music, b.TL?.audio?.music);
+    const diff = (xa = [], xb = []) => { const s = new Set(xa.map(key)); for (const x of xb) if (!s.has(key(x))) hit(x.t0 ?? x.t ?? x.start, x.t1 ?? x.end ?? (x.dur != null ? x.t + x.dur : x.t0 ?? x.t)); };
+    diff(a.TL?.scenes, b.TL?.scenes); diff(a.CAP, b.CAP); diff(a.TL?.efx, b.TL?.efx); diff(a.TL?.fx, b.TL?.fx); // efx / fx: S28 M206 diff(a.TL?.audio?.sfx, b.TL?.audio?.sfx); diff(a.TL?.audio?.music, b.TL?.audio?.music);
     const sa = clipStarts(a.TL || {}), cb = b.TL?.clips || [], ca = a.TL?.clips || [];
     cb.forEach((c, i) => { if (key(c.transition) !== key(ca[i]?.transition)) hit(sa[i] - 0.5, sa[i] + 0.5); });
     if (!Number.isFinite(lo)) return null;
@@ -347,6 +354,8 @@
     const ca = a?.TL?.clips || [], cb = b?.TL?.clips || [];
     const nt = cb.filter((c, i) => i > 0 && key(c.transition) !== key(ca[i]?.transition)).length;
     if (nt) out.push(`${nt} chỗ nối chuyển cảnh`);
+    const ne = delta(a?.TL?.efx, b?.TL?.efx).add.length + delta(a?.TL?.fx, b?.TL?.fx).add.length; // S28 M206
+    if (ne) out.push(`+${ne} hiệu ứng`);
     return out.slice(0, 6);
   }
   function logPush(list, raw, max = LOG_MAX) {
@@ -365,7 +374,7 @@
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts,
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
     logEntry, logPush, logParse, changeSummary, regionOf, frameAt }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
