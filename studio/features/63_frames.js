@@ -37,7 +37,49 @@
     follow();
   }
 
+  // ---- S29 M213: khung xem trước 540p (engine/preview_proxy.js, route /api/frames/proxy) ----
+  // Nút "540p" cạnh nút phóng to: Tự động → Bật → Tắt (lưu trên máy này). Bật thì trích lười chuỗi 540p còn thiếu (chạy nền,
+  // không chiếm job), xong thì S.proxyMap = {chuỗi gốc: chuỗi 540p} và preview dựng lại; render không dùng S.proxyMap.
+  const KEY = 'avs.proxy540', NEXT = { auto: 'on', on: 'off', off: 'auto' };
+  const prefGet = () => { try { const v = localStorage.getItem(KEY); return NEXT[v] ? v : 'auto'; } catch { return 'auto'; } };
+  const prefSet = v => { try { localStorage.setItem(KEY, v); } catch {} };
+  let btn = null, gen = 0;
+  const same = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null);
+  function apply(map) {
+    if (same(S.proxyMap, map)) return;
+    S.proxyMap = map; S.redraw?.();
+  }
+  function paint(info) {
+    if (!btn) return;
+    const pref = prefGet(), on = !!info?.on, ready = on && Object.keys(info.map || {}).length, wait = on && info.pending?.some(m => m.state === 'running');
+    btn.classList.toggle('on', !!ready);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.innerHTML = `<span class="aspect sm">${wait ? '540…' : '540p'}</span>`;
+    const why = pref !== 'auto' ? '' : on ? (info.profile === 'tiet-kiem' ? ' (profile Tiết kiệm)' : ' (máy render bằng SwiftShader)') : ' (máy đủ mạnh: dùng khung gốc)';
+    btn.title = `Khung xem trước 540p: ${{ auto: 'Tự động', on: 'Bật', off: 'Tắt' }[pref]}${why}. Chỉ preview nhẹ hơn, video xuất vẫn đủ nét. Bấm để đổi.`;
+  }
+  async function proxySync() {
+    const my = ++gen;
+    let info; try { info = await S.api('/api/frames/proxy?pref=' + prefGet()); } catch { return; }
+    if (my !== gen) return;
+    paint(info);
+    apply(info.on && Object.keys(info.map || {}).length ? info.map : null);
+    if (!info.on || !info.pending?.length) return;
+    if (info.pending.some(m => m.state === 'missing')) { try { await S.api('/api/frames/proxy', {}); } catch { return; } }
+    else if (!info.pending.some(m => m.state === 'running')) return; // trích lỗi: giữ khung gốc, không thử lại liên tục
+    setTimeout(() => { if (my === gen) proxySync(); }, 1500);
+  }
+  S.proxySync = proxySync;
+
   S.onReady(async () => {
+    const cr = document.querySelector('#controls .cr');
+    if (cr && !document.getElementById('proxy540')) {
+      btn = document.createElement('button');
+      btn.className = 'icon tog'; btn.id = 'proxy540';
+      btn.onclick = () => { prefSet(NEXT[prefGet()]); proxySync(); };
+      cr.prepend(btn);
+    }
+    proxySync();
     let list; try { list = await S.api('/api/frames/check'); } catch { return; }
     if (!Array.isArray(list) || !list.length) return;
     if (list.some(m => m.src)) return start();

@@ -1,6 +1,6 @@
 # Keyframe tự do · Mặt nạ & tách nền · B-roll AI
 
-Code: engine `engine/engine.js` (`kfAt`, `sceneFx`, `maskCss`, `applyLineKf`, nhánh `bg` trong `clipLayer`) · Studio `studio/features/60_keyframes.js`, `61_mask.js`, `62_broll.js` · server `studio/routes/60_media.mjs` · CLI `scripts/ai_broll.mjs`.
+Code: engine `engine/engine.js` (`kfAt`, `sceneFx`, `maskCss`, `applyLineKf`, nhánh `bg` và keyframe trong `clipLayer`), `engine/kf.js` · Studio `studio/features/60_keyframes.js`, `61_mask.js`, `62_broll.js` · server `studio/routes/60_media.mjs` · CLI `scripts/ai_broll.mjs`.
 
 ## 1. Keyframe tự do — `kf`
 Gắn vào **bất kỳ cảnh nào** (`scenes[i]`: photo, sticker, emoji_pop, broll, media_card, led_text…) hoặc **một dòng chữ** (`scenes[i].lines[j]`, cả cảnh `text`).
@@ -15,14 +15,28 @@ Gắn vào **bất kỳ cảnh nào** (`scenes[i]`: photo, sticker, emoji_pop, b
 | `t` | giây **tuyệt đối** trên timeline (dời cảnh trong Studio thì keyframe dời theo) |
 | `x`, `y` | độ dời (px thiết kế, 720×1280 hoặc 1280×720) so với vị trí gốc |
 | `scale`, `rot`, `opacity` | tỉ lệ (1 = gốc), xoay (độ), độ mờ 0–1 (nhân với độ mờ sẵn có) |
-| `ease` | đường cong **từ key này tới key sau**: `linear`, `in`, `out`, `inOut`, `back` (nảy quá), `bounce`, `hold` (đứng yên rồi nhảy) |
+| `ease` | đường cong **từ key này tới key sau**: `linear`, `in`, `out`, `inOut`, `back` (nảy quá), `bounce`, `hold` (đứng yên rồi nhảy); S29 M209 thêm preset bezier `easeIn`, `easeOut`, `easeInOut`, `overshoot` (nảy), `elastic` (đàn hồi) |
+| `bz` | `[x1, y1, x2, y2]` cubic-bezier tự chọn, thắng `ease` |
 | `anchor` (cảnh) | tâm xoay/phóng `[x, y]` px; mặc định `[s.x, s.y]` hoặc giữa khung. Studio tự đặt khi tạo key đầu tiên |
 
 - Trước key đầu = giá trị key đầu; sau key cuối = giá trị key cuối. Thiếu trường = mặc định (0, 0, 1, 0, 1).
 - Engine bọc `back`/`front` của cảnh trong một lớp transform → hoạt ảnh vào/ra sẵn có của module **vẫn chạy bên trong**; không có `kf` thì không đổi gì. Cảnh có `kf`/`mask` không còn được coi là "phủ kín" (`cover`) nên video chính vẫn vẽ bên dưới.
 - Dòng chữ: engine gán `data-cid` rồi chèn transform ngay sau `translate(-50%,-50%)` → xoay/phóng quanh tâm chữ.
 
-**Studio** — chọn thành phần → tab **Keyframe**: Thêm/cập nhật keyframe tại playhead (lấy giá trị đang hiển thị), ‹ › nhảy keyframe, xoá, thanh trượt Dời X/Y, Tỉ lệ, Xoay, Độ mờ (kéo là tự tạo key tại playhead), chọn kiểu chuyển động, danh sách key. Timeline vẽ **hình thoi** trên khối; bấm hình thoi để tua tới. Khi thành phần đã có keyframe, **kéo trên preview / ô X-Y-Cỡ / Alt+mũi tên sửa keyframe tại playhead** (tạo mới nếu chưa có) thay vì vị trí gốc (bọc `getPos`/`setPos` của studio.js). Track chính (clip) chưa hỗ trợ `kf`.
+**Studio** — chọn thành phần → tab **Keyframe**: Thêm/cập nhật keyframe tại playhead (lấy giá trị đang hiển thị), ‹ › nhảy keyframe, xoá, thanh trượt Dời X/Y, Tỉ lệ, Xoay, Độ mờ (kéo là tự tạo key tại playhead), chọn kiểu chuyển động, danh sách key. Timeline vẽ **hình thoi** trên khối; bấm hình thoi để tua tới. Khi thành phần đã có keyframe, **kéo trên preview / ô X-Y-Cỡ / Alt+mũi tên sửa keyframe tại playhead** (tạo mới nếu chưa có) thay vì vị trí gốc (bọc `getPos`/`setPos` của studio.js). Track chính: xem 1b.
+
+### 1b. Keyframe clip chính và nhạc (S29 M209) — `clips[i].kf`, `audio.music[i].kf`
+Lõi thuần `engine/kf.js` (`window.KF`, Node `require`), dùng chung engine, Studio, Claude; bản Python `scripts/kf_env.py` (cùng easing) cho tiếng.
+```json
+{ "src": {"seq": "work/frames/%05d.jpg"}, "in": 0, "out": 6, "mask": {"shape": "circle"}, "filter": {"preset": "warm"},
+  "kf": [ {"t": 0, "scale": 1,   "mask_x": 30, "strength": 0,   "volume": 1,   "ease": "easeInOut"},
+          {"t": 4, "scale": 1.2, "mask_x": 70, "strength": 100, "volume": 0.2} ] }
+```
+- `t` = giây **tính từ đầu clip** trên timeline (nhạc: từ `t0` của khối), nên ripple / dời clip không lệch key. Tách clip (`splitClipAt`) chia key và đặt key ở điểm cắt (`KF.split`).
+- Mỗi key chỉ cần thuộc tính được đặt: thuộc tính nội suy giữa các key **có nó**; ngoài hai đầu giữ giá trị mép. Thuộc tính: `x`, `y`, `scale`, `rot`, `opacity` (biến đổi quanh tâm khung, bọc ngoài hoạt ảnh clip và thắng phần trùng — thứ tự ghép 3½ ở `engine.js`), `mask_x` / `mask_y` / `mask_w` / `mask_h` / `mask_feather` (chỉ khi clip có `mask`), `strength` (cường độ bộ lọc, khi có `preset`) và mọi Adjust của M208 (`exposure`, `brightness`, … `FX.ADJ`), `volume` (× của clip), nhạc: `gain` (dB).
+- Tiếng: `mix_audio.py` thay `volume=<gain>dB` của khối nhạc bằng `volume='pow(10,(…)/20)':eval=frame`, và nối `volume='…':eval=frame` sau chuỗi của clip (đường cong lấy mẫu 8 đoạn thẳng / khoảng). Xem trước: `studio.js` đặt `volume` của thẻ audio theo key.
+- **Studio** (`features/85_kfprops.js`): khi chọn clip / khối nhạc, mỗi thanh của Mặt nạ, Màu, Âm lượng (và ô Âm lượng dB của nhạc) có **nút hình thoi**: rỗng = chưa có key, viền = có key nơi khác, đặc = có key tại playhead; bấm = đặt / xoá key tại playhead. Thuộc tính đã có key thì kéo thanh = sửa key tại playhead (giá trị tĩnh giữ nguyên). Tab **Keyframe**: Dời / Tỉ lệ / Xoay / Mờ, kiểu chuyển động, ‹ › key, danh sách, xoá hết. Chấm keyframe trên khối clip và khối nhạc.
+- **Claude**: việc `clip_kf` (`75_ask.core.js` `clipKfApply` → `KF.ramp`): một thuộc tính chạy `from` → `to` trong `[start, end]` giây của clip, xem lại rồi Nhận / Bỏ.
 
 ## 2. Mặt nạ — `mask`
 Trên clip track chính (`clips[i].mask`) hoặc cảnh bất kỳ (`scenes[i].mask`).

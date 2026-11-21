@@ -7,8 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+const SpeedMap = createRequire(import.meta.url)('../engine/speed.js'); // S29 M207: clips.js tính thời lượng clip qua SpeedMap
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const FX = createRequire(import.meta.url)('../engine/fx_registry.js'); // S28 M202: clips.js đọc TRANS_TYPES / FILTERS từ window.FX
 const CUT_SRC = `
 function cutRanges(ranges) {
   if (!TL.clips?.length) migrateClips();
@@ -38,7 +41,7 @@ function cutOne(a, b) {
 
 export function rippleCut(tl, caps, ranges, frames) {
   const src = fs.readFileSync(path.join(SKILL, 'studio/clips.js'), 'utf8');
-  const c = vm.createContext({ TL: JSON.parse(JSON.stringify(tl)), CAP: JSON.parse(JSON.stringify(caps)), META: { frames }, console });
+  const c = vm.createContext({ SpeedMap, TL: JSON.parse(JSON.stringify(tl)), CAP: JSON.parse(JSON.stringify(caps)), META: { frames }, FX, console });
   vm.runInContext(src + '\n' + CUT_SRC, c, { filename: 'clips.js' });
   c.__R = JSON.parse(JSON.stringify(ranges));
   const r = vm.runInContext('cutRanges(__R)', c);

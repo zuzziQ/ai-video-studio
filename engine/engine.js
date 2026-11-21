@@ -42,8 +42,10 @@ const url = p => (!p ? '' : /^(https?:|file:|data:)/.test(p) ? p : TL.base + p);
 const pad = (n, w) => String(n).padStart(w, '0');
 // '@clip' / '@cut' are virtual patterns for the main track (TL.clips): frame n of the OUTPUT maps to the
 // right clip's source frame, so every module that reads TL.aroll.frames follows cuts, speed and reorder.
+// S29 M213: xem trước của Studio có TL.preview_proxy → đọc chuỗi 540p (engine/preview_proxy.js); render không có, đọc chuỗi gốc.
+const PX = p => (typeof PreviewProxy === 'undefined' ? p : PreviewProxy.pick(TL.preview_proxy, p));
 const fmtSeq = (pattern, n) => (pattern === '@clip' || pattern === '@cut' ? clipPath((n - 1) / TL.fps, pattern === '@cut')
-  : pattern.replace(/%0(\d)d/, (_, w) => pad(n, +w)));
+  : PX(pattern).replace(/%0(\d)d/, (_, w) => pad(n, +w)));
 const frameAt = t => Math.min(TL.aroll?.count || 1e9, Math.max(1, Math.floor(t * TL.fps + 1e-6) + 1));
 
 // Media item: "x.jpg" | {src} | {seq:"dir/%05d.jpg", fps, count, t0}
@@ -71,13 +73,14 @@ function emoji(ch, x, y, size, style = '') {
 // ---------- main track: TL.clips (spec: references/clips.md) ----------
 // clip = { src: {seq,fps,count} | "still.jpg", audio?, in, out, speed=1, volume=1, filter:{preset,brightness,contrast,
 //          saturate,hue,temp,blur}, flip, fit:"cover"|"contain"|"blurfill", zoom, ox, oy, cutouts?, transition:{type,dur} }
+// S29 M207: speedCurve / reverse / hold (Freeze) — thời lượng và giây nguồn lấy từ SpeedMap (engine/speed.js), chung với Studio.
 let CLIPS = [];
 function layoutClips() {
   CLIPS = [];
   let t = 0;
   for (const c of TL.clips || []) {
     if (c.hidden) continue;
-    const d = Math.max(1 / TL.fps, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1));
+    const d = SpeedMap.dur(c, TL.fps);
     CLIPS.push({ ...c, t0: t, t1: t + d });
     t += d;
   }
@@ -88,30 +91,32 @@ function clipAt(t) {
   let i = CLIPS.findIndex(c => t < c.t1);
   if (i < 0) i = CLIPS.length - 1;
   const c = CLIPS[i];
-  return { c, i, lt: t - c.t0, src: (c.in || 0) + Math.max(0, t - c.t0) * (c.speed || 1) };
+  return { c, i, lt: t - c.t0, src: SpeedMap.srcAt(c, t - c.t0) };
 }
 function srcFrame(c, srcT, cut) {
   if (typeof c.src === 'string') return cut ? (c.cutout_img || c.src) : c.src;
   const fps = c.src.fps || TL.fps, n = Math.min(c.src.count || 1e9, Math.max(1, Math.floor(srcT * fps + 1e-6) + 1));
-  return fmtSeq(cut && c.cutouts ? c.cutouts : c.src.seq, n);
+  if (cut && c.cutouts) return fmtSeq(c.cutouts, n);
+  const bk = bakeOf(c); // S29 M212: chuỗi nướng khớp tham số, trong đoạn in–out đã nướng, chưa lỗi ảnh
+  if (bk && n >= bk.n0 && n <= bk.n1) return fmtSeq(bk.p540 && !BAKE_BAD[bk.seq + '_540'] && TL.preview_proxy && Object.hasOwn(TL.preview_proxy, c.src.seq) ? PreviewProxy.proxySeq(bk.seq) : bk.seq, n);
+  return fmtSeq(c.src.seq, n);
 }
+// S29 M212: nướng sẵn bằng ffmpeg (engine/bake.js). Chuỗi nướng lỗi ảnh → BAKE_BAD, clip đó đọc lại chuỗi gốc (+ CSS gần đúng).
+const BAKE_BAD = {};
+const bakeOf = c => { if (typeof BakeCore === 'undefined' || !c.bake) return null; const b = BakeCore.active(c, TL.fps); return b && !BAKE_BAD[b.seq] ? b : null; };
+const bakeCss = c => (typeof BakeCore !== 'undefined' && c.bake && !bakeOf(c) ? BakeCore.approxCss(c, TL.fps, true) : '');
 function clipPath(t, cut) { const k = clipAt(t); return k ? srcFrame(k.c, k.src, cut) : ''; }
-const LUT = {
-  warm: 'sepia(.22) saturate(1.2) hue-rotate(-8deg)', cool: 'saturate(1.05) hue-rotate(12deg) brightness(1.02)',
-  vivid: 'saturate(1.45) contrast(1.1)', bw: 'grayscale(1) contrast(1.15)', film: 'sepia(.3) contrast(1.08) saturate(.85)',
-  fade: 'contrast(.86) brightness(1.08) saturate(.8)', night: 'brightness(.8) saturate(1.2) hue-rotate(195deg) contrast(1.1)',
-  pop: 'saturate(1.6) contrast(1.15) brightness(1.04)',
-};
-function clipFilter(c) {
-  const f = c.filter || {};
-  let s = f.preset ? LUT[f.preset] || '' : '';
-  if (f.brightness != null) s += ` brightness(${f.brightness})`;
-  if (f.contrast != null) s += ` contrast(${f.contrast})`;
-  if (f.saturate != null) s += ` saturate(${f.saturate})`;
-  if (f.hue) s += ` hue-rotate(${f.hue}deg)`;
-  if (f.temp) s += f.temp > 0 ? ` sepia(${(f.temp * .5).toFixed(2)})` : ` hue-rotate(${(f.temp * 25).toFixed(0)}deg)`;
-  if (f.blur) s += ` blur(${f.blur}px)`;
-  return s;
+// S29 M208: màu của clip / cảnh (LUT có cường độ + Adjust) ở engine/fx_registry.js FX.colorFx; trường cũ in đúng chuỗi cũ.
+// filter (CSS, có url(#…) cho vùng sáng / tối, nét) gắn vào ảnh; over (defs SVG + vignette + hạt) đặt trong hộp clip (clipBox).
+const clipFilter = c => `${FX.colorFx(c.filter).filter} ${bakeCss(c)}`.trim();
+const colorOver = (c, t) => (c.filter ? FX.colorFx(c.filter, { t }).over : '');
+// b-roll / ảnh phủ có s.filter: lọc cả lớp; vignette / hạt phủ ở lớp trên cùng của cảnh (front, không có thì back), cảnh dạng thẻ chỉ lọc
+function colorWrap(s, r, t) {
+  const c = FX.colorFx(s.filter, { t });
+  if (!c.filter && !c.over) return;
+  const card = (s.type === 'photo' && s.mode === 'card') || (s.type === 'broll' && (s.layout || 'full') !== 'full');
+  const top = r.front ? 'front' : 'back';
+  for (const k of ['back', 'front']) if (r[k]) r[k] = `<div class="full" style="filter:${c.filter || 'none'}">${r[k]}</div>${k === top ? (card ? c.defs : c.over) : ''}`;
 }
 // Auto-reframe (references/reframe-dub.md): clip.reframe = [{t, ox, oy}] = face centre (% of the source) keyed by SOURCE time,
 // clip.ar = source width/height. Pans the cover crop so the face sits centred (x) / at 42% height (y); off with clip.reframe_off.
@@ -154,11 +159,46 @@ function fixReframe(stage, t) {
     im.style.objectPosition = op; if (own) im.style.transformOrigin = to;
   }
 }
+// S28 M204: thứ tự ghép transform — định nghĩa MỘT lần ở đây, từ trong ra ngoài:
+//   clip chính: 1. ảnh: khung cắt tay / bám mặt (reframeCss: object-position + transform-origin) rồi lật + phóng (c.flip, c.zoom)
+//               2. hộp clip: mặt nạ (c.mask)   3. hoạt ảnh clip c.anim (Combo × Vào × Ra, quanh tâm khung; animWrap)
+//               3½. keyframe c.kf (S29 M209, quanh tâm khung; mask / màu theo key đã vào bước 1–2; thắng phần trùng của anim)
+//               4. chuyển cảnh mainTrack (inS / outS)   5. TL.zoom (arollTransform)   6. hiệu ứng cả khung TL.fx (fxWrap)
+//   cảnh b-roll / ảnh phủ: module → mặt nạ (s.mask) → hoạt ảnh s.anim → keyframe s.kf (sceneFx). Keyframe thắng phần trùng
+//               thuộc tính: x / y / scale / rot / opacity nào có trong s.kf thì bỏ phần đó của hoạt ảnh.
+// Tốc độ (M207) chỉ đổi srcT (giây nguồn); hoạt ảnh theo giây trên timeline (t − t0), nên tua ngược / đường cong không đổi nhịp hoạt ảnh.
+const ANIM_SCENES = new Set(['photo', 'broll']);
+const KF_OWN = ['x', 'y', 'scale', 'rot', 'opacity'];
+const kfOwned = kf => (kf?.length ? new Set(KF_OWN.filter(p => kf.some(k => k[p] != null))) : null);
+function animWrap(anim, lt, D, html, origin = '50% 50%', kf = null) {
+  const v = html && FX.clipAnimAt(anim, lt, D);
+  if (!v) return html;
+  const css = FX.clipAnimCss(v, kfOwned(kf));
+  return css ? `<div class="full" style="transform-origin:${origin};${css}">${html}</div>` : html;
+}
+// tâm hoạt ảnh của cảnh: s.anchor, hoặc tâm thẻ (ảnh dạng thẻ, b-roll không toàn khung), không thì tâm khung
+function animOrigin(s) {
+  if (s.anchor) return `${s.anchor[0]}px ${s.anchor[1]}px`;
+  const b = s.type === 'photo' && s.mode === 'card' ? s.card : s.type === 'broll' && (s.layout || 'full') !== 'full' ? s : null;
+  return b && Number.isFinite(+b.x) && Number.isFinite(+b.w) ? `${+b.x + b.w / 2}px ${+b.y + b.h / 2}px` : '50% 50%';
+}
+// S29 M209: keyframe clip chính (engine/kf.js): mặt nạ / màu theo key ở trong hộp clip (bước 2, và filter ảnh), biến đổi x / y / tỉ lệ /
+// xoay / mờ bọc NGOÀI hoạt ảnh (3½, quanh tâm khung) và thắng phần trùng của hoạt ảnh — như keyframe của cảnh.
+const kfClip = (c, t) => (c.kf?.length && c.t1 != null ? KF.clipAt(c, t - c.t0) : null);
+// mainTrack truyền `${clipFilter(c)} …`: có key màu thì thay phần đầu đó bằng filter tại t (mainTrack giữ nguyên, test so khung cũ)
 function clipLayer(c, srcT, t, extraFilter = '', style = '') {
+  const k = kfClip(c, t);
+  if (k && k.c.filter !== c.filter) { const f0 = clipFilter(c); if (extraFilter.startsWith(f0)) extraFilter = clipFilter(k.c) + extraFilter.slice(f0.length); }
+  let html = clipBox(k ? k.c : c, srcT, t, extraFilter, style);
+  if (c.anim && c.t1 != null) html = animWrap(c.anim, t - c.t0, c.t1 - c.t0, html, '50% 50%', c.kf);
+  if (k?.tr) html = `<div class="full" style="transform-origin:50% 50%;transform:${kfTr(k.tr)};opacity:${clamp(k.tr.opacity).toFixed(3)}">${html}</div>`;
+  return html;
+}
+function clipBox(c, srcT, t, extraFilter = '', style = '') {
   const rf = reframeCss(c, srcT);
   const tr = `${c.flip ? 'scaleX(-1) ' : ''}scale(${c.zoom || 1})`;
   const img = `<img src="${url(srcFrame(c, srcT))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:${c.fit === 'contain' || c.fit === 'blurfill' ? 'contain' : 'cover'};
-    transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">`;
+    transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">${colorOver(c, t)}`;
   const bg = c.fit === 'blurfill' ? `<img src="${url(srcFrame(c, srcT))}" style="position:absolute;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;filter:blur(30px) brightness(.7)">` : '';
   // Background replace: person cutout (clip.cutouts) over blur / colour / image / nothing; frames without a cutout show the plain frame.
   if (c.cutouts && c.bg?.type) {
@@ -167,40 +207,26 @@ function clipLayer(c, srcT, t, extraFilter = '', style = '') {
       : b.type === 'color' ? `<div class="full" style="background:${b.color || '#151515'}"></div>`
       : b.type === 'image' && b.src ? `<img src="${media(b.src, t)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : '';
     const cut = `<img src="${url(srcFrame(c, srcT, true))}" onerror="this.onerror=null;this.src='${raw}'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:${fit};
-      transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">`;
+      transform:${tr};${rf || `transform-origin:${c.ox ?? 50}% ${c.oy ?? 45}%`};filter:${gradeBase(t)} ${extraFilter}">${colorOver(c, t)}`;
     return `<div class="full" style="overflow:hidden;${style}${maskCss(c.mask)}">${under}${cut}</div>`;
   }
   const inner = `<div class="full" style="overflow:hidden;${style}${maskCss(c.mask)}">${bg}${img}</div>`;
   return c.mask?.bg ? `<div class="full"><div class="full" style="background:${c.mask.bg}"></div>${inner}</div>` : inner;
 }
 // Transition INTO clip c over its first `dur` seconds; the previous clip keeps playing underneath.
-const TRANS = {
-  fade: k => [`opacity:${k}`, ''],
-  dissolve: k => [`opacity:${k}`, ''],
-  slide_l: k => [`transform:translateX(${((1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
-  slide_r: k => [`transform:translateX(${(-(1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
-  slide_up: k => [`transform:translateY(${((1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
-  push: k => [`transform:translateX(${((1 - E.inOutSine(k)) * 100).toFixed(2)}%)`, `transform:translateX(${(-E.inOutSine(k) * 100).toFixed(2)}%)`],
-  zoom: k => [`opacity:${k};transform:scale(${lerp(1.35, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, .85, k).toFixed(3)})`],
-  zoom_out: k => [`opacity:${k};transform:scale(${lerp(.7, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, 1.25, k).toFixed(3)})`],
-  blur: k => [`opacity:${k};filter:blur(${((1 - k) * 22).toFixed(1)}px)`, `filter:blur(${(k * 22).toFixed(1)}px)`],
-  whip: k => [`transform:translateX(${((1 - E.outExpo(k)) * 110).toFixed(2)}%);filter:blur(${((1 - k) * 26).toFixed(1)}px)`, `transform:translateX(${(-E.inCubic(k) * 110).toFixed(2)}%);filter:blur(${(k * 26).toFixed(1)}px)`],
-  spin: k => [`opacity:${k};transform:rotate(${((1 - E.outCubic(k)) * -25).toFixed(1)}deg) scale(${lerp(1.4, 1, E.outCubic(k)).toFixed(3)})`, ''],
-  wipe: k => [`clip-path:inset(0 ${((1 - E.inOutSine(k)) * 100).toFixed(2)}% 0 0)`, ''],
-  circle: k => [`clip-path:circle(${(E.outCubic(k) * 75).toFixed(2)}% at 50% 50%)`, ''],
-  flash: k => [`opacity:${k > .5 ? 1 : 0}`, ''],
-  glitch: k => [`opacity:${k > .3 ? 1 : 0};transform:translateX(${k < .9 ? ((rnd(Math.floor(k * 20)) - .5) * 60).toFixed(0) : 0}px)`, ''],
-};
+// S28 M202: danh sách + hàm (k) → [inStyle, outStyle] nằm ở engine/fx_registry.js (FX.TRANS).
+const TRANS = FX.transFns();
 function mainTrack(t, extraFilter = '', extraStyle = '') {
   const k = clipAt(t);
   if (!k) return '<div class="full" style="background:#000"></div>';
   const { c, i, lt, src } = k, tr = c.transition, prev = CLIPS[i - 1];
   const cur = clipLayer(c, src, t, `${clipFilter(c)} ${extraFilter}`, extraStyle);
   if (!tr || !prev || lt >= (tr.dur ?? .4)) return cur;
-  const p = clamp(lt / (tr.dur ?? .4)), [inS, outS] = (TRANS[tr.type] || TRANS.fade)(p);
-  const pSrc = (prev.out ?? 0) + lt * (prev.speed || 1);
-  const flash = tr.type === 'flash' ? `<div class="full" style="background:#fff;opacity:${(1 - Math.abs(p - .5) * 2).toFixed(3)}"></div>` : '';
-  return `<div class="full">${clipLayer(prev, pSrc, t, clipFilter(prev), outS)}<div class="full" style="${inS}">${cur}</div>${flash}</div>`;
+  // S29 M203: tr.params (hướng, màu, cường độ, ease) — thiếu là mặc định, nên timeline cũ dựng ra giống hệt
+  const pr = tr.params, p = FX.ease(pr?.ease, clamp(lt / (tr.dur ?? .4))), [inS, outS] = (TRANS[tr.type] || TRANS.fade)(p, pr);
+  const pSrc = SpeedMap.srcAt(prev, prev.t1 - prev.t0 + lt); // clip trước chạy tiếp dưới chuyển cảnh (ngược: lùi tiếp)
+  const flash = FX.transOverlay(tr.type, p, pr); // lớp phủ: loé sáng, qua màu, rò sáng…
+  return FX.transWrap(tr.type, p, pr, `<div class="full">${clipLayer(prev, pSrc, t, clipFilter(prev), outS)}<div class="full" style="${inS}">${cur}</div>${flash}</div>`);
 }
 
 const GRADES = {
@@ -212,12 +238,12 @@ const GRADES = {
 };
 const activeIn = (list, t) => (list || []).filter(r => t >= r.t0 && t < r.t1);
 
-function gradeBase(t) { const g = activeIn(TL.grade, t).pop(); return GRADES[g ? g.mode : 'normal'] || g.mode; }
+function gradeBase(t) { const g = activeIn(TL.grade, t).filter(r => !r.hidden).pop(); return GRADES[g ? g.mode : 'normal'] || g.mode; } // S28 M206: khối ẩn trên track Hiệu ứng
 function arollFilter(t) {
   const base = gradeBase(t);
   // Modules that draw TL.aroll themselves still pick up the clip's colour grade.
   const k = CLIPS.length ? clipAt(t) : null;
-  return k ? `${base} ${clipFilter(k.c)}` : base;
+  return k ? `${base} ${FX.colorCss(k.c.filter)}` : base; // không có chỗ đặt defs SVG: bỏ vùng sáng / tối, nét
 }
 function arollTransform(t) {
   const z = activeIn(TL.zoom, t).pop();
@@ -298,13 +324,15 @@ function placeSub2(stage) {
 // ---------- free keyframes + masks (spec: references/keyframes-mask-broll.md) ----------
 // kf: [{t (absolute s), x, y (px offset), scale, rot (deg), opacity, ease: linear|in|out|inOut|back|bounce|hold}] — ease = curve leaving that key.
 const KF_EASE = { linear: k => k, in: E.inCubic, out: E.outCubic, inOut: E.inOutSine, back: k => E.outBack(k, 1.7), hold: () => 0,
-  bounce: k => { const n = 7.5625, d = 2.75; return k < 1 / d ? n * k * k : k < 2 / d ? n * (k -= 1.5 / d) * k + .75 : k < 2.5 / d ? n * (k -= 2.25 / d) * k + .9375 : n * (k -= 2.625 / d) * k + .984375; } };
+  bounce: k => { const n = 7.5625, d = 2.75; return k < 1 / d ? n * k * k : k < 2 / d ? n * (k -= 1.5 / d) * k + .75 : k < 2.5 / d ? n * (k -= 2.25 / d) * k + .9375 : n * (k -= 2.625 / d) * k + .984375; },
+  ...Object.fromEntries(Object.entries(KF.EASE).filter(([k]) => KF.BZ[k] || k === 'elastic')) }; // S29 M209: easeIn / easeOut / easeInOut / overshoot / elastic; a.bz tự chọn
+const kfEase = a => (a.bz ? KF.easeOf(a) : KF_EASE[a.ease] || KF_EASE.linear);
 const KF_DEF = { x: 0, y: 0, scale: 1, rot: 0, opacity: 1 };
 function kfAt(kf, t) {
   const ks = [...kf].sort((a, b) => a.t - b.t), v = k => ({ ...KF_DEF, ...k });
   const i = ks.findIndex(k => k.t > t);
   if (i === 0 || i < 0) return v(ks[i === 0 ? 0 : ks.length - 1]);
-  const a = v(ks[i - 1]), b = v(ks[i]), e = (KF_EASE[a.ease] || KF_EASE.linear)(clamp((t - a.t) / Math.max(1e-6, b.t - a.t)));
+  const a = v(ks[i - 1]), b = v(ks[i]), e = kfEase(a)(clamp((t - a.t) / Math.max(1e-6, b.t - a.t)));
   const o = { ...a }; for (const p in KF_DEF) o[p] = a[p] + (b[p] - a[p]) * e; return o;
 }
 const kfTr = v => `translate(${(+v.x).toFixed(2)}px,${(+v.y).toFixed(2)}px) rotate(${(+v.rot).toFixed(2)}deg) scale(${(+v.scale).toFixed(4)})`;
@@ -329,6 +357,7 @@ function maskCss(m) {
 function sceneFx(s, html, t) {
   if (!html) return html;
   if (s.mask) html = `<div class="full" style="${maskCss(s.mask)}">${html}</div>`;
+  if (s.anim && ANIM_SCENES.has(s.type)) html = animWrap(s.anim, t - s.t0, s.t1 - s.t0, html, animOrigin(s), s.kf); // S28 M204
   if (s.kf?.length) {
     const v = kfAt(s.kf, t), [ax, ay] = s.anchor || [s.x ?? STAGE_WH[0] / 2, s.y ?? STAGE_WH[1] / 2];
     html = `<div class="full" style="transform-origin:${ax}px ${ay}px;transform:${kfTr(v)};opacity:${clamp(v.opacity).toFixed(3)}">${html}</div>`;
@@ -367,14 +396,15 @@ const DEFAULT_HIDE_CAPS = new Set(['slam_bg', 'mega', 'orbit', 'mosaic', 'mosaic
 // scene followed straight away by another scene ("handoff": next t0 within 0.1 s of its t1) stays whole and keeps running
 // for 0.32 s UNDER the next one, which crossfades in on top, so two backdrops/panels never dip to the raw camera between them.
 // Not applied at the very start/end of the video, to scenes with their own fades (broll, photo), or when s.cut = true
-// (a deliberate hard cut on the beat); `keep` scenes (stay to the end) only get the ease-in.
+// (a deliberate hard cut on the beat); `keep` scenes (stay to the end) only get the ease-in. S28 M205: a scene with its own
+// Ra (FX.hasOut: anim_out on the scene or on a line / sticker in it) keeps the ease-in only; its Ra replaces the fade-out.
 const ENV = { in: .2, out: .26, fin: .32, fout: .32 }, OWN_FADE = new Set(['broll', 'photo']);
 const enveloped = s => !s.cut && !OWN_FADE.has(s.type);
 function envelope(s, t, full, hand) {
   if (!enveloped(s)) return null;
   const D = TL.duration || 1e9, di = full ? ENV.fin : ENV.in, dout = full ? ENV.fout : ENV.out;
   const ki = s.t0 > .05 ? clamp((t - s.t0) / di) : 1;
-  const ko = s.keep ? 0 : hand ? clamp((t - s.t1 - ENV.fin * .5) / (ENV.fin * .5)) : s.t1 < D - .05 ? clamp((t - (s.t1 - dout / 2)) / dout) : 0;
+  const ko = s.keep || (!hand && FX.hasOut(s)) ? 0 : hand ? clamp((t - s.t1 - ENV.fin * .5) / (ENV.fin * .5)) : s.t1 < D - .05 ? clamp((t - (s.t1 - dout / 2)) / dout) : 0;
   if (ki >= 1 && ko <= 0) return null;
   return { ki, ko, o: (full ? E.inOutSine(ki) : E.outCubic(ki)) * (1 - E.inOutSine(ko)) };
 }
@@ -421,7 +451,12 @@ function compose(t) {
     const h = hand.includes(s0), s = h ? { ...s0, t1: s0.t1 + ENV.fin } : s0, fn = MODULES[s.type];
     if (!fn) { console.warn('unknown module', s.type); continue; }
     const r = fn(s, t, t - s.t0) || {};
+    if (s.filter && ANIM_SCENES.has(s.type)) colorWrap(s, r, t); // S29 M208
     if (s.kf?.length || s.mask) { r.back = sceneFx(s, r.back, t); r.front = sceneFx(s, r.front, t); r.cover = false; }
+    else if (s.anim && ANIM_SCENES.has(s.type)) { // S28 M204: hoạt ảnh không keyframe/mặt nạ; đoạn Vào / Ra để lộ a-roll bên dưới
+      r.back = sceneFx(s, r.back, t); r.front = sceneFx(s, r.front, t);
+      if (FX.clipAnimAt(s.anim, t - s.t0, s.t1 - s.t0)?.edge) r.cover = false;
+    }
     const full = h || isFull(s, r), v = envelope(s0, t, full, h);
     if (v) { r.back = envWrap(r.back, v, full); r.front = envWrap(r.front, v, full); r.cover = false; }
     if (r.cover) cover = true;
@@ -431,14 +466,24 @@ function compose(t) {
     if (r.front) front.push(r.front);
     if (t < s0.t1 && (s.hideCaptions ?? (r.hideCaptions || DEFAULT_HIDE_CAPS.has(s.type)))) hideCaps = true;
   }
-  return fxWrap(t, (cover ? '' : arollImg(t) + burnMask()) + back.join('') + (person ? personLayer(t) : '') + front.join('')) + (hideCaps ? '' : captionHTML(t));
+  return fxWrap(t, (cover ? '' : mainFx(t, arollImg(t)) + burnMask()) + back.join('') + (person ? personLayer(t) : '') + front.join('')) + (hideCaps ? '' : captionHTML(t));
 }
 
 // Whole-frame transition accents: timeline.fx = [{ t, type, dur?, amp? }] — captions stay steady on top.
-const FX_DUR = { shake: .35, punch: .25, zoom_in: .6, whip: .3, blur_in: .35, glitch: .3, flash: .25, rgb: .3, push: 2, mono: 1.5 };
+// S28 M206: thời lượng mặc định + nhãn ở engine/fx_registry.js (nhóm fx, legacy); TL.efx = khối mới của track Hiệu ứng (FX.fxApply).
+const FX_DUR = FX.accentDur();
+const efxAt = (t, target) => (TL.efx || []).filter(e => !e.hidden && (e.target === 'main' ? 'main' : 'all') === target && t >= e.start && t < e.end);
+// target 'main': chỉ video chính (dưới graphic, b-roll, chữ); không có khối thì trả html y nguyên
+function mainFx(t, html) {
+  const ex = efxAt(t, 'main');
+  if (!ex.length) return html;
+  const r = FX.fxApply(ex, t, html);
+  return `<div class="full" style="transform:${r.tr || 'none'};filter:${r.fl || 'none'};transform-origin:50% 45%">${r.html}</div>${r.over}`;
+}
 function fxWrap(t, html) {
-  const list = (TL.fx || []).filter(f => t >= f.t && t < f.t + (f.dur ?? FX_DUR[f.type] ?? .3));
-  if (!list.length) return html;
+  const list = (TL.fx || []).filter(f => !f.hidden && t >= f.t && t < f.t + (f.dur ?? FX_DUR[f.type] ?? .3));
+  const ex = efxAt(t, 'all');
+  if (!list.length && !ex.length) return html;
   let tr = '', fl = '', over = '';
   for (const f of list) {
     const d = f.dur ?? FX_DUR[f.type] ?? .3, k = (t - f.t) / d, j = Math.floor(t * 30);
@@ -462,6 +507,7 @@ function fxWrap(t, html) {
     }
     if (f.type === 'flash') over += `<div class="full" style="background:#fff;opacity:${(1 - E.outCubic(k)).toFixed(3)}"></div>`;
   }
+  if (ex.length) { const r = FX.fxApply(ex, t, html); html = r.html; tr += r.tr; fl += r.fl; over += r.over; }
   return `<div class="full" style="transform:${tr || 'none'};filter:${fl || 'none'};transform-origin:50% 45%">${html}</div>${over}`;
 }
 
@@ -488,6 +534,25 @@ window.init = async (timeline) => {
   await document.fonts.ready;
   return true;
 };
+
+// S29 M213: ảnh 540p lỗi (chưa trích đủ, hỏng) → đổi về ảnh gốc, chuỗi đó thôi dùng 540p (bắt ở pha capture: lỗi ảnh không nổi bọt).
+if (typeof document !== 'undefined' && typeof PreviewProxy !== 'undefined') document.addEventListener('error', e => {
+  const im = e.target;
+  if (im?.tagName !== 'IMG' || !TL?.preview_proxy) return;
+  const s = PreviewProxy.fallback(TL.preview_proxy, im.getAttribute('src'), url);
+  if (s) im.src = s;
+}, true);
+
+// S29 M212: ảnh của chuỗi nướng lỗi (bị xoá, chưa đủ) → bản 540p lỗi thì đọc bản nướng đủ cỡ; bản nướng lỗi thì đọc chuỗi gốc.
+if (typeof document !== 'undefined' && typeof BakeCore !== 'undefined') document.addEventListener('error', e => {
+  const im = e.target, s = im?.tagName === 'IMG' ? im.getAttribute('src') || '' : '', pre = url(BakeCore.DIR + '/');
+  if (!pre || !s.startsWith(pre)) return;
+  const m = /^([0-9a-f]{16})(_540)?\/(\d{5})\.(jpg|png)$/.exec(s.slice(pre.length).split('?')[0]); if (!m) return;
+  const seq = `${BakeCore.DIR}/${m[1]}/%05d.${m[4]}`, c = CLIPS.find(x => x.bake?.hash === m[1]);
+  if (m[2]) { BAKE_BAD[seq + '_540'] = 1; im.src = url(fmtSeq(seq, +m[3])); return; }
+  BAKE_BAD[seq] = 1;
+  if (c && typeof c.src === 'object') im.src = url(fmtSeq(c.src.seq, +m[3]));
+}, true);
 
 // Decode every image of the next frame BEFORE it replaces the visible one, so live playback never shows a
 // half-loaded (black) frame. Decoded images are kept in a small LRU so the swap paints them immediately.

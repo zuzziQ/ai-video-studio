@@ -57,8 +57,9 @@
       <label class="check"><input type="checkbox" data-shnofill ${o.fill === 'none' ? 'checked' : ''}> Không nền</label></div>${swatch('fill')}`, 'ti-palette');
     h += sect(liney ? 'Nét' : 'Viền', `<div class="row"><input type="color" data-shc="stroke" value="${hex(o.stroke, DSTROKE)}"></div>${swatch('stroke')}
       ${rng('stroke_w', sw, liney ? 1 : 0, 60, 1, 'Độ dày', 'px')}${kind === 'rounded' ? rng('radius', o.radius ?? 32, 0, 300, 1, 'Bo góc', 'px') : ''}`, 'ti-border-outer');
-    h += sect('Hiển thị', `${rng('opacity', Math.round((o.opacity ?? 1) * 100), 0, 100, 1, 'Độ mờ', '%')}
-      <span class="lbl">Hoạt ảnh vào</span><div class="seg3">${ANIMS.map(([k, l, ic]) => `<button data-sha="${k}" class="${(o.anim || 'fade') === k ? 'on' : ''}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div>`, 'ti-eye');
+    h += sect('Hiển thị', rng('opacity', Math.round((o.opacity ?? 1) * 100), 0, 100, 1, 'Độ mờ', '%'), 'ti-eye');
+    // S28 M205: Vào / Ra / Lặp dùng chung (83_anim.js); fade / pop / wipe giữ hình cũ của engine/shape.js
+    if (S.animPick) h += S.animPick(o, { def: 'fade', extra: ANIMS.map(([k, l]) => [k, l]) });
     return ['shape', 'Hình', `<div id="shpanel">${h}</div>`];
   }
   S.addInspectorTab(tab);
@@ -70,7 +71,6 @@
     if ((b = e.target.closest('#libbody [data-shadd]'))) return add(b.dataset.shadd);
     if (!e.target.closest('#shpanel')) return;
     if ((b = e.target.closest('[data-shk]'))) return set(o => setKind(o, b.dataset.shk));
-    if ((b = e.target.closest('[data-sha]'))) return set(o => { o.anim = b.dataset.sha; });
     if ((b = e.target.closest('[data-shsw]'))) return set(o => { o[b.dataset.shsw] = b.dataset.v; if (b.dataset.shsw === 'stroke' && !LINEY.has(o.shape) && !o.stroke_w) o.stroke_w = 6; });
   });
   // Đổi loại hình, giữ vị trí / màu / thời gian (tab Hình, và "Thay element đang chọn" của chi tiết thư viện, M147)

@@ -7,6 +7,7 @@
 import { createRequire } from 'node:module';
 
 export const AskCore = createRequire(import.meta.url)('../studio/features/75_ask.core.js');
+const PresetsCore = createRequire(import.meta.url)('../studio/features/84_presets.core.js'); // S29 M211
 
 export class AskError extends Error {
   constructor(msg, status = 400) { super(msg); this.name = 'AskError'; this.status = status; }
@@ -34,8 +35,14 @@ export function checkInput(raw) {
   if (!scope) throw bad('Cài đặt không có thanh Hỏi Claude');
   const n = (v, max) => Math.max(0, Math.min(max, Math.round(+v || 0)));
   const ctx = { duration: Math.round(Math.max(0, Math.min(36000, +I.duration || 0)) * 10) / 10, clips: n(I.clips, 999), scenes: n(I.scenes, 9999), captions: n(I.captions, 99999), pack: str(I.pack, 40), text: sel?.text || '',
-    qc: scope.step === 'check' ? qc : null, dw, dh, image: false };
+    qc: scope.step === 'check' ? qc : null, dw, dh, image: false, beats: checkBeats(I.beats), presets: PresetsCore.checkBrief(I.presets) };
   return { scope, ask, ctx };
+}
+// S28 M210: nhịp nhạc (BeatsCore.brief của 33_beats.core.js): { bpm, strong: [giây] } — tối đa 40 mốc phách mạnh
+export function checkBeats(v) {
+  if (!v || typeof v !== 'object' || !(+v.bpm > 20 && +v.bpm < 400) || !Array.isArray(v.strong)) return null;
+  const strong = v.strong.slice(0, 40).map(Number).filter(t => Number.isFinite(t) && t >= 0 && t <= 36000).map(t => Math.round(t * 100) / 100);
+  return { bpm: Math.round(+v.bpm * 10) / 10, strong };
 }
 // M154: kết quả kiểm tra gần nhất (16_qc.js) để mô hình giải thích lỗi: { score, issues: [{ t, kind, msg, sev }] } — tối đa 12 lỗi, chữ cắt ngắn
 const SEV = ['high', 'medium', 'low'];
@@ -49,7 +56,9 @@ export function checkQc(v) {
 
 function scopeText(input) {
   const s = input.scope, c = input.ctx, S = AskCore.STEPS;
-  const base = `Video dài ${c.duration} s, ${c.clips} clip, ${c.scenes} cảnh / graphic, ${c.captions} dòng phụ đề${c.pack ? `, gói style ${c.pack}` : ''}.`;
+  const base = `Video dài ${c.duration} s, ${c.clips} clip, ${c.scenes} cảnh / graphic, ${c.captions} dòng phụ đề${c.pack ? `, gói style ${c.pack}` : ''}.`
+    + (c.beats ? `
+Nhạc nền ${c.beats.bpm} BPM, phách mạnh tại (giây): ${c.beats.strong.join(', ') || 'chưa rõ'}. Chuyển cảnh, chỗ cắt và b-roll nên rơi đúng phách mạnh; nút "Cắt theo nhịp" cạnh nút tách chia clip tại vạch nhịp; nhấn hình theo nhạc thì dùng fx_beats (khối ngắn tại mỗi phách mạnh thứ every).` : '');
   if (s.kind === 'elem') return `${base}\nPhạm vi: element đang chọn (${s.chip}).`;
   if (s.kind === 'clip') return `${base}\nPhạm vi: ${s.chip}${s.idx ? '' : ' (clip đầu, không có chuyển cảnh vào)'}.`;
   if (s.kind === 'region') return `${base}\nPhạm vi: một vùng người dùng khoanh trên khung hình ${c.dw}×${c.dh} px tại ${AskCore.stamp(s.t)}: x ${s.x}, y ${s.y}, rộng ${s.w}, cao ${s.h} px (gốc ở góc trên-trái).\n${c.image ? `Ảnh vùng đó (cắt từ video gốc, chưa có chữ / graphic) là tệp ${c.image} trong thư mục làm việc: đọc bằng công cụ Read rồi trả lời theo đúng những gì thấy.` : 'Không có ảnh của vùng: chỉ dựa vào toạ độ, đừng đoán nội dung ảnh.'}`;
@@ -64,11 +73,17 @@ function paramText(p) {
   if (!e.length) return 'không có tham số';
   return e.map(([k, d]) => `${k}: ${d.t === 'enum' ? d.values.join(' | ') : d.t === 'num' ? `số ${d.min}–${d.max}` : `chữ ≤ ${d.max} ký tự`}`).join('; ');
 }
+// S29 M211 (gu thương hiệu M192): preset người dùng đã lưu — chọn chuyển cảnh / hoạt ảnh / màu thì ưu tiên đúng loại + tham số của preset
+function presetText(list) {
+  if (!list?.length) return '';
+  return dataBlock('Preset người dùng đã lưu (gu riêng; mục "của thương hiệu" là gu của thương hiệu đang mở)', PresetsCore.briefLines(list)) +
+    '\nKhi việc cần chọn chuyển cảnh, hoạt ảnh hoặc màu: nếu một preset trên hợp nội dung thì dùng đúng type và tham số của preset đó (ưu tiên preset của thương hiệu) thay vì tự chọn loại khác.\n';
+}
 export function routerPrompt(input) {
   const list = AskCore.actionsOf(input.scope);
   return `Bạn là trợ lý của một phần mềm dựng video ngắn. Người dùng gõ một câu; chọn ĐÚNG MỘT việc trong danh sách dưới đây để phần mềm tự chạy.
 ${scopeText(input)}
-${input.ctx.text ? dataBlock('Chữ của element', input.ctx.text) + '\n' : ''}Danh sách việc (chỉ được chọn id có ở đây):
+${input.ctx.text ? dataBlock('Chữ của element', input.ctx.text) + '\n' : ''}${presetText(input.ctx.presets)}Danh sách việc (chỉ được chọn id có ở đây):
 ${list.map(a => `- ${a.id}: ${a.what} Tham số: ${paramText(a.params)}.`).join('\n')}
 ${dataBlock('Câu của người dùng', input.ask)}
 Nếu không việc nào khớp, hoặc người dùng chỉ hỏi để hiểu, chọn "answer" và trả lời ngắn (≤ 3 câu, tiếng Việt có dấu) trong "reply".

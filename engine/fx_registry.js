@@ -1,0 +1,745 @@
+// S28 M202: registry hiệu ứng chung — nguồn DUY NHẤT cho chuyển cảnh, hoạt ảnh chữ (vào) và bộ lọc màu (LUT).
+// Chạy ở ba nơi, không DOM:
+//   - engine (engine/index.html nạp trước mọi module): window.FX; engine.js lấy TRANS / LUT từ đây
+//   - Studio (studio/index.html nạp /engine/fx_registry.js trước clips.js): TRANS_TYPES, FILTERS, LUT_CSS, ANIM_LIST
+//   - Node (require): scripts/tests/s28_registry.test.mjs, studio/features/75_ask.core.js (prompt Claude), scripts/fx_doc.mjs
+// Mỗi mục: { id, label (nhãn Việt), group, icon (Tabler), params: { tên: { t: 'num'|'enum', min, max, def, values } },
+//            fn, ai: { mood, nhip, khi_nao, tranh } } — `ai` là mô tả cho Claude chọn theo nội dung câu nói, không chọn bừa.
+//   chuyển cảnh: fn(k, params) → [inStyle, outStyle] (k 0→1 trong đoạn chuyển; in = clip mới, out = clip trước chạy dưới nền);
+//                overlay(k) → HTML phủ lên trên (chỉ flash). Hàm thuần: cùng k cho cùng chuỗi (glitch dùng rnd tất định).
+//   LUT: css = chuỗi CSS filter; fn(k) → css ở cường độ k 0–1 (S29 M208; ghép với Adjust ở colorFx).
+//   hoạt ảnh (M205): anim_in (= text_in) / anim_out / anim_loop — hàm thuần + animOf / animAt, dùng chung cho chữ, hình, element, sticker.
+// Thêm một loại = thêm một mục ở đây; danh sách của Studio, prompt Claude và bảng references/clips.md (node scripts/fx_doc.mjs) đọc từ đó.
+'use strict';
+(function (root) {
+  // Bản sao đúng công thức của engine/engine.js (E, lerp) và engine/modules.js (rnd): file này nạp trước nên không dùng chung được.
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const rnd = i => { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
+  const E = {
+    inCubic: k => k * k * k,
+    outCubic: k => 1 - Math.pow(1 - k, 3),
+    outExpo: k => (k >= 1 ? 1 : 1 - Math.pow(2, -10 * k)),
+    inOutSine: k => -(Math.cos(Math.PI * k) - 1) / 2,
+  };
+
+  const GROUPS = {
+    trans: [['basic', 'Cơ bản'], ['slide', 'Trượt'], ['camera', 'Camera'], ['light', 'Ánh sáng'], ['mask', 'Mặt nạ'], ['distort', 'Nhiễu']],
+    text_in: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
+    lut: [['tone', 'Tông màu'], ['mood', 'Không khí']],
+    // S28 M205
+    anim_in: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
+    anim_out: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
+    anim_loop: [['move', 'Chuyển động'], ['light', 'Ánh sáng'], ['letter', 'Từng chữ']],
+  };
+
+  // ---- S29 M203: tham số chuyển cảnh. Chung: dur (0.1–3 s), ease (5 preset, đường cong thời gian áp lên k trước fn; 'auto' = giữ
+  // nhịp riêng của loại, nên dữ liệu cũ không có params dựng ra giống hệt). Riêng: dir (trượt, đẩy, gạt, lia, lật), color (flash,
+  // qua màu, nhấp nháy), intensity (nhiễu, lắc, tách RGB). Nhãn hiện trong inspector chỗ nối: label + vl (nhãn từng giá trị).
+  const DUR = { t: 'num', min: 0.1, max: 3, def: 0.4, label: 'Thời lượng' };
+  const EASE = { auto: k => k, smooth: E.inOutSine, accel: k => k * k, decel: k => 1 - (1 - k) * (1 - k), snap: E.outExpo };
+  const EASE_P = { t: 'enum', values: Object.keys(EASE), def: 'auto', label: 'Nhịp',
+    vl: { auto: 'Mặc định', smooth: 'Mượt', accel: 'Nhanh dần', decel: 'Chậm dần', snap: 'Bật' } };
+  const DIR = def => ({ t: 'enum', values: ['l', 'r', 'u', 'd'], def, label: 'Hướng', vl: { l: 'Sang trái', r: 'Sang phải', u: 'Lên', d: 'Xuống' } });
+  const COLORS = { white: '#fff', black: '#000', warm: '#ffb648', pink: '#ff4f9a', blue: '#4fb8ff' };
+  const COLOR = def => ({ t: 'enum', values: Object.keys(COLORS), def, label: 'Màu', vl: { white: 'Trắng', black: 'Đen', warm: 'Vàng ấm', pink: 'Hồng', blue: 'Xanh' } });
+  const TINT = { t: 'num', min: 0.2, max: 2, def: 1, label: 'Cường độ' };
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), f3t = v => v.toFixed(3);
+  const tri = k => 1 - Math.abs(k - .5) * 2, bell = k => Math.sin(Math.PI * k), half = k => (k >= .5 ? 1 : 0);
+  const AX = { l: ['X', 1], r: ['X', -1], u: ['Y', 1], d: ['Y', -1] };
+  const mv = (d, v) => { const [a, s] = AX[d] || AX.l; return `translate${a}(${(s * v).toFixed(2)}%)`; };
+  const INSET = { r: v => `inset(0 ${v}% 0 0)`, l: v => `inset(0 0 0 ${v}%)`, d: v => `inset(0 0 ${v}% 0)`, u: v => `inset(${v}% 0 0 0)` };
+  const veil = (bg, a, extra = '') => `<div class="full" style="pointer-events:none;${extra}background:${bg};opacity:${f3t(a)}"></div>`;
+  const msk = m => `-webkit-mask-image:${m};mask-image:${m}`;
+  // Hình mặt nạ (điểm quanh tâm, bán kính ~1): tim, sao 5 cánh, thoi. cover = hệ số phóng để phủ kín góc khung ở k = 1.
+  const SHAPES = {
+    heart: { cover: 2.6, pts: Array.from({ length: 40 }, (_, i) => { const t = i / 40 * Math.PI * 2; return [16 * Math.sin(t) ** 3 / 17, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 17 - .1]; }) },
+    star: { cover: 2.1, pts: Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? .45 : 1; return [r * Math.cos(a), r * Math.sin(a)]; }) },
+    diamond: { cover: 1.05, pts: [[0, -1], [1, 0], [0, 1], [-1, 0]] },
+  };
+  const shapeClip = (id, k) => { const S = SHAPES[id], s = E.inOutSine(k) * S.cover * 100; return `clip-path:polygon(${S.pts.map(([x, y]) => `${f2(50 + x * s)}% ${f2(50 + y * s)}%`).join(',')})`; };
+
+  const TRANS = [
+    { id: 'fade', label: 'Mờ dần', group: 'basic', icon: 'ti-blur', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${k}`, ''],
+      ai: { mood: 'nhẹ, trung tính', nhip: 'chậm–vừa', khi_nao: 'đổi ý trong cùng mạch kể, chuyển giữa hai đoạn nói', tranh: 'video bán hàng nhịp nhanh, cần cú đấm' } },
+    { id: 'dissolve', label: 'Hoà tan', group: 'basic', icon: 'ti-droplet-half-2', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${k}`, ''],
+      ai: { mood: 'mềm, cảm xúc, hoài niệm', nhip: 'chậm', khi_nao: 'cảnh đẹp, kể chuyện, trước/sau theo thời gian', tranh: 'nội dung tin tức, hướng dẫn cần rõ ràng' } },
+    { id: 'slide_l', label: 'Trượt trái', group: 'slide', icon: 'ti-arrow-big-left-lines', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outCubic(k)) * 100)}`, ''],
+      ai: { mood: 'gọn, tiến tới', nhip: 'vừa', khi_nao: 'sang ý tiếp theo, bước kế trong danh sách', tranh: 'dùng liên tục mọi chỗ nối (đơn điệu)' } },
+    { id: 'slide_r', label: 'Trượt phải', group: 'slide', icon: 'ti-arrow-big-right-lines', params: { dur: DUR, ease: EASE_P, dir: DIR('r') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outCubic(k)) * 100)}`, ''],
+      ai: { mood: 'gọn, quay lại', nhip: 'vừa', khi_nao: 'nhắc lại ý trước, so sánh ngược', tranh: 'dùng liên tục mọi chỗ nối (đơn điệu)' } },
+    { id: 'slide_up', label: 'Trượt lên', group: 'slide', icon: 'ti-arrow-big-up-lines', params: { dur: DUR, ease: EASE_P, dir: DIR('u') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outCubic(k)) * 100)}`, ''],
+      ai: { mood: 'hướng lên, tích cực', nhip: 'vừa–nhanh', khi_nao: 'kết quả, con số tăng, video dọc kiểu lướt feed', tranh: 'tin buồn, nội dung trầm' } },
+    { id: 'push', label: 'Đẩy', group: 'slide', icon: 'ti-arrows-right', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.inOutSine(k)) * 100)}`, `transform:${mv(p.dir, -E.inOutSine(k) * 100)}`],
+      ai: { mood: 'liền mạch, chuyên nghiệp', nhip: 'vừa', khi_nao: 'chuyển địa điểm, sản phẩm này sang sản phẩm khác', tranh: 'hai clip gần giống nhau (trông như giật)' } },
+    { id: 'zoom', label: 'Phóng vào', group: 'camera', icon: 'ti-zoom-in', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${k};transform:scale(${lerp(1.35, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, .85, k).toFixed(3)})`],
+      ai: { mood: 'mạnh, nhấn, hào hứng', nhip: 'nhanh', khi_nao: 'câu hook, tiết lộ, chi tiết sản phẩm, nhịp mạnh của nhạc', tranh: 'đặt dày đặc; nội dung trang trọng' } },
+    { id: 'zoom_out', label: 'Thu ra', group: 'camera', icon: 'ti-zoom-out', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${k};transform:scale(${lerp(.7, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, 1.25, k).toFixed(3)})`],
+      ai: { mood: 'mở rộng, toàn cảnh', nhip: 'vừa', khi_nao: 'từ chi tiết ra toàn cảnh, tổng kết, cảnh BĐS rộng', tranh: 'đầu video (mất hook)' } },
+    { id: 'blur', label: 'Nhoè', group: 'light', icon: 'ti-blur-off', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${k};filter:blur(${((1 - k) * 22).toFixed(1)}px)`, `filter:blur(${(k * 22).toFixed(1)}px)`],
+      ai: { mood: 'mơ màng, chuyển trạng thái', nhip: 'chậm–vừa', khi_nao: 'hồi tưởng, chuyển sang suy nghĩ, cảnh sang trọng', tranh: 'video hướng dẫn cần đọc chữ trên màn' } },
+    { id: 'whip', label: 'Lia nhanh', group: 'slide', icon: 'ti-wind', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outExpo(k)) * 110)};filter:blur(${((1 - k) * 26).toFixed(1)}px)`, `transform:${mv(p.dir, -E.inCubic(k) * 110)};filter:blur(${(k * 26).toFixed(1)}px)`],
+      ai: { mood: 'năng lượng, trẻ, vlog', nhip: 'nhanh', khi_nao: 'đổi cảnh dồn dập, montage, đúng nhịp mạnh', tranh: 'nội dung chậm, tâm sự; dur dài (> 0.5 s)' } },
+    { id: 'spin', label: 'Xoay', group: 'camera', icon: 'ti-rotate-clockwise-2', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${k};transform:rotate(${((1 - E.outCubic(k)) * -25).toFixed(1)}deg) scale(${lerp(1.4, 1, E.outCubic(k)).toFixed(3)})`, ''],
+      ai: { mood: 'vui, bất ngờ, giải trí', nhip: 'nhanh', khi_nao: 'twist, chuyển chủ đề vui, video giải trí', tranh: 'thương hiệu sang trọng, nội dung nghiêm túc' } },
+    { id: 'wipe', label: 'Gạt', group: 'mask', icon: 'ti-layout-sidebar-left-expand', params: { dur: DUR, ease: EASE_P, dir: DIR('r') },
+      fn: (k, p) => [`clip-path:${(INSET[p.dir] || INSET.r)(((1 - E.inOutSine(k)) * 100).toFixed(2))}`, ''],
+      ai: { mood: 'rõ ràng, so sánh', nhip: 'vừa', khi_nao: 'trước/sau, so sánh hai lựa chọn, đổi chương', tranh: 'dùng cho mọi chỗ nối' } },
+    { id: 'circle', label: 'Vòng tròn', group: 'mask', icon: 'ti-circle-dashed', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`clip-path:circle(${(E.outCubic(k) * 75).toFixed(2)}% at 50% 50%)`, ''],
+      ai: { mood: 'tập trung, tiết lộ', nhip: 'vừa', khi_nao: 'mở màn sản phẩm, tiết lộ kết quả ở giữa khung', tranh: 'chủ thể lệch mép khung' } },
+    { id: 'flash', label: 'Loé sáng', group: 'light', icon: 'ti-bolt', params: { dur: DUR, ease: EASE_P, color: COLOR('white') },
+      fn: k => [`opacity:${k > .5 ? 1 : 0}`, ''],
+      overlay: (k, p) => `<div class="full" style="background:${COLORS[p.color] || '#fff'};opacity:${(1 - Math.abs(k - .5) * 2).toFixed(3)}"></div>`,
+      ai: { mood: 'sốc, cú đấm, khoảnh khắc', nhip: 'rất nhanh', khi_nao: 'đúng beat drop, câu đinh, ảnh chụp/khoảnh khắc (color black = chớp đen)', tranh: 'quá 2–3 lần mỗi video; người xem nhạy sáng' } },
+    { id: 'glitch', label: 'Nhiễu', group: 'distort', icon: 'ti-wave-saw-tool', params: { dur: DUR, ease: EASE_P, intensity: TINT },
+      fn: (k, p) => [`opacity:${k > .3 ? 1 : 0};transform:translateX(${k < .9 ? ((rnd(Math.floor(k * 20)) - .5) * 60 * p.intensity).toFixed(0) : 0}px)`, ''],
+      ai: { mood: 'công nghệ, gắt, căng', nhip: 'nhanh', khi_nao: 'tin công nghệ/AI, lỗi, bất ngờ tiêu cực, nhạc điện tử', tranh: 'thương hiệu mềm mại, mỹ phẩm, BĐS cao cấp' } },
+
+    // ---- S29 M203: 24 loại mới (CSS thuần, hàm thuần theo k) ----
+    // Cơ bản
+    { id: 'dip', label: 'Qua màu', group: 'basic', icon: 'ti-circle-half-2', params: { dur: DUR, ease: EASE_P, color: COLOR('black') },
+      fn: k => [`opacity:${half(k)}`, ''],
+      overlay: (k, p) => veil(COLORS[p.color] || '#000', bell(k)),
+      ai: { mood: 'trầm, ngắt chương', nhip: 'chậm', khi_nao: 'hết một phần, chuyển thời gian, mở đầu/kết video (đen); trắng = mơ, hồi tưởng', tranh: 'giữa hai câu liền mạch; dur ngắn (< 0.4 s)' } },
+    { id: 'soft_zoom', label: 'Mờ phóng nhẹ', group: 'basic', icon: 'ti-zoom-pan', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(k)};transform:scale(${f3t(lerp(1.08, 1, E.outCubic(k)))})`, ''],
+      ai: { mood: 'nhẹ, có hồn', nhip: 'vừa', khi_nao: 'thay mờ dần cho video sang, lifestyle, BĐS', tranh: 'montage nhanh' } },
+    { id: 'soft_slide', label: 'Mờ trượt nhẹ', group: 'basic', icon: 'ti-arrow-move-up', params: { dur: DUR, ease: EASE_P, dir: DIR('u') },
+      fn: (k, p) => [`opacity:${f3t(k)};transform:${mv(p.dir, (1 - E.outCubic(k)) * 8)}`, ''],
+      ai: { mood: 'gọn, hiện đại', nhip: 'vừa', khi_nao: 'chuyển ý trong video hướng dẫn, khoá học, giới thiệu sản phẩm', tranh: 'cần cú đấm mạnh' } },
+    { id: 'blink', label: 'Chớp mắt', group: 'basic', icon: 'ti-eye-closed', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const o = f2(E.inCubic(c01(k * 2)) * 50), i = f2((1 - E.outCubic(c01((k - .5) * 2))) * 50);
+        return [k < .5 ? 'opacity:0' : `clip-path:inset(${i}% 0 ${i}% 0)`, `clip-path:inset(${o}% 0 ${o}% 0)`];
+      },
+      ai: { mood: 'tò mò, góc nhìn nhân vật', nhip: 'vừa', khi_nao: 'tỉnh dậy, "nhìn lại", chuyển sang góc nhìn người nói', tranh: 'dùng nhiều lần; nội dung nghiêm túc' } },
+    // Camera
+    { id: 'pull_in', label: 'Kéo vào', group: 'camera', icon: 'ti-focus-centered', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(c01((k - .35) / .4))};transform:scale(${f3t(lerp(1.3, 1, E.outCubic(k)))})`, `transform:scale(${f3t(lerp(1, 2.4, E.inCubic(k)))});filter:blur(${f1(k * 10)}px)`],
+      ai: { mood: 'lao tới, cuốn vào', nhip: 'nhanh', khi_nao: 'đi sâu vào chi tiết, "bên trong có gì", vlog du lịch', tranh: 'chủ thể nằm sát mép khung' } },
+    { id: 'zoom_blur', label: 'Zoom mờ', group: 'camera', icon: 'ti-zoom-scan', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const g = E.inCubic(c01(k * 2)), h = E.outCubic(c01((k - .5) * 2));
+        return [k < .5 ? 'opacity:0' : `transform:scale(${f3t(lerp(1.5, 1, h))});filter:blur(${f1((1 - h) * 18)}px)`, `transform:scale(${f3t(lerp(1, 1.5, g))});filter:blur(${f1(g * 18)}px)`];
+      },
+      ai: { mood: 'tốc độ, kịch tính', nhip: 'nhanh', khi_nao: 'nối hai cảnh hành động, beat drop, thể thao, xe', tranh: 'nội dung nhẹ nhàng, chữ trên màn cần đọc' } },
+    { id: 'shake', label: 'Lắc', group: 'camera', icon: 'ti-vibration', params: { dur: DUR, ease: EASE_P, intensity: TINT },
+      fn: (k, p) => {
+        const a = 4 * p.intensity * tri(k), f = Math.floor(k * 24);
+        const t = `transform:translate(${f2((rnd(f) - .5) * 2 * a)}%,${f2((rnd(f + 97) - .5) * 2 * a)}%) rotate(${f2((rnd(f + 31) - .5) * a)}deg) scale(${f3t(1 + .02 * a)})`;
+        return [`opacity:${half(k)};${t}`, t];
+      },
+      ai: { mood: 'sốc, rung động', nhip: 'rất nhanh', khi_nao: 'tin sốc, cú va, tiếng bass mạnh, phản ứng bất ngờ', tranh: 'quá 2 lần mỗi video; nội dung sang trọng' } },
+    // Ánh sáng
+    { id: 'leak', label: 'Rò sáng', group: 'light', icon: 'ti-sun-high', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(k)}`, ''],
+      overlay: k => { const x = f1(lerp(-10, 110, k)), y = f1(lerp(110, -10, k)); return veil(`radial-gradient(ellipse 60% 80% at ${x}% 30%, rgba(255,170,70,.95), rgba(255,70,110,.5) 45%, transparent 75%),radial-gradient(ellipse 45% 60% at ${y}% 80%, rgba(255,220,140,.7), transparent 70%)`, bell(k), 'mix-blend-mode:screen;'); },
+      ai: { mood: 'ấm, hoài niệm, phim', nhip: 'chậm–vừa', khi_nao: 'vlog, đám cưới, du lịch, kỷ niệm, hoàng hôn', tranh: 'công nghệ, tin tức' } },
+    { id: 'burn', label: 'Cháy phim', group: 'light', icon: 'ti-flame', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${half(k)}`, ''],
+      overlay: k => { const a = bell(k), r = 20 + a * 110; return veil(`radial-gradient(circle at 18% 82%, rgba(255,255,230,.95) 0%, rgba(255,170,50,.9) ${f1(r * .35)}%, rgba(210,50,0,.75) ${f1(r * .7)}%, transparent ${f1(r)}%)`, a, 'mix-blend-mode:screen;'); },
+      ai: { mood: 'cổ điển, phim nhựa, mạnh', nhip: 'vừa', khi_nao: 'kể chuyện kiểu phim, chuyển thời kỳ, retro', tranh: 'thương hiệu sạch, y tế, văn phòng' } },
+    { id: 'bloom', label: 'Sáng loá', group: 'light', icon: 'ti-sun', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(k)};filter:brightness(${f3t(1 + 2 * (1 - k))})`, `filter:brightness(${f3t(1 + 2 * k)})`],
+      ai: { mood: 'mơ, thiên đường, tích cực', nhip: 'vừa', khi_nao: 'kết quả đẹp, tiết lộ sản phẩm, cảnh nắng', tranh: 'cảnh đã cháy sáng sẵn' } },
+    { id: 'strobe', label: 'Nhấp nháy', group: 'light', icon: 'ti-bulb', params: { dur: DUR, ease: EASE_P, color: COLOR('white') },
+      fn: k => [`opacity:${half(k)}`, ''],
+      overlay: (k, p) => veil(COLORS[p.color] || '#fff', (Math.floor(k * 7) % 2 ? 0 : 1) * (.9 - .5 * k)),
+      ai: { mood: 'tiệc, sân khấu, dồn dập', nhip: 'rất nhanh', khi_nao: 'nhạc EDM, sự kiện, đếm ngược', tranh: 'người xem nhạy sáng; dùng quá 1 lần' } },
+    // Nhiễu
+    { id: 'rgb_split', label: 'Tách RGB', group: 'distort', icon: 'ti-layers-difference', params: { dur: DUR, ease: EASE_P, intensity: TINT },
+      fn: k => [`opacity:${half(k)}`, ''],
+      // 3 bản sao (đỏ / lục / lam) lệch ngang, cộng sáng lại; bản giữa giữ data-cid. Nặng gấp 3 lần vẽ khung trong đoạn chuyển.
+      wrap: (k, p) => h => {
+        const o = 3 * p.intensity * tri(k);
+        if (o < .02) return h;
+        return `<div class="full" style="background:#000;isolation:isolate">${[['#f00', -o, noCid(h)], ['#0f0', 0, h], ['#00f', o, noCid(h)]].map(([c, dx, x]) =>
+          `<div class="full" style="mix-blend-mode:screen;transform:translateX(${f2(dx)}%)">${x}<div class="full" style="pointer-events:none;mix-blend-mode:multiply;background:${c}"></div></div>`).join('')}</div>`;
+      },
+      ai: { mood: 'công nghệ, gắt, MV', nhip: 'nhanh', khi_nao: 'tin AI/công nghệ, nhạc điện tử, cú twist', tranh: 'mỹ phẩm, BĐS cao cấp; máy yếu (render nặng)' } },
+    { id: 'ripple', label: 'Gợn', group: 'distort', icon: 'ti-ripple', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`clip-path:circle(${f2(E.outCubic(k) * 75)}% at 50% 50%);transform:scale(${f3t(1 + .05 * Math.sin(k * Math.PI * 6) * (1 - k))})`, `transform:scale(${f3t(1 + .03 * Math.sin(k * Math.PI * 6 + 1) * tri(k))})`],
+      overlay: k => veil(`repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.4) 0 2px, transparent 2px ${f1(18 + 40 * k)}px)`, .5 * bell(k)),
+      ai: { mood: 'mơ, nước, chuyển trạng thái', nhip: 'vừa', khi_nao: 'hồi tưởng, giấc mơ, đồ uống, spa', tranh: 'video hướng dẫn cần rõ' } },
+    { id: 'stretch', label: 'Kéo giãn', group: 'distort', icon: 'ti-arrows-horizontal', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const g = E.inCubic(c01(k * 2)), h = E.outCubic(c01((k - .5) * 2));
+        return [k < .5 ? 'opacity:0' : `transform:scale(${f3t(lerp(3, 1, h))},${f3t(lerp(.3, 1, h))});filter:blur(${f1((1 - h) * 8)}px)`, `transform:scale(${f3t(lerp(1, 3, g))},${f3t(lerp(1, .3, g))});filter:blur(${f1(g * 8)}px)`];
+      },
+      ai: { mood: 'vui, đàn hồi, meme', nhip: 'nhanh', khi_nao: 'giải trí, phản ứng hài, đổi cảnh bất ngờ', tranh: 'nội dung trang trọng, mặt người cận' } },
+    { id: 'tv', label: 'TV tắt', group: 'distort', icon: 'ti-device-tv-old', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const g = c01(k * 2), h = c01((k - .5) * 2);
+        return [k < .5 ? 'opacity:0' : `transform:scale(1,${f3t(Math.max(.004, E.outCubic(h)))});filter:brightness(${f3t(1 + 2 * (1 - h))})`,
+          `transform:scale(${f3t(lerp(1, 1.04, g))},${f3t(Math.max(.004, 1 - E.inCubic(g)))});filter:brightness(${f3t(1 + 2 * g)})`];
+      },
+      ai: { mood: 'retro, kết thúc, hài', nhip: 'nhanh', khi_nao: 'tắt một ý/chủ đề, "hết giờ", nội dung retro, chuyển kênh', tranh: 'giữa hai câu liền mạch' } },
+    { id: 'scan', label: 'Vạch quét', group: 'distort', icon: 'ti-scan', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`clip-path:inset(0 0 ${f2((1 - E.inOutSine(k)) * 100)}% 0)`, ''],
+      overlay: k => { const y = E.inOutSine(k) * 100; return veil(`linear-gradient(180deg, transparent ${f1(y - 3)}%, rgba(120,220,255,.9) ${f1(y)}%, transparent ${f1(y + .6)}%),repeating-linear-gradient(rgba(0,0,0,.25) 0 1px, transparent 1px 3px)`, bell(k)); },
+      ai: { mood: 'công nghệ, phân tích', nhip: 'vừa', khi_nao: 'quét/phân tích dữ liệu, demo app, AI, giao diện', tranh: 'cảnh thiên nhiên, cảm xúc' } },
+    // Mặt nạ
+    { id: 'heart', label: 'Lau hình tim', group: 'mask', icon: 'ti-heart', params: { dur: DUR, ease: EASE_P },
+      fn: k => [shapeClip('heart', k), ''],
+      ai: { mood: 'dễ thương, yêu thương', nhip: 'vừa', khi_nao: 'cặp đôi, quà tặng, mẹ và bé, cảm ơn khách', tranh: 'tin tức, công nghệ, nội dung nghiêm túc' } },
+    { id: 'star', label: 'Lau hình sao', group: 'mask', icon: 'ti-star', params: { dur: DUR, ease: EASE_P },
+      fn: k => [shapeClip('star', k), ''],
+      ai: { mood: 'vui, nổi bật, giải thưởng', nhip: 'vừa', khi_nao: 'khoảnh khắc nổi bật, đánh giá 5 sao, trẻ em, chúc mừng', tranh: 'thương hiệu sang trọng' } },
+    { id: 'diamond', label: 'Lau hình thoi', group: 'mask', icon: 'ti-diamond', params: { dur: DUR, ease: EASE_P },
+      fn: k => [shapeClip('diamond', k), ''],
+      ai: { mood: 'sắc, hình học, thời trang', nhip: 'vừa', khi_nao: 'thời trang, trang sức, giới thiệu bộ sưu tập', tranh: 'chủ thể lệch mép khung' } },
+    { id: 'diagonal', label: 'Lau chéo', group: 'mask', icon: 'ti-slash', params: { dur: DUR, ease: EASE_P },
+      fn: k => { const x = E.inOutSine(k) * 200; return [`clip-path:polygon(0 0,${f2(x)}% 0,${f2(x - 100)}% 100%,0 100%)`, '']; },
+      ai: { mood: 'động, thể thao', nhip: 'vừa–nhanh', khi_nao: 'so sánh, đổi chương nhanh, thể thao, ưu đãi', tranh: 'dùng cho mọi chỗ nối' } },
+    { id: 'curtain', label: 'Rèm mở', group: 'mask', icon: 'ti-layout-columns', params: { dur: DUR, ease: EASE_P },
+      fn: k => { const v = f2((1 - E.inOutSine(k)) * 50); return [`clip-path:inset(0 ${v}% 0 ${v}%)`, '']; },
+      ai: { mood: 'trang trọng, ra mắt', nhip: 'vừa', khi_nao: 'ra mắt sản phẩm, khai trương, mở màn sự kiện', tranh: 'giữa video nhịp nhanh' } },
+    { id: 'blinds', label: 'Lá sách', group: 'mask', icon: 'ti-blinds', params: { dur: DUR, ease: EASE_P },
+      fn: k => { const w = f2(E.inOutSine(k) * 10); return [msk(`repeating-linear-gradient(90deg,#000 0 ${w}%,transparent ${w}% 10%)`), '']; },
+      ai: { mood: 'gọn, đồ hoạ, doanh nghiệp', nhip: 'vừa', khi_nao: 'trình bày, slide doanh nghiệp, nội thất', tranh: 'cảnh nhiều chi tiết dọc (rối mắt)' } },
+    { id: 'grid', label: 'Lưới ô', group: 'mask', icon: 'ti-layout-grid', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const r = E.inOutSine(k) * 50, a = f2(50 - r), b = f2(50 + r), band = d => `linear-gradient(${d},transparent ${a}%,#000 ${a}% ${b}%,transparent ${b}%)`;
+        return [`${msk(`${band('90deg')},${band('180deg')}`)};-webkit-mask-size:12.5% 12.5%;mask-size:12.5% 12.5%;-webkit-mask-composite:source-in;mask-composite:intersect`, ''];
+      },
+      ai: { mood: 'công nghệ, sắp xếp, vui', nhip: 'vừa', khi_nao: 'tổng hợp nhiều sản phẩm, danh sách, giao diện app', tranh: 'cảnh mặt người cận' } },
+    // Trượt
+    { id: 'flip', label: 'Lật 3D', group: 'slide', icon: 'ti-rotate-3d', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => {
+        const v = p.dir === 'u' || p.dir === 'd', s = p.dir === 'r' || p.dir === 'u' ? -1 : 1, A = v ? 'X' : 'Y';
+        const g = E.inCubic(c01(k * 2)), h = E.outCubic(c01((k - .5) * 2));
+        return [k < .5 ? 'opacity:0' : `transform:perspective(1600px) rotate${A}(${f1(s * 90 * (1 - h))}deg)`, `${k < .5 ? '' : 'opacity:0;'}transform:perspective(1600px) rotate${A}(${f1(-s * 90 * g)}deg)`];
+      },
+      ai: { mood: 'vui, lật mặt, trước/sau', nhip: 'vừa', khi_nao: 'trước/sau, lật thẻ, đáp án câu hỏi, mặt sau sản phẩm', tranh: 'dùng liên tục; nội dung trầm' } },
+    { id: 'page', label: 'Lật trang', group: 'slide', icon: 'ti-book-2', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`transform-origin:0 50%;transform:perspective(1800px) rotateY(${f1(-(1 - E.outCubic(k)) * 90)}deg)`, `filter:brightness(${f3t(1 - .45 * bell(k))})`],
+      ai: { mood: 'kể chuyện, sách, hướng dẫn', nhip: 'vừa', khi_nao: 'chương mới, bước tiếp theo trong hướng dẫn, khoá học', tranh: 'montage nhanh' } },
+  ];
+  // Hàm của mục luôn nhận tham số đã kẹp (thiếu → mặc định): fn(k) cũ vẫn đúng như trước, fn(k, {dir:'r'}) đổi hướng.
+  for (const x of TRANS) for (const f of ['fn', 'overlay', 'wrap']) {
+    const raw = x[f];
+    if (raw) x[f] = (k, p) => raw(k, params('trans', x.id, p));
+  }
+  const ease = (id, k) => (EASE[id] || EASE.auto)(k);
+
+  // Hoạt ảnh vào của dòng chữ (L.anim, engine/vertical.js textLine). Thứ tự = thứ tự nút trong Studio.
+  const TEXT_IN = [
+    { id: 'pop', label: 'Bật', group: 'basic', icon: 'ti-sparkles', params: {},
+      ai: { mood: 'vui, nổi bật', nhip: 'nhanh', khi_nao: 'từ khoá, con số, nhãn ngắn (mặc định)', tranh: 'đoạn chữ dài' } },
+    { id: 'fade', label: 'Mờ dần', group: 'basic', icon: 'ti-blur', params: {},
+      ai: { mood: 'nhẹ, sang', nhip: 'chậm', khi_nao: 'câu trích dẫn, thương hiệu cao cấp', tranh: 'hook cần giật mắt' } },
+    { id: 'slide_l', label: 'Trượt trái', group: 'move', icon: 'ti-arrow-big-left-lines', params: {},
+      ai: { mood: 'năng động', nhip: 'nhanh', khi_nao: 'tiêu đề đi vào từ phải, danh sách', tranh: 'chữ đặt sát mép trái' } },
+    { id: 'slide_r', label: 'Trượt phải', group: 'move', icon: 'ti-arrow-big-right-lines', params: {},
+      ai: { mood: 'năng động', nhip: 'nhanh', khi_nao: 'tiêu đề đi vào từ trái, đối xứng với slide_l', tranh: 'chữ đặt sát mép phải' } },
+    { id: 'drop', label: 'Rơi', group: 'move', icon: 'ti-arrow-big-down-lines', params: {},
+      ai: { mood: 'chắc, đóng dấu', nhip: 'vừa–nhanh', khi_nao: 'kết luận, giá, nhãn "MỚI"', tranh: 'nhiều dòng cùng lúc' } },
+    { id: 'blur_zoom', label: 'Nhoè', group: 'move', icon: 'ti-zoom-in', params: {},
+      ai: { mood: 'điện ảnh, mạnh', nhip: 'vừa', khi_nao: 'tiêu đề lớn, mở màn, câu hook', tranh: 'chữ nhỏ, phụ' } },
+    { id: 'fly', label: 'Bay', group: 'move', icon: 'ti-plane', params: {},
+      ai: { mood: 'kể chuyện, dẫn mắt', nhip: 'vừa', khi_nao: 'chữ hiện ở một chỗ rồi bay về vị trí (from_x / from_y)', tranh: 'không có vị trí bắt đầu rõ' } },
+    { id: 'tumble', label: 'Lật', group: 'letter', icon: 'ti-rotate-3d', params: {},
+      ai: { mood: 'vui, sinh động', nhip: 'vừa', khi_nao: 'câu ngắn cần chú ý từng chữ', tranh: 'câu dài (> 20 ký tự)' } },
+    { id: 'type', label: 'Đánh máy', group: 'letter', icon: 'ti-keyboard', params: {},
+      ai: { mood: 'công nghệ, tò mò', nhip: 'chậm', khi_nao: 'câu hỏi, prompt AI, ghi chú', tranh: 'chữ hiện quá ngắn (< 1 s)' } },
+  ];
+
+  // ---- S28 M205: bộ hoạt ảnh chung { in, out, loop } cho dòng chữ, hình khối, element riêng, sticker ----
+  // Dữ liệu trên element (giữ trường cũ để mọi chỗ đọc `o.anim` như chuỗi vẫn chạy):
+  //   anim: id vào (chuỗi, như cũ) · anim_dur: thời lượng vào (s) · anim_out: { type, dur } · anim_loop: { type, speed }.
+  // Hàm vào fn(lt, c) → { tr, fl, o, clip, chars }: lt giây từ lúc hiện (đã quy về thời lượng gốc D0), c = { x, y, from_x,
+  // from_y, from_scale, hold, stagger, n, text }. Chữ (c.text) có chars = [{ hide } | { o, tr } | {}] cho từng ký tự.
+  // Công thức vào là bản chuyển nguyên từ engine/vertical.js textLine trước M205 (timeline cũ dựng ra giống hệt, test s28_anim).
+  // Ra = cùng hàm vào chạy ngược theo thời gian còn lại tới lúc tắt (đối xứng). Lặp chạy sau khi vào xong.
+  const c01 = v => Math.min(1, Math.max(0, v));
+  const pg = (t, t0, d) => c01((t - t0) / d);
+  const oBack = (k, s = 1.70158) => 1 + (s + 1) * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
+  const stg = (c, def) => c.stagger ?? def;
+  const IN_FN = {
+    pop: lt => ({ tr: `scale(${lerp(.3, 1, oBack(pg(lt, 0, .28), 2)).toFixed(3)})`, o: c01(lt / .12) }),
+    fade: lt => ({ o: E.outCubic(pg(lt, 0, .25)) }),
+    slide_l: lt => slide(lt, -1), slide_r: lt => slide(lt, 1),
+    drop: lt => ({ tr: `translateY(${((1 - oBack(pg(lt, 0, .3), 1.6)) * -90).toFixed(1)}px)`, o: c01(lt / .1) }),
+    blur_zoom: lt => { const k = E.outCubic(pg(lt, 0, .35)); return { tr: `scale(${lerp(1.7, 1, k).toFixed(3)})`, fl: `blur(${((1 - k) * 16).toFixed(1)}px)`, o: c01(lt / .1) }; },
+    fly: (lt, c) => {
+      // hiện ở from_x/from_y (bật), giữ, rồi bay về x/y — "VIẾT NHƯ NGƯỜI THẬT" ở hook
+      const x = c.x ?? 0, y = c.y ?? 0, hold = c.hold ?? .25, fk = E.inOutSine(pg(lt, .2 + hold, .22)), pk = oBack(pg(lt, 0, .25), 2);
+      const fx = (c.from_x ?? x) - x, fy = (c.from_y ?? y + 120) - y, fs = c.from_scale ?? .8;
+      return { tr: `translate(${(fx * (1 - fk)).toFixed(1)}px,${(fy * (1 - fk)).toFixed(1)}px) scale(${(lerp(.3, fs, pk) * (1 - fk) + fk).toFixed(3)})`, o: c01(lt / .1) };
+    },
+    tumble: (lt, c) => {
+      const tumb = k => { const e = oBack(k, 1.8); return { o: c01(k * 3), tr: `perspective(300px) rotateX(${((1 - e) * -95).toFixed(1)}deg) translateY(${((1 - e) * 26).toFixed(1)}px)` }; };
+      if (!c.text) return tumb(pg(lt, 0, .28)); // hình khối / element: lật cả khối
+      const st = stg(c, .06);
+      return { chars: Array.from({ length: c.n || 0 }, (_, i) => { const k = pg(lt, i * st, .28); return k <= 0 ? { hide: true } : tumb(k); }) };
+    },
+    type: (lt, c) => {
+      if (!c.text) return { clip: pg(lt, 0, .5) }; // hình khối / element: lộ dần từ trái
+      const st = stg(c, .035);
+      return { chars: Array.from({ length: c.n || 0 }, (_, i) => (pg(lt, i * st, .001) <= 0 ? { hide: true } : {})) };
+    },
+  };
+  function slide(lt, dir) {
+    const k = E.outExpo(pg(lt, 0, .35));
+    return { tr: `translateX(${(dir * (1 - k) * 420).toFixed(1)}px) skewX(${(dir * (1 - k) * -12).toFixed(1)}deg)`, fl: `blur(${((1 - k) * 10).toFixed(1)}px)` };
+  }
+  // Thời lượng gốc D0 của từng loại vào (s) — anim_dur / anim_out.dur co giãn thời gian theo tỉ lệ D0 / dur
+  const D0 = { pop: .28, fade: .25, slide_l: .35, slide_r: .35, drop: .3, blur_zoom: .35,
+    fly: c => .42 + (c.hold ?? .25), tumble: c => (c.text ? .28 + stg(c, .06) * Math.max(0, (c.n || 1) - 1) : .28), type: c => (c.text ? stg(c, .035) * (c.n || 1) : .5) };
+  const d0 = (id, c) => (typeof D0[id] === 'function' ? D0[id](c) : D0[id] || .3);
+  TEXT_IN.forEach(x => { x.fn = IN_FN[x.id]; x.params = { dur: { t: 'num', min: .1, max: 3, def: 0 } }; });
+  // Ra: 9 loại đối xứng với Vào (cùng id, cùng hàm chạy ngược)
+  const OUT_LABEL = { pop: 'Thu nhỏ', fade: 'Mờ đi', slide_l: 'Trượt sang trái', slide_r: 'Trượt sang phải', drop: 'Bay lên', blur_zoom: 'Nhoè ra', fly: 'Bay đi', tumble: 'Lật đi', type: 'Xoá chữ' };
+  const ANIM_OUT = TEXT_IN.map(x => ({ id: x.id, label: OUT_LABEL[x.id], group: x.group, icon: x.icon, params: { dur: { t: 'num', min: .1, max: 3, def: 0 } }, fn: x.fn,
+    ai: { mood: x.ai.mood, nhip: x.ai.nhip, khi_nao: `rời khung đối xứng với vào "${x.id}"; ${x.ai.khi_nao}`, tranh: x.ai.tranh } }));
+  // Lặp: fn(lt, sp, c) → { tr, fl, o, chars }; lt tính từ lúc vào xong, sp = tốc độ (1 = vừa)
+  const TAU = Math.PI * 2;
+  const loop = (id, label, group, icon, fn, ai) => ({ id, label, group, icon, params: { speed: { t: 'num', min: .25, max: 3, def: 1 } }, fn, ai });
+  const ANIM_LOOP = [
+    loop('pulse', 'Nhịp đập', 'move', 'ti-heartbeat', (lt, sp) => ({ tr: `scale(${(1 + .07 * Math.pow(Math.max(0, Math.sin(TAU * 1.2 * sp * lt)), 3)).toFixed(3)})` }),
+      { mood: 'nhấn, gấp', nhip: 'vừa', khi_nao: 'giá, ưu đãi, nút CTA, con số cần nhớ', tranh: 'chữ dài, đặt nhiều dòng cùng lúc' }),
+    loop('sway', 'Lắc lư', 'move', 'ti-wave-sine', (lt, sp) => ({ tr: `rotate(${(Math.sin(TAU * .7 * sp * lt) * 5).toFixed(2)}deg)` }),
+      { mood: 'vui, thả lỏng', nhip: 'chậm', khi_nao: 'sticker, nhãn vui, video giải trí', tranh: 'thương hiệu nghiêm túc' }),
+    loop('bounce', 'Nảy', 'move', 'ti-ball-basketball', (lt, sp) => ({ tr: `translateY(${(-Math.abs(Math.sin(Math.PI * 1.4 * sp * lt)) * 16).toFixed(1)}px)` }),
+      { mood: 'năng động, trẻ', nhip: 'nhanh', khi_nao: 'mũi tên chỉ, "bấm vào đây", emoji', tranh: 'chữ lớn chiếm khung' }),
+    loop('blink', 'Nhấp nháy', 'light', 'ti-bulb', (lt, sp) => ({ o: .35 + .65 * (Math.cos(TAU * 1.2 * sp * lt) + 1) / 2 }),
+      { mood: 'cảnh báo, gây chú ý', nhip: 'nhanh', khi_nao: '"LIVE", "MỚI", cảnh báo ngắn', tranh: 'đoạn chữ cần đọc; người nhạy sáng' }),
+    loop('float', 'Trôi', 'move', 'ti-cloud', (lt, sp) => ({ tr: `translate(${(Math.cos(TAU * .35 * sp * lt) * 4).toFixed(1)}px,${(Math.sin(TAU * .5 * sp * lt) * 10).toFixed(1)}px)` }),
+      { mood: 'nhẹ, mơ màng, sang', nhip: 'chậm', khi_nao: 'tiêu đề giữ lâu, logo, thẻ sản phẩm cao cấp', tranh: 'chữ sát mép khung' }),
+    loop('spin', 'Xoay', 'move', 'ti-rotate-clockwise', (lt, sp) => ({ tr: `rotate(${((lt * sp * 120) % 360).toFixed(1)}deg)` }),
+      { mood: 'vui, kỹ thuật', nhip: 'vừa', khi_nao: 'huy hiệu tròn, icon, ngôi sao, "SALE" dạng tem', tranh: 'chữ (khó đọc khi xoay)' }),
+    loop('sparkle', 'Lấp lánh', 'light', 'ti-sparkles', (lt, sp) => {
+      const s = Math.pow(Math.max(0, Math.sin(TAU * 1.1 * sp * lt)), 2);
+      return { fl: `brightness(${(1 + .35 * s).toFixed(3)}) drop-shadow(0 0 ${(4 + 10 * s).toFixed(1)}px rgba(255,255,255,${(.25 + .5 * s).toFixed(2)}))` };
+    }, { mood: 'sang, lấp lánh, quà tặng', nhip: 'vừa', khi_nao: 'mỹ phẩm, trang sức, giải thưởng, chữ vàng', tranh: 'nền trắng (không thấy sáng)' }),
+    loop('wave', 'Sóng chữ', 'letter', 'ti-wave-square', (lt, sp, c) => {
+      const f = i => `translateY(${(Math.sin(TAU * .9 * sp * lt - i * .55) * 10).toFixed(1)}px)`;
+      return c.text ? { chars: Array.from({ length: c.n || 0 }, (_, i) => ({ tr: f(i) })) } : { tr: f(0) };
+    }, { mood: 'vui, nhạc, sinh động', nhip: 'vừa', khi_nao: 'tên bài hát, lời chào, câu ngắn theo nhạc', tranh: 'câu dài (> 20 ký tự); hình khối chỉ nhấp nhô cả khối' }),
+  ];
+  const isObj = v => v != null && typeof v === 'object' && !Array.isArray(v);
+  const numOr = (v, d) => (v != null && v !== '' && Number.isFinite(+v) ? +v : d);
+  // Đọc bộ anim của element: { in: {type, dur}|null, out: {type, dur}|null, loop: {type, speed}|null }. Dữ liệu cũ (chỉ `anim`
+  // chuỗi) = in, không out → engine giữ phong bì cũ. id vào lạ vẫn trả về (module cũ như shape 'wipe' tự vẽ); out / loop lạ bỏ.
+  function animOf(o, def) {
+    const id = typeof o?.anim === 'string' && o.anim ? o.anim : def;
+    const inn = id ? { type: id, dur: Math.min(3, Math.max(0, numOr(o?.anim_dur, 0))) } : null;
+    const ro = typeof o?.anim_out === 'string' ? { type: o.anim_out } : isObj(o?.anim_out) ? o.anim_out : null;
+    const rl = typeof o?.anim_loop === 'string' ? { type: o.anim_loop } : isObj(o?.anim_loop) ? o.anim_loop : null;
+    const out = ro && IN_FN[ro.type] ? { type: ro.type, dur: Math.min(3, Math.max(0, numOr(ro.dur, 0))) } : null;
+    const lp = rl && ANIM_LOOP.some(x => x.id === rl.type) ? { type: rl.type, speed: Math.min(3, Math.max(.25, numOr(rl.speed, 1))) } : null;
+    return { in: inn, out, loop: lp };
+  }
+  // Trạng thái gộp ở lt (giây từ lúc hiện) và left (giây còn lại tới lúc tắt, Infinity = không tắt). Chỉ có vào → đúng chuỗi cũ.
+  function animAt(an, lt, left, c = {}) {
+    const parts = [];
+    const fnIn = an.in && IN_FN[an.in.type];
+    let dIn = 0;
+    if (fnIn) { const b = d0(an.in.type, c); dIn = an.in.dur > 0 ? an.in.dur : b; parts.push(fnIn(an.in.dur > 0 ? lt * b / an.in.dur : lt, c)); }
+    if (an.out && Number.isFinite(left)) { const b = d0(an.out.type, c), d = an.out.dur > 0 ? an.out.dur : b; const p = IN_FN[an.out.type](Math.max(0, left) * b / d, c); p.o = (p.o ?? 1) * c01(left / .08); parts.push(p); } // 0.08 s cuối luôn tắt hẳn (trượt không có độ mờ)
+    if (an.loop) parts.push(ANIM_LOOP.find(x => x.id === an.loop.type).fn(Math.max(0, lt - dIn), an.loop.speed, c));
+    const r = { tr: '', fl: '', o: 1, clip: 1, chars: null };
+    parts.forEach((p, i) => {
+      if (p.tr) r.tr = r.tr ? `${r.tr} ${p.tr}` : p.tr;
+      if (p.fl) r.fl = r.fl ? `${r.fl} ${p.fl}` : p.fl;
+      if (p.o != null) r.o = i ? r.o * p.o : p.o;
+      if (p.clip != null) r.clip = Math.min(r.clip, p.clip);
+      if (p.chars) r.chars = r.chars ? r.chars.map((a, j) => mergeChar(a, p.chars[j] || {})) : p.chars;
+    });
+    return r;
+  }
+  function mergeChar(a, b) {
+    if (a.hide || b.hide) return { hide: true };
+    const m = {};
+    if (a.o != null || b.o != null) m.o = (a.o ?? 1) * (b.o ?? 1);
+    if (a.tr || b.tr) m.tr = [a.tr, b.tr].filter(Boolean).join(' ');
+    return m;
+  }
+  // Cảnh có Ra riêng (cảnh hoặc dòng chữ / sticker / keyword bên trong) → engine.js bỏ nửa "ra" của phong bì mờ chung ENV
+  const hasOut = s => !!(animOf(s).out || (s.lines || []).some(L => animOf(L).out) || (s.sticker && animOf(s.sticker).out) || (s.keyword && animOf(s.keyword).out));
+  // Style thêm cho hình khối / element / sticker (không có từng ký tự): transform, filter, hệ số mờ, clip lộ từ trái
+  const clipCss = r => (r.clip < 1 ? `clip-path:inset(-50% ${((1 - r.clip) * 100).toFixed(1)}% -50% -50%);` : '');
+
+  // S29 M208: fn(k) = cường độ 0–1 (k ≥ 1 → đúng chuỗi cũ), xem lutAt
+  const lut = (id, label, group, icon, css, ai) => ({ id, label, group, icon, params: {}, css, fn: (k = 1) => lutAt(id, k), ai });
+  const LUT = [
+    lut('warm', 'Ấm', 'tone', 'ti-sun', 'sepia(.22) saturate(1.2) hue-rotate(-8deg)',
+      { mood: 'ấm áp, gần gũi', nhip: '—', khi_nao: 'đồ ăn, gia đình, chia sẻ, nội thất', tranh: 'da người đã vàng sẵn' }),
+    lut('cool', 'Lạnh', 'tone', 'ti-snowflake', 'saturate(1.05) hue-rotate(12deg) brightness(1.02)',
+      { mood: 'sạch, công nghệ', nhip: '—', khi_nao: 'công nghệ, y tế, văn phòng', tranh: 'đồ ăn' }),
+    lut('vivid', 'Rực rỡ', 'tone', 'ti-palette', 'saturate(1.45) contrast(1.1)',
+      { mood: 'tươi, bắt mắt', nhip: '—', khi_nao: 'bán hàng, du lịch, sản phẩm nhiều màu', tranh: 'cảnh đã bão hoà, da mặt cận' }),
+    lut('bw', 'Đen trắng', 'mood', 'ti-contrast', 'grayscale(1) contrast(1.15)',
+      { mood: 'nghiêm, hoài niệm', nhip: '—', khi_nao: 'hồi tưởng, trích dẫn, đoạn "trước"', tranh: 'sản phẩm cần thấy màu' }),
+    lut('film', 'Phim', 'mood', 'ti-movie', 'sepia(.3) contrast(1.08) saturate(.85)',
+      { mood: 'điện ảnh, cổ điển', nhip: '—', khi_nao: 'kể chuyện, vlog, thương hiệu thủ công', tranh: 'tin tức, hướng dẫn' }),
+    lut('fade', 'Phai', 'mood', 'ti-droplet', 'contrast(.86) brightness(1.08) saturate(.8)',
+      { mood: 'nhẹ, mộng', nhip: '—', khi_nao: 'lifestyle, thời trang nhẹ nhàng', tranh: 'cảnh tối' }),
+    lut('night', 'Đêm', 'mood', 'ti-moon', 'brightness(.8) saturate(1.2) hue-rotate(195deg) contrast(1.1)',
+      { mood: 'bí ẩn, đêm', nhip: '—', khi_nao: 'cảnh đêm, kể chuyện bí ẩn', tranh: 'da người cận mặt (đổi sắc mạnh)' }),
+    lut('pop', 'Pop', 'tone', 'ti-confetti', 'saturate(1.6) contrast(1.15) brightness(1.04)',
+      { mood: 'trẻ, sôi động', nhip: '—', khi_nao: 'giải trí, review đồ chơi, quảng cáo nhanh', tranh: 'thương hiệu sang trọng' }),
+  ];
+
+  // ---- S29 M208: màu — cường độ LUT + Adjust; một nguồn cho engine (clip chính, b-roll / ảnh phủ, khối Điều chỉnh) và Studio ----
+  // filter = { preset?, strength? (0–100, thiếu = 100), brightness, contrast, saturate, hue, temp, blur (trường cũ),
+  //            exposure, highlights, shadows, sharpen, fade, vignette, grain (mới) }; thiếu = trung tính.
+  // colorFx(f, { t, mix, svg, blur }) → { filter (CSS), defs (SVG <filter>: vùng sáng / tối, nét), over (defs + vignette + hạt) }.
+  //   Chỉ trường cũ → filter đúng chuỗi cũ, over rỗng: timeline cũ dựng ra y hệt. mix 0–1 kéo mọi giá trị về trung tính (khối Điều chỉnh).
+  //   svg: false → bỏ url(#…) (thumbnail Studio, module tự vẽ a-roll: không có chỗ đặt defs). Hàm thuần theo t (hạt theo số khung).
+  const NEUTRAL = { sepia: 0, grayscale: 0, invert: 0, saturate: 1, contrast: 1, brightness: 1, 'hue-rotate': 0, blur: 0 };
+  const n4 = v => +(+v).toFixed(4);
+  function lutAt(id, k = 1) {
+    const d = LUT.find(x => x.id === id);
+    if (!d) return '';
+    if (!(k < 1)) return d.css;
+    if (!(k > 0)) return '';
+    return d.css.replace(/([a-z-]+)\((-?[\d.]+)(deg|px)?\)/g, (m, fn, v, u = '') => { const n = NEUTRAL[fn] ?? 0; return `${fn}(${n4(n + (v - n) * k)}${u})`; });
+  }
+  const ADJ = [
+    ['exposure', 'Phơi sáng', -1, 1, .01, 0], ['brightness', 'Độ sáng', .5, 1.5, .01, 1], ['contrast', 'Tương phản', .5, 1.5, .01, 1],
+    ['saturate', 'Bão hoà', 0, 2, .01, 1], ['temp', 'Nhiệt độ', -1, 1, .01, 0], ['hue', 'Sắc độ', -180, 180, 1, 0, '°'],
+    ['highlights', 'Vùng sáng', -1, 1, .01, 0], ['shadows', 'Vùng tối', -1, 1, .01, 0], ['sharpen', 'Nét', 0, 1, .01, 0],
+    ['fade', 'Fade', 0, 1, .01, 0], ['vignette', 'Vignette', 0, 1, .01, 0], ['grain', 'Hạt', 0, 1, .01, 0], ['blur', 'Làm mờ', 0, 20, .5, 0, 'px'],
+  ].map(([id, label, min, max, step, def, unit = '']) => ({ id, label, min, max, step, def, unit }));
+  // kẹp một bộ filter theo bảng (preset lạ → bỏ, strength 0–100); dùng cho dữ liệu Claude / dán
+  function colorClean(f) {
+    const out = {};
+    if (!f || typeof f !== 'object') return out;
+    if (f.preset && LUT.some(x => x.id === f.preset)) out.preset = f.preset;
+    if (out.preset && f.strength != null && Number.isFinite(+f.strength)) out.strength = Math.round(Math.min(100, Math.max(0, +f.strength)));
+    for (const a of ADJ) {
+      const v = f[a.id];
+      if (v == null || v === '' || !Number.isFinite(+v)) continue;
+      const x = Math.round(Math.min(a.max, Math.max(a.min, +v)) * 100) / 100;
+      if (x !== a.def) out[a.id] = x;
+    }
+    return out;
+  }
+  function colorFx(f, o = {}) {
+    f = f && typeof f === 'object' ? f : {};
+    const mix = o.mix ?? 1, t = o.t || 0;
+    const v = (id, n) => { const x = f[id]; return x == null ? null : mix === 1 ? x : n4(n + (+x - n) * mix); };
+    let s = f.preset ? lutAt(f.preset, ((f.strength ?? 100) / 100) * mix) : '';
+    // trường cũ: đúng thứ tự và cách in của engine.js clipFilter trước M208
+    const br = v('brightness', 1), ct = v('contrast', 1), sa = v('saturate', 1), hue = v('hue', 0), temp = v('temp', 0), bl = v('blur', 0);
+    if (br != null) s += ` brightness(${br})`;
+    if (ct != null) s += ` contrast(${ct})`;
+    if (sa != null) s += ` saturate(${sa})`;
+    if (hue) s += ` hue-rotate(${hue}deg)`;
+    if (temp) s += temp > 0 ? ` sepia(${(temp * .5).toFixed(2)})` : ` hue-rotate(${(temp * 25).toFixed(0)}deg)`;
+    if (bl && o.blur !== false) s += ` blur(${bl}px)`;
+    // mới
+    const ex = +v('exposure', 0) || 0, fd = +v('fade', 0) || 0, hl = +v('highlights', 0) || 0, sh = +v('shadows', 0) || 0, sp = +v('sharpen', 0) || 0;
+    if (ex) s += ` brightness(${n4(2 ** ex)})`;
+    if (fd > 0) s += ` contrast(${n4(1 - .3 * fd)}) brightness(${n4(1 + .06 * fd)}) saturate(${n4(1 - .15 * fd)})`;
+    let defs = '';
+    if ((hl || sh || sp > 0) && o.svg !== false) {
+      const id = 'avscg' + [hl, sh, sp].map(x => Math.round(x * 1000)).join('_').replace(/-/g, 'm');
+      // đường cong tông: hai đầu giữ nguyên, vùng tối nặng ở 1/3 dưới, vùng sáng nặng ở 1/3 trên
+      const tv = Array.from({ length: 11 }, (_, i) => { const x = i / 10, w = 4 * x * (1 - x); return n4(Math.min(1, Math.max(0, x + .45 * w * (sh * (1 - x) + hl * x)))); }).join(' ');
+      const tone = hl || sh ? `<feComponentTransfer>${['R', 'G', 'B'].map(c => `<feFunc${c} type="table" tableValues="${tv}"/>`).join('')}</feComponentTransfer>` : '';
+      const a = n4(sp * .8), sharp = sp > 0 ? `<feConvolveMatrix order="3" kernelMatrix="0 ${-a} 0 ${-a} ${n4(1 + 4 * a)} ${-a} 0 ${-a} 0" preserveAlpha="true" edgeMode="duplicate"/>` : '';
+      defs = `<svg width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true"><filter id="${id}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">${tone}${sharp}</filter></svg>`;
+      s += ` url(#${id})`;
+    }
+    const vg = +v('vignette', 0) || 0, gr = +v('grain', 0) || 0;
+    let over = defs;
+    if (vg > 0) over += `<div class="full" style="pointer-events:none;background:radial-gradient(ellipse at 50% 50%, transparent ${(60 - 25 * vg).toFixed(1)}%, rgba(0,0,0,${(.85 * vg).toFixed(3)}) 100%)"></div>`;
+    if (gr > 0) {
+      const j = Math.floor(t * 24);
+      over += `<div class="full" style="pointer-events:none;mix-blend-mode:overlay;opacity:${(.6 * gr).toFixed(3)};background-image:${NOISE};background-size:256px 256px;background-position:${Math.round(rnd(j) * 256)}px ${Math.round(rnd(j + 9) * 256)}px"></div>`;
+    }
+    return { filter: s, defs, over };
+  }
+  const colorCss = (f, o = {}) => colorFx(f, { ...o, svg: false }).filter;
+  // mô tả cho Claude (trợ lý "color", scripts/assist.mjs)
+  const colorGuide = () => `Bộ lọc (preset): ${aiGuide('lut', ' | ')}.\nAdjust (thiếu = trung tính): ${ADJ.map(a => `${a.id} ${a.label.toLowerCase()} ${a.min}…${a.max} (trung tính ${a.def})`).join('; ')}.`;
+
+  // ---- S28 M206: nhóm `fx` — khối của track Hiệu ứng (TL.efx) + 10 hiệu ứng nhấn cũ (TL.fx, engine.js fxWrap vẽ như trước) ----
+  // Khối mới: TL.efx = [{ type, start, end, params: { intensity, speed, range }, target: 'all'|'main', hidden?, locked? }].
+  //   fn(lt, p, dur) → { filter?, transform?, over? (HTML phủ trên), wrap? (html → html) }; lt = giây từ đầu khối. Hàm thuần theo t
+  //   (nhiễu dùng rnd tất định theo số khung), không CSS animation theo đồng hồ. Mỗi loại ≤ 3 thanh.
+  // Nhấn cũ (legacy: true): chỉ dữ liệu (nhãn, thời lượng mặc định, mô tả cho Claude); hình vẫn ở engine.js fxWrap để timeline cũ y hệt.
+  GROUPS.fx = [['accent', 'Nhấn'], ['light', 'Ánh sáng'], ['retro', 'Cổ điển'], ['frame', 'Khung'], ['color', 'Màu']];
+  const clamp01 = v => Math.min(1, Math.max(0, v));
+  const f3 = v => (+v).toFixed(3);
+  const INT = def => ({ t: 'num', min: 0, max: 1, def, label: 'Cường độ' });
+  const SPD = (def, min = .1, max = 4) => ({ t: 'num', min, max, def, label: 'Tốc độ' });
+  const RNG = (def, min = 0, max = 1) => ({ t: 'num', min, max, def, label: 'Phạm vi' });
+  const env = (lt, dur, f = .3) => clamp01(Math.min(lt / f, (dur - lt) / f)); // vào / ra mềm ở hai đầu khối
+  const noCid = h => h.replace(/ data-cid=/g, ' data-mcid='); // bản sao (gương, giữ màu) không bấm chọn được trên Studio
+  const svgUrl = s => `url(data:image/svg+xml,${encodeURIComponent(s).replace(/'/g, '%27').replace(/\(/g, '%28').replace(/\)/g, '%29')})`;
+  const NOISE = svgUrl("<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='256' height='256' filter='url(#n)'/></svg>");
+  const ACC = (id, label, icon, dur, amp, ai) => ({ id, label, group: 'accent', icon, legacy: true, dur,
+    params: { dur: { t: 'num', min: .1, max: 4, def: dur, label: 'Thời lượng' }, ...(amp ? { amp: { t: 'num', min: amp[0], max: amp[1], def: amp[2], label: 'Cường độ' } } : {}) }, ai });
+  const FXS = [
+    ACC('shake', 'Rung', 'ti-vibration', .35, [2, 40, 14], { mood: 'gắt, bất ngờ', nhip: 'rất nhanh', khi_nao: 'câu sốc, va chạm, beat mạnh', tranh: 'đặt liền nhau; nội dung nhẹ nhàng' }),
+    ACC('punch', 'Đấm zoom', 'ti-zoom-in-area', .25, [.03, .4, .12], { mood: 'nhấn, dứt khoát', nhip: 'nhanh', khi_nao: 'từ khoá, con số, câu đinh', tranh: 'quá 1 lần / 3 s' }),
+    ACC('zoom_in', 'Phóng chậm', 'ti-zoom-in', .6, [.03, .4, .15], { mood: 'tập trung, kịch tính', nhip: 'vừa', khi_nao: 'nhấn một câu quan trọng, tiết lộ', tranh: 'khi đang có zoom khác' }),
+    ACC('whip', 'Lia', 'ti-wind', .3, null, { mood: 'năng lượng', nhip: 'nhanh', khi_nao: 'chuyển ý dồn dập, montage', tranh: 'nội dung chậm' }),
+    ACC('blur_in', 'Nhoè vào', 'ti-blur', .35, null, { mood: 'mở màn, tỉnh lại', nhip: 'vừa', khi_nao: 'đầu đoạn mới, sau cảnh đen', tranh: 'giữa câu đang nói' }),
+    ACC('glitch', 'Nhiễu', 'ti-wave-saw-tool', .3, null, { mood: 'công nghệ, lỗi', nhip: 'nhanh', khi_nao: 'tin AI/công nghệ, bất ngờ tiêu cực', tranh: 'thương hiệu mềm mại' }),
+    ACC('rgb', 'Lệch màu', 'ti-color-swatch', .3, null, { mood: 'điện tử, gắt', nhip: 'nhanh', khi_nao: 'nhạc điện tử, beat drop', tranh: 'cảnh sang trọng' }),
+    ACC('flash', 'Loé trắng', 'ti-bolt', .25, null, { mood: 'cú đấm, khoảnh khắc', nhip: 'rất nhanh', khi_nao: 'beat drop, ảnh chụp', tranh: 'quá 2–3 lần mỗi video' }),
+    ACC('push', 'Đẩy vào mặt', 'ti-focus-centered', 2, [.03, .3, .1], { mood: 'thân mật, chú ý', nhip: 'chậm', khi_nao: 'câu tâm sự, nhấn lời người nói', tranh: 'đoạn có b-roll phủ kín' }),
+    ACC('mono', 'Đen trắng nhấn', 'ti-contrast-2', 1.5, null, { mood: 'nghiêm, dừng lại', nhip: 'chậm', khi_nao: 'câu đinh, trích dẫn, khoảnh khắc "trước"', tranh: 'sản phẩm cần thấy màu' }),
+    { id: 'light_leak', label: 'Rò sáng', group: 'light', icon: 'ti-sun-high', params: { intensity: INT(.6), speed: SPD(.5) },
+      fn: (lt, p, dur) => {
+        const a = p.intensity * env(lt, dur, .5), w = 2 * Math.PI * lt * p.speed * .25;
+        const x = 50 + 42 * Math.sin(w), y = 30 + 25 * Math.cos(w * .7), x2 = 100 - x * .8;
+        return { over: `<div class="full" style="pointer-events:none;mix-blend-mode:screen;background:radial-gradient(ellipse 55% 75% at ${x.toFixed(1)}% ${y.toFixed(1)}%, rgba(255,150,60,${f3(.75 * a)}), rgba(255,60,120,${f3(.35 * a)}) 45%, transparent 72%),radial-gradient(ellipse 40% 60% at ${x2.toFixed(1)}% ${(100 - y).toFixed(1)}%, rgba(255,210,120,${f3(.4 * a)}), transparent 70%)"></div>` };
+      },
+      ai: { mood: 'ấm, hoài niệm, mơ màng', nhip: 'chậm', khi_nao: 'vlog, du lịch, kỷ niệm, cảnh ngoài trời', tranh: 'tin tức, hướng dẫn cần rõ chữ' } },
+    { id: 'vhs', label: 'Băng VHS', group: 'retro', icon: 'ti-device-tv-old', params: { intensity: INT(.6), speed: SPD(1) },
+      fn: (lt, p) => {
+        const i = p.intensity, j = Math.floor(lt * 30), band = ((lt * p.speed * .35) % 1) * 115 - 10;
+        const jit = rnd(j) > .86 ? ((rnd(j + 1) - .5) * 14 * i).toFixed(1) : 0;
+        return { filter: `saturate(${f3(1 + .4 * i)}) contrast(${f3(1 + .15 * i)}) sepia(${f3(.18 * i)})`, transform: jit ? `translateX(${jit}px)` : '',
+          over: `<div class="full" style="pointer-events:none;background:repeating-linear-gradient(rgba(0,0,0,${f3(.28 * i)}) 0 1px, transparent 1px 3px)"></div>` +
+            `<div class="abs" style="pointer-events:none;left:0;right:0;top:${band.toFixed(2)}%;height:6%;background:rgba(255,255,255,${f3(.12 * i)});mix-blend-mode:screen;filter:blur(2px)"></div>` };
+      },
+      ai: { mood: 'cổ điển, retro 90s', nhip: 'vừa', khi_nao: 'hồi tưởng, chuyện xưa, meme, nhạc lo-fi', tranh: 'thương hiệu cao cấp, sản phẩm mới' } },
+    { id: 'grain', label: 'Hạt phim', group: 'retro', icon: 'ti-grain', params: { intensity: INT(.45), speed: SPD(1) },
+      fn: (lt, p) => {
+        const j = Math.floor(lt * 24 * p.speed);
+        return { over: `<div class="full" style="pointer-events:none;mix-blend-mode:overlay;opacity:${f3(.6 * p.intensity)};background-image:${NOISE};background-size:256px 256px;background-position:${Math.round(rnd(j) * 256)}px ${Math.round(rnd(j + 9) * 256)}px"></div>` };
+      },
+      ai: { mood: 'điện ảnh, mộc', nhip: '—', khi_nao: 'kể chuyện, phim ngắn, thương hiệu thủ công; phủ cả video ở mức nhẹ', tranh: 'màn hình app / chữ nhỏ' } },
+    { id: 'vignette', label: 'Tối viền', group: 'frame', icon: 'ti-circle-dot', params: { intensity: INT(.6), range: RNG(.45, .1, .9) },
+      fn: (lt, p) => ({ over: `<div class="full" style="pointer-events:none;background:radial-gradient(ellipse at 50% 50%, transparent ${(p.range * 100).toFixed(1)}%, rgba(0,0,0,${f3(.85 * p.intensity)}) 100%)"></div>` }),
+      ai: { mood: 'tập trung, trầm', nhip: '—', khi_nao: 'kéo mắt vào người nói / sản phẩm giữa khung', tranh: 'chủ thể ở mép khung' } },
+    { id: 'letterbox', label: 'Viền điện ảnh', group: 'frame', icon: 'ti-movie', params: { intensity: INT(1), speed: SPD(1), range: RNG(.12, .03, .25) },
+      fn: (lt, p, dur) => {
+        const d = .6 / p.speed, s = E.outCubic(clamp01(Math.min(lt / d, (dur - lt) / d))), h = (p.range * 100 * s).toFixed(2), bg = `rgba(0,0,0,${f3(p.intensity)})`;
+        return { over: `<div class="abs" style="pointer-events:none;left:0;right:0;top:0;height:${h}%;background:${bg}"></div><div class="abs" style="pointer-events:none;left:0;right:0;bottom:0;height:${h}%;background:${bg}"></div>` };
+      },
+      ai: { mood: 'điện ảnh, trang trọng', nhip: 'chậm', khi_nao: 'mở màn, cảnh đẹp, tiết lộ, trailer', tranh: 'đoạn có phụ đề / chữ sát mép trên dưới' } },
+    { id: 'glow', label: 'Phát sáng', group: 'light', icon: 'ti-brightness-up', params: { intensity: INT(.5), range: RNG(.6, .2, 1) },
+      fn: (lt, p, dur) => {
+        const i = p.intensity * env(lt, dur);
+        return { filter: `brightness(${f3(1 + .12 * i)}) saturate(${f3(1 + .25 * i)}) contrast(${f3(1 - .05 * i)})`,
+          over: `<div class="full" style="pointer-events:none;mix-blend-mode:soft-light;background:radial-gradient(ellipse at 50% 42%, rgba(255,255,255,${f3(.55 * i)}), transparent ${(p.range * 100).toFixed(1)}%)"></div>` };
+      },
+      ai: { mood: 'mộng, sạch, sang', nhip: '—', khi_nao: 'mỹ phẩm, thời trang, cảnh sản phẩm sáng', tranh: 'cảnh đã cháy sáng' } },
+    { id: 'mirror', label: 'Chia đôi gương', group: 'frame', icon: 'ti-flip-vertical', params: { intensity: INT(1) },
+      fn: (lt, p) => ({ wrap: h => `<div class="full" style="clip-path:inset(0 50% 0 0)">${h}</div><div class="full" style="pointer-events:none;transform:scaleX(-1);clip-path:inset(0 50% 0 0);opacity:${f3(p.intensity)}">${noCid(h)}</div>` }),
+      ai: { mood: 'lạ mắt, nghệ thuật', nhip: 'nhanh', khi_nao: 'nhịp mạnh của nhạc, montage thời trang, đoạn ngắn 1–2 s', tranh: 'người nói nhìn vào máy (mặt bị cắt đôi); chữ trên khung' } },
+    { id: 'edge_blur', label: 'Mờ viền', group: 'frame', icon: 'ti-blur', params: { intensity: INT(.5), range: RNG(.4, .1, .8) },
+      fn: (lt, p) => {
+        const r = (p.range * 100).toFixed(1), m = `radial-gradient(ellipse at 50% 50%, transparent ${r}%, #000 ${(p.range * 100 + 25).toFixed(1)}%)`;
+        return { over: `<div class="full" style="pointer-events:none;backdrop-filter:blur(${(2 + 12 * p.intensity).toFixed(1)}px);-webkit-mask-image:${m};mask-image:${m}"></div>` };
+      },
+      ai: { mood: 'mơ, tập trung giữa khung', nhip: '—', khi_nao: 'hồi tưởng, giấc mơ, nhấn chủ thể giữa khung', tranh: 'chữ / logo ở mép; đặt rất dài (blur nặng khi xuất)' } },
+    { id: 'pulse', label: 'Nhịp sáng', group: 'light', icon: 'ti-heartbeat', params: { intensity: INT(.5), speed: SPD(2, .5, 4) },
+      fn: (lt, p) => {
+        const pk = Math.pow(1 - ((lt * p.speed) % 1), 3) * p.intensity;
+        return { filter: `brightness(${f3(1 + .45 * pk)})`, transform: `scale(${(1 + .03 * pk).toFixed(4)})` };
+      },
+      ai: { mood: 'sôi động, bắt nhịp', nhip: 'theo nhạc (speed = số nhịp mỗi giây)', khi_nao: 'đoạn nhạc mạnh, quảng cáo nhanh, đếm ngược', tranh: 'người xem nhạy sáng; đoạn nói chậm' } },
+    { id: 'color_pop', label: 'Đen trắng giữ màu', group: 'color', icon: 'ti-color-picker', params: { intensity: INT(1), range: RNG(.35, .15, .7) },
+      fn: (lt, p) => {
+        const r = (p.range * 100).toFixed(1), m = `radial-gradient(ellipse ${r}% ${(p.range * 120).toFixed(1)}% at 50% 45%, #000 60%, transparent 100%)`;
+        return { wrap: h => `<div class="full" style="filter:grayscale(${f3(p.intensity)})">${h}</div><div class="full" style="pointer-events:none;-webkit-mask-image:${m};mask-image:${m}">${noCid(h)}</div>` };
+      },
+      ai: { mood: 'nhấn chủ thể, nghệ thuật', nhip: '—', khi_nao: 'giữ màu sản phẩm / người ở giữa khung, nền thành đen trắng (gần đúng: theo vùng, không theo màu)', tranh: 'chủ thể lệch mép' } },
+    // S29 M208: khối Điều chỉnh — bộ màu (b.filter, như clip.filter) áp lên mọi lớp bên dưới trong đoạn; Cường độ kéo cả bộ về trung tính
+    { id: 'adjust', label: 'Điều chỉnh', group: 'color', icon: 'ti-adjustments', color: true, params: { intensity: INT(1) },
+      fn: (lt, p, dur, b) => { const r = colorFx(b?.filter, { t: lt, mix: p.intensity }); return { filter: r.filter.trim(), over: r.over }; },
+      ai: { mood: 'đồng bộ màu cả đoạn', nhip: '—', khi_nao: 'chỉnh màu một lần cho mọi clip, b-roll, ảnh phủ trong đoạn', tranh: 'chỉ một clip cần chỉnh (dùng tab Màu của clip)' } },
+  ];
+  // Thực thi khối mới tại t: html = các lớp bên dưới; trả lớp gói + filter / transform + HTML phủ (engine.js gộp vào wrapper)
+  function fxApply(items, t, html) {
+    let tr = '', fl = '', over = '';
+    for (const b of items) {
+      const d = FXS.find(x => x.id === b.type);
+      if (!d?.fn) continue;
+      const r = d.fn(t - b.start, params('fx', b.type, b.params), b.end - b.start, b) || {};
+      if (r.wrap) html = r.wrap(html);
+      if (r.transform) tr += ' ' + r.transform;
+      if (r.filter) fl += ' ' + r.filter;
+      if (r.over) over += r.over;
+    }
+    return { html, tr, fl, over };
+  }
+
+  const LISTS = { trans: TRANS, text_in: TEXT_IN, lut: LUT, fx: FXS, anim_in: TEXT_IN, anim_out: ANIM_OUT, anim_loop: ANIM_LOOP };
+  const list = kind => LISTS[kind] || [];
+  const get = (kind, id) => list(kind).find(x => x.id === id) || null;
+  const ids = kind => list(kind).map(x => x.id);
+  const groupLabel = (kind, g) => (GROUPS[kind] || []).find(x => x[0] === g)?.[1] || g;
+  // Tham số đã kẹp theo bảng của mục (thiếu → mặc định)
+  function params(kind, id, p) {
+    const d = get(kind, id), out = {};
+    for (const [n, s] of Object.entries(d?.params || {})) {
+      const v = p?.[n];
+      if (s.t === 'num') out[n] = Number.isFinite(+v) && v !== null && v !== '' ? Math.min(s.max, Math.max(s.min, +v)) : s.def;
+      else if (s.t === 'enum') out[n] = s.values.includes(v) ? v : s.def;
+    }
+    return out;
+  }
+  // Mô tả cho Claude: một dòng mỗi loại, đủ để chọn theo nội dung (75_ask.core.js, prompt AI dựng)
+  const aiGuide = (kind, sep = '\n') => list(kind).map(x => `${x.id} (${x.label.toLowerCase()}): ${x.ai.mood}; nhịp ${x.ai.nhip}; dùng khi ${x.ai.khi_nao}; tránh ${x.ai.tranh}`).join(sep);
+  // Bảng Markdown cho references/clips.md (scripts/fx_doc.mjs)
+  function docTable(kind) {
+    const head = '| `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |\n|---|---|---|---|---|---|\n';
+    return head + list(kind).map(x => `| \`${x.id}\` | ${x.label} | ${groupLabel(kind, x.group)} | ${x.ai.mood} | ${x.ai.khi_nao} | ${x.ai.tranh} |`).join('\n');
+  }
+
+  const FX = {
+    GROUPS, TRANS, TEXT_IN, LUT, list, get, ids, groupLabel, params, aiGuide, docTable,
+    // engine/engine.js
+    transFns: () => Object.fromEntries(TRANS.map(x => [x.id, x.fn])),
+    transOverlay: (id, k, p) => get('trans', id)?.overlay?.(k, p) || '',
+    // S29 M203: nhịp (ease) áp lên k trước fn / overlay / wrap; wrap gói cả lớp chuyển cảnh (tách RGB), không có thì giữ html
+    ease, transWrap: (id, k, p, html) => { const w = get('trans', id)?.wrap; return w ? w(k, p)(html) : html; },
+    lutCss: () => Object.fromEntries(LUT.map(x => [x.id, x.css])),
+    // studio (dạng mảng cũ của clips.js / library.js)
+    transTypes: () => TRANS.map(x => [x.id, x.label, x.icon]),
+    filters: () => [['', 'Gốc'], ...LUT.map(x => [x.id, x.label])],
+    // S29 M208: màu (engine.js clipFilter / clipBox / colorWrap, studio/clips.js clipFilterCss, features/82_color.js)
+    ADJ, lutAt, colorFx, colorCss, colorClean, colorGuide,
+    animList: () => TEXT_IN.map(x => [x.id, x.label]),
+    // S28 M206: track Hiệu ứng (engine.js fxWrap / mainFx, studio/features/81_fxtrack*.js, 75_ask.core.js)
+    FXS, fxApply,
+    accentDur: () => Object.fromEntries(FXS.filter(x => x.legacy).map(x => [x.id, x.dur])),
+    // S28 M205: bộ anim chung (engine/vertical.js, shape.js, celem.js; studio/features/83_anim.js)
+    ANIM_OUT, ANIM_LOOP, animOf, animAt, hasOut, clipCss,
+    animOutList: () => ANIM_OUT.map(x => [x.id, x.label]),
+    animLoopList: () => ANIM_LOOP.map(x => [x.id, x.label]),
+  };
+  // ---------- S28 M204: nhóm clip_anim — hoạt ảnh clip Vào / Ra / Combo (clip.anim của clip Video chính, b-roll, ảnh phủ) ----------
+  // anim = { in: {type, dur}, out: {type, dur}, combo: {type, speed} }; ghép ở engine/engine.js (animWrap: clipLayer, sceneFx).
+  // Mỗi mục trả props { x, y (% khung), scale, rot (độ), rx, ry (độ, xoay 3D), opacity, blur (px) }; thiếu = trung tính.
+  //   in.fn(k): k 0→1 trong in.dur đầu clip, k = 1 là trạng thái nghỉ. out.fn(k): k 0→1 trong out.dur cuối (đối xứng của Vào).
+  //   combo.fn(p, lt, speed): suốt clip, p = 0→1 theo thời lượng clip, lt giây. Hàm thuần theo t: cùng t cho cùng chuỗi.
+  // Combo có xoay / trôi tự phóng nhẹ để không lộ mép khung.
+  (() => {
+    const bounce = k => { const n = 7.5625, d = 2.75; return k < 1 / d ? n * k * k : k < 2 / d ? n * (k -= 1.5 / d) * k + .75 : k < 2.5 / d ? n * (k -= 2.25 / d) * k + .9375 : n * (k -= 2.625 / d) * k + .984375; };
+    const ADUR = { t: 'num', min: 0.1, max: 3, def: 0.5 }, ASPD = { t: 'num', min: 0.25, max: 3, def: 1 };
+    const fadeUp = k => Math.min(1, k * 2);
+    const IN = {
+      fade: k => ({ opacity: k }),
+      zoom_in: k => ({ scale: lerp(.6, 1, E.outCubic(k)), opacity: fadeUp(k) }),
+      zoom_out: k => ({ scale: lerp(1.4, 1, E.outCubic(k)), opacity: fadeUp(k) }),
+      slide_l: k => ({ x: (1 - E.outCubic(k)) * 100 }),
+      slide_r: k => ({ x: -(1 - E.outCubic(k)) * 100 }),
+      slide_up: k => ({ y: (1 - E.outCubic(k)) * 100 }),
+      slide_down: k => ({ y: -(1 - E.outCubic(k)) * 100 }),
+      rotate: k => ({ rot: (1 - E.outCubic(k)) * -90, scale: lerp(.4, 1, E.outCubic(k)), opacity: fadeUp(k) }),
+      shake: k => ({ x: Math.sin(k * Math.PI * 8) * (1 - k) * 6, scale: lerp(1.08, 1, k) }),
+      sway: k => ({ rot: Math.sin(k * Math.PI * 5) * (1 - k) * 8, scale: lerp(1.15, 1, k) }),
+      bounce: k => ({ scale: lerp(.3, 1, bounce(k)), opacity: Math.min(1, k * 3) }),
+      blur: k => ({ blur: (1 - k) * 24, opacity: k, scale: lerp(1.08, 1, E.outCubic(k)) }),
+    };
+    const ai = (mood, nhip, khi_nao, tranh) => ({ mood, nhip, khi_nao, tranh });
+    const mk = (group, p) => (id, label, icon, fn, a) => ({ id, label, group, icon, params: { [p === ASPD ? 'speed' : 'dur']: p }, fn, ai: a });
+    const ci = mk('in', ADUR), co = mk('out', ADUR), cc = mk('combo', ASPD);
+    const CLIP_IN = [
+      ci('fade', 'Mờ dần', 'ti-blur', IN.fade, ai('nhẹ, trung tính', 'chậm–vừa', 'mở clip đầu, ảnh phủ vào nhẹ', 'cần cú đấm ngay khung đầu')),
+      ci('zoom_in', 'Phóng to vào', 'ti-zoom-in', IN.zoom_in, ai('bật ra, hào hứng', 'nhanh', 'sản phẩm, chi tiết, câu hook', 'nội dung trang trọng')),
+      ci('zoom_out', 'Thu vào', 'ti-zoom-out', IN.zoom_out, ai('mạnh, điện ảnh', 'vừa', 'cảnh rộng, mở chương, ảnh phủ toàn khung', 'clip quá ngắn (< 1 s)')),
+      ci('slide_l', 'Trượt sang trái', 'ti-arrow-big-left-lines', IN.slide_l, ai('tiến tới, gọn', 'vừa–nhanh', 'ý tiếp theo, ảnh minh hoạ đi vào từ phải', 'dùng cho mọi clip liền nhau')),
+      ci('slide_r', 'Trượt sang phải', 'ti-arrow-big-right-lines', IN.slide_r, ai('quay lại, so sánh', 'vừa–nhanh', 'nhắc ý trước, đối chiếu', 'dùng cho mọi clip liền nhau')),
+      ci('slide_up', 'Trượt lên', 'ti-arrow-big-up-lines', IN.slide_up, ai('tích cực, lướt feed', 'nhanh', 'video dọc, kết quả, con số tăng', 'tin buồn')),
+      ci('slide_down', 'Trượt xuống', 'ti-arrow-big-down-lines', IN.slide_down, ai('rơi vào, đóng dấu', 'vừa', 'kết luận, thẻ giá, ảnh rơi vào khung', 'mở đầu video')),
+      ci('rotate', 'Xoay vào', 'ti-rotate-clockwise-2', IN.rotate, ai('vui, bất ngờ', 'nhanh', 'twist, giải trí, sticker ảnh', 'thương hiệu sang trọng')),
+      ci('shake', 'Lắc', 'ti-vibration', IN.shake, ai('gắt, sốc', 'rất nhanh', 'tin sốc, beat drop, lỗi', 'nội dung nhẹ nhàng; dùng dày')),
+      ci('sway', 'Lắc lư', 'ti-wave-sine', IN.sway, ai('tinh nghịch, mềm', 'vừa', 'lifestyle, đồ ăn, trẻ em', 'tin tức, hướng dẫn kỹ thuật')),
+      ci('bounce', 'Nảy', 'ti-ball-basketball', IN.bounce, ai('vui, năng lượng', 'nhanh', 'ảnh sản phẩm dạng thẻ, khuyến mãi', 'cảnh toàn khung nghiêm túc')),
+      ci('blur', 'Mờ nhoè', 'ti-blur-off', IN.blur, ai('mơ màng, sang', 'chậm–vừa', 'hồi tưởng, BĐS cao cấp, mỹ phẩm', 'màn có chữ cần đọc ngay')),
+    ];
+    // Ra = Vào chạy ngược; hướng đổi chiều để clip đi tiếp ra ngoài (trượt ra trái = vào từ trái chạy ngược, phóng ra = thu vào chạy ngược)
+    const back = id => k => IN[id](1 - k);
+    const CLIP_OUT = [
+      co('fade', 'Mờ dần', 'ti-blur', back('fade'), ai('nhẹ, kết', 'chậm–vừa', 'clip cuối, ảnh phủ rút đi', 'ngay trước chuyển cảnh mạnh')),
+      co('zoom_in', 'Phóng ra', 'ti-zoom-in', back('zoom_out'), ai('lao tới, dồn dập', 'nhanh', 'trước cảnh hook, đẩy sang ý mới', 'kết video')),
+      co('zoom_out', 'Thu nhỏ', 'ti-zoom-out', back('zoom_in'), ai('khép lại', 'vừa', 'tổng kết, ảnh thẻ rút đi', 'clip chính đang nói')),
+      co('slide_l', 'Trượt ra trái', 'ti-arrow-big-left-lines', back('slide_r'), ai('tiến tới', 'vừa–nhanh', 'nhường chỗ ý tiếp theo', 'dùng cho mọi clip')),
+      co('slide_r', 'Trượt ra phải', 'ti-arrow-big-right-lines', back('slide_l'), ai('lùi lại', 'vừa–nhanh', 'quay về ý trước', 'dùng cho mọi clip')),
+      co('slide_up', 'Trượt ra trên', 'ti-arrow-big-up-lines', back('slide_down'), ai('lướt đi', 'nhanh', 'video dọc kiểu lướt feed', 'tin buồn')),
+      co('slide_down', 'Trượt ra dưới', 'ti-arrow-big-down-lines', back('slide_up'), ai('hạ xuống, kết', 'vừa', 'kết đoạn, rút ảnh minh hoạ', 'mở đầu')),
+      co('rotate', 'Xoay ra', 'ti-rotate-clockwise-2', back('rotate'), ai('vui, bất ngờ', 'nhanh', 'kết đoạn giải trí', 'thương hiệu sang trọng')),
+      co('sway', 'Lắc lư ra', 'ti-wave-sine', back('sway'), ai('tinh nghịch', 'vừa', 'lifestyle, đồ ăn', 'tin tức')),
+      co('blur', 'Mờ nhoè', 'ti-blur-off', back('blur'), ai('mơ màng', 'chậm–vừa', 'chuyển sang hồi tưởng, cảnh sang', 'màn có chữ cần đọc')),
+    ];
+    const TAU = Math.PI * 2;
+    // xoay θ độ: phóng đủ để khung 9:16 / 16:9 (tỉ lệ ≤ 1,78) vẫn phủ kín
+    const cover = deg => { const a = Math.abs(deg % 180) * Math.PI / 180; return Math.abs(Math.cos(a)) + 1.78 * Math.abs(Math.sin(a)); };
+    const CLIP_COMBO = [
+      cc('ken_burns', 'Ken Burns', 'ti-camera', (p, lt, v) => ({ scale: 1.04 + .14 * v * p, x: lerp(-1.5, 1.5, p), y: lerp(1, -1, p) }),
+        ai('kể chuyện, sống động', 'chậm', 'b-roll ảnh tĩnh (ảnh AI, ảnh stock) cho khỏi đứng hình, BĐS, du lịch', 'video quay sẵn đã chuyển động mạnh')),
+      cc('pendulum', 'Con lắc', 'ti-clock-pause', (p, lt, v) => ({ rot: Math.sin(lt * v * TAU / 3) * 3, scale: 1.12 }),
+        ai('đung đưa, thư thả', 'chậm', 'ảnh minh hoạ vui, đồ chơi, thời trang', 'tin tức, dữ liệu')),
+      cc('zoom_pulse', 'Zoom vào-ra', 'ti-arrows-diagonal', (p, lt, v) => ({ scale: 1 + .08 * (1 - Math.cos(lt * v * TAU / 2.5)) / 2 }),
+        ai('nhấn nhá, sôi động', 'vừa', 'ảnh sản phẩm, khuyến mãi, nhạc vui', 'clip chính đang nói dài (chóng mặt)')),
+      cc('shake3d', 'Lắc 3D', 'ti-rotate-3d', (p, lt, v) => ({ ry: Math.sin(lt * v * TAU / 2.2) * 10, rx: Math.sin(lt * v * TAU / 3.1) * 5, scale: 1.15 }),
+        ai('công nghệ, hiện đại', 'vừa', 'ảnh màn hình app, sản phẩm công nghệ', 'mặt người cận')),
+      cc('breathe', 'Thở', 'ti-lungs', (p, lt, v) => ({ scale: 1.03 + .03 * Math.sin(lt * v * TAU / 3) }),
+        ai('êm, sống', 'chậm', 'ảnh tĩnh giữ lâu, chân dung, cảnh đẹp', 'chồng với Ken Burns')),
+      cc('drift', 'Trôi', 'ti-wind', (p, lt, v) => ({ x: Math.sin(lt * v * .9) * 2.5, y: Math.cos(lt * v * .7) * 1.8, scale: 1.08 }),
+        ai('mơ màng, điện ảnh', 'chậm', 'cảnh thiên nhiên, BĐS, hồi tưởng', 'ảnh có chữ sát mép')),
+      cc('beat_shake', 'Rung nhịp', 'ti-wave-square', (p, lt, v) => { const e = Math.exp(-((lt * v * 2) % 1) * 7); return { x: Math.sin(lt * 60) * e * 1.2, scale: 1.04 + .05 * e }; },
+        ai('mạnh, theo nhạc', 'nhanh (2 nhịp/giây × speed)', 'montage, nhạc EDM, khoảnh khắc bùng nổ', 'đoạn nói chậm, tâm sự')),
+      cc('slow_spin', 'Xoay chậm', 'ti-rotate', (p, lt, v) => { const r = lt * v * 4; return { rot: r, scale: cover(r) }; },
+        ai('lạ, nghệ thuật', 'chậm', 'ảnh sản phẩm trưng bày, intro nghệ thuật', 'clip dài (> 5 s, phóng quá to)')),
+    ];
+    Object.assign(GROUPS, { clip_in: [['in', 'Vào']], clip_out: [['out', 'Ra']], clip_combo: [['combo', 'Combo']] });
+    Object.assign(LISTS, { clip_in: CLIP_IN, clip_out: CLIP_OUT, clip_combo: CLIP_COMBO });
+    const SLOT = { in: 'clip_in', out: 'clip_out', combo: 'clip_combo' };
+    const NEUTRAL = { x: 0, y: 0, scale: 1, rot: 0, rx: 0, ry: 0, opacity: 1, blur: 0 };
+    // Props đã ghép tại giây lt của clip dài D (null = không có hoạt ảnh nào đang chạy → engine không bọc gì, giữ HTML cũ).
+    // edge = đang ở đoạn Vào / Ra (clip có thể hở nền: engine bỏ cờ cover của cảnh).
+    function clipAnimAt(anim, lt, D) {
+      if (!anim || typeof anim !== 'object' || !(D > 0)) return null;
+      const P = { ...NEUTRAL }; let any = false, edge = false;
+      const add = q => { any = true; for (const k in q) P[k] = k === 'scale' || k === 'opacity' ? P[k] * q[k] : P[k] + q[k]; };
+      const fi = anim.in && get('clip_in', anim.in.type), fo = anim.out && get('clip_out', anim.out.type), fc = anim.combo && get('clip_combo', anim.combo.type);
+      let di = fi ? params('clip_in', fi.id, anim.in).dur : 0, dout = fo ? params('clip_out', fo.id, anim.out).dur : 0;
+      if (di + dout > D) { const s = D / (di + dout); di *= s; dout *= s; } // clip ngắn: chia thời gian Vào / Ra theo tỉ lệ
+      const x = Math.min(Math.max(lt, 0), D);
+      if (fc) add(fc.fn(x / D, x, params('clip_combo', fc.id, anim.combo).speed));
+      if (di && x < di) { add(fi.fn(x / di)); edge = true; }
+      if (dout && x > D - dout) { add(fo.fn((x - (D - dout)) / dout)); edge = true; }
+      return any ? { ...P, edge } : null;
+    }
+    // CSS của props; skip = thuộc tính keyframe đã giữ (x/y/scale/rot/opacity) → bỏ phần đó của hoạt ảnh (keyframe thắng).
+    function clipAnimCss(P, skip) {
+      const has = k => !skip?.has(k), n = (v, d = 2) => (+v).toFixed(d), tr = [];
+      if (P.rx || P.ry) tr.push('perspective(900px)');
+      const x = has('x') ? P.x : 0, y = has('y') ? P.y : 0;
+      if (x || y) tr.push(`translate(${n(x)}%,${n(y)}%)`);
+      if (P.rx) tr.push(`rotateX(${n(P.rx)}deg)`);
+      if (P.ry) tr.push(`rotateY(${n(P.ry)}deg)`);
+      if (has('rot') && P.rot) tr.push(`rotate(${n(P.rot)}deg)`);
+      if (has('scale') && P.scale !== 1) tr.push(`scale(${n(P.scale, 4)})`);
+      let css = tr.length ? `transform:${tr.join(' ')};` : '';
+      if (has('opacity') && P.opacity < 1) css += `opacity:${n(Math.max(0, P.opacity), 3)};`;
+      if (P.blur > .3) css += `filter:blur(${n(P.blur, 1)}px);`;
+      return css;
+    }
+    // Đặt một slot của anim: type rỗng / 'none' / không có trong nhóm → bỏ slot; trả anim mới (null = hết slot). Studio + Claude dùng chung.
+    function clipAnimSet(anim, slot, type, v) {
+      const kind = SLOT[slot]; if (!kind) return anim || null;
+      const o = { ...(anim && typeof anim === 'object' ? anim : {}) };
+      if (!type || type === 'none' || !get(kind, type)) delete o[slot];
+      else o[slot] = { type, ...params(kind, type, { ...(o[slot] || {}), ...(v || {}) }) };
+      return Object.keys(o).length ? o : null;
+    }
+    Object.assign(FX, { CLIP_IN, CLIP_OUT, CLIP_COMBO, CLIP_SLOT: SLOT, clipAnimAt, clipAnimCss, clipAnimSet });
+  })();
+
+  if (typeof module === 'object' && module.exports) module.exports = FX;
+  else root.FX = FX;
+})(typeof window !== 'undefined' ? window : globalThis);

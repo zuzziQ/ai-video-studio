@@ -44,7 +44,8 @@ new MutationObserver(recs => { for (const r of recs) for (const n of r.addedNode
   .observe(document.documentElement, { childList: true, subtree: true });
 
 // ---------- vocabulary ----------
-const TRACKS = [['cap', 'Phụ đề', 'ti-badge-cc'], ['add', 'Chữ thêm', 'ti-letter-t'], ['gline', 'Chữ graphic', 'ti-text-size'], ['gfx', 'Graphic', 'ti-sparkles'],
+const TRACKS = [['efx', 'Hiệu ứng', 'ti-wand'], ['cap', 'Phụ đề', 'ti-badge-cc'], // S28 M206: efx = track Hiệu ứng (features/81_fxtrack.js)
+  ['add', 'Chữ thêm', 'ti-letter-t'], ['gline', 'Chữ graphic', 'ti-text-size'], ['gfx', 'Graphic', 'ti-sparkles'],
   ['broll', 'B-roll', 'ti-photo'], ['scene', 'Cảnh', 'ti-layout-board'], ['video', 'Video chính', 'ti-movie'], ['audio', 'Âm thanh', 'ti-music'], ['wave', 'Giọng', 'ti-wave-sine']];
 const TCOL = { scene: 'rgb(var(--track-2))', cap: 'rgb(var(--track-3))', add: 'rgb(var(--track-4))', gline: 'rgb(var(--track-5))', gfx: 'rgb(var(--track-6))', broll: 'rgb(var(--track-7))', audio: 'rgb(var(--track-8))', video: 'rgb(var(--track-1))' };
 const TRK = Object.fromEntries(TRACKS.map(([k]) => [k, { lock: false, hide: false }]));
@@ -130,13 +131,15 @@ function changed(inspector = false) {
 }
 
 // ---------- preview ----------
-function previewTL() {
-  const o = JSON.parse(JSON.stringify(TL));
+function previewTL(src = TL) { // S28 M202: src = TL tạm của xem thử chuyển cảnh (79_transpeek.js)
+  const o = JSON.parse(JSON.stringify(src));
   o.captions = JSON.parse(JSON.stringify(CAP)); o.base = PB(); o.width = DW; o.height = DH;
   if (o.aroll) o.aroll.count = META.frames || undefined;
+  if (window.Studio?.proxyMap) o.preview_proxy = { ...window.Studio.proxyMap }; // S29 M213: chuỗi 540p đã trích (63_frames.js), chỉ xem trước
   // Track "hide" toggles only affect the preview, never the saved timeline.
   if (TRK.video.hide) for (const c of o.clips || []) c.filter = { ...(c.filter || {}), brightness: 0 };
   if (TRK.cap.hide) o.caption_style = 'none';
+  if (TRK.efx.hide) for (const k of ['fx', 'grade', 'efx']) for (const x of o[k] || []) x.hidden = true; // S28 M206
   (o.scenes || []).forEach(s => {
     if (s.type === 'text' ? TRK.add.hide : TRK[trackOf(s)]?.hide) s.hidden = true;
     if (s.type !== 'text' && TRK.gline.hide) for (const L of s.lines || []) L.hidden = true;
@@ -384,11 +387,12 @@ function textBlock(o, withStyle) {
     <div><span class="lbl">Độ đậm</span><select data-f="weight">${opt([['', 'Mặc định'], ['500', '500'], ['600', '600'], ['700', '700'], ['800', '800'], ['900', '900']], o.weight || '')}</select></div></div>
     ${withStyle ? `<span class="lbl">Kiểu chữ</span><div class="pills">${STYLES.map(([v, l]) => `<button class="${(o.style || 'white') === v ? 'on' : ''}" data-sty="${v}">${l}</button>`).join('')}</div>
     <label class="check"><input type="checkbox" data-f="italic" ${o.italic === false ? '' : 'checked'}> Nghiêng</label>` : ''}
-    ${colorBlock(o.color)}`, 'ti-typography');
+    ${colorBlock(o.color)}`, 'ti-typography') + (window.Studio?.presets ? sect('Kiểu chữ của tôi', Studio.presets.block('text'), 'ti-bookmark') : ''); // S29 M211
 }
 function animBlock(c) {
   const o = c.obj, cur = o.anim || 'pop', d = r2(c.t1 - c.t0);
-  return sect('Hoạt ảnh vào', `<div class="angrid">${ANIM_LIST.map(([k, l]) => `<button class="an ${cur === k ? 'on' : ''}" data-anim="${k}"><span class="ad"><b class="an-${k}">Aa</b></span><small>${l}</small></button>`).join('')}</div>`, 'ti-sparkles') +
+  // S28 M205: khối Vào / Ra / Lặp dùng chung (features/83_anim.js); chưa nạp thì lưới Vào cũ
+  return (window.Studio?.animPick ? Studio.animPick(o) : sect('Hoạt ảnh vào', `<div class="angrid">${ANIM_LIST.map(([k, l]) => `<button class="an ${cur === k ? 'on' : ''}" data-anim="${k}"><span class="ad"><b class="an-${k}">Aa</b></span><small>${l}</small></button>`).join('')}</div>`, 'ti-sparkles')) +
     sect('Thời lượng', `<div class="slrow"><span>Hiển thị</span><input type="range" data-f="dur" min=".3" max="10" step=".1" value="${d}"><b>${d}s</b></div>
     <div class="help">Chữ hiện từ ${fmt(c.t0)}. Kéo mép khối trên timeline để chỉnh chính xác.</div>`, 'ti-clock');
 }
@@ -396,7 +400,7 @@ function capText(c) { return c.words.map(w => (w.hl ? `*${w.w}*` : w.w) + (w.br 
 
 // Clip inspector (main track): Cơ bản / Tốc độ / Âm thanh / Màu / Chuyển cảnh.
 function clipTabs(c) {
-  const o = c.obj, k = clipLayout()[c.idx], f = o.filter || {}, still = typeof o.src === 'string';
+  const o = c.obj, k = clipLayout()[c.idx], still = typeof o.src === 'string';
   const rng = (fld, v, a, b, st, lab, unit = '', show = x => x) => `<div class="slrow"><span>${lab}</span><input type="range" data-cf="${fld}" min="${a}" max="${b}" step="${st}" value="${v}"><b data-v="${fld}">${show(v)}${unit}</b></div>`;
   const thumb = clipFrameUrl(o, srcAt(k, k.t0 + Math.min(.5, (k.t1 - k.t0) / 2)));
   return [
@@ -408,20 +412,19 @@ function clipTabs(c) {
       sect('Cắt nguồn (giây)', `<div class="row"><div><span class="lbl">Vào</span><input type="number" step=".05" data-cf="in" value="${r2(o.in || 0)}"></div><div><span class="lbl">Ra</span><input type="number" step=".05" data-cf="out" value="${r2(o.out ?? 3)}"></div></div>
         <div class="help">Đổi điểm vào/ra sẽ tự dồn phụ đề, graphic, SFX phía sau (ripple).</div>`, 'ti-cut') +
       `<div class="acts"><button data-cact="split"><i class="ti ti-scissors"></i> Tách tại playhead</button><button data-cact="dup"><i class="ti ti-copy"></i> Nhân bản</button><button data-cact="del" class="danger"><i class="ti ti-trash"></i> Xoá (dồn)</button></div>`],
-    ['speed', 'Tốc độ', sect('Tốc độ phát', `<div class="seg4">${[.5, 1, 1.5, 2].map(v => `<button class="${(o.speed || 1) === v ? 'on' : ''}" data-cspeed="${v}">${v}×</button>`).join('')}</div>
+    ['speed', 'Tốc độ', (h => (Studio.speedTab ? Studio.speedTab(o, k, h) : h))(sect('Tốc độ phát', `<div class="seg4">${[.5, 1, 1.5, 2].map(v => `<button class="${(o.speed || 1) === v ? 'on' : ''}" data-cspeed="${v}">${v}×</button>`).join('')}</div>
         ${rng('speed', o.speed || 1, .25, 4, .05, 'Tốc độ', '×')}
         <div class="stat"><span>Thời lượng</span><b>${r2(k.t1 - k.t0)}s</b><span class="muted">gốc ${r2((o.out ?? 3) - (o.in || 0))}s</span></div>
-        <div class="help">Phụ đề, graphic giãn/co theo clip; phía sau tự dồn. ${tip('Tiếng đổi tốc độ theo clip nhưng giữ cao độ.')}</div>`, 'ti-brand-speedtest')],
+        <div class="help">Phụ đề, graphic giãn/co theo clip; phía sau tự dồn. ${tip('Tiếng đổi tốc độ theo clip nhưng giữ cao độ.')}</div>`, 'ti-brand-speedtest'))],
     ['audio', 'Âm thanh', sect('Âm lượng clip', still || !o.audio ? '<div class="help">Clip này không có tiếng.</div>'
       : `${rng('volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, 'Âm lượng', '%')}<div class="acts"><button data-cact="mute" class="${o.mute ? 'on' : ''}"><i class="ti ${o.mute ? 'ti-volume-off' : 'ti-volume'}"></i> ${o.mute ? 'Đang tắt tiếng' : 'Tắt tiếng'}</button></div>`, 'ti-volume')],
-    ['color', 'Màu', sect('Bộ lọc', `<div class="flmini">${FILTERS.map(([v, l]) => `<button class="${(f.preset || '') === v ? 'on' : ''}" data-cpreset="${v}"><span data-dbg="${esc(thumb)}" data-dfx="${esc(v ? LUT_CSS[v] : 'none')}"></span><small>${l}</small></button>`).join('')}</div>`, 'ti-color-filter') +
-      sect('Điều chỉnh', `${rng('brightness', f.brightness ?? 1, .5, 1.5, .01, 'Độ sáng')}${rng('contrast', f.contrast ?? 1, .5, 1.5, .01, 'Tương phản')}${rng('saturate', f.saturate ?? 1, 0, 2, .01, 'Bão hoà')}
-        ${rng('temp', f.temp ?? 0, -1, 1, .01, 'Nhiệt độ')}${rng('hue', f.hue ?? 0, -180, 180, 1, 'Sắc độ', '°')}${rng('blur', f.blur ?? 0, 0, 20, .5, 'Làm mờ', 'px')}
-        <div class="acts"><button data-cact="resetcolor"><i class="ti ti-restore"></i> Đặt lại màu</button></div>`, 'ti-adjustments')],
-    ['trans', 'Chuyển cảnh', c.idx === 0 ? sect('', `<div class="help">Clip đầu tiên không có chuyển cảnh vào. ${tip('Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối giữa hai clip.')}</div>`)
+    ['color', 'Màu', Studio.colorPanel ? Studio.colorPanel(o, thumb, 'clip') : ''], // S29 M208: features/82_color.js (bộ lọc + cường độ + Adjust)
+    ['trans', 'Chuyển cảnh', Studio.transUI ? Studio.transUI.insp(c) /* S29 M203: 83_transui.js */ : c.idx === 0 ? sect('', `<div class="help">Clip đầu tiên không có chuyển cảnh vào. ${tip('Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối giữa hai clip.')}</div>`)
       : sect('Chuyển cảnh vào clip này', `<div class="trgrid sm"><button class="tr ${o.transition ? '' : 'on'}" data-ctr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
         ${TRANS_TYPES.map(([kk, l, ic]) => `<button class="tr ${o.transition?.type === kk ? 'on' : ''}" data-ctr="${kk}"><span class="demo t-${kk}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
-        ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 1.5, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
+        ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 3, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
+    ...(Studio.animTab ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204: 81_clipanim.js
+    ...(Studio.bakeTab ? [['bake', 'Hiệu chỉnh', Studio.bakeTab(c)]] : []), // S29 M212: 86_bake.js (phông xanh, LUT .cube, HSL, curves, ổn định — nướng bằng ffmpeg)
   ];
 }
 function inspTabs(c) {
@@ -449,6 +452,7 @@ function inspTabs(c) {
   // scene
   let basic = '';
   if (o.text != null || ['led_text', 'neon_text'].includes(o.type)) basic += sect('Nội dung', `<input data-f="text" value="${esc(o.text || '')}">${colorBlock(o.color)}`, 'ti-letter-t');
+  if (o.type === 'sticker' && window.Studio?.animPick) basic += Studio.animPick(o, { def: '', inNone: 'Theo hướng bay' }); // S28 M205
   if (o.type === 'emoji_pop') basic += sect('Emoji', `<input data-f="emoji" value="${esc(o.src || '')}"><div class="help">Dán một emoji bất kỳ. Thư viện Sticker bên trái có sẵn emoji 3D.</div>`, 'ti-mood-smile');
   if (o.type === 'logo_row') basic += sect('Logo (cách nhau dấu phẩy)', `<input data-f="icons" value="${esc((o.icons || []).map(i => (typeof i === 'object' ? i.icon : i)).join(', '))}"><div class="help">si:openai, si:claude, si:googlegemini, emoji 🤖…</div>`, 'ti-brand-apple');
   if (o.type === 'title_card') basic += sect('Thẻ kết', `<span class="lbl">Câu hỏi</span><input data-f="question" value="${esc(o.question ?? '')}"><span class="lbl">Chữ trong nhãn</span><input data-f="pilltext" value="${esc(o.pill?.text || 'Claude')}">`);
@@ -456,7 +460,9 @@ function inspTabs(c) {
     basic += sect('Ảnh / clip', `<select data-f="pmedia">${opt([['', typeof cur === 'object' && cur ? 'Video đã chọn' : '— Chọn từ Media —'], ...list.map(m => [m.path, m.name])], typeof cur === 'string' ? cur : '')}</select><div class="help">Nhập ảnh/video mới ở mục Media bên trái.</div>`, 'ti-photo'); }
   if (o.type === 'frame_grid') basic += sect('Khung video', `<span class="lbl">Làm mờ video (px)</span>${num('blur', typeof o.blur === 'number' ? o.blur : Array.isArray(o.blur) ? o.blur[o.blur.length - 1].v : 0)}<span class="lbl">Vào cảnh</span><select data-f="enter">${opt([['cut', 'Cắt'], ['blur', 'Mờ dần'], ['zoom', 'Phóng to']], o.enter || 'cut')}</select>`);
   basic += timeBlock(c);
-  return [['basic', 'Cơ bản', basic], ['pos', 'Vị trí', posBlock(c) || sect('', `<div class="help">Thành phần này không kéo thả được trên preview. ${tip('Sửa vị trí trong tab Nâng cao (JSON).')}</div>`)],
+  return [['basic', 'Cơ bản', basic], ...(Studio.animTab && ['photo', 'broll'].includes(o.type) ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204
+    ...(Studio.colorPanel && ['photo', 'broll'].includes(o.type) ? [['color', 'Màu', Studio.colorPanel(o, null, 'scene')]] : []), // S29 M208
+    ['pos', 'Vị trí', posBlock(c) || sect('', `<div class="help">Thành phần này không kéo thả được trên preview. ${tip('Sửa vị trí trong tab Nâng cao (JSON).')}</div>`)],
     ['json', 'Nâng cao', sect('Tham số đầy đủ (JSON)', `<textarea class="code" data-f="json">${esc(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' || k === 'lines' || k === 'nodes' ? undefined : v), 1))}</textarea>
       <div class="acts"><button data-act="json" class="primary"><i class="ti ti-check"></i> Áp dụng JSON</button></div>`, 'ti-code')]];
 }
@@ -715,6 +721,7 @@ function clipField(f, v, el) {
   pushUndo('clip' + i + f);
   const lab = el?.parentNode?.querySelector(`[data-v="${f}"]`);
   if (f === 'speed') { setClipSpeed(i, +v); if (lab) lab.textContent = r2(+v) + '×'; changed(); return; }
+  if ((f === 'in' || f === 'out') && !SpeedMap.plain(o)) { setClipRange(i, f, +v); changed(true); return; } // S29 M207: đường cong / ngược
   if (f === 'in' || f === 'out') {
     const sp = o.speed || 1, cur = f === 'in' ? (o.in || 0) : (o.out ?? 3);
     trimClip(i, f === 'in' ? 'l' : 'r', (+v - cur) / sp); changed(true); return;
@@ -1210,10 +1217,10 @@ const RULER_H = 28, VIDEO_H = 64, WAVE_H = 40;
 const lanes = list => { const ends = []; for (const c of list) { let l = ends.findIndex(e => e <= c.t0 + .001); if (l < 0) { l = ends.length; ends.push(0); } ends[l] = c.t1; c.lane = l; } return Math.max(1, ends.length); };
 function rulerStep() { for (const s of [.25, .5, 1, 2, 5, 10, 15, 30, 60, 120]) if (s * PPS >= 64) return s; return 300; }
 function clipStrip(k, w) {
-  const tw = Math.max(18, Math.round((VIDEO_H - 2) * DW / DH)), n = Math.min(400, Math.ceil(w / tw)), sp = k.c.speed || 1, f = clipFilterCss(k.c);
+  const tw = Math.max(18, Math.round((VIDEO_H - 2) * DW / DH)), n = Math.min(400, Math.ceil(w / tw)), f = clipFilterCss(k.c);
   let h = '';
   const fx = esc(f);
-  for (let j = 0; j < n; j++) h += `<i data-dw="${tw}" data-dbg="${esc(clipFrameUrl(k.c, (k.c.in || 0) + ((j + .5) * tw / PPS) * sp))}" data-dfx="${fx}"></i>`;
+  for (let j = 0; j < n; j++) h += `<i data-dw="${tw}" data-dbg="${esc(clipFrameUrl(k.c, srcAt(k, k.t0 + (j + .5) * tw / PPS)))}" data-dfx="${fx}"></i>`;
   return h;
 }
 function renderTimeline() {
@@ -1241,14 +1248,14 @@ function renderTimeline() {
         const w = Math.max(6, (k.t1 - k.t0) * PPS - 1), c = k.c, on = sel?.obj === c;
         return `<div class="clip ${on ? 'sel' : ''}" data-ci="${k.i}" data-dl="${k.t0 * PPS}" data-dw="${w}">
           <div class="strip">${clipStrip(k, w)}</div>
-          <div class="ctop"><span class="cn">${k.i + 1}</span>${c.speed && c.speed !== 1 ? `<span class="cb"><i class="ti ti-brand-speedtest"></i>${c.speed}×</span>` : ''}${c.mute ? '<span class="cb"><i class="ti ti-volume-off"></i></span>' : ''}${c.filter ? '<span class="cb"><i class="ti ti-color-filter"></i></span>' : ''}${c.flip ? '<span class="cb"><i class="ti ti-flip-vertical"></i></span>' : ''}<span class="cd">${r2(k.t1 - k.t0)}s</span></div>
-          <span class="h l"></span><span class="h r"></span></div>`;
+          <div class="ctop"><span class="cn">${k.i + 1}</span>${SpeedMap.label(c) ? `<span class="cb"><i class="ti ${c.hold != null ? 'ti-snowflake' : c.reverse ? 'ti-arrow-back-up' : 'ti-brand-speedtest'}"></i>${esc(SpeedMap.label(c))}</span>` : ''}${c.mute ? '<span class="cb"><i class="ti ti-volume-off"></i></span>' : ''}${c.filter ? '<span class="cb"><i class="ti ti-color-filter"></i></span>' : ''}${c.flip ? '<span class="cb"><i class="ti ti-flip-vertical"></i></span>' : ''}<span class="cd">${r2(k.t1 - k.t0)}s</span></div>
+          <span class="h l"></span><span class="h r"></span>${Studio._cblk.map(f => f(k, PPS)).join('')}</div>`;
       }).join('') + L.slice(1).map(k => `<button class="tb ${k.c.transition ? 'on' : ''}" data-tbi="${k.i}" data-dl="${k.t0 * PPS}" title="${k.c.transition ? 'Chuyển cảnh: ' + (TRANS_TYPES.find(x => x[0] === k.c.transition.type)?.[1] || k.c.transition.type) : 'Thêm chuyển cảnh'}"><i class="ti ${k.c.transition ? 'ti-transition-right' : 'ti-plus'}"></i></button>`).join('') + '</div>';
       lh += label(key, name, ic, VIDEO_H + 8);
       continue;
     }
     const list = comps.filter(c => c.track === key).sort((a, b) => a.t0 - b.t0);
-    if (!list.length && !['cap', 'audio'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
+    if (!list.length && !['cap', 'audio', 'efx'].includes(key) && !key.startsWith('xa:') && !TRK[key].lock && !TRK[key].hide) continue; // empty optional tracks stay out of the way
     const n = lanes(list), h = Math.max(28, n * 24 + 5);
     th += `<div class="track${lk}${hd}" data-track="${key}" data-dh="${h}">` + list.map(c => `<div class="blk ${sel?.obj === c.obj ? 'sel' : ''} ${c.obj.hidden ? 'off' : ''} ${c.obj.locked ? 'lockd' : ''} k-${c.kind}" data-cid="${c.obj.cid}"
       data-dl="${c.t0 * PPS}" data-dw="${Math.max(8, (c.t1 - c.t0) * PPS - 2)}" data-dt="${3 + c.lane * 24}" data-dbc="${TCOL[key]}" title="${esc(c.label)} · ${fmt(c.t0)}–${fmt(c.t1)}${esc(Studio._tip.map(f => f(c) || '').join(''))}">
@@ -1307,9 +1314,10 @@ $('#tllabels').addEventListener('click', e => {
   if (l) { const k = l.dataset.tlock; TRK[k].lock = !TRK[k].lock; if (TRK[k].lock && sel?.track === k) select(null); renderTimeline(); }
 });
 function seekFromX(clientX) { const r = $('#tlinner').getBoundingClientRect(); setTime(clamp((clientX - r.left) / PPS, 0, TL.duration - 1 / FPS)); }
+const extraSnaps = () => (window.Studio?._snap || []).flatMap(f => { try { return f() || []; } catch { return []; } }); // S28 M210: vạch nhịp (33_beats.js)
 function snap(t, self) {
   if (!SNAP) return t;
-  const cands = [T, 0, ...clipLayout().flatMap(k => [k.t0, k.t1]), ...comps.filter(c => c.obj !== self && c.track && c.kind !== 'clip').flatMap(c => [c.t0, c.t1])];
+  const cands = [T, 0, ...clipLayout().flatMap(k => [k.t0, k.t1]), ...comps.filter(c => c.obj !== self && c.track && c.kind !== 'clip').flatMap(c => [c.t0, c.t1]), ...extraSnaps()];
   for (const x of cands) if (Math.abs(x - t) * PPS < 7) return x;
   return t;
 }
@@ -1357,7 +1365,7 @@ function clipDragMove(e) {
   const o = JSON.parse(tdrag.base); TL = o.TL; CAP = o.CAP;
   const edgeT = mode === 'r' ? k.t1 : k.t0;
   let target = edgeT + d;
-  if (SNAP) { for (const x of [T, ...clipLayout().filter(q => q.i !== i).flatMap(q => [q.t0, q.t1])]) if (Math.abs(x - target) * PPS < 7) { target = x; break; } }
+  if (SNAP) { for (const x of [T, ...clipLayout().filter(q => q.i !== i).flatMap(q => [q.t0, q.t1]), ...extraSnaps()]) if (Math.abs(x - target) * PPS < 7) { target = x; break; } }
   trimClip(i, mode, target - edgeT);
   build(); sel = compOf(TL.clips[i]); renderTimeline(); needInit = true; draw();
 }
@@ -1438,10 +1446,11 @@ const audFor = src => { const p = previewSrc(src); if (!clipAud.has(p)) clipAud.
 function syncClipAudio(force) {
   let want = null;
   const k = playing && TL.clips?.length ? clipAtT(T) : null;
-  if (k && k.c.audio && !k.c.mute && T < k.t1 - .02) {
+  const rate = k ? SpeedMap.speedAt(k.c, T - k.t0) : 0; // S29 M207: đứng hình / ngược / nhanh hơn 4× = im lặng (như bản xuất)
+  if (k && k.c.audio && !k.c.mute && !k.c.reverse && rate > 0 && rate <= 4 && T < k.t1 - .02) {
     want = audFor(k.c.audio);
     const st = srcAt(k, T);
-    want.playbackRate = k.c.speed || 1; want.volume = clamp(k.c.volume ?? 1, 0, 1);
+    want.playbackRate = clamp(rate, .25, 4); want.volume = clamp((k.c.kf && window.KF?.valueAt(k.c.kf, 'volume', T - k.t0)) ?? k.c.volume ?? 1, 0, 1); // S29 M209: key âm lượng
     if (want.paused || force || curClip !== k.i || Math.abs(want.currentTime - st) > .25) { want.currentTime = st; want.play().catch(() => {}); }
   }
   curClip = k ? k.i : -1;
@@ -1486,6 +1495,7 @@ function tick() {
     const inside = T >= m.t0 && T < m.t1;
     if (inside && el.paused) { el.currentTime = (T - m.t0 + (m.offset || 0)) % (el.duration || 1e9); el.play().catch(() => {}); }
     if (!inside && !el.paused) el.pause();
+    if (inside && m.kf) { const g = window.KF?.valueAt(m.kf, 'gain', T - m.t0); if (g != null) el.volume = dbVol(g + 4); } // S29 M209: key âm lượng nhạc
   }
   for (const f of Studio._play) f('tick', T);
   lastT = T;
@@ -1849,6 +1859,8 @@ const Studio = window.Studio = {
   $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, newProject, openTemplates: openTemplatesFor, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
   select, sect, openSect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
+  // S28 M202: xem thử trên khung chính bằng TL tạm (79_transpeek.js): previewTL(tl) = bản engine của tl; redraw() = dựng lại từ TL thật
+  previewTL: src => previewTL(src), redraw() { needInit = true; draw(); },
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
   FONTS, SWATCH, ANIM_LIST, fontOpt, setTimes: (c, t0, t1) => setTimes(c, t0, t1, false), rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
   removeSel, duplicateSel, splitAtPlayhead,
@@ -1860,8 +1872,9 @@ const Studio = window.Studio = {
   // S20 M142: bảng Lớp (67_layers.js): tab thêm của panel Thành phần, danh sách element, track khoá, cuộn timeline tới khối
   get comps() { return comps; }, trackLocked: c => !!TRK[c?.track]?.lock, revealOnTimeline: c => revealOnTimeline(c), pickAll: (x, y) => pickAll(x, y),
   addCompTab(key, label, fn, title, first) { if (!COMP_EXT[key]) { COMP_TABS[first ? 'unshift' : 'push']([key, label, title]); if (first) tab = key; } COMP_EXT[key] = fn; if (panel === 'comp') renderComps(); },
-  _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
+  _insp: [], _ready: [], _blk: [], _cblk: [], // _cblk: fn(clipLayout item, PPS) -> HTML trong khối clip Video chính (S29 M209: chấm keyframe); _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _tip: [], _itop: [], // S27 M194: _tip: fn(comp) -> chữ thêm vào tooltip khối timeline; _itop: fn(comp) -> HTML đầu Thuộc tính (dưới hàng Hỏi Claude)
+  _snap: [], // S28 M210: fn() -> [giây] thêm mốc cho nam châm (mép clip, element, chỗ nối)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
   // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … }, { step: 'build', level: 'basic' })
   // opts (optional, M82): step 'prep'|'source'|'build'|'check'|'ship'|'settings', level 'basic'|'pro' — read by features/01_workflow.js

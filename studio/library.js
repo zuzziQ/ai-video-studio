@@ -26,7 +26,7 @@ const TEXT_PRESETS = [
   { name: 'Chữ tối', text: 'Ghi chú', p: { style: 'dark', size: 52, anim: 'slide_l', italic: false, weight: 800, upper: false }, css: 'color:#111;font:800 19px Montserrat,var(--font-sans);background:#fff;padding:2px 8px;border-radius:4px' }, // design-token-ok: preset preview = text colours of the video
   { name: 'Oswald', text: 'TIN NÓNG', p: { style: 'white', size: 70, anim: 'slide_r', font: "'Oswald'", italic: false, weight: 700 }, css: 'color:#fff;font:700 22px Oswald,var(--font-sans);text-shadow:2px 2px 0 #000;letter-spacing:.02em' }, // design-token-ok: preset preview = text colours of the video
 ];
-const ANIM_LIST = [['pop', 'Bật'], ['fade', 'Mờ dần'], ['slide_l', 'Trượt trái'], ['slide_r', 'Trượt phải'], ['drop', 'Rơi'], ['blur_zoom', 'Nhoè'], ['fly', 'Bay'], ['tumble', 'Lật'], ['type', 'Đánh máy']];
+const ANIM_LIST = FX.animList(); // S28 M202: engine/fx_registry.js FX.TEXT_IN
 
 function renderRail() {
   $('#rail').innerHTML = RAIL.map(([k, ic, name]) => `<button data-p="${k}" class="${panel === k ? 'on' : ''}"><i class="ti ${ic}"></i><span>${name}</span></button>`).join('');
@@ -41,7 +41,7 @@ function openPanel(p) {
 }
 const PANEL_TITLE = Object.fromEntries(RAIL.map(r => [r[0], r[2]]));
 const EXTRA_PANELS = {}; // id -> render fn, added by features via Studio.addPanel
-const SEARCH_PH = { media: 'Tìm media / b-roll (Enter)…', audio: 'Tìm nhạc, SFX…', fx: 'Tìm hiệu ứng…', comp: 'Tìm chữ…', sticker: '', tpl: 'Tìm mẫu…', text: '', trans: '', filter: '' };
+const SEARCH_PH = { media: 'Tìm media / b-roll (Enter)…', audio: 'Tìm nhạc, SFX…', fx: 'Tìm hiệu ứng…', comp: 'Tìm chữ…', sticker: '', tpl: 'Tìm mẫu…', text: '', trans: 'Tìm chuyển cảnh…', filter: '' };
 function renderPanel() {
   $('#libtitle').textContent = PANEL_TITLE[panel];
   $('#libsearch').style.display = SEARCH_PH[panel] ? '' : 'none';
@@ -454,6 +454,7 @@ function libDragItem(el) {
   if ((b = el.closest('[data-tp]'))) return ['text', b.dataset.tp];
   if ((b = el.closest('[data-st]'))) return ['sticker', b.dataset.st];
   if ((b = el.closest('[data-fx]'))) return ['fx', b.dataset.fx];
+  if ((b = el.closest('[data-efxadd]'))) return ['efx', b.dataset.efxadd]; // S28 M206: hiệu ứng khung hình → track Hiệu ứng
   if ((b = el.closest('.mcell[data-m]'))) return ['media', b.dataset.m];
   if ((b = el.closest('.mcell[data-k]'))) return ['kho', b.dataset.k];
   return null;
@@ -470,6 +471,7 @@ function libInsert(d, where, o = {}) {
   if (d.kind === 'text') return addText(+d.id >= 0 ? TEXT_PRESETS[+d.id] : undefined, at);
   if (d.kind === 'sticker') return STICKERS.includes(d.id) && addSticker(d.id, at);
   if (d.kind === 'fx') { const [i, j] = d.id.split(':').map(Number); return packs()[i]?.items[j] && addPackItem(i, j, at); }
+  if (d.kind === 'efx') return window.Studio?.fxtrack?.add(d.id, where === 'timeline' ? o.t : undefined); // S28 M206 (81_fxtrack.js)
   const how = where === 'stage' ? 'overlay' : DropCore.mediaHow(o.track);
   if (d.kind === 'kho') { const it = KHOM?.items?.[+d.id]; return it && useKho(it, how, where === 'timeline' ? o.t : undefined); }
   const m = MEDIA[+d.id]; if (!m) return;
@@ -498,7 +500,9 @@ function libAct(kind, id, how) {
   if (kind === 'sfx') return addSfx(id);
   if (kind === 'trans') {
     if (how === 'all') {
-      pushUndo(); TL.clips.forEach((c, i) => { if (i) { if (id) c.transition = { type: id, dur: r2(transDur) }; else delete c.transition; } }); changed(true); renderPanel();
+      // S29 M203: chỗ nối đang chọn cùng loại thì chép nguyên { type, dur, params } (giữ tham số)
+      const src = sel?.kind === 'clip' && sel.obj.transition?.type === id ? sel.obj.transition : id ? { type: id, dur: r2(transDur) } : null;
+      pushUndo(); TL.clips.forEach((c, i) => { if (i) { if (src) c.transition = JSON.parse(JSON.stringify(src)); else delete c.transition; } }); changed(true); renderPanel();
       return toast(id ? `Đã áp dụng “${id}” cho ${TL.clips.length - 1} chỗ nối` : 'Đã bỏ chuyển cảnh ở mọi chỗ nối');
     }
     if (sel?.kind !== 'clip') { const k = clipAtT(T); if (k && k.i > 0) { select(compOf(k.c)); } else return toast('Chọn một clip (không phải clip đầu)'); }
@@ -650,7 +654,7 @@ function panelFx() {
       return `<button class="fx" data-fx="${i}:${j}" draggable="true" title="${esc(it.label)} · ${esc(it.type)}"><span class="fth ${DW > DH ? 'h' : ''}">${has(k) ? `<img loading="lazy" src="/studio/thumbs/${k}.jpg" onerror="this.remove()" draggable="false">` : ''}<em>${esc(p.icon || '✦')}</em></span><small>${esc(it.label)}</small></button>`;
     }).join('')}</div></div>`;
   }).join('');
-  $('#libbody').innerHTML = (packs().length ? '' : '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang nạp engine…</div>') + (groups || (packs().length ? empty('ti-search-off', 'Không tìm thấy hiệu ứng', '') : ''));
+  $('#libbody').innerHTML = (window.Studio?.fxtrack?.panelHtml(q) || '') + (packs().length ? '' : '<div class="loading"><i class="ti ti-loader-2 spin"></i> Đang nạp engine…</div>') + (groups || (packs().length ? empty('ti-search-off', 'Không tìm thấy hiệu ứng', '') : ''));
 }
 // Pack demo items point at sample files (broll/01.jpg, ui/…png) most projects don't have → use the project's own images instead.
 const DEMO_MEDIA = /^(broll|ui)\/[\w.-]+\.(jpe?g|png|webp)$/i;
@@ -672,15 +676,18 @@ async function addPackItem(i, j, o = {}) {
 function panelTrans() {
   const c = sel?.kind === 'clip' ? sel : null, cur = c?.obj.transition?.type || '';
   $('#libbody').innerHTML = `<div class="help">${c ? (c.idx === 0 ? 'Clip đầu tiên không có chuyển cảnh vào — chọn clip phía sau.' : `Áp dụng cho chuyển cảnh <b>vào clip ${c.idx + 1}</b>.`) : `Chọn một clip trên track chính. ${tip('Hoặc kéo hiệu ứng thả vào chỗ nối giữa hai clip.')}`}</div>
-    <div class="slrow"><span>Thời lượng</span><input type="range" min=".1" max="1.5" step=".05" value="${c?.obj.transition?.dur ?? transDur}" data-transdur><b id="tdv">${(c?.obj.transition?.dur ?? transDur).toFixed(2)}s</b></div>
-    <div class="trgrid"><button class="tr ${cur ? '' : 'on'}" data-tr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
-    ${TRANS_TYPES.map(([k, l, ic]) => `<button class="tr ${cur === k ? 'on' : ''}" data-tr="${k}" draggable="true"><span class="demo t-${k}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
+    <div class="slrow"><span>Thời lượng</span><input type="range" min=".1" max="3" step=".05" value="${c?.obj.transition?.dur ?? transDur}" data-transdur><b id="tdv">${(c?.obj.transition?.dur ?? transDur).toFixed(2)}s</b></div>
+    ${window.Studio?.transUI ? Studio.transUI.grid(cur, 'tr', query) /* S29 M203: tab nhóm + tìm (83_transui.js) */ : `<div class="trgrid"><button class="tr ${cur ? '' : 'on'}" data-tr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
+    ${TRANS_TYPES.map(([k, l, ic]) => `<button class="tr ${cur === k ? 'on' : ''}" data-tr="${k}" draggable="true"><span class="demo t-${k}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>`}
+    ${c?.obj.transition ? `<div class="help">Nhịp, hướng, màu, cường độ: mục Chuyển cảnh trong Thuộc tính của clip.</div>` : ''}
     <button class="wide" data-trall><i class="ti ti-copy"></i> Áp dụng cho mọi clip</button>`;
 }
 function setTransition(i, type, dur = transDur) {
   const c = TL.clips?.[i]; if (!c || i === 0) return toast('Clip đầu tiên không có chuyển cảnh vào');
   pushUndo();
-  if (type) c.transition = { type, dur: r2(dur) }; else delete c.transition;
+  // S29 M203: đổi loại giữ tham số loại mới cũng có (ease, dir…)
+  const params = type && window.Studio?.transUI?.cleanParams(type, c.transition?.params);
+  if (type) c.transition = { type, dur: r2(dur), ...(params ? { params } : {}) }; else delete c.transition;
   changed(true); if (panel === 'trans') renderPanel();
 }
 

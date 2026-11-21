@@ -730,6 +730,49 @@ const cover = {
   },
 };
 
+// S29 M208: Claude chọn màu cho một clip — đọc ảnh nhỏ giữa clip + màu / giọng thương hiệu + thói quen đã học (M192, chỉ là dữ liệu)
+// → một bộ { preset, strength 0–100, …Adjust } kẹp theo engine/fx_registry.js (FX.colorClean); Studio đặt thẻ Nhận / Bỏ ở tab Claude.
+const FXR = createRequire(import.meta.url)('../engine/fx_registry.js');
+const color = {
+  label: 'Claude chọn màu',
+  check(raw) {
+    const b = obj(raw);
+    const image = decodeImage(b.image);
+    if (!image) throw bad('Cần ảnh khung hình của clip');
+    const br = b.brand && typeof b.brand === 'object' && !Array.isArray(b.brand) ? b.brand : {};
+    const cols = ['primary', 'accent', 'dark', 'light'].map(k => [k, String(br[k] || '').toUpperCase()]).filter(([, v]) => hexOk(v));
+    const taste = Array.isArray(b.taste) ? b.taste.slice(0, 8).map(s => str(s, 200)).filter(Boolean) : [];
+    return { image, brand: { name: str(br.name, 80), voice: str(br.voice, 200), colors: Object.fromEntries(cols) }, taste, current: FXR.colorClean(b.current) };
+  },
+  image: i => i.image, imageName: 'frame',
+  prompt(i) {
+    const cols = Object.entries(i.brand.colors).map(([k, v]) => `${k} ${v}`).join(', ');
+    return [
+      'Bạn chỉnh MÀU cho một clip trong video ngắn tiếng Việt (kiểu chỉnh màu của app edit: bộ lọc + cường độ + vài thanh Adjust).',
+      `Thư mục hiện tại có file frame.${i.image.ext}: một khung giữa clip. DÙNG CÔNG CỤ Read để XEM file đó trước khi trả lời.`,
+      FXR.colorGuide(),
+      i.brand.name ? 'Thương hiệu: ' + i.brand.name : '', i.brand.voice ? 'Giọng thương hiệu: ' + i.brand.voice : '', cols ? 'Màu thương hiệu: ' + cols : '',
+      i.taste.length ? dataBlock('Thói quen đã học của thương hiệu (gu)', i.taste.join('\n')) : '',
+      Object.keys(i.current).length ? 'Màu đang có của clip: ' + JSON.stringify(i.current) : '',
+      'Nhìn ánh sáng, da người, tông nền: sửa lỗi trước (thiếu sáng → exposure / shadows, cháy sáng → highlights âm, nhạt → saturate), rồi mới tạo không khí hợp thương hiệu. Giữ da người tự nhiên; cường độ bộ lọc vừa phải (thường 40–80); chỉ đặt 2–5 thanh Adjust cần thiết.',
+      'Trả về DUY NHẤT một JSON: {"preset":"<id bộ lọc hoặc rỗng>","strength":<0–100>,"adjust":{"<id thanh>":<số>},"why":"<≤ 16 từ, vì sao>"}',
+    ].filter(Boolean).join('\n\n');
+  },
+  normalize(v) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('cần một object JSON');
+    const adj = v.adjust && typeof v.adjust === 'object' && !Array.isArray(v.adjust) ? v.adjust : {};
+    const raw = { ...adj, preset: str(v.preset, 20).toLowerCase(), strength: v.strength };
+    const filter = FXR.colorClean(raw), warnings = [];
+    if (raw.preset && !filter.preset) warnings.push(`Bỏ bộ lọc lạ “${raw.preset}”.`);
+    const odd = Object.keys(adj).filter(k => !FXR.ADJ.some(a => a.id === k));
+    if (odd.length) warnings.push('Bỏ thanh lạ: ' + odd.slice(0, 4).join(', ') + '.');
+    if (!Object.keys(filter).length) throw new Error('không có bộ lọc hay thanh Adjust nào hợp lệ');
+    const why = str(v.why, 160);
+    const lut = filter.preset ? FXR.get('lut', filter.preset).label : 'Không bộ lọc';
+    return { fields: [{ key: 'color', label: 'Màu cho clip', kind: 'color', value: { filter, why }, display: `${lut}${filter.preset ? ` ${filter.strength ?? 100}%` : ''}${why ? ' · ' + why : ''}` }], warnings };
+  },
+};
+
 /** Soát các câu claim bằng scripts/ad_gates.py --script (chính sách Meta/TikTok + cụm từ rủi ro). null khi không chạy được. */
 export function adGates(texts, industry, { py, adGatesScript = path.join(SKILL, 'scripts/ad_gates.py') } = {}) {
   const payload = { beats: texts.map(text => ({ text, type: 'body', where: 'claim' })), ads: { ...(INDUSTRIES.includes(industry) ? { industry } : {}) } };
@@ -910,7 +953,7 @@ const transcript = {
 };
 
 // ---------------------------------------------------------------- bảng trợ lý + chạy
-export const ASSISTANTS = { brand, product, text, captions, templates, cover, transcript };
+export const ASSISTANTS = { brand, product, text, captions, templates, cover, transcript, color };
 export const list = () => Object.entries(ASSISTANTS).map(([name, a]) => ({ name, label: a.label }));
 export const has = name => Object.hasOwn(ASSISTANTS, name);
 export function check(name, raw) { if (!has(name)) throw new AssistError('Không có trợ lý ' + String(name).slice(0, 40), 404); return ASSISTANTS[name].check(raw); }

@@ -46,7 +46,8 @@ test('lượt Claude chỉ áp phần đã chọn', () => {
   const ai = read('studio/features/20_ai.js');
   assert.match(ai, /if \(!only\.graphic\) plan = \{ \.\.\.plan, pack: TL\.pack, caption_style: TL\.caption_style, hook: null, scenes: null \}/);
   assert.match(ai, /if \(plan\.scenes\) TL\.scenes =/);
-  assert.match(ai, /if \(plan\.sfx\) TL\.audio\.sfx =/);
+  assert.match(ai, /if \(plan\.sfx\) \{\s*TL\.audio\.sfx =/); // M210: khối nhịp cùng nhánh "Nhạc và SFX"
+  assert.match(ai, /if \(plan\.sfx\) \{[^}]*?\n[^]*?for \(const k of \['fx', 'efx'\]\)/);
   assert.match(ai, /applyPlan\(plan, \{ only \}\)/);
 });
 

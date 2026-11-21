@@ -34,6 +34,7 @@ P = lambda p: p if os.path.isabs(p) else os.path.join(base, p)
 dur = tl["duration"]
 SKILL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kf_env  # noqa: E402  S29 M209: đường bao âm lượng từ keyframe
 
 
 def find(d, stem):
@@ -45,27 +46,24 @@ def find(d, stem):
 
 # Main track made of clips (TL.clips, references/clips.md): build the voice by trimming each clip's audio
 # (in/out, speed via atempo, volume, mute; stills and silent clips become silence) and concatenating.
+# S29 M207: speed curve / reverse / freeze (hold) via speed_curve.clip_graph (same maths as engine/speed.js).
+# S29 M209: clip.kf volume keys -> volume envelope after the clip's chain (kf_env.py, same maths as engine/kf.js).
 def clips_voice(clips):
+    import speed_curve
     parts, ins, fc = [], [], []
     for c in clips:
         if c.get("hidden"):
             continue
-        sp = c.get("speed", 1) or 1
-        d = max(1 / 30, (c.get("out", 3) - c.get("in", 0)) / sp)
+        d = speed_curve.dur(c)
         k = len(parts)
         src = c.get("audio")
-        if src and not c.get("mute") and os.path.exists(P(src)):
+        live = src and not c.get("mute") and c.get("hold") is None and os.path.exists(P(src))
+        if live:
             ins += ["-i", P(src)]
-            tempo, chain = sp, []
-            while tempo > 2.0:
-                chain.append("atempo=2.0"); tempo /= 2.0
-            while tempo < 0.5:
-                chain.append("atempo=0.5"); tempo /= 0.5
-            chain.append(f"atempo={tempo:.4f}")
-            fc.append(f"[{len(ins) // 2 - 1}:a]atrim=start={c.get('in', 0)}:end={c.get('out', 3)},asetpts=PTS-STARTPTS,"
-                      f"aresample=48000,aformat=channel_layouts=stereo,{','.join(chain)},volume={c.get('volume', 1)},apad,atrim=duration={d:.3f}[p{k}]")
-        else:
-            fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={d:.3f}[p{k}]")
+        vf = kf_env.volume_filter(c.get("kf")) if live else None  # S29 M209: âm lượng theo keyframe (giây trong clip)
+        fc += speed_curve.clip_graph(dict(c, volume=1) if vf else c, f"{len(ins) // 2 - 1}:a" if live else None, f"q{k}" if vf else f"p{k}", d)
+        if vf:
+            fc.append(f"[q{k}]{vf}[p{k}]")
         parts.append(f"[p{k}]")
     out = P(".studio/voice_clips.wav")
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -150,7 +148,7 @@ for i, m in enumerate(A.get("music", [])):
     xf = m.get("xfade", 0.12)
     fi, fo = max(xf, m.get("fade_in") or 0), max(xf, m.get("fade_out") or 0)
     graph.append(f"[{idx}:a]atrim=start={m.get('offset', 0)}:duration={d + xf},asetpts=PTS-STARTPTS,aresample=48000,"
-                 f"afade=t=in:d={fi},afade=t=out:st={max(0, d + xf - fo)}:d={fo},volume={m.get('gain', -20)}dB,adelay={int(m['t0'] * 1000)}:all=1[m{i}]")
+                 f"afade=t=in:d={fi},afade=t=out:st={max(0, d + xf - fo)}:d={fo},{kf_env.gain_filter(m.get('kf'), m.get('gain', -20))},adelay={int(m['t0'] * 1000)}:all=1[m{i}]")
     music_labels.append(f"[m{i}]")
 sfx_labels = []
 for i, s in enumerate(A.get("sfx", [])):

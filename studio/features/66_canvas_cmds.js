@@ -34,12 +34,17 @@
     const font = `<select data-cb="font" title="Font" aria-label="Font">${S.fontOpt ? S.fontOpt(o.font) : opt(S.FONTS, o.font)}</select>`; // S21 M148: font thương hiệu đứng đầu
     if (k === 'text') return font + sizeCtl + color +
       btn('bold', 'ti-bold', 'Đậm', `class="${(o.weight ?? 900) >= 700 ? 'on' : ''}" aria-pressed="${(o.weight ?? 900) >= 700}"`) +
-      `<select data-cb="anim" title="Hoạt ảnh vào" aria-label="Hoạt ảnh vào">${opt(S.ANIM_LIST, o.anim || 'pop')}</select>` + layerBtns(c) + btn('more', 'ti-dots', 'Thêm');
+      `<select data-cb="anim" title="Hoạt ảnh vào" aria-label="Hoạt ảnh vào">${opt(S.ANIM_LIST, o.anim || 'pop')}</select>` + animOutLoop(c) + layerBtns(c) + btn('more', 'ti-dots', 'Thêm');
     if (k === 'cap') return font + sizeCtl + color + btn('more', 'ti-dots', 'Thêm');
     return `<button data-cb="replace" class="txt" title="Thay bằng mục khác trong thư viện"><i class="ti ti-replace"></i> Thay</button>` + layerBtns(c) +
       `<span class="sep"></span>${btn('dup', 'ti-copy', 'Nhân bản (⌘D)')}${btn('del', 'ti-trash', 'Xoá (Delete)', 'class="danger"')}${btn('more', 'ti-dots', 'Thêm')}`;
   }
-  const keyOf = c => JSON.stringify([c.obj.cid, c.kind, c.obj.font, c.obj.weight, c.obj.color, c.obj.anim, Math.round(S.getPos(c)?.size || 0), scenes().length,
+  // S28 M205: Ra / Lặp của dòng chữ (bộ anim chung, FX.ANIM_OUT / FX.ANIM_LOOP); '' = không có (Ra = mờ dần chung như cũ)
+  const typeOf = v => (v && typeof v === 'object' ? v.type : v) || '';
+  const animOutLoop = c => (c.kind !== 'line' || !window.FX ? '' :
+    `<select data-cba="out" title="Hoạt ảnh ra" aria-label="Hoạt ảnh ra">${opt([['', 'Ra: mờ'], ...FX.animOutList()], typeOf(c.obj.anim_out))}</select>` +
+    `<select data-cba="loop" title="Hoạt ảnh lặp" aria-label="Hoạt ảnh lặp">${opt([['', 'Lặp: không'], ...FX.animLoopList()], typeOf(c.obj.anim_loop))}</select>`);
+  const keyOf = c => JSON.stringify([c.obj.cid, c.kind, c.obj.font, c.obj.weight, c.obj.color, c.obj.anim, typeOf(c.obj.anim_out), typeOf(c.obj.anim_loop), Math.round(S.getPos(c)?.size || 0), scenes().length,
     C.layerOf(c, scenes())?.arr?.indexOf(C.layerOf(c, scenes())?.item)]);
 
   // Đặt lại thanh nổi sau mỗi lần vẽ khung chọn (drawOverlay → Studio._ov).
@@ -83,6 +88,8 @@
       case 'dup': return S.duplicateSel();
       case 'cut': case 'copy': return S.copySel(id === 'cut');
       case 'paste': return S.pasteClip();
+      case 'pcopy': return copyProps();
+      case 'ppaste': return pasteDlg();
       case 'lock': return S.toggleLock();
       case 'del': return S.removeSel();
       case 'split': return S.splitAtPlayhead();
@@ -96,7 +103,11 @@
   }
   bar.addEventListener('mousedown', e => { if (!e.target.closest('select')) e.preventDefault(); }); // không lấy focus khỏi preview
   bar.addEventListener('click', e => { const b = e.target.closest('button[data-cb]'); if (b && !b.disabled) run(b.dataset.cb, b); });
-  bar.addEventListener('change', e => { const s = e.target.closest('select[data-cb]'); if (s) setField(s.dataset.cb, s.value); });
+  bar.addEventListener('change', e => {
+    const s = e.target.closest('select[data-cb]'); if (s) return setField(s.dataset.cb, s.value);
+    const a = e.target.closest('select[data-cba]'); if (!a || !sel()) return;
+    const o = sel().obj; S.touch(o, 'anim_' + a.dataset.cba); C.animSet(o, a.dataset.cba, a.value); S.changed(true);
+  });
 
   // Bảng màu nhỏ dưới nút Màu
   function togglePop(anchor) {
@@ -116,10 +127,65 @@
   }
   function closePop() { pop?.remove(); pop = null; }
 
+  // ---- S29 M211: Chép / Dán thuộc tính (lõi KeysCore.propsCopy / propsApply của 67_keys.core.js, đọc lúc chạy) ----
+  // Clipboard thuộc tính trong trang, riêng với clipboard element (⌘C / ⌘V). Dán: hộp tích chọn nhóm, lên mục đang chọn (cả nhóm
+  // Shift) hoặc mọi mục cùng loại; một bước hoàn tác. Tốc độ đi qua clips.js (setClipSpeed / setClipCurve / setClipReverse: ripple).
+  let PCLIP = null;
+  const K = () => window.KeysCore;
+  const kindOf = c => (c && K() ? K().propKind(c, c.kind === 'efx' && !!window.FX?.get('fx', c.obj?.type)?.color) : null);
+  const KIND_VI = { clip: 'clip', media: 'b-roll / ảnh phủ', elem: 'hình khối / sticker / element', text: 'dòng chữ', efx: 'khối Điều chỉnh' };
+  function copyProps() {
+    const c = sel(), k = kindOf(c), clip = k && K().propsCopy(c.obj, k, c.t0);
+    if (!clip) return S.toast('Mục này chưa đặt hoạt ảnh, màu, mặt nạ, chuyển cảnh, tốc độ hay keyframe để chép');
+    PCLIP = clip;
+    S.toast(`Đã chép: ${K().PROP_GROUPS.filter(g => clip.groups[g.id]).map(g => g.label).join(', ')} · chuột phải mục khác → Dán thuộc tính`);
+  }
+  function pasteDlg() {
+    const c = sel(); if (!c || !PCLIP) return;
+    const kinds = [...new Set([c, ...S.multi].map(kindOf).filter(Boolean))];
+    const groups = K().PROP_GROUPS.filter(g => kinds.some(k => K().pasteGroups(PCLIP, k).includes(g.id)));
+    if (!groups.length) return S.toast('Thuộc tính đã chép không hợp với mục này');
+    const k0 = kindOf(c), many = S.multi.length ? ` (${S.multi.length + 1} mục đang chọn)` : '';
+    modal(`<h3><i class="ti ti-clipboard-check"></i> Dán thuộc tính${esc(many)}</h3>
+      <p>Chọn nhóm cần dán. Nhóm được dán thay hẳn thiết lập cũ của nhóm đó; ⌘Z hoàn tác cả lần dán.</p>
+      <div class="pp-list">${groups.map(g => `<label class="check"><input type="checkbox" data-pp="${g.id}" checked> ${esc(g.label)}</label>`).join('')}</div>
+      ${k0 ? `<label class="check pp-all"><input type="checkbox" data-ppall> Dán cho mọi ${esc(KIND_VI[k0])} trong dự án</label>` : ''}
+      <div class="actions"><button data-ppgo class="primary"><i class="ti ti-clipboard-check"></i> Dán</button><button data-ppno>Huỷ</button></div>`);
+  }
+  function speedTo(i, v) {
+    if (v.speedCurve != null) setClipCurve(i, v.speedCurve); else setClipSpeed(i, v.speed ?? 1);
+    setClipReverse(i, !!v.reverse);
+  }
+  function pasteProps(ids, all) {
+    const c = sel(); if (!c || !PCLIP || !ids.length) return;
+    const k0 = kindOf(c), list = (all ? (S.comps || []).filter(x => kindOf(x) === k0) : [c, ...S.multi]).filter(x => kindOf(x) && !x.obj.locked);
+    if (!list.length) return S.toast('Mục đang khoá · ⌥⇧L để mở khoá');
+    S.pushUndo();
+    let m = 0;
+    for (const x of list) {
+      const k = kindOf(x), use = k === 'clip' && !x.idx ? ids.filter(i => i !== 'trans') : ids; // clip đầu không có chuyển cảnh vào
+      if (x.kind !== 'clip' && !x.obj._orig) x.obj._orig = JSON.parse(JSON.stringify(x.obj, (q, v) => (q === 'cid' || q === '_orig' ? undefined : v)));
+      const r = K().propsApply(x.obj, k, PCLIP, use, x.t0);
+      if (r.speed && x.kind === 'clip' && x.obj.hold == null) speedTo(x.idx, r.speed);
+      if (r.n) m++;
+    }
+    S.changed(true);
+    S.toast(m ? `Đã dán thuộc tính cho ${m} mục` : 'Không mục nào nhận được nhóm đã chọn');
+  }
+  document.addEventListener('click', e => {
+    const box = e.target.closest?.('#modalbox'); if (!box?.querySelector('[data-ppgo]')) return;
+    if (e.target.closest('[data-ppno]')) return closeModal();
+    if (!e.target.closest('[data-ppgo]')) return;
+    const ids = [...box.querySelectorAll('[data-pp]:checked')].map(i => i.dataset.pp), all = !!box.querySelector('[data-ppall]:checked');
+    closeModal(); pasteProps(ids, all);
+  });
+  S.props = { copy: copyProps, paste: pasteProps, get clip() { return PCLIP; } };
+
   // ---- menu chuột phải ----
   function openMenu(x, y) {
     const c = sel(); if (!c) return;
-    const items = C.menuItems(c, { scenes: scenes(), hasOrig: !!c.obj._orig, hidden: !!c.obj.hidden, canEditText: !!window.StageCore?.canEditText(c.kind, c.obj), canSplit: c.kind === 'clip', locked: !!c.obj.locked, canPaste: S.canPaste });
+    const items = C.menuItems(c, { scenes: scenes(), hasOrig: !!c.obj._orig, hidden: !!c.obj.hidden, canEditText: !!window.StageCore?.canEditText(c.kind, c.obj), canSplit: c.kind === 'clip', locked: !!c.obj.locked, canPaste: S.canPaste,
+      props: !!kindOf(c), canPasteProps: [c, ...S.multi].some(x => window.KeysCore?.pasteGroups(PCLIP, kindOf(x)).length > 0) });
     if (!items.length) return;
     closePop();
     menu.innerHTML = items.map(it => (it === '-' ? '<hr>' : `<button role="menuitem" data-mi="${it.id}" class="${it.danger ? 'danger' : ''}" ${it.off ? 'disabled' : ''}>

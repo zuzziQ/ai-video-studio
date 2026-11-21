@@ -19,10 +19,25 @@
     : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(kk => [kk, v[kk]])) : v));
   const STEPS = { prep: 'Chuẩn bị', source: 'Nguồn', build: 'Dựng', check: 'Kiểm tra', ship: 'Xuất và đăng' };
   const ELEM_KINDS = ['line', 'cap', 'node', 'badge', 'scene'];
-  // = TRANS_TYPES của studio/clips.js (id); đổi ở đó thì đổi ở đây
-  const TRANS = ['fade', 'dissolve', 'slide_l', 'slide_r', 'slide_up', 'push', 'zoom', 'zoom_out', 'blur', 'whip', 'spin', 'wipe', 'circle', 'flash', 'glitch'];
-  const TRANS_VI = { fade: 'mờ dần', dissolve: 'hoà tan', slide_l: 'trượt trái', slide_r: 'trượt phải', slide_up: 'trượt lên', push: 'đẩy', zoom: 'phóng vào',
-    zoom_out: 'thu ra', blur: 'nhoè', whip: 'lia nhanh', spin: 'xoay', wipe: 'gạt', circle: 'vòng tròn', flash: 'loé sáng', glitch: 'nhiễu' };
+  // S28 M202: chuyển cảnh đọc từ engine/fx_registry.js (trình duyệt: window.FX nạp trước clips.js; Node: require)
+  const FX = typeof module === 'object' && module.exports ? require('../../engine/fx_registry.js') : root.FX;
+  const TRANS = FX.ids('trans');
+  const TRANS_VI = Object.fromEntries(FX.TRANS.map(x => [x.id, x.label.toLocaleLowerCase('vi')]));
+  // Mô tả cho mô hình chọn chuyển cảnh theo nội dung (không chọn bừa): một dòng mỗi loại từ FX.TRANS[].ai
+  const TRANS_GUIDE = `Chọn type theo nội dung và nhịp: ${FX.aiGuide('trans', ' | ')}.`;
+  const TDUR = FX.TRANS[0].params.dur;
+  // S29 M203: tham số riêng của chuyển cảnh (ease mọi loại; dir / color / intensity chỉ loại có) — Claude đặt kèm type
+  const TP = FX.TRANS.find(x => x.id === 'whip').params, TPC = FX.get('trans', 'flash').params.color, TPI = FX.get('trans', 'glitch').params.intensity;
+  const TPARAMS = { ease: { t: 'enum', values: TP.ease.values }, dir: { t: 'enum', values: TP.dir.values }, color: { t: 'enum', values: TPC.values }, intensity: { t: 'num', min: TPI.min, max: TPI.max } };
+  const TPARAM_HELP = ' ease = nhịp (auto mặc định, smooth, accel, decel, snap); dir = hướng l/r/u/d (trượt, đẩy, gạt, lia, lật); color = màu (flash, dip, strobe); intensity = cường độ 0.2–2 (glitch, shake, rgb_split). Bỏ trống = mặc định.';
+  // giữ các tham số loại `type` có (đã kẹp), bỏ dur và giá trị bằng mặc định; không còn gì → undefined
+  function transParams(type, p) {
+    const d = FX.get('trans', type); if (!d || !p) return undefined;
+    const v = FX.params('trans', type, p), out = {};
+    for (const [n, s] of Object.entries(d.params)) if (n !== 'dur' && p[n] != null && v[n] !== s.def) out[n] = v[n];
+    return Object.keys(out).length ? out : undefined;
+  }
+  const transOf = p => { const params = transParams(p.type, p); return { type: p.type, dur: r2(p.dur ?? 0.4), ...(params ? { params } : {}) }; };
   const AUTOFILL = ['all', 'broll', 'sfx'];
   const DENS = ['thua', 'vua', 'day'];
   // = /api/publish/platforms (scripts/publish.mjs); 'all' = mọi nền tảng đang tích ở hộp Đăng
@@ -78,8 +93,8 @@
     ai_build: { what: 'AI dựng lại cả video (gói style, graphic, phụ đề, nhạc). Dùng khi muốn đổi phong cách, nhịp, "sôi động hơn", "sang hơn".',
       params: { extra: { t: 'str', max: 200 }, density: { t: 'enum', values: DENS } } },
     autofill: { what: 'Tự thêm b-roll (broll), âm thanh SFX + nhạc (sfx) hoặc cả hai (all).', params: { mode: { t: 'enum', values: AUTOFILL } } },
-    transitions: { what: 'Đặt cùng một chuyển cảnh cho mọi chỗ nối giữa các clip (type "none" = bỏ hết).',
-      params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: 0.1, max: 1.5 } } },
+    transitions: { what: `Đặt cùng một chuyển cảnh cho mọi chỗ nối giữa các clip (type "none" = bỏ hết). ${TRANS_GUIDE}${TPARAM_HELP}`,
+      params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max }, ...TPARAMS } },
     elem_edit: { what: 'Sửa element đang chọn (kiểu, màu, font, vị trí, cỡ, hoạt ảnh, thời lượng, viết lại chữ). ask = câu yêu cầu ngắn gọn bằng tiếng Việt.',
       params: { ask: { t: 'str', max: 200 } } },
     elem_variants: { what: 'Đưa 3 biến thể của element đang chọn để người dùng xem và chọn.', params: {} },
@@ -87,7 +102,7 @@
     // S27 M199: Claude dựng element riêng (box, nền box chữ, khung, nhãn…) khi thư viện không có cái hợp (72_celem.js)
     elem_create: { what: 'Dựng MỚI một element đồ hoạ riêng theo thương hiệu (box chữ, nền chữ, khung, nhãn giá, thẻ…) rồi chèn tại playhead; 3 phương án xem bằng ảnh. ask = mô tả element bằng tiếng Việt.',
       params: { ask: { t: 'str', max: 300 } } },
-    clip_transition: { what: 'Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ).', params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: 0.1, max: 1.5 } } },
+    clip_transition: { what: `Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ). ${TRANS_GUIDE}${TPARAM_HELP}`, params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max }, ...TPARAMS } },
     // ---- M154: Chuẩn bị ----
     brand_ai: { what: 'Dựng bộ thương hiệu (vai trò 4 màu, cặp font, giọng văn, slogan, CTA) từ logo đã tải, tên và website. website = link nếu người dùng đưa.',
       params: { website: { t: 'str', max: 200 } } },
@@ -119,11 +134,107 @@
     check: ['qc_fix_all', 'ab_hooks'],
     ship: ['publish_write', 'cover', 'post_time'],
   };
+  // S29 M207: tốc độ của clip đang chọn (preset đường cong, đều, Freeze, đảo ngược) — áp bằng Studio.speed.apply (59_speed.js)
+  const SM = root.SpeedMap || (typeof require === 'function' ? require('../../engine/speed.js') : null);
+  const SPEED_MODES = ['montage', 'hero', 'bullet', 'jump_cut', 'flash_in', 'flash_out', 'normal', 'freeze', 'reverse', 'forward'];
+  A.clip_speed = { what: 'Đổi tốc độ clip đang chọn: preset đường cong (montage, hero = nhanh–chậm–nhanh khoe khoảnh khắc, bullet = chậm sâu ở giữa, jump_cut, flash_in, flash_out), normal = tốc độ đều speed×, freeze = đứng hình dur giây tại playhead (nhấn câu đinh), reverse = phát ngược, forward = bỏ phát ngược.',
+    params: { mode: { t: 'enum', values: SPEED_MODES }, speed: { t: 'num', min: 0.25, max: 4 }, dur: { t: 'num', min: 0.5, max: 10 } } };
+  // S28 M206: hiệu ứng khung hình trên track Hiệu ứng (nhóm fx của engine/fx_registry.js; áp bằng FxTrackCore.addApply, 81_fxtrack.core.js)
+  // đọc lười: trình duyệt nạp feature theo tên (studio/server.mjs FEATURES), 81_fxtrack.core.js đến SAU file này (nghiệm thu S28)
+  let FT0 = null;
+  const FT = () => FT0 || (FT0 = root.FxTrackCore || (typeof require === 'function' ? require('./81_fxtrack.core.js') : null));
+  const EFX = FX.ids('fx');
+  const EFX_VI = Object.fromEntries(FX.list('fx').map(x => [x.id, x.label.toLocaleLowerCase('vi')]));
+  A.fx_add = { what: `Thêm một khối hiệu ứng khung hình lên track Hiệu ứng: phạm vi đoạn → phủ đúng đoạn, cả video → tại playhead (dur giây). intensity / speed / range 0–1 (speed của pulse = nhịp mỗi giây); target main = chỉ video chính, all = cả khung. Nhấn ngắn (shake, punch, flash…) đặt đúng câu / nhịp cần nhấn. Chọn type theo nội dung: ${FX.aiGuide('fx', ' | ')}.`,
+    params: { type: { t: 'enum', values: EFX }, dur: { t: 'num', min: 0.1, max: 30 }, intensity: { t: 'num', min: 0, max: 1 }, speed: { t: 'num', min: 0.1, max: 4 }, range: { t: 'num', min: 0, max: 1 }, target: { t: 'enum', values: ['all', 'main'] } } };
+  const fxAddApply = (tl, p, range, at) => (FT() ? FT().addApply(tl, p, range, at) : 0);
+  // S28 M210: hiệu ứng theo nhịp — khối ngắn tại mỗi phách mạnh thứ every (times = phách mạnh giờ video, Studio.beatTimes)
+  A.fx_beats = { what: `Đặt khối hiệu ứng ngắn lên track Hiệu ứng tại MỖI phách mạnh thứ every của nhạc nền (phạm vi đoạn → chỉ trong đoạn, cả video → mọi phách mạnh); chỉ dùng khi ngữ cảnh có nhịp nhạc nền (phách mạnh). Hợp montage, nhạc sôi động, beat drop: punch / shake / flash / rgb / glitch / mirror / pulse; every 2–4 cho video có người nói để khỏi rối mắt. Làm lại thì thay khối theo nhịp cũ.`,
+    params: { type: { t: 'enum', values: EFX }, every: { t: 'num', min: 1, max: 8 }, dur: { t: 'num', min: 0.1, max: 2 }, intensity: { t: 'num', min: 0, max: 1 }, amp: { t: 'num', min: 0, max: 40 } } };
+  const fxBeatsApply = (tl, p, range, times) => (FT() ? FT().beatApply(tl, p, times, range) : 0);
+  // S28 M204: hoạt ảnh clip (Vào / Ra / Combo) từ registry nhóm clip_anim (engine/fx_registry.js); áp thuần bằng clipAnimApply
+  const CA_TYPES = [...new Set([...FX.ids('clip_in'), ...FX.ids('clip_out'), ...FX.ids('clip_combo')])];
+  A.clip_anim = { what: `Đặt hoạt ảnh cho clip đang chọn. slot = in (vào, dur giây đầu clip) | out (ra, dur giây cuối) | combo (chạy suốt clip, speed ×); type "none" = bỏ slot đó. Ảnh tĩnh / b-roll đứng hình: combo ken_burns.
+Vào: ${FX.aiGuide('clip_in', ' | ')}.
+Ra: ${FX.aiGuide('clip_out', ' | ')}.
+Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
+    params: { slot: { t: 'enum', values: ['in', 'out', 'combo'] }, type: { t: 'enum', values: [...CA_TYPES, 'none'] }, dur: { t: 'num', min: 0.1, max: 3 }, speed: { t: 'num', min: 0.25, max: 3 } } };
+  // Trả false khi type không thuộc slot (mô hình lẫn Vào / Combo) để không áp nhầm
+  function clipAnimApply(tl, idx, p) {
+    const c = tl.clips?.[idx], kind = FX.CLIP_SLOT[p.slot]; if (!c || !kind) return false;
+    if (p.type && p.type !== 'none' && !FX.get(kind, p.type)) return false;
+    const v = p.slot === 'combo' ? (p.speed != null ? { speed: p.speed } : {}) : (p.dur != null ? { dur: p.dur } : {});
+    const a = FX.clipAnimSet(c.anim, p.slot, p.type, v);
+    if (a) c.anim = a; else delete c.anim;
+    return true;
+  }
+  // S28 M205: hoạt ảnh Vào / Ra / Lặp của element đang chọn (chữ, hình khối, element riêng, sticker) — bộ chung FX.animOf
+  const ANIM_IN = FX.ids('anim_in'), ANIM_LOOP = FX.ids('anim_loop');
+  const ANIM_GUIDE = `Vào (in, trường anim): ${FX.aiGuide('anim_in', ' | ')}. Ra (out, trường anim_out): cùng id với Vào, chạy ngược tới lúc element tắt, thay mờ dần chung; chỉ đặt khi element cần rời khung có chủ ý. Lặp (loop, trường anim_loop, chạy sau khi vào xong): ${FX.aiGuide('anim_loop', ' | ')}.`;
+  A.elem_anim = { what: `Đặt hoạt ảnh cho element đang chọn: in = vào, out = ra ("none" = bỏ), loop = lặp ("none" = bỏ); dur / out_dur = giây (bỏ trống = mặc định), speed = tốc độ lặp. ${ANIM_GUIDE}`,
+    params: { in: { t: 'enum', values: ANIM_IN }, out: { t: 'enum', values: [...ANIM_IN, 'none'] }, loop: { t: 'enum', values: [...ANIM_LOOP, 'none'] },
+      dur: { t: 'num', min: 0.1, max: 3 }, out_dur: { t: 'num', min: 0.1, max: 3 }, speed: { t: 'num', min: 0.25, max: 3 } } };
+  // Ghi vào element có cid (cảnh hoặc dòng chữ trong cảnh) của bản timeline tl. Trả true khi tìm thấy element.
+  function elemAnimApply(tl, cid, p) {
+    const all = (tl?.scenes || []).flatMap(s => [s, ...(s.lines || [])]), o = all.find(x => x && x.cid === cid);
+    if (!o || !p) return false;
+    if (p.in) { o.anim = p.in; if (p.dur) o.anim_dur = p.dur; else delete o.anim_dur; }
+    if (p.out === 'none') delete o.anim_out; else if (p.out) o.anim_out = p.out_dur ? { type: p.out, dur: p.out_dur } : { type: p.out };
+    if (p.loop === 'none') delete o.anim_loop; else if (p.loop) o.anim_loop = p.speed ? { type: p.loop, speed: p.speed } : { type: p.loop };
+    return true;
+  }
+  // S29 M208: Claude chọn màu cho clip đang chọn — trợ lý 'color' (scripts/assist.mjs) đọc khung + gu thương hiệu, Studio.color.pick
+  //   (82_color.js) trả bộ filter; colorApply đặt bộ đó lên bản timeline (thẻ Nhận / Bỏ). Không tham số: Claude tự chọn hết.
+  A.color_pick = { what: 'Claude xem khung của clip đang chọn và gu thương hiệu rồi chọn màu: bộ lọc + cường độ + vài thanh Adjust (phơi sáng, vùng sáng / tối, nét, fade, vignette, hạt…). Dùng khi người dùng muốn chỉnh màu, làm đẹp màu, đổi tông, hợp thương hiệu.', params: {} };
+  function colorApply(tl, idx, filter) {
+    const c = tl.clips?.[idx], f = FX.colorClean ? FX.colorClean(filter) : null;
+    if (!c || !f || !Object.keys(f).length) return false;
+    c.filter = f;
+    return true;
+  }
+  // S29 M209: keyframe của clip đang chọn (engine/kf.js) — một thuộc tính chạy from → to trong [start, end] giây của clip (bỏ trống = cả
+  //   clip), thay key cũ của thuộc tính đó. Đọc lười: /engine/kf.js nạp trước features trong trình duyệt, Node cần require.
+  let KF0 = null;
+  const KFM = () => KF0 || (KF0 = root.KF || (typeof require === 'function' ? require('../../engine/kf.js') : null));
+  const KF_PROPS = ['x', 'y', 'scale', 'rot', 'opacity', 'mask_x', 'mask_y', 'mask_w', 'mask_h', 'mask_feather', 'strength', ...(FX.ADJ || []).map(a => a.id), 'volume'];
+  const KF_EASES = ['linear', 'inOut', 'in', 'out', 'back', 'bounce', 'hold', 'easeIn', 'easeOut', 'easeInOut', 'overshoot', 'elastic'];
+  A.clip_kf = { what: 'Đặt keyframe cho clip đang chọn: thuộc tính prop chạy từ from tới to trong đoạn start → end giây TÍNH TỪ ĐẦU CLIP (bỏ trống = cả clip), ease = kiểu chuyển động. prop: x / y = dời (px), scale = tỉ lệ (1 = gốc; phóng chậm 1 → 1.15), rot = xoay (độ), opacity = mờ 0–1, mask_x / mask_y / mask_w / mask_h (% khung) và mask_feather = mặt nạ (chỉ khi clip có mặt nạ), strength = cường độ bộ lọc 0–100 (khi có bộ lọc), exposure / brightness / contrast / saturate / temp… = Adjust như trợ lý màu, volume = âm lượng clip × (0–2; 0 = tắt dần). ease: easeIn / easeOut / easeInOut = ease vào / ra / cả hai, overshoot = nảy, elastic = đàn hồi, hold = giữ rồi nhảy.',
+    params: { prop: { t: 'enum', values: KF_PROPS }, from: { t: 'num', min: -1280, max: 1280 }, to: { t: 'num', min: -1280, max: 1280 }, start: { t: 'num', min: 0, max: 600 }, end: { t: 'num', min: 0, max: 600 }, ease: { t: 'enum', values: KF_EASES } } };
+  function clipKfApply(tl, idx, p) {
+    const c = tl.clips?.[idx], K = KFM(); if (!c || !K || !p?.prop || !K.prop(p.prop)) return false;
+    if (p.prop.startsWith('mask_') && !c.mask) return false;
+    const d = SM ? SM.dur(c, tl.fps || 30) : 3, a = Math.min(Math.max(0, +p.start || 0), Math.max(0, d - 0.1)), b = p.end != null && +p.end > a ? Math.min(+p.end, d) : d;
+    return K.ramp(c, p.prop, p.from, p.to, a, b, p.ease);
+  }
+  // S29 M212: hiệu chỉnh nướng sẵn của clip đang chọn (engine/bake.js; tab Hiệu chỉnh 86_bake.js). Claude chỉ đặt tham số lên bản
+  //   timeline: xem gần đúng bằng CSS, job nướng ffmpeg chỉ chạy khi người dùng Nhận. LUT phải do người dùng nhập file, Claude chỉ đổi mix.
+  const BK = root.BakeCore || (typeof require === 'function' ? require('../../engine/bake.js') : null);
+  const BAKE_OPS = ['chroma', 'hsl', 'curves', 'stab', 'lut', 'none'];
+  A.clip_bake = { what: 'Hiệu chỉnh nướng sẵn cho clip đang chọn, mỗi lần một op: chroma = tách phông xanh / lục (color #rrggbb màu nền, strength 0–100 độ rộng màu bị xoá, edge 0–100 viền mềm, spill 0–100 khử ánh màu lem lên người); hsl = đổi một dải màu (band all|r|y|g|c|b|m, hue −180–180, sat −100–100, light −100–100); curves = đường cong (preset ' + (BK ? BK.CURVES.join('|') : '') + ', shadows / highlights −50–50); stab = ổn định hình rung (strength 0–100, 0 = tắt); lut = độ mạnh LUT .cube người dùng đã nhập (strength 0–100); none = bỏ mọi hiệu chỉnh nướng. Tác dụng thấy sau khi người dùng Nhận và máy nướng xong (vài giây).',
+    params: { op: { t: 'enum', values: BAKE_OPS }, color: { t: 'str', max: 7 }, strength: { t: 'num', min: 0, max: 100 }, edge: { t: 'num', min: 0, max: 100 }, spill: { t: 'num', min: 0, max: 100 },
+      band: { t: 'enum', values: BK ? BK.BANDS : ['all'] }, hue: { t: 'num', min: -180, max: 180 }, sat: { t: 'num', min: -100, max: 100 }, light: { t: 'num', min: -100, max: 100 },
+      preset: { t: 'enum', values: BK ? BK.CURVES : ['none'] }, shadows: { t: 'num', min: -50, max: 50 }, highlights: { t: 'num', min: -50, max: 50 } } };
+  // đặt một op lên clip idx của bản timeline tl (bỏ seq / hash cũ: Studio nướng lại khi Nhận). Trả false khi không áp được.
+  function bakeApply(tl, idx, p) {
+    const c = tl.clips?.[idx];
+    if (!c || !BK || typeof c.src !== 'object' || !p || !BAKE_OPS.includes(p.op)) return false;
+    if (p.op === 'none') { if (!c.bake) return false; delete c.bake; return true; }
+    const b = { ...(c.bake || {}) }; delete b.seq; delete b.hash; delete b.p540;
+    if (p.op === 'chroma') { const col = /^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color.toLowerCase() : b.chroma?.color || '#00b140'; b.chroma = { ...(b.chroma || {}), color: col, ...['strength', 'edge', 'spill'].reduce((o, k) => (p[k] != null ? { ...o, [k]: p[k] } : o), {}) }; } // design-token-ok: màu phông xanh mặc định trong video
+    if (p.op === 'hsl') b.hsl = { ...(b.hsl || {}), ...['band', 'hue', 'sat', 'light'].reduce((o, k) => (p[k] != null ? { ...o, [k]: p[k] } : o), {}) };
+    if (p.op === 'curves') b.curves = { ...(b.curves || {}), ...['preset', 'shadows', 'highlights'].reduce((o, k) => (p[k] != null ? { ...o, [k]: p[k] } : o), {}) };
+    if (p.op === 'stab') { if (p.strength) b.stab = { strength: p.strength }; else delete b.stab; }
+    if (p.op === 'lut') { if (!b.lut?.file) return false; b.lut = { ...b.lut, mix: p.strength ?? 100 }; }
+    const o = BK.ops(b);
+    if (!o) { delete c.bake; return true; }
+    c.bake = { ...b };
+    return true;
+  }
   function actionsOf(scope) {
     if (!scope) return [];
-    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'elem_create']
-      : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
-        : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'open_panel'] : ['open_panel'])
+    const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'fx_beats', 'elem_create']
+      : scope.kind === 'elem' ? ['elem_edit', ...(scope.ek === 'line' || scope.ek === 'scene' ? ['elem_anim'] : []), 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
+        : scope.kind === 'clip' ? [...(scope.idx > 0 ? ['clip_transition'] : []), 'clip_speed', 'clip_anim', 'clip_kf', 'color_pick', 'clip_bake', 'open_panel']
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
@@ -150,7 +261,7 @@
         q('3 biến thể', 'elem_variants', {}, 'ti-layout-grid'), ...(scope.knobs ? [q('Gợi ý núm', 'elem_knobs', {}, 'ti-adjustments-horizontal')] : [])].slice(0, 4);
       case 'clip': return [...(scope.idx > 0 ? [q('Chuyển cảnh mờ dần', 'clip_transition', { type: 'fade', dur: 0.4 }, 'ti-transition-right'),
         q('Chuyển cảnh lia nhanh', 'clip_transition', { type: 'whip', dur: 0.3 }, 'ti-wind')] : []),
-      q('Bộ lọc màu', 'open_panel', { panel: 'filter' }, 'ti-color-filter'), q('B-roll phủ', 'open_panel', { panel: 'wf-broll' }, 'ti-photo-plus')];
+      q('Claude chọn màu', 'color_pick', {}, 'ti-color-filter'), q('B-roll phủ', 'open_panel', { panel: 'wf-broll' }, 'ti-photo-plus')]; // S29 M208
       // M154: nút AI trùng của panel thành gợi ý ở đây (nút chính của panel vẫn giữ)
       default: switch (scope.step) {
         case 'prep': return [q('Dựng bộ thương hiệu', 'brand_ai', {}, 'ti-palette'), q('Viết mô tả sản phẩm', 'product_ai', {}, 'ti-package'),
@@ -190,7 +301,7 @@
     if (!act) { if (id && id !== 'answer') warnings.push(`việc "${clip(id, 24)}" không có trong phạm vi này`); id = 'answer'; act = list.find(a => a.id === 'answer'); }
     const params = act ? cleanParams(act.params, pickKey(o, ['params', 'args', 'parameters', 'arguments']), warnings) : {};
     // thiếu tham số bắt buộc → về trả lời bằng chữ, không đoán
-    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], clip_transition: ['type'], open_panel: ['panel'] }[id] || [];
+    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], fx_add: ['type'], fx_beats: ['type'], clip_transition: ['type'], clip_speed: ['mode'], clip_anim: ['slot', 'type'], clip_bake: ['op'], open_panel: ['panel'] }[id] || [];
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
@@ -199,6 +310,7 @@
     if (id === 'ab_hooks' && !params.kind) params.kind = 'hook';
     if (id === 'clean_speech' && !params.claude) params.claude = 'khong';
     if (id === 'find_highlights' && params.n != null) params.n = Math.round(params.n);
+    if (id === 'fx_beats' && params.every != null) params.every = Math.round(params.every);
     if ((id === 'transitions' || id === 'clip_transition') && params.type !== 'none' && params.dur == null) params.dur = 0.4;
     return { action: id, params, reply, warnings };
   }
@@ -207,7 +319,7 @@
   // Chuyển cảnh: mọi chỗ nối (clip i > 0); range [a, b] → chỉ chỗ nối nằm trong đoạn. Trả số chỗ nối đã đổi.
   function clipStarts(tl) {
     let t = 0; const out = [];
-    for (const c of tl.clips || []) { out.push(t); t += Math.max(1 / 30, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1)); }
+    for (const c of tl.clips || []) { out.push(t); t += SM ? SM.dur(c, 30) : Math.max(1 / 30, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1)); }
     return out;
   }
   function transitionsApply(tl, p, range) {
@@ -216,13 +328,13 @@
       if (!i) return;
       if (range && (starts[i] < range.a - 0.05 || starts[i] > range.b + 0.05)) return;
       if (!p.type || p.type === 'none') { if (c.transition) { delete c.transition; n++; } return; }
-      c.transition = { type: p.type, dur: r2(p.dur ?? 0.4) }; n++;
+      c.transition = transOf(p); n++;
     });
     return n;
   }
   function clipTransitionApply(tl, idx, p) {
     const c = tl.clips?.[idx]; if (!c || idx <= 0) return false;
-    if (!p.type || p.type === 'none') delete c.transition; else c.transition = { type: p.type, dur: r2(p.dur ?? 0.4) };
+    if (!p.type || p.type === 'none') delete c.transition; else c.transition = transOf(p);
     return true;
   }
   // Khoảng thời gian có đổi giữa hai bản { TL, CAP }: cảnh / phụ đề / sfx / nhạc mới hoặc khác; chỗ nối đổi chuyển cảnh.
@@ -230,8 +342,8 @@
     let lo = Infinity, hi = -Infinity;
     const hit = (t0, t1) => { if (Number.isFinite(+t0)) { lo = Math.min(lo, +t0); hi = Math.max(hi, Number.isFinite(+t1) ? +t1 : +t0); } };
     const key = sameKey;
-    const diff = (xa = [], xb = []) => { const s = new Set(xa.map(key)); for (const x of xb) if (!s.has(key(x))) hit(x.t0 ?? x.t, x.t1 ?? x.t0 ?? x.t); };
-    diff(a.TL?.scenes, b.TL?.scenes); diff(a.CAP, b.CAP); diff(a.TL?.audio?.sfx, b.TL?.audio?.sfx); diff(a.TL?.audio?.music, b.TL?.audio?.music);
+    const diff = (xa = [], xb = []) => { const s = new Set(xa.map(key)); for (const x of xb) if (!s.has(key(x))) hit(x.t0 ?? x.t ?? x.start, x.t1 ?? x.end ?? (x.dur != null ? x.t + x.dur : x.t0 ?? x.t)); };
+    diff(a.TL?.scenes, b.TL?.scenes); diff(a.CAP, b.CAP); diff(a.TL?.efx, b.TL?.efx); diff(a.TL?.fx, b.TL?.fx); // efx / fx: S28 M206 diff(a.TL?.audio?.sfx, b.TL?.audio?.sfx); diff(a.TL?.audio?.music, b.TL?.audio?.music);
     const sa = clipStarts(a.TL || {}), cb = b.TL?.clips || [], ca = a.TL?.clips || [];
     cb.forEach((c, i) => { if (key(c.transition) !== key(ca[i]?.transition)) hit(sa[i] - 0.5, sa[i] + 0.5); });
     if (!Number.isFinite(lo)) return null;
@@ -261,7 +373,7 @@
     let i = clips.length - 1;
     while (i > 0 && st[i] > t) i--;
     const c = clips[i] || {}, a = +c.in || 0, b = Number.isFinite(+c.out) ? +c.out : Infinity;
-    const at = r2(Math.max(a, Math.min(b, a + Math.max(0, (+t || 0) - st[i]) * (+c.speed || 1))));
+    const at = r2(Math.max(a, Math.min(b, SM ? SM.srcAt(c, (+t || 0) - st[i]) : a + Math.max(0, (+t || 0) - st[i]) * (+c.speed || 1))));
     const out = { at };
     const src = c.src && typeof c.src === 'object' ? c.src : null;
     if (src && typeof src.seq === 'string' && /%0\d+d/.test(src.seq)) {
@@ -339,6 +451,12 @@
     const ca = a?.TL?.clips || [], cb = b?.TL?.clips || [];
     const nt = cb.filter((c, i) => i > 0 && key(c.transition) !== key(ca[i]?.transition)).length;
     if (nt) out.push(`${nt} chỗ nối chuyển cảnh`);
+    const nf = cb.filter((c, i) => key(c.filter) !== key(ca[i]?.filter)).length; // S29 M208
+    if (nf) out.push(`màu ${nf} clip`);
+    const nb = cb.filter((c, i) => key(c.bake) !== key(ca[i]?.bake)).length; // S29 M212
+    if (nb) out.push(`hiệu chỉnh ${nb} clip`);
+    const ne = delta(a?.TL?.efx, b?.TL?.efx).add.length + delta(a?.TL?.fx, b?.TL?.fx).add.length; // S28 M206
+    if (ne) out.push(`+${ne} hiệu ứng`);
     return out.slice(0, 6);
   }
   function logPush(list, raw, max = LOG_MAX) {
@@ -357,8 +475,8 @@
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts,
-    logEntry, logPush, logParse, changeSummary, regionOf, frameAt }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, colorApply, bakeApply, clipKfApply, KF_PROPS, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply, fxBeatsApply,
+    logEntry, logPush, logParse, changeSummary, regionOf, frameAt, ANIM_GUIDE, elemAnimApply }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

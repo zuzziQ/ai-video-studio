@@ -6,7 +6,7 @@
   const MIME = 'text/x-avs-lib';
   // Loại mục kéo được: chữ (id = số mẫu, -1 = Thêm chữ), sticker (emoji), fx (gói "i:j", gồm khối HyperFrames),
   // media (số trong Media › Dự án này), kho (số trong Media › Kho).
-  const KINDS = new Set(['text', 'sticker', 'fx', 'media', 'kho']);
+  const KINDS = new Set(['text', 'sticker', 'fx', 'media', 'kho', 'efx']); // efx: S28 M206 hiệu ứng khung hình (81_fxtrack.js)
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const r2 = v => Math.round(v * 100) / 100;
 

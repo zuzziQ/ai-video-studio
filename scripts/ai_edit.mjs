@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import os from 'node:os'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { findChrome } from './platform.mjs';
 import { launchChrome } from './chrome_profile.mjs';
 import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
@@ -24,6 +25,24 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const say = (p, s) => console.log(`@@ ${p.toFixed(2)} ${s}`);
 const r2 = v => Math.round(v * 100) / 100;
+const BeatsCore = createRequire(import.meta.url)('../studio/features/33_beats.core.js');
+const FxTrackCore = createRequire(import.meta.url)('../studio/features/81_fxtrack.core.js'); // S28 M210: hiệu ứng theo nhịp
+// S28 M210: phách mạnh (giờ video) của nền nhạc người dùng có nhịp (Studio → tab Nhịp); AI dựng giữ nền đó nên cảnh hít vào phách mạnh
+export function beatGrid(tl) {
+  const m = tl?.audio?.music || [];
+  if (!hasUserBed(m, tl?.duration || 0)) return [];
+  return BeatsCore.grid(m.filter(isUserMusic), 'beat', tl.duration).filter(x => x.strong).map(x => x.t);
+}
+export const onBeat = (t, g, tol = .2) => { let best = t, d = tol; for (const x of g || []) { const e = Math.abs(x - t); if (e <= d) { d = e; best = x; } } return best; };
+function beatText(tl) {
+  const g = beatGrid(tl); if (!g.length) return '';
+  const bpm = BeatsCore.brief(tl.audio.music.filter(isUserMusic), tl.duration)?.bpm;
+  return `
+# Nhịp nhạc nền (của người dùng, giữ nguyên): ${bpm} BPM, phách mạnh tại (giây): ${g.slice(0, 60).join(', ')}
+Chọn từ khoá cho cảnh graphic / b-roll gần phách mạnh nhất có thể; phần mềm kéo mép cảnh vào phách mạnh trong ±0,2 s.
+Tuỳ chọn "beat_fx": {"type":"…","every":2} trong JSON trả về = khối hiệu ứng ngắn tại mỗi phách mạnh thứ every (1–8) trên track Hiệu ứng. Dùng khi nhạc sôi động / montage / bán hàng năng lượng (punch, shake, flash, rgb, glitch, pulse; every 2–4 khi có người nói); bỏ trường này khi nội dung nhẹ, tâm sự. type một trong: ${FxTrackCore.BEAT_TYPES.join(', ')}.
+`;
+}
 // Packs that need footage the AI cannot invent (second camera, screen recording, cutouts, before/after photos, photo slideshows).
 const SPECIAL = new Set(['hypecam', 'beatslide', 'multicam', 'screencast', 'greenscreen', 'transform']);
 const LONG_TEXT = new Set(['code', 'definition', 'text', 'example', 'quote', 'body', 'desc', 'question', 'answer']);
@@ -142,7 +161,7 @@ Bảng màu: ember, light, neon, ocean, violet, gold, forest, sunset, candy, mon
 # Bố cục khung hình
 ${layout}
 
-# Nhạc nền (mood): ${moods}
+# Nhạc nền (mood): ${moods}${beatText(tl)}
 # SFX: ${sfxNames}
 
 # Việc cần làm
@@ -306,6 +325,7 @@ const sheetTag = x => (Number.isInteger(x?._sheet) ? { _sheet: x._sheet, ...(x._
 export function validate(raw, { tl, caps, cat, lib, o, script }) {
   const fromSheet = !!o.sheet; // S27 M194: kế hoạch từ bảng dựng (planFromSheet): giữ _sheet + _script, không giới hạn 15 cảnh
   const dropped = [], cuts = []; // cuts: graphic text cut to fit (S13 · M111, shortenCuts)
+  const BG = fromSheet ? [] : beatGrid(tl);
   const dur = tl.duration;
   const keep = o.pack && o.pack !== 'auto';
   const vertical = (tl.height || 1920) > (tl.width || 1080);
@@ -338,7 +358,9 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     if (t0 == null) t0 = typeof s.t0 === 'number' ? s.t0 : null;
     if (t0 == null) { dropped.push(`cảnh ${s.type}: thiếu thời điểm`); continue; }
     t0 = r2(Math.max(0, Math.min(dur - .8, t0 - .05)));
-    const t1 = r2(Math.min(dur, t0 + Math.min(8, Math.max(.8, +s.dur || (it.ex.t1 - it.ex.t0) || 2.5))));
+    if (BG.length) t0 = r2(Math.min(dur - .8, onBeat(t0, BG))); // S28 M210: mở cảnh đúng phách mạnh
+    let t1 = r2(Math.min(dur, t0 + Math.min(8, Math.max(.8, +s.dur || (it.ex.t1 - it.ex.t0) || 2.5))));
+    if (BG.length) { const b = onBeat(t1, BG); if (b - t0 >= .8 && b <= dur) t1 = r2(b); }
     const params = cleanText(s.params && typeof s.params === 'object' ? s.params : {}, it.ex, '', cuts);
     for (const k of ['type', 't0', 't1', 'cid', '_orig', '_ai']) delete params[k];
     const ex = shiftRel(it.ex, t0, t1);
@@ -377,13 +399,21 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     if (!name || t == null || t >= dur) { dropped.push(`SFX "${x.name}" không hợp lệ`); continue; }
     sfx.push({ t: r2(Math.max(0, t - .05)), name, gain: -12, _ai: true, ...(fromSheet ? sheetTag(x) : {}) });
   }
+  // S28 M210: hiệu ứng theo nhịp (chỉ khi nền nhạc người dùng có nhịp): khối _ai _beat cụ thể, applyPlan thay khối _ai _beat cũ
+  let beat_fx = null;
+  if (raw.beat_fx && typeof raw.beat_fx === 'object') {
+    const bt = String(raw.beat_fx.type || ''), tmp = { duration: dur };
+    const n = BG.length && FxTrackCore.BEAT_TYPES.includes(bt) ? FxTrackCore.beatApply(tmp, { type: bt, every: raw.beat_fx.every, tag: { _ai: true } }, BG) : 0;
+    if (n) beat_fx = { type: bt, every: Math.max(1, Math.min(8, Math.round(+raw.beat_fx.every || 1))), fx: tmp.fx || [], efx: tmp.efx || [] };
+    else dropped.push(`hiệu ứng theo nhịp "${bt}" không đặt được${BG.length ? '' : ' (nhạc chưa có nhịp)'}`);
+  }
   const marks = script ? scriptMarks(script) : [], hookMark = marks.find(m => m.kind === 'hook');
   const cut60 = s => { s = String(s).trim(); if (s.length <= 60) return s; const w = s.slice(0, 61).split(/\s+/); w.pop(); return w.join(' ') || s.slice(0, 60); };
   const hook = hookMark ? cut60(hookMark.text) : String(raw.hook || '').slice(0, 60); // S17 M123: hook theo [HOOK] của kịch bản
   // S17 M123: dấu của kịch bản chưa có cảnh tương ứng → ghi lại (QC báo "dấu kịch bản chưa đặt")
   const miss = script ? markMissing(marks, [...base, ...scenes], { strings: sceneStrings, title: hook }) : [];
   for (const m of miss) dropped.push(`kịch bản: dấu ${m.kind === 'broll' ? 'B-ROLL' : m.kind === 'screen' ? 'CHỮ' : m.kind.toUpperCase()} “${String(m.text).slice(0, 40)}” @${m.t0}s chưa có cảnh`);
-  return { pack, caption_style, hook, captions: capOut, scenes: [...base, ...scenes], music, sfx, summary: String(raw.summary || '').slice(0, 400), dropped, cuts, created: new Date().toISOString(),
+  return { pack, caption_style, hook, captions: capOut, scenes: [...base, ...scenes], music, sfx, ...(beat_fx ? { beat_fx } : {}), summary: String(raw.summary || '').slice(0, 400), dropped, cuts, created: new Date().toISOString(),
     ...(script ? { script: { marks: marks.length, missing: miss.map(m => ({ kind: m.kind, text: m.text, t0: m.t0 })) } } : {}) };
 }
 
@@ -481,6 +511,8 @@ export function applyPlan(tl, caps, plan) {
     if (!r.kept && plan.music && (!tl.audio.duck || typeof tl.audio.duck !== 'object')) tl.audio.duck = { ...DEFAULT_DUCK };
   } else tl.audio.music = [...(tl.audio.music || []).filter(m => isUserMusic(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= tl.duration - .1))), ...(plan.music && !keep ? [plan.music] : [])];
   tl.audio.sfx = [...(tl.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x)))];
+  // S28 M210: khối theo nhịp của lần dựng trước (chưa sửa tay) thay bằng khối của kế hoạch này (bản client 20_ai.js giống hệt)
+  for (const k of ['fx', 'efx']) { const v = [...(tl[k] || []).filter(f => !(f._ai && f._beat && !f._orig)), ...JSON.parse(JSON.stringify(plan.beat_fx?.[k] || []))]; if (v.length || tl[k]) tl[k] = v; }
   let n = 0;
   for (const e of plan.captions) {
     const c = caps[e.i];

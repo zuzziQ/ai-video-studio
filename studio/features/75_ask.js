@@ -111,7 +111,8 @@
     return { kind: c.kind, cid: c.obj.cid || '', label: String(c.label || ''), text, t0: c.t0, t1: c.t1, knobs: !!S.elemAi?.knobsOk(c) };
   }
   const scope = () => AC.scopeOf({ step: step(), sel: selInfo(), range: AS.range, region: AS.region, qc: !!S.qc?.last });
-  const info = () => ({ dw: S.DW || 720, dh: S.DH || 1280, duration: S.TL?.duration || 0, clips: S.TL?.clips?.length || 0, scenes: S.TL?.scenes?.length || 0, captions: (S.CAP || []).length, pack: S.TL?.pack || '',
+  const info = () => ({ dw: S.DW || 720, dh: S.DH || 1280, duration: S.TL?.duration || 0, clips: S.TL?.clips?.length || 0, scenes: S.TL?.scenes?.length || 0, captions: (S.CAP || []).length, pack: S.TL?.pack || '', beats: window.BeatsCore?.brief(S.TL?.audio?.music, S.TL?.duration) || null, // S28 M210
+    presets: S.presets?.brief() || null, // S29 M211: preset người dùng / thương hiệu (gu M192)
     ...(step() === 'check' && S.qc?.brief ? { qc: S.qc.brief() } : {}) });
   const elemShown = sc => sc?.kind === 'elem' && S.elemAi && (S.elemAi.cid === sc.cid || S.review?.owner === 'elem_ai') && S.elemAi.st !== 'idle';
 
@@ -502,9 +503,56 @@
         const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(r ? `${nm} trong ${sc.chip}` : `${nm} mọi chỗ nối`, r ? r.a : 0, r ? r.b : Math.min(dur, 8), tl => AC.transitionsApply(tl, p, r));
       }
+      case 'fx_add': { // S28 M206: khối track Hiệu ứng, xem lại trên khung trước khi nhận
+        const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = `Hiệu ứng ${AC.EFX_VI[p.type] || p.type}`, at = S.T || 0;
+        return pureReview(r ? `${nm} trong ${sc.chip}` : `${nm} tại ${AC.stamp(at)}`, r ? r.a : at, r ? r.b : at + 2, tl => AC.fxAddApply(tl, p, r, at));
+      }
+      case 'fx_beats': { // S28 M210: khối Hiệu ứng ngắn tại phách mạnh (33_beats.js Studio.beatTimes), xem lại rồi Nhận / Bỏ
+        const times = S.beatTimes?.() || [];
+        if (!times.length) return setOut('reply', { reply: 'Nhạc nền chưa có nhịp: chọn khối nhạc → tab Nhịp → Phân tích nhịp, rồi hỏi lại.' });
+        const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = `${AC.EFX_VI[p.type] || p.type} theo nhịp`;
+        return pureReview(r ? `${nm} trong ${sc.chip}` : nm, r ? r.a : 0, r ? r.b : Math.min(dur, 8), tl => AC.fxBeatsApply(tl, p, r, times));
+      }
       case 'clip_transition': {
         const nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(`${nm} vào ${sc.chip}`, Math.max(0, sc.t0 - 0.6), sc.t0 + 0.8, tl => AC.clipTransitionApply(tl, sc.idx, p));
+      }
+      case 'clip_anim': { // S28 M204: hoạt ảnh clip Vào / Ra / Combo, xem lại đúng đoạn có hoạt ảnh rồi Nhận / Bỏ
+        const kind = FX.CLIP_SLOT[p.slot], nm = p.type === 'none' ? `Bỏ hoạt ảnh ${{ in: 'vào', out: 'ra', combo: 'combo' }[p.slot]}` : `Hoạt ảnh ${FX.get(kind, p.type)?.label || p.type}`;
+        const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3, d = (p.dur ?? 0.5) + 0.6;
+        const [a, b] = p.slot === 'out' ? [Math.max(sc.t0, t1 - d), t1] : [sc.t0, Math.min(t1, sc.t0 + (p.slot === 'in' ? d : 3))];
+        return pureReview(`${nm} cho ${sc.chip}`, a, b, tl => AC.clipAnimApply(tl, sc.idx, p));
+      }
+      case 'clip_kf': { // S29 M209: keyframe một thuộc tính của clip (engine/kf.js), xem lại đúng đoạn chạy rồi Nhận / Bỏ
+        const d = sc.t1 > sc.t0 ? sc.t1 - sc.t0 : 3, a = Math.min(Math.max(0, +p.start || 0), d), b = p.end != null && +p.end > a ? Math.min(+p.end, d) : d;
+        const nm = window.KF?.prop(p.prop)?.label || p.prop;
+        return pureReview(`Keyframe ${nm} ${p.from} → ${p.to} cho ${sc.chip}`, sc.t0 + a, sc.t0 + b, tl => AC.clipKfApply(tl, sc.idx, p));
+      }
+      case 'elem_anim': { // S28 M205: Vào / Ra / Lặp của element đang chọn, xem lại trên khung trước khi nhận
+        const nm = [p.in && `vào ${p.in}`, p.out && (p.out === 'none' ? 'bỏ ra' : `ra ${p.out}`), p.loop && (p.loop === 'none' ? 'bỏ lặp' : `lặp ${p.loop}`)].filter(Boolean).join(', ') || 'giữ nguyên';
+        return pureReview(`Hoạt ảnh ${nm} cho ${sc.chip}`, Math.max(0, sc.t0 - 0.2), sc.t1 || sc.t0 + 3, tl => AC.elemAnimApply(tl, sc.cid, p));
+      }
+      case 'color_pick': { // S29 M208: Claude chọn màu (82_color.js → trợ lý 'color'), xem lại giữa clip rồi Nhận / Bỏ
+        if (!S.color?.pick) return setOut('error', { err: 'Chưa có công cụ Màu' });
+        setOut('working', { step: 'Claude đang xem khung để chọn màu…' });
+        let r; try { r = await S.color.pick(sc.idx, s => { AS.step = s; paint(true); }); } catch (e) { return setOut('error', { err: e.message, errKind: e.kind }); }
+        const lut = r.filter.preset ? `${FX.get('lut', r.filter.preset)?.label} ${r.filter.strength ?? 100}%` : 'không bộ lọc';
+        const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3;
+        return pureReview(`Màu ${lut} cho ${sc.chip}${r.why ? ' · ' + r.why : ''}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => AC.colorApply(tl, sc.idx, r.filter));
+      }
+      case 'clip_bake': { // S29 M212: hiệu chỉnh nướng sẵn (86_bake.js) — bản xem dùng CSS gần đúng; job nướng chỉ chạy khi Nhận (tl là S.TL)
+        const nm = { chroma: 'Tách phông xanh', hsl: 'HSL', curves: 'Curves', stab: 'Ổn định hình', lut: 'Độ mạnh LUT', none: 'Bỏ hiệu chỉnh' }[p.op] || 'Hiệu chỉnh';
+        const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3;
+        return pureReview(`${nm} cho ${sc.chip}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => {
+          const ok = AC.bakeApply(tl, sc.idx, p);
+          if (ok && tl === S.TL) setTimeout(() => S.bake?.run(sc.idx), 0);
+          return ok;
+        });
+      }
+      case 'clip_speed': { // S29 M207: tốc độ / Freeze / đảo ngược qua 59_speed.js, xem lại trước khi nhận (ripple đổi cả phụ đề)
+        if (!S.speed) return setOut('error', { err: 'Chưa có công cụ Tốc độ' });
+        const nm = { normal: `Tốc độ ${p.speed ?? 1}×`, freeze: 'Freeze', reverse: 'Đảo ngược', forward: 'Bỏ phát ngược' }[p.mode] || `Tốc độ ${SpeedMap.PRESET_VI[p.mode] || p.mode}`;
+        return viaReview(`${nm} cho ${sc.chip}`, async () => (S.speed.apply(sc.idx, p) ? {} : { error: 'Clip này không đổi được' }));
       }
       case 'autofill': {
         if (!S.autofill) return setOut('error', { err: 'Chưa có công cụ Tự động' });

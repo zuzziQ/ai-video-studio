@@ -24,6 +24,8 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const has = k => args.includes(k);
 const say = (p, s) => console.log(`@@ ${p.toFixed(2)} ${s}`);
+// S28 M204: ảnh tĩnh do AI đặt toàn khung → Combo Ken Burns (lia + phóng, engine/fx_registry.js) thay kb chỉ phóng; video giữ kb nhẹ
+const stillKb = (seq, dir) => (seq ? { kb: .04, kb_dir: dir } : { kb: 0, anim: { combo: { type: 'ken_burns', speed: 1 } } });
 const fold = s => String(s).toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, '');
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -303,7 +305,8 @@ function phrasesIn(ws, n = 5, max = 3) {
 }
 
 // ---------- HyperFrames blocks as b-roll: vars written from the speech ----------
-let HF = {}; try { const w = {}; new Function('window', fs.readFileSync(path.join(SKILL, 'engine/hf/catalog.js'), 'utf8'))(w); HF = w.HF_CATALOG || {}; } catch {}
+// catalog.json = cùng dữ liệu window.HF_CATALOG của catalog.js (scripts/hf_import.mjs ghi cả hai); đọc JSON, không chạy mã
+let HF = {}; try { HF = JSON.parse(fs.readFileSync(path.join(SKILL, 'engine/hf/catalog.json'), 'utf8')) || {}; } catch {}
 const cap1 = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const sentShort = (s, n = 60) => { const t = String(s || '').trim(); return t.length <= n ? t : t.slice(0, n).replace(/\s+\S*$/, '') + '…'; };
 const HF_SPEC = {
@@ -550,7 +553,7 @@ function sceneFor(s, c, lay) {
   if (['media', 'kho', 'lib', 'stock', 'stockvid', 'aiimg'].includes(c.kind)) {
     const m = c.media; if (!m) return null;
     const media = m.seq ? { ...m.seq, t0: s.t0 } : m.path, credit = m.credit ? { credit: m.credit } : {};
-    if (full) return { ...base, t1: r2(Math.min(s.t1, s.t0 + (m.seq ? 2.2 : 1.6))), type: 'photo', mode: 'full', media, kb: m.seq ? .04 : .12, kb_dir: s.i % 2 ? -1 : 1, ...credit };
+    if (full) return { ...base, t1: r2(Math.min(s.t1, s.t0 + (m.seq ? 2.2 : 1.6))), type: 'photo', mode: 'full', media, ...stillKb(m.seq, s.i % 2 ? -1 : 1), ...credit };
     return { ...base, type: 'photo', mode: 'card', media, kb: .08, card: { x: box[0], y: box[1], w: box[2], h: box[3], r: 20 }, ...credit };
   }
   if (c.kind === 'hf') {

@@ -43,13 +43,16 @@
     return true;
   }
 
-  // Bảng lệnh của menu chuột phải (cũng là nút ⋯ của thanh nổi). ctx: {scenes, hasOrig, hidden, canEditText, canSplit, locked, canPaste}.
+  // Bảng lệnh của menu chuột phải (cũng là nút ⋯ của thanh nổi). ctx: {scenes, hasOrig, hidden, canEditText, canSplit, locked, canPaste,
+  //   props, canPasteProps} — S29 M211: props = mục có thuộc tính chép được (KeysCore.propKind), canPasteProps = clipboard thuộc tính hợp.
   // Mỗi mục {id, label, icon, key?, off?}; '-' là gạch ngăn. S20 M141: Cắt / Chép / Dán, Khoá (element khoá: không cắt, xoá, đổi lớp).
   function menuItems(c, ctx = {}) {
     if (!c) return [];
     const clip = (cut = true) => [...(cut ? [{ id: 'cut', label: 'Cắt', icon: 'ti-cut', key: '⌘X', off: !!ctx.locked }] : []),
       { id: 'copy', label: c.kind === 'clip' ? 'Chép (dán = nhân bản sau clip)' : 'Chép', icon: 'ti-clipboard-copy', key: '⌘C' },
-      { id: 'paste', label: 'Dán tại playhead', icon: 'ti-clipboard', key: '⌘V', off: !ctx.canPaste }];
+      { id: 'paste', label: 'Dán tại playhead', icon: 'ti-clipboard', key: '⌘V', off: !ctx.canPaste }, ...props];
+    const props = !ctx.props ? [] : [{ id: 'pcopy', label: 'Chép thuộc tính', icon: 'ti-clipboard-data' },
+      { id: 'ppaste', label: 'Dán thuộc tính…', icon: 'ti-clipboard-check', off: !ctx.canPasteProps || !!ctx.locked }];
     if (c.kind === 'clip') return [
       { id: 'split', label: 'Tách tại playhead', icon: 'ti-scissors', key: '⌘B', off: !ctx.canSplit },
       { id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D' }, '-', ...clip(false), '-',
@@ -94,7 +97,24 @@
   // Cỡ chữ ±: bước 10 % cỡ hiện tại, kẹp 8–400 px thiết kế.
   const stepSize = (size, dir) => Math.round(Math.min(400, Math.max(8, size * (dir > 0 ? 1.1 : 1 / 1.1))) * 10) / 10;
 
-  const T = { barKind, replacePanel, layerOf, layerTarget, moveLayer, menuItems, placeBar, placeMenu, stepSize };
+  // S28 M205: ghi bộ anim chung của element (engine/fx_registry.js FX.animOf): which = 'in' | 'out' | 'loop' (id, '' = bỏ),
+  // 'in_dur' | 'out_dur' (giây, 0 = mặc định) | 'speed' (tốc độ lặp). Dùng chung cho thanh nổi chữ và khối Hoạt ảnh (83_anim.js).
+  function animSet(o, which, v) {
+    const obj = x => (x && typeof x === 'object' ? { ...x } : typeof x === 'string' ? { type: x } : null), n = +v;
+    if (which === 'in') { if (v) o.anim = v; else delete o.anim; return o; }
+    if (which === 'in_dur') { if (n > 0) o.anim_dur = Math.min(3, n); else delete o.anim_dur; return o; }
+    const f = which === 'out' || which === 'out_dur' ? 'anim_out' : 'anim_loop';
+    if (which === 'out' || which === 'loop') { if (!v) delete o[f]; else o[f] = { ...(obj(o[f]) || {}), type: v }; return o; }
+    const cur = obj(o[f]); if (!cur) return o;
+    if (which === 'out_dur') { if (n > 0) cur.dur = Math.min(3, n); else delete cur.dur; }
+    if (which === 'speed') { if (n > 0) cur.speed = Math.min(3, Math.max(.25, n)); else delete cur.speed; }
+    o[f] = cur; return o;
+  }
+  // Element có khối Vào / Ra / Lặp: dòng chữ (chữ thêm, chữ graphic) và cảnh hình khối / element riêng / sticker
+  const ANIM_SCENES = new Set(['shape', 'celem', 'sticker']);
+  const animCan = c => !!c && (c.kind === 'line' || (c.kind === 'scene' && ANIM_SCENES.has(c.obj?.type)));
+
+  const T = { barKind, replacePanel, layerOf, layerTarget, moveLayer, menuItems, placeBar, placeMenu, stepSize, animSet, animCan };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.CanvasCmds = T;
 })(typeof window !== 'undefined' ? window : globalThis);

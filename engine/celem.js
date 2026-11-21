@@ -37,6 +37,8 @@
   const isObj = v => v != null && typeof v === 'object' && !Array.isArray(v);
   const cl = (v, a, b) => Math.min(b, Math.max(a, v));
   const f1 = v => Math.round(v * 10) / 10;
+  // S28 M205: bộ anim chung (engine/fx_registry.js) cho s.anim / s.anim_out / s.anim_loop của cảnh (không đụng spec)
+  const FXR = typeof FX !== 'undefined' ? FX : typeof require === 'function' ? require('./fx_registry.js') : null;
   const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   const colorOk = v => typeof v === 'string' && !BAD.test(v) && (COLOR.test(v.trim()) || v === 'transparent' ||
@@ -230,13 +232,21 @@
     const box = `left:${f1(b.x)}px;top:${f1(b.y)}px;width:${f1(b.w)}px;height:${f1(b.h)}px;`;
     if (!r.ok) return { front: `<div class="abs"${cid} title="Element riêng lỗi" style="${box}border:2px dashed rgba(255,90,54,.8);box-sizing:border-box"></div>`, errors: r.errors };
     const B = brandOf(o), sx = b.w / spec.w, sy = b.h / spec.h, d = spec.dur || 0.4;
-    const aIn = animAt(spec.in || 'fade', spec.in === 'none' ? 1 : lt / d);
-    const end = Number.isFinite(+s.t1) ? +s.t1 : Infinity, ko = spec.out && spec.out !== 'none' ? cl((end - t) / d, 0, 1) : 1;
-    const aOut = animAt(spec.out || 'none', ko);
+    // s.anim (vào) / s.anim_out (ra) của bộ chung thay spec.in / spec.out khi có; s.anim_loop cộng thêm
+    const an = FXR && (typeof s.anim === 'string' || s.anim_out || s.anim_loop) ? FXR.animOf(s) : null;
+    const regIn = !!(an?.in && FXR.get('anim_in', an.in.type));
+    const aIn = animAt(regIn ? 'none' : spec.in || 'fade', regIn || spec.in === 'none' ? 1 : lt / d);
+    const end = Number.isFinite(+s.t1) ? +s.t1 : Infinity, ko = !an?.out && spec.out && spec.out !== 'none' ? cl((end - t) / d, 0, 1) : 1;
+    const aOut = animAt(an?.out ? 'none' : spec.out || 'none', ko);
     const a = { o: aIn.o * aOut.o, tx: aIn.tx + aOut.tx, ty: aIn.ty + aOut.ty, s: aIn.s * aOut.s, sx: aIn.sx * aOut.sx, rev: Math.min(aIn.rev, aOut.rev) };
+    const rf = an ? FXR.animAt({ in: regIn ? an.in : null, out: an.out, loop: an.loop }, lt, end - t, {}) : null;
+    if (rf) { a.o *= rf.o; a.rev = Math.min(a.rev, rf.clip); }
+    let css = animCss(a);
+    if (rf?.tr) css = css.includes('transform:') ? css.replace('transform:', `transform:${rf.tr} `) : `transform:${rf.tr};` + css;
+    if (rf?.fl) css += `filter:${rf.fl};`;
     const text = typeof s.text === 'string' ? s.text : '';
     const inner = spec.layers.map(L => layerHTML(L, spec, B, sx, sy, lt, text)).join('');
-    return { front: `<div class="abs"${cid} style="${box}opacity:${a.o.toFixed(3)};${animCss(a)}">${inner}</div>` };
+    return { front: `<div class="abs"${cid} style="${box}opacity:${a.o.toFixed(3)};${css}">${inner}</div>` };
   }
   const celem = (s, t, lt) => render(s, t, lt);
 

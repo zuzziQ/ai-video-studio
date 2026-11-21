@@ -123,7 +123,55 @@
     return true;
   }
 
-  const T = { keyName, chord, actionOf, ACTIONS, zoneAfter, arrowAction, pasteStep, clampPos, STEP, COPYABLE, selectAllAt, KEYMAP, keyLabel, fieldOwnsKey, RANGE_KEYS };
+  // S29 M211: Chép / Dán thuộc tính (menu chuột phải, 66_canvas_cmds.js). Clipboard thuộc tính trong trang, tách khỏi clipboard element.
+  // Loại đích: clip (track chính) · media (b-roll / ảnh phủ) · elem (hình khối, element riêng, sticker) · text (dòng chữ) · efx (khối
+  // Điều chỉnh có màu). Mỗi nhóm là các trường của obj; speed đi qua clips.js (ripple) nên propsApply trả riêng, không ghi thẳng.
+  const PROP_GROUPS = [
+    { id: 'clip_anim', label: 'Hoạt ảnh clip (Vào / Ra / Combo)', kinds: ['clip', 'media'], keys: ['anim'], has: o => !!o.anim && typeof o.anim === 'object' },
+    { id: 'anim', label: 'Hoạt ảnh Vào / Ra / Lặp', kinds: ['text', 'elem'], keys: ['anim', 'anim_dur', 'anim_out', 'anim_loop'], has: o => (typeof o.anim === 'string' && !!o.anim) || !!o.anim_out || !!o.anim_loop },
+    { id: 'color', label: 'Màu (bộ lọc + Điều chỉnh)', kinds: ['clip', 'media', 'efx'], keys: ['filter'] },
+    { id: 'mask', label: 'Mặt nạ', kinds: ['clip', 'media'], keys: ['mask'] },
+    { id: 'trans', label: 'Chuyển cảnh + tham số', kinds: ['clip'], keys: ['transition'] },
+    { id: 'speed', label: 'Tốc độ / đường cong', kinds: ['clip'], keys: ['speed', 'speedCurve', 'reverse'], has: o => o.hold == null && (o.speed != null || o.speedCurve != null || !!o.reverse) },
+    { id: 'kf', label: 'Keyframe', kinds: ['media', 'elem', 'text'], keys: ['kf'], has: o => Array.isArray(o.kf) && o.kf.length > 0 },
+  ];
+  const MEDIA = new Set(['photo', 'broll']), ELEM = new Set(['shape', 'celem', 'sticker']);
+  // c = comp của Studio {kind, obj}; efxColor = khối track Hiệu ứng có màu (FX.get('fx', type).color)
+  function propKind(c, efxColor) {
+    if (!c?.obj) return null;
+    if (c.kind === 'clip') return 'clip';
+    if (c.kind === 'line') return 'text';
+    if (c.kind === 'scene') return MEDIA.has(c.obj.type) ? 'media' : ELEM.has(c.obj.type) ? 'elem' : null;
+    if (c.kind === 'efx') return efxColor ? 'efx' : null;
+    return null;
+  }
+  const deep = v => JSON.parse(JSON.stringify(v));
+  const hasGroup = (g, o) => (g.has ? g.has(o) : g.keys.some(k => o[k] != null));
+  // Chép: {kind, t0, groups: {id: {trường: giá trị}}} chỉ nhóm hợp loại và đang có; không có gì → null
+  function propsCopy(o, kind, t0 = 0) {
+    if (!o || !kind) return null;
+    const groups = {};
+    for (const g of PROP_GROUPS) if (g.kinds.includes(kind) && hasGroup(g, o)) groups[g.id] = deep(Object.fromEntries(g.keys.filter(k => o[k] != null).map(k => [k, o[k]])));
+    return Object.keys(groups).length ? { kind, t0: +t0 || 0, groups } : null;
+  }
+  // Nhóm trong clipboard dán được lên loại kind
+  const pasteGroups = (clip, kind) => (clip ? PROP_GROUPS.filter(g => clip.groups[g.id] && g.kinds.includes(kind)).map(g => g.id) : []);
+  // Dán các nhóm ids lên o (loại kind, bắt đầu lúc t0). Nhóm có trên nguồn thay hẳn trường cũ của nhóm đó. Keyframe dời theo
+  // t0 đích − t0 nguồn (kf.t là giây tuyệt đối). Trả {n: số nhóm đã ghi, speed: {speed?, speedCurve?, reverse?} | null}.
+  function propsApply(o, kind, clip, ids, t0 = 0) {
+    const out = { n: 0, speed: null };
+    for (const id of pasteGroups(clip, kind)) {
+      if (!ids.includes(id)) continue;
+      const g = PROP_GROUPS.find(x => x.id === id), v = deep(clip.groups[id]);
+      if (id === 'speed') { out.speed = v; out.n++; continue; }
+      if (id === 'kf') { const d = (+t0 || 0) - clip.t0; v.kf = v.kf.map(k => ({ ...k, t: Math.round(Math.max(0, (+k.t || 0) + d) * 1000) / 1000 })); }
+      for (const k of g.keys) delete o[k];
+      Object.assign(o, v); out.n++;
+    }
+    return out;
+  }
+
+  const T = { keyName, chord, actionOf, ACTIONS, zoneAfter, arrowAction, pasteStep, clampPos, STEP, COPYABLE, selectAllAt, KEYMAP, keyLabel, fieldOwnsKey, RANGE_KEYS, PROP_GROUPS, propKind, propsCopy, pasteGroups, propsApply };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.KeysCore = T;
 })(typeof window !== 'undefined' ? window : globalThis);
