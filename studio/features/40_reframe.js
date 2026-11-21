@@ -46,6 +46,21 @@
     Studio.changed(true);
     return `Đã bám mặt ${n} clip · thấy mặt ở ${Math.round(out.found * 100)}% mẫu${out.cuts ? ` · ${out.cuts} chỗ cắt cảnh` : ''}`;
   }
+  // S27 M201: "Cố định mặt" của bước Dựng (26_tasks.js): bám mặt cho nguồn video dài nhất của track chính (mọi clip cùng nguồn).
+  // → Promise<{ text } | { error }> (chờ việc nền xong). Clip đã bám mặt hoặc chỉnh khung tay vẫn được dò lại: clip chỉnh tay bỏ qua bám mặt như cũ.
+  async function runMain() {
+    const dur = new Map(), pick = new Map();
+    for (const k of Studio.TL?.clips || []) {
+      if (!k.src || typeof k.src === 'string') continue;
+      const id = k.src.seq ?? JSON.stringify(k.src); dur.set(id, (dur.get(id) || 0) + Math.max(0, (+k.out || 0) - (+k.in || 0))); if (!pick.has(id)) pick.set(id, k);
+    }
+    const best = [...dur].sort((a, b) => b[1] - a[1])[0];
+    if (!best) return { error: 'Không có clip video để bám mặt' };
+    const o = pick.get(best[0]);
+    const t = await startJob('/api/reframe', { src: o.src }, 'reframe', out => applyTrack(out, o), 'Cố định mặt');
+    return t?.ok ? { text: t.result?.text || 'Đã bám mặt' } : { error: t?.r?.error || t?.job?.step || 'Chưa bám mặt được' };
+  }
+  Studio.reframe = { runMain };
   document.addEventListener('click', e => {
     const b = e.target.closest('#rfpanel [data-rf]'); if (!b) return;
     const c = clipSel(); if (!c) return; const o = c.obj, a = b.dataset.rf;

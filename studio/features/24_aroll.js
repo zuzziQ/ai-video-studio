@@ -22,7 +22,7 @@
     return h.toString(36);
   }
   const s1 = v => (+v || 0).toFixed(1).replace('.', ',');
-  const inAi = () => !!$('#libbody [data-ai="build"]');
+  const inAi = () => !!$('#libbody [data-ai="build"], #libbody #bt-box'); // S27 M201: panel AI dựng mở đầu bằng Bạn muốn làm gì? (26_tasks.js)
   const redraw = () => { if (inAi()) S.ai?.renderBuild?.(); };
   async function refresh() {
     clearTimeout(A.timer); A.at = Date.now(); A.busy = true;

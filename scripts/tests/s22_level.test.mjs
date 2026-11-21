@@ -13,7 +13,7 @@ const read = f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8'
 
 test('thanh trái Cơ bản theo bảng mục 4', () => {
   assert.deepEqual(L.BASIC_RAIL, {
-    prep: ['brands', 'wf-project'], source: ['wf-new'], build: ['wf-aihelp', 'tpl', 'text', 'audio', 'audioplus'],
+    prep: ['brands', 'wf-project'], source: ['wf-new', 'wf-script'], build: ['wf-aihelp', 'tpl', 'text', 'audio', 'audioplus'],
     check: ['wf-qc'], ship: ['wf-export', 'wf-publish'], settings: ['wf-mode', 'wf-engines'],
   });
   for (const [st, id] of [['prep', 'products'], ['prep', 'kho'], ['source', 'words'], ['source', 'ai'], ['source', 'longform'],

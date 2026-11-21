@@ -32,7 +32,7 @@
   // panel mở được theo bước (id của PANELS trong 01_workflow.js)
   const PANELS = {
     prep: { brands: 'Bộ thương hiệu', products: 'Sản phẩm', kho: 'Kho' },
-    source: { words: 'Lời thoại', ai: 'Làm sạch lời nói', longform: 'Cắt clip từ video dài', 'wf-new': 'Video nguồn' },
+    source: { words: 'Lời thoại', ai: 'Làm sạch lời nói', longform: 'Cắt clip từ video dài', 'wf-new': 'Video nguồn', 'wf-script': 'Kịch bản' },
     check: { 'wf-qc': 'Kiểm tra' },
     ship: { 'wf-export': 'Xuất', 'wf-publish': 'Đăng', schedule: 'Lịch đăng' },
     clip: { trans: 'Chuyển cảnh', filter: 'Bộ lọc', 'wf-broll': 'B-roll' },

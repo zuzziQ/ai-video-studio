@@ -444,8 +444,8 @@
   async function matchScript() {
     const cur = await S.api('/api/script').catch(() => null), sc = cur?.script;
     if (!sc?.text) {
-      openP('wf-new'); S.workflow?.focus?.('wf-new', '#wf-script textarea');
-      return setOut('reply', { reply: 'Chưa có kịch bản: dán vào ô Kịch bản (bước Nguồn) rồi bấm Dùng kịch bản, hoặc hỏi lại sau khi dán.' });
+      openP('wf-script'); S.workflow?.focus?.('wf-script', '#wf-script textarea');
+      return setOut('reply', { reply: 'Chưa có kịch bản: dán vào ô Kịch bản (bước Nguồn → Kịch bản) rồi bấm Dùng kịch bản, hoặc hỏi lại sau khi dán.' });
     }
     if (needCap()) return;
     return viaReview('Phụ đề theo kịch bản', async () => {

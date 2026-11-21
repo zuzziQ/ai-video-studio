@@ -14,7 +14,7 @@
   // Âm thanh = Nhạc & SFX + Giọng & trộn. Bước không có ở đây (vd. 'queue' — hàng đợi Tự lái) hiện đủ ở mọi chế độ.
   const BASIC_RAIL = {
     prep: ['brands', 'wf-project'], // S24 M174: Cài đặt dự án (01_workflow.js) — cũ ở tab Dự án của cột phải
-    source: ['wf-new'],
+    source: ['wf-new', 'wf-script'], // S27 M201: Kịch bản ngay dưới Video nguồn
     build: ['wf-aihelp', 'tpl', 'text', 'audio', 'audioplus'],
     check: ['wf-qc'],
     ship: ['wf-export', 'wf-publish'],
