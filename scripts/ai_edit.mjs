@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import os from 'node:os'; import path from 'node:path'; import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { findChrome } from './platform.mjs';
 import { launchChrome } from './chrome_profile.mjs';
 import { runLLM, askJSON, parseLooseJSON } from './llm.mjs';
@@ -24,6 +25,22 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const say = (p, s) => console.log(`@@ ${p.toFixed(2)} ${s}`);
 const r2 = v => Math.round(v * 100) / 100;
+const BeatsCore = createRequire(import.meta.url)('../studio/features/33_beats.core.js');
+// S28 M210: phách mạnh (giờ video) của nền nhạc người dùng có nhịp (Studio → tab Nhịp); AI dựng giữ nền đó nên cảnh hít vào phách mạnh
+export function beatGrid(tl) {
+  const m = tl?.audio?.music || [];
+  if (!hasUserBed(m, tl?.duration || 0)) return [];
+  return BeatsCore.grid(m.filter(isUserMusic), 'beat', tl.duration).filter(x => x.strong).map(x => x.t);
+}
+export const onBeat = (t, g, tol = .2) => { let best = t, d = tol; for (const x of g || []) { const e = Math.abs(x - t); if (e <= d) { d = e; best = x; } } return best; };
+function beatText(tl) {
+  const g = beatGrid(tl); if (!g.length) return '';
+  const bpm = BeatsCore.brief(tl.audio.music.filter(isUserMusic), tl.duration)?.bpm;
+  return `
+# Nhịp nhạc nền (của người dùng, giữ nguyên): ${bpm} BPM, phách mạnh tại (giây): ${g.slice(0, 60).join(', ')}
+Chọn từ khoá cho cảnh graphic / b-roll gần phách mạnh nhất có thể; phần mềm kéo mép cảnh vào phách mạnh trong ±0,2 s.
+`;
+}
 // Packs that need footage the AI cannot invent (second camera, screen recording, cutouts, before/after photos, photo slideshows).
 const SPECIAL = new Set(['hypecam', 'beatslide', 'multicam', 'screencast', 'greenscreen', 'transform']);
 const LONG_TEXT = new Set(['code', 'definition', 'text', 'example', 'quote', 'body', 'desc', 'question', 'answer']);
@@ -142,7 +159,7 @@ Bảng màu: ember, light, neon, ocean, violet, gold, forest, sunset, candy, mon
 # Bố cục khung hình
 ${layout}
 
-# Nhạc nền (mood): ${moods}
+# Nhạc nền (mood): ${moods}${beatText(tl)}
 # SFX: ${sfxNames}
 
 # Việc cần làm
@@ -306,6 +323,7 @@ const sheetTag = x => (Number.isInteger(x?._sheet) ? { _sheet: x._sheet, ...(x._
 export function validate(raw, { tl, caps, cat, lib, o, script }) {
   const fromSheet = !!o.sheet; // S27 M194: kế hoạch từ bảng dựng (planFromSheet): giữ _sheet + _script, không giới hạn 15 cảnh
   const dropped = [], cuts = []; // cuts: graphic text cut to fit (S13 · M111, shortenCuts)
+  const BG = fromSheet ? [] : beatGrid(tl);
   const dur = tl.duration;
   const keep = o.pack && o.pack !== 'auto';
   const vertical = (tl.height || 1920) > (tl.width || 1080);
@@ -338,7 +356,9 @@ export function validate(raw, { tl, caps, cat, lib, o, script }) {
     if (t0 == null) t0 = typeof s.t0 === 'number' ? s.t0 : null;
     if (t0 == null) { dropped.push(`cảnh ${s.type}: thiếu thời điểm`); continue; }
     t0 = r2(Math.max(0, Math.min(dur - .8, t0 - .05)));
-    const t1 = r2(Math.min(dur, t0 + Math.min(8, Math.max(.8, +s.dur || (it.ex.t1 - it.ex.t0) || 2.5))));
+    if (BG.length) t0 = r2(Math.min(dur - .8, onBeat(t0, BG))); // S28 M210: mở cảnh đúng phách mạnh
+    let t1 = r2(Math.min(dur, t0 + Math.min(8, Math.max(.8, +s.dur || (it.ex.t1 - it.ex.t0) || 2.5))));
+    if (BG.length) { const b = onBeat(t1, BG); if (b - t0 >= .8 && b <= dur) t1 = r2(b); }
     const params = cleanText(s.params && typeof s.params === 'object' ? s.params : {}, it.ex, '', cuts);
     for (const k of ['type', 't0', 't1', 'cid', '_orig', '_ai']) delete params[k];
     const ex = shiftRel(it.ex, t0, t1);

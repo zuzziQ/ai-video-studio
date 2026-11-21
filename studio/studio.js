@@ -1308,9 +1308,10 @@ $('#tllabels').addEventListener('click', e => {
   if (l) { const k = l.dataset.tlock; TRK[k].lock = !TRK[k].lock; if (TRK[k].lock && sel?.track === k) select(null); renderTimeline(); }
 });
 function seekFromX(clientX) { const r = $('#tlinner').getBoundingClientRect(); setTime(clamp((clientX - r.left) / PPS, 0, TL.duration - 1 / FPS)); }
+const extraSnaps = () => (window.Studio?._snap || []).flatMap(f => { try { return f() || []; } catch { return []; } }); // S28 M210: vạch nhịp (33_beats.js)
 function snap(t, self) {
   if (!SNAP) return t;
-  const cands = [T, 0, ...clipLayout().flatMap(k => [k.t0, k.t1]), ...comps.filter(c => c.obj !== self && c.track && c.kind !== 'clip').flatMap(c => [c.t0, c.t1])];
+  const cands = [T, 0, ...clipLayout().flatMap(k => [k.t0, k.t1]), ...comps.filter(c => c.obj !== self && c.track && c.kind !== 'clip').flatMap(c => [c.t0, c.t1]), ...extraSnaps()];
   for (const x of cands) if (Math.abs(x - t) * PPS < 7) return x;
   return t;
 }
@@ -1358,7 +1359,7 @@ function clipDragMove(e) {
   const o = JSON.parse(tdrag.base); TL = o.TL; CAP = o.CAP;
   const edgeT = mode === 'r' ? k.t1 : k.t0;
   let target = edgeT + d;
-  if (SNAP) { for (const x of [T, ...clipLayout().filter(q => q.i !== i).flatMap(q => [q.t0, q.t1])]) if (Math.abs(x - target) * PPS < 7) { target = x; break; } }
+  if (SNAP) { for (const x of [T, ...clipLayout().filter(q => q.i !== i).flatMap(q => [q.t0, q.t1]), ...extraSnaps()]) if (Math.abs(x - target) * PPS < 7) { target = x; break; } }
   trimClip(i, mode, target - edgeT);
   build(); sel = compOf(TL.clips[i]); renderTimeline(); needInit = true; draw();
 }
@@ -1866,6 +1867,7 @@ const Studio = window.Studio = {
   addCompTab(key, label, fn, title, first) { if (!COMP_EXT[key]) { COMP_TABS[first ? 'unshift' : 'push']([key, label, title]); if (first) tab = key; } COMP_EXT[key] = fn; if (panel === 'comp') renderComps(); },
   _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _tip: [], _itop: [], // S27 M194: _tip: fn(comp) -> chữ thêm vào tooltip khối timeline; _itop: fn(comp) -> HTML đầu Thuộc tính (dưới hàng Hỏi Claude)
+  _snap: [], // S28 M210: fn() -> [giây] thêm mốc cho nam châm (mép clip, element, chỗ nối)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
   // left rail panel: Studio.addPanel('ai', 'ti-robot', 'AI', () => { $('#libbody').innerHTML = … }, { step: 'build', level: 'basic' })
   // opts (optional, M82): step 'prep'|'source'|'build'|'check'|'ship'|'settings', level 'basic'|'pro' — read by features/01_workflow.js
