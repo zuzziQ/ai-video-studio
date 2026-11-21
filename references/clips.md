@@ -87,6 +87,63 @@ Hình vẫn vẽ ở `engine/vertical.js` `textLine`; registry giữ nhãn, nhó
 | `type` | Đánh máy | Từng chữ | công nghệ, tò mò | câu hỏi, prompt AI, ghi chú | chữ hiện quá ngắn (< 1 s) |
 <!-- /fx:text_in -->
 
+### Hoạt ảnh clip (`clip.anim`, S28 M204)
+`anim = { in: {type, dur 0,1–3}, out: {type, dur}, combo: {type, speed 0,25–3} }` cho clip Video chính (`TL.clips[i]`) và cảnh `photo` / `broll`. Vào chạy `dur` giây đầu, Ra `dur` giây cuối (Vào + Ra dài hơn clip thì chia theo tỉ lệ), Combo chạy suốt clip; ba phần cộng dồn. Hoạt ảnh theo giây trên timeline, không theo giây nguồn (tốc độ cong / ngược không đổi nhịp).
+
+Thứ tự ghép (một chỗ ở `engine/engine.js`, trên `animWrap`), từ trong ra ngoài:
+- Clip chính: khung cắt / bám mặt → lật + phóng → mặt nạ → **hoạt ảnh** → chuyển cảnh → `TL.zoom` → `TL.fx`.
+- Cảnh b-roll / ảnh phủ: module → mặt nạ → **hoạt ảnh** → keyframe. Thuộc tính nào keyframe đã đặt (`x`/`y`/`scale`/`rot`/`opacity`) thì keyframe thắng, phần đó của hoạt ảnh bị bỏ.
+
+Ảnh tĩnh toàn khung do AI đặt (`script_build.mjs`, `auto_broll.mjs`) mặc định `anim.combo = ken_burns` (thay `kb` chỉ phóng).
+
+Vào:
+<!-- fx:clip_in -->
+| `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |
+|---|---|---|---|---|---|
+| `fade` | Mờ dần | Vào | nhẹ, trung tính | mở clip đầu, ảnh phủ vào nhẹ | cần cú đấm ngay khung đầu |
+| `zoom_in` | Phóng to vào | Vào | bật ra, hào hứng | sản phẩm, chi tiết, câu hook | nội dung trang trọng |
+| `zoom_out` | Thu vào | Vào | mạnh, điện ảnh | cảnh rộng, mở chương, ảnh phủ toàn khung | clip quá ngắn (< 1 s) |
+| `slide_l` | Trượt sang trái | Vào | tiến tới, gọn | ý tiếp theo, ảnh minh hoạ đi vào từ phải | dùng cho mọi clip liền nhau |
+| `slide_r` | Trượt sang phải | Vào | quay lại, so sánh | nhắc ý trước, đối chiếu | dùng cho mọi clip liền nhau |
+| `slide_up` | Trượt lên | Vào | tích cực, lướt feed | video dọc, kết quả, con số tăng | tin buồn |
+| `slide_down` | Trượt xuống | Vào | rơi vào, đóng dấu | kết luận, thẻ giá, ảnh rơi vào khung | mở đầu video |
+| `rotate` | Xoay vào | Vào | vui, bất ngờ | twist, giải trí, sticker ảnh | thương hiệu sang trọng |
+| `shake` | Lắc | Vào | gắt, sốc | tin sốc, beat drop, lỗi | nội dung nhẹ nhàng; dùng dày |
+| `sway` | Lắc lư | Vào | tinh nghịch, mềm | lifestyle, đồ ăn, trẻ em | tin tức, hướng dẫn kỹ thuật |
+| `bounce` | Nảy | Vào | vui, năng lượng | ảnh sản phẩm dạng thẻ, khuyến mãi | cảnh toàn khung nghiêm túc |
+| `blur` | Mờ nhoè | Vào | mơ màng, sang | hồi tưởng, BĐS cao cấp, mỹ phẩm | màn có chữ cần đọc ngay |
+<!-- /fx:clip_in -->
+
+Ra:
+<!-- fx:clip_out -->
+| `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |
+|---|---|---|---|---|---|
+| `fade` | Mờ dần | Ra | nhẹ, kết | clip cuối, ảnh phủ rút đi | ngay trước chuyển cảnh mạnh |
+| `zoom_in` | Phóng ra | Ra | lao tới, dồn dập | trước cảnh hook, đẩy sang ý mới | kết video |
+| `zoom_out` | Thu nhỏ | Ra | khép lại | tổng kết, ảnh thẻ rút đi | clip chính đang nói |
+| `slide_l` | Trượt ra trái | Ra | tiến tới | nhường chỗ ý tiếp theo | dùng cho mọi clip |
+| `slide_r` | Trượt ra phải | Ra | lùi lại | quay về ý trước | dùng cho mọi clip |
+| `slide_up` | Trượt ra trên | Ra | lướt đi | video dọc kiểu lướt feed | tin buồn |
+| `slide_down` | Trượt ra dưới | Ra | hạ xuống, kết | kết đoạn, rút ảnh minh hoạ | mở đầu |
+| `rotate` | Xoay ra | Ra | vui, bất ngờ | kết đoạn giải trí | thương hiệu sang trọng |
+| `sway` | Lắc lư ra | Ra | tinh nghịch | lifestyle, đồ ăn | tin tức |
+| `blur` | Mờ nhoè | Ra | mơ màng | chuyển sang hồi tưởng, cảnh sang | màn có chữ cần đọc |
+<!-- /fx:clip_out -->
+
+Combo:
+<!-- fx:clip_combo -->
+| `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |
+|---|---|---|---|---|---|
+| `ken_burns` | Ken Burns | Combo | kể chuyện, sống động | b-roll ảnh tĩnh (ảnh AI, ảnh stock) cho khỏi đứng hình, BĐS, du lịch | video quay sẵn đã chuyển động mạnh |
+| `pendulum` | Con lắc | Combo | đung đưa, thư thả | ảnh minh hoạ vui, đồ chơi, thời trang | tin tức, dữ liệu |
+| `zoom_pulse` | Zoom vào-ra | Combo | nhấn nhá, sôi động | ảnh sản phẩm, khuyến mãi, nhạc vui | clip chính đang nói dài (chóng mặt) |
+| `shake3d` | Lắc 3D | Combo | công nghệ, hiện đại | ảnh màn hình app, sản phẩm công nghệ | mặt người cận |
+| `breathe` | Thở | Combo | êm, sống | ảnh tĩnh giữ lâu, chân dung, cảnh đẹp | chồng với Ken Burns |
+| `drift` | Trôi | Combo | mơ màng, điện ảnh | cảnh thiên nhiên, BĐS, hồi tưởng | ảnh có chữ sát mép |
+| `beat_shake` | Rung nhịp | Combo | mạnh, theo nhạc | montage, nhạc EDM, khoảnh khắc bùng nổ | đoạn nói chậm, tâm sự |
+| `slow_spin` | Xoay chậm | Combo | lạ, nghệ thuật | ảnh sản phẩm trưng bày, intro nghệ thuật | clip dài (> 5 s, phóng quá to) |
+<!-- /fx:clip_combo -->
+
 ## Thời gian
 - Clip `i` bắt đầu tại tổng thời lượng các clip đứng trước. `TL.duration` nên bằng tổng các clip, cộng thêm phần đuôi nếu có thẻ kết.
 - **Mọi thứ khác** (scenes, phụ đề, sfx, nhạc) dùng thời gian **đầu ra**. Khi người dùng cắt hoặc xoá một đoạn trên track chính (ripple), Studio phải dời theo:

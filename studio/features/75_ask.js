@@ -510,6 +510,12 @@
         const nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(`${nm} vào ${sc.chip}`, Math.max(0, sc.t0 - 0.6), sc.t0 + 0.8, tl => AC.clipTransitionApply(tl, sc.idx, p));
       }
+      case 'clip_anim': { // S28 M204: hoạt ảnh clip Vào / Ra / Combo, xem lại đúng đoạn có hoạt ảnh rồi Nhận / Bỏ
+        const kind = FX.CLIP_SLOT[p.slot], nm = p.type === 'none' ? `Bỏ hoạt ảnh ${{ in: 'vào', out: 'ra', combo: 'combo' }[p.slot]}` : `Hoạt ảnh ${FX.get(kind, p.type)?.label || p.type}`;
+        const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3, d = (p.dur ?? 0.5) + 0.6;
+        const [a, b] = p.slot === 'out' ? [Math.max(sc.t0, t1 - d), t1] : [sc.t0, Math.min(t1, sc.t0 + (p.slot === 'in' ? d : 3))];
+        return pureReview(`${nm} cho ${sc.chip}`, a, b, tl => AC.clipAnimApply(tl, sc.idx, p));
+      }
       case 'clip_speed': { // S29 M207: tốc độ / Freeze / đảo ngược qua 59_speed.js, xem lại trước khi nhận (ripple đổi cả phụ đề)
         if (!S.speed) return setOut('error', { err: 'Chưa có công cụ Tốc độ' });
         const nm = { normal: `Tốc độ ${p.speed ?? 1}×`, freeze: 'Freeze', reverse: 'Đảo ngược', forward: 'Bỏ phát ngược' }[p.mode] || `Tốc độ ${SpeedMap.PRESET_VI[p.mode] || p.mode}`;

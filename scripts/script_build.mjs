@@ -16,6 +16,8 @@ import { DEFAULT_MUSIC_GAIN } from './audio_defaults.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const r2 = v => Math.round(v * 100) / 100;
+// S28 M204: ảnh tĩnh do AI đặt toàn khung → Combo Ken Burns (lia + phóng, engine/fx_registry.js) thay kb chỉ phóng; video giữ kb nhẹ
+const stillKb = (seq, dir) => (seq ? { kb: .04, kb_dir: dir } : { kb: 0, anim: { combo: { type: 'ken_burns', speed: 1 } } });
 const key = s => fold(s).replace(/[^a-z0-9]+/g, ' ').trim();
 export const WPS = 2.6; // tốc độ đọc ước lượng (từ / giây), như estimateTimes của M191
 export const SHEET_VERSION = 1;
@@ -449,7 +451,7 @@ export function sheetToPlan(sheet, tl = {}, o = {}) {
       const d2 = b.mine && !cover ? Math.min(Math.max(1, step - .15), 5) : d; // file bạn đưa giữ lâu hơn (≤ 5 s)
       const t = tag(id, 'B-ROLL', b.q || b.pick, note, b.from);
       if (b.mine) Object.assign(t._script, { mine: b.pick, file: base(b.pick) });
-      out.photos.push({ type: 'photo', mode: 'full', t0: r2(a), t1: r2(Math.min(dur, a + d2)), media: m.seq ? { ...m.seq, t0: r2(a - off) } : m.path, kb: m.seq ? .04 : .12, kb_dir: k % 2 ? -1 : 1, credit, _ai: true, ...t });
+      out.photos.push({ type: 'photo', mode: 'full', t0: r2(a), t1: r2(Math.min(dur, a + d2)), media: m.seq ? { ...m.seq, t0: r2(a - off) } : m.path, ...stillKb(m.seq, k % 2 ? -1 : 1), credit, _ai: true, ...t });
     });
     if (cover && !br.length && r.aroll.from !== 'auto') fail(`${r.seg}:aroll`, 'A-ROLL bỏ', 'không có cảnh minh hoạ để phủ đoạn', at);
     (r.sfx || []).forEach((x, i) => {

@@ -134,11 +134,27 @@
   A.fx_add = { what: `Thêm một khối hiệu ứng khung hình lên track Hiệu ứng: phạm vi đoạn → phủ đúng đoạn, cả video → tại playhead (dur giây). intensity / speed / range 0–1 (speed của pulse = nhịp mỗi giây); target main = chỉ video chính, all = cả khung. Nhấn ngắn (shake, punch, flash…) đặt đúng câu / nhịp cần nhấn. Chọn type theo nội dung: ${FX.aiGuide('fx', ' | ')}.`,
     params: { type: { t: 'enum', values: EFX }, dur: { t: 'num', min: 0.1, max: 30 }, intensity: { t: 'num', min: 0, max: 1 }, speed: { t: 'num', min: 0.1, max: 4 }, range: { t: 'num', min: 0, max: 1 }, target: { t: 'enum', values: ['all', 'main'] } } };
   const fxAddApply = (tl, p, range, at) => (FT ? FT.addApply(tl, p, range, at) : 0);
+  // S28 M204: hoạt ảnh clip (Vào / Ra / Combo) từ registry nhóm clip_anim (engine/fx_registry.js); áp thuần bằng clipAnimApply
+  const CA_TYPES = [...new Set([...FX.ids('clip_in'), ...FX.ids('clip_out'), ...FX.ids('clip_combo')])];
+  A.clip_anim = { what: `Đặt hoạt ảnh cho clip đang chọn. slot = in (vào, dur giây đầu clip) | out (ra, dur giây cuối) | combo (chạy suốt clip, speed ×); type "none" = bỏ slot đó. Ảnh tĩnh / b-roll đứng hình: combo ken_burns.
+Vào: ${FX.aiGuide('clip_in', ' | ')}.
+Ra: ${FX.aiGuide('clip_out', ' | ')}.
+Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
+    params: { slot: { t: 'enum', values: ['in', 'out', 'combo'] }, type: { t: 'enum', values: [...CA_TYPES, 'none'] }, dur: { t: 'num', min: 0.1, max: 3 }, speed: { t: 'num', min: 0.25, max: 3 } } };
+  // Trả false khi type không thuộc slot (mô hình lẫn Vào / Combo) để không áp nhầm
+  function clipAnimApply(tl, idx, p) {
+    const c = tl.clips?.[idx], kind = FX.CLIP_SLOT[p.slot]; if (!c || !kind) return false;
+    if (p.type && p.type !== 'none' && !FX.get(kind, p.type)) return false;
+    const v = p.slot === 'combo' ? (p.speed != null ? { speed: p.speed } : {}) : (p.dur != null ? { dur: p.dur } : {});
+    const a = FX.clipAnimSet(c.anim, p.slot, p.type, v);
+    if (a) c.anim = a; else delete c.anim;
+    return true;
+  }
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
-        : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'clip_speed', 'open_panel'] : ['clip_speed', 'open_panel'])
+        : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'clip_speed', 'clip_anim', 'open_panel'] : ['clip_speed', 'clip_anim', 'open_panel'])
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
@@ -205,7 +221,7 @@
     if (!act) { if (id && id !== 'answer') warnings.push(`việc "${clip(id, 24)}" không có trong phạm vi này`); id = 'answer'; act = list.find(a => a.id === 'answer'); }
     const params = act ? cleanParams(act.params, pickKey(o, ['params', 'args', 'parameters', 'arguments']), warnings) : {};
     // thiếu tham số bắt buộc → về trả lời bằng chữ, không đoán
-    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], fx_add: ['type'], clip_transition: ['type'], clip_speed: ['mode'], open_panel: ['panel'] }[id] || [];
+    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], fx_add: ['type'], clip_transition: ['type'], clip_speed: ['mode'], clip_anim: ['slot', 'type'], open_panel: ['panel'] }[id] || [];
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
@@ -374,7 +390,7 @@
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
     logEntry, logPush, logParse, changeSummary, regionOf, frameAt }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;

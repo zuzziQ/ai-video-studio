@@ -425,6 +425,7 @@ function clipTabs(c) {
       : sect('Chuyển cảnh vào clip này', `<div class="trgrid sm"><button class="tr ${o.transition ? '' : 'on'}" data-ctr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
         ${TRANS_TYPES.map(([kk, l, ic]) => `<button class="tr ${o.transition?.type === kk ? 'on' : ''}" data-ctr="${kk}"><span class="demo t-${kk}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
         ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 1.5, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
+    ...(Studio.animTab ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204: 81_clipanim.js
   ];
 }
 function inspTabs(c) {
@@ -459,7 +460,8 @@ function inspTabs(c) {
     basic += sect('Ảnh / clip', `<select data-f="pmedia">${opt([['', typeof cur === 'object' && cur ? 'Video đã chọn' : '— Chọn từ Media —'], ...list.map(m => [m.path, m.name])], typeof cur === 'string' ? cur : '')}</select><div class="help">Nhập ảnh/video mới ở mục Media bên trái.</div>`, 'ti-photo'); }
   if (o.type === 'frame_grid') basic += sect('Khung video', `<span class="lbl">Làm mờ video (px)</span>${num('blur', typeof o.blur === 'number' ? o.blur : Array.isArray(o.blur) ? o.blur[o.blur.length - 1].v : 0)}<span class="lbl">Vào cảnh</span><select data-f="enter">${opt([['cut', 'Cắt'], ['blur', 'Mờ dần'], ['zoom', 'Phóng to']], o.enter || 'cut')}</select>`);
   basic += timeBlock(c);
-  return [['basic', 'Cơ bản', basic], ['pos', 'Vị trí', posBlock(c) || sect('', `<div class="help">Thành phần này không kéo thả được trên preview. ${tip('Sửa vị trí trong tab Nâng cao (JSON).')}</div>`)],
+  return [['basic', 'Cơ bản', basic], ...(Studio.animTab && ['photo', 'broll'].includes(o.type) ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204
+    ['pos', 'Vị trí', posBlock(c) || sect('', `<div class="help">Thành phần này không kéo thả được trên preview. ${tip('Sửa vị trí trong tab Nâng cao (JSON).')}</div>`)],
     ['json', 'Nâng cao', sect('Tham số đầy đủ (JSON)', `<textarea class="code" data-f="json">${esc(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' || k === 'lines' || k === 'nodes' ? undefined : v), 1))}</textarea>
       <div class="acts"><button data-act="json" class="primary"><i class="ti ti-check"></i> Áp dụng JSON</button></div>`, 'ti-code')]];
 }
