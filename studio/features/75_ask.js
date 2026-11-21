@@ -506,6 +506,12 @@
         const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = `Hiệu ứng ${AC.EFX_VI[p.type] || p.type}`, at = S.T || 0;
         return pureReview(r ? `${nm} trong ${sc.chip}` : `${nm} tại ${AC.stamp(at)}`, r ? r.a : at, r ? r.b : at + 2, tl => AC.fxAddApply(tl, p, r, at));
       }
+      case 'fx_beats': { // S28 M210: khối Hiệu ứng ngắn tại phách mạnh (33_beats.js Studio.beatTimes), xem lại rồi Nhận / Bỏ
+        const times = S.beatTimes?.() || [];
+        if (!times.length) return setOut('reply', { reply: 'Nhạc nền chưa có nhịp: chọn khối nhạc → tab Nhịp → Phân tích nhịp, rồi hỏi lại.' });
+        const r = sc.kind === 'range' ? { a: sc.a, b: sc.b } : null, nm = `${AC.EFX_VI[p.type] || p.type} theo nhịp`;
+        return pureReview(r ? `${nm} trong ${sc.chip}` : nm, r ? r.a : 0, r ? r.b : Math.min(dur, 8), tl => AC.fxBeatsApply(tl, p, r, times));
+      }
       case 'clip_transition': {
         const nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(`${nm} vào ${sc.chip}`, Math.max(0, sc.t0 - 0.6), sc.t0 + 0.8, tl => AC.clipTransitionApply(tl, sc.idx, p));

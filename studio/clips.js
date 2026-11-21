@@ -172,7 +172,28 @@ function setClipSpeed(i, sp) {
   remapClip(k, old);
 }
 // S29 M207 ---------- đường cong tốc độ, ngược, đứng hình ----------
+// Dòng phụ đề (và từ) vắt qua mép clip sắp đảo chiều: tách tại mép, nếu không phần trong clip nhảy sang đầu kia và dòng phủ cả clip,
+// chồng lên các dòng khác (nghiệm thu S28). Chỉ tách giữa hai từ, giữ mọi trường khác của dòng.
+function splitCapsAt(ts) {
+  for (const t of ts) {
+    const out = [];
+    for (const c of CAP) {
+      // từ vắt qua mép: kẹp về phía chứa giữa từ (lệch 1 ms để mốc không rơi đúng mép, nơi fClip không ánh xạ)
+      for (const w of c.words || []) if (w.s < t && w.e > t) { if ((w.s + w.e) / 2 < t) w.e = Math.max(w.s, t - .001); else w.s = Math.min(w.e, t + .001); }
+      const ws = c.words || [], j = ws.findIndex(w => (w.s + w.e) / 2 >= t);
+      if (j <= 0 || (ws[0].s + ws[0].e) / 2 >= t) {
+        if (ws.length && c.t0 < t && c.t1 > t) { if (j < 0) c.t1 = Math.min(c.t1, Math.max(t - .001, ws[ws.length - 1].e)); else c.t0 = Math.max(c.t0, Math.min(t + .001, ws[0].s)); } // mép dòng vắt qua
+        out.push(c); continue;
+      }
+      const a = { ...c, words: ws.slice(0, j) }, b = { ...c, words: ws.slice(j) };
+      a.t1 = a.words[a.words.length - 1].e; b.t0 = b.words[0].s; // mép dòng theo từ: mốc đúng mép clip không được ánh xạ (fClip giữ t ≤ t0)
+      out.push(a, b);
+    }
+    CAP = out;
+  }
+}
 function remapClip(k, old) {
+  if (!!old.reverse !== !!k.c.reverse) splitCapsAt([k.t0, k.t1]);
   remapAll(fClip(k, old));
   fixDuration();
 }

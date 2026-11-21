@@ -227,7 +227,7 @@ Studio tự nạp mọi `studio/routes/*.mjs` (server) và `studio/features/*.js
   - `28_engines`: nút **Mô hình & giọng**: nhà cung cấp LLM cho việc chỉ có chữ (Claude/Ollama, `references/llm.md`) và giọng VieNeu (`references/voice.md`).
   - `29_perf`: panel trái **Hiệu năng** (`references/perf-profile.md`): thẻ máy, chọn profile, form Tuỳ chỉnh, dòng biến môi trường đang ghi đè, kế hoạch render, **Đo thử 10 s**, lịch sử `perf_log`, **Hỏi AI chọn profile** (`POST /api/perf/advise` của `31_perfai`, không có thì ẩn nút); hộp xuất hiện tên profile đang dùng. Route `29_perf.mjs` chỉ nhận `/api/perf`, `/api/perf/log`, `/api/perf/bench`, đường dẫn khác dưới `/api/perf/` để route sau xử lý.
   - `30_audio`: Âm thanh+.
-  - `33_beats` (S28 M210, `references/audio.md` mục Nhịp): tab **Nhịp** của khối nhạc, vạch nhịp trên track nhạc, nam châm hít nhịp (`Studio._snap`), nút Cắt theo nhịp (`Studio.cutByBeats`). Lõi `33_beats.core.js` (`BeatsCore`).
+  - `33_beats` (S28 M210, `references/audio.md` mục Nhịp): tab **Nhịp** của khối nhạc, vạch nhịp trên track nhạc, nam châm hít nhịp (`Studio._snap`), nút Cắt theo nhịp (`Studio.cutByBeats`), Hiệu ứng theo nhịp (`Studio.fxOnBeats`, `Studio.beatTimes`). Lõi `33_beats.core.js` (`BeatsCore`). Lõi `NN_x.core.js` chỉ đọc `window.*Core` của file số nhỏ hơn lúc nạp (feature nạp theo tên); số lớn hơn thì đọc lười.
   - `40_reframe`: Bám mặt, Lồng tiếng.
   - `50–52`: Hàng loạt, Thương hiệu, Đăng.
   - `53_products`: Sản phẩm (Product Brain, `references/products.md`).

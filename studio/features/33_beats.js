@@ -3,7 +3,8 @@
 //   Nhịp gắn vào khối nhạc (TL.audio.music[i].beats, giờ nguồn của file) một bước hoàn tác; vạch vẽ trong khối nhạc trên timeline
 //   (phách mạnh đậm hơn); nam châm bật thì mép clip / element / chỗ nối hít vào vạch đang hiện (Studio._snap).
 //   Nút "Cắt theo nhịp" cạnh nút tách: chia clip đang chọn (không thì clip tại playhead) tại các vạch trong khoảng của nó, một bước hoàn tác.
-// Chưa có "hiệu ứng theo nhịp" (đợi M206).
+//   Hiệu ứng theo nhịp (tab Nhịp): khối Hiệu ứng ngắn (track Hiệu ứng M206, FxTrackCore.beatApply) tại mỗi phách mạnh thứ N
+//   trong khoảng của khối nhạc đang chọn, một bước hoàn tác; bấm lại thay khối theo nhịp cũ chưa sửa tay. Hỏi Claude: việc fx_beats.
 'use strict';
 (function () {
   const S = window.Studio, BC = window.BeatsCore; if (!S || !BC) return;
@@ -22,6 +23,9 @@
     return memo.g;
   }
   S._snap.push(() => BC.snapTimes(grid()));
+  // phách mạnh (giờ video) của mọi khối nhạc có nhịp, không phụ thuộc mức vạch đang xem: hiệu ứng theo nhịp, Hỏi Claude (fx_beats)
+  const strongTimes = () => BC.grid(music(), 'beat', S.TL?.duration || Infinity).filter(x => x.strong).map(x => x.t);
+  S.beatTimes = strongTimes;
 
   // ---------- vạch trong khối nhạc ----------
   S._blk.push((c, pps) => {
@@ -70,8 +74,33 @@
       : `${b ? `<div class="help"><b>${b.bpm} BPM</b> · ${b.t.length} phách, ${b.strong.length} phách mạnh</div>` : '<div class="help">Tìm phách trong bài để vạch nhịp hiện trên track nhạc và các mép hít vào nhịp.</div>'}
         <div class="bmrow"><button data-bmact="run" ${busy ? 'disabled' : ''}><i class="ti ti-wave-sine"></i>${busy ? S.esc(busy) : b ? 'Phân tích lại' : 'Phân tích nhịp'}</button>${b ? '<button data-bmact="clear" title="Bỏ nhịp của khối này"><i class="ti ti-trash"></i></button>' : ''}</div>
         <div class="bmrow" role="group" aria-label="Mức vạch nhịp"><span class="lbl">Vạch</span>${lv}</div>
-        <div class="help">Nam châm bật thì kéo clip / element hít vào vạch. Chọn clip rồi bấm <i class="ti ti-slice"></i> cạnh nút tách để cắt theo nhịp.</div>`;
+        <div class="help">Nam châm bật thì kéo clip / element hít vào vạch. Chọn clip rồi bấm <i class="ti ti-slice"></i> cạnh nút tách để cắt theo nhịp.</div>
+        ${b ? `<span class="lbl">Hiệu ứng theo nhịp</span><div class="bmrow"><select data-bmfx aria-label="Loại hiệu ứng">${fxOpts()}</select>
+          <select data-bmevery aria-label="Mỗi mấy phách mạnh">${[1, 2, 4].map(n => `<option value="${n}" ${n === fxEvery ? 'selected' : ''}>${n === 1 ? 'Mỗi phách mạnh' : `Mỗi ${n} phách mạnh`}</option>`).join('')}</select>
+          <button data-bmact="fx" title="Đặt khối Hiệu ứng ngắn tại các phách mạnh trong khối nhạc này (bấm lại thì thay)"><i class="ti ti-sparkles"></i>Đặt</button></div>` : ''}`;
     return ['beats', 'Nhịp', S.sect('Nhịp nhạc', body, 'ti-wave-sine')];
+  });
+  // ---------- hiệu ứng theo nhịp ----------
+  const FT = () => window.FxTrackCore; // 81_fxtrack.core.js nạp sau file này
+  let fxType = 'punch', fxEvery = 2;
+  const fxOpts = () => (window.FX?.list('fx') || []).map(x => `<option value="${x.id}" ${x.id === fxType ? 'selected' : ''}>${S.esc(x.label)}</option>`).join('');
+  function fxOnBeats(m) {
+    if (!FT()) return S.toast('Chưa có track Hiệu ứng');
+    if (S.trackLocked?.({ track: 'efx' })) return S.toast('Track Hiệu ứng đang khoá');
+    const times = strongTimes().filter(t => t >= m.t0 && t < m.t1);
+    if (!times.length) return S.toast('Khối nhạc này chưa có phách mạnh');
+    const peek = JSON.parse(JSON.stringify({ duration: S.TL.duration, fx: S.TL.fx || [], efx: S.TL.efx || [] }));
+    if (!FT().beatApply(peek, { type: fxType, every: fxEvery }, times, { a: m.t0, b: m.t1 })) return S.toast('Không có phách mạnh nào đặt được');
+    S.pushUndo();
+    const n = FT().beatApply(S.TL, { type: fxType, every: fxEvery }, times, { a: m.t0, b: m.t1 });
+    S.changed(true);
+    S.toast(`Đã đặt ${n} khối “${window.FX.get('fx', fxType)?.label || fxType}” theo nhịp`);
+  }
+  S.fxOnBeats = fxOnBeats;
+  document.addEventListener('change', e => {
+    const t = e.target.closest?.('#insp [data-bmfx]'), ev = e.target.closest?.('#insp [data-bmevery]');
+    if (t && window.FX?.get('fx', t.value)) fxType = t.value;
+    if (ev) fxEvery = Math.max(1, +ev.value || 1);
   });
   async function analyse(m) {
     const src = srcOf(m), key = keyOf(src); if (!src || ST.busy.has(key)) return;
@@ -107,6 +136,7 @@
     if (lv) { level = lv.dataset.bmlv; try { localStorage.setItem(KEY, level); } catch { /* bỏ qua */ } S.renderTimeline(); S.renderInspector(); return; }
     if (!act || S.sel?.kind !== 'music') return;
     if (act.dataset.bmact === 'run') analyse(S.sel.obj);
+    if (act.dataset.bmact === 'fx') fxOnBeats(S.sel.obj);
     if (act.dataset.bmact === 'clear') { S.pushUndo(); const src = srcOf(S.sel.obj); for (const x of music()) if (sameSrc(src, srcOf(x))) delete x.beats; S.changed(true); }
   });
 
