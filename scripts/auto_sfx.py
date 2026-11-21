@@ -21,6 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I does not add the script dir
 from llm_bridge import ask  # noqa: E402  (model calls go through scripts/llm.mjs)
+import speed_curve  # noqa: E402  (S29 M207: thời lượng clip theo đường cong tốc độ)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("timeline")
@@ -524,7 +525,7 @@ def level_mode():
                 put(pos, fam, -16, 2)
             elif not tr and LEVEL >= 3:
                 put(pos, "whoosh_soft", -25, 0)
-        pos += max(1 / 30, (c.get("out", 3) - c.get("in", 0)) / (c.get("speed") or 1))
+        pos += speed_curve.dur(c)  # S29 M207: đường cong / ngược / đứng hình
     # captions: numbers / money (vừa+), highlighted & emotional words (phong phú)
     last_money, last_key = -9.0, -9.0
     any_hl = any(w["hl"] for w in words)

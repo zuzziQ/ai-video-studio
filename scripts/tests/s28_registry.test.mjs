@@ -83,9 +83,9 @@ test('hàm thuần: gọi lại cùng k cho cùng chuỗi (glitch tất định)
 test('mainTrack mới (engine.js đọc FX) dựng ra đúng HTML như mainTrack cũ', () => {
   const eng = read('engine/engine.js');
   const src = eng.match(/function mainTrack\([\s\S]*?\n}\n/)[0];
-  const CLIPS = [{ in: 0, out: 2, name: 'a' }, { in: 0, out: 2, name: 'b' }];
+  const CLIPS = [{ in: 0, out: 2, name: 'a', t0: 0, t1: 2 }, { in: 0, out: 2, name: 'b', t0: 2, t1: 4 }];
   const ctx = {
-    clamp, CLIPS, FX,
+    clamp, CLIPS, FX, SpeedMap: createRequire(import.meta.url)('../../engine/speed.js'), // S29 M207: pSrc của clip trước qua SpeedMap
     clipFilter: c => `f-${c.name}`,
     clipLayer: (c, s, t, f, st = '') => `<L ${c.name} ${s.toFixed(4)} ${t.toFixed(4)} ${f}|${st}>`,
     clipAt: t => { const i = t < 2 ? 0 : 1; return { c: CLIPS[i], i, lt: t - i * 2, src: t - i * 2 }; },

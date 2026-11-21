@@ -71,13 +71,14 @@ function emoji(ch, x, y, size, style = '') {
 // ---------- main track: TL.clips (spec: references/clips.md) ----------
 // clip = { src: {seq,fps,count} | "still.jpg", audio?, in, out, speed=1, volume=1, filter:{preset,brightness,contrast,
 //          saturate,hue,temp,blur}, flip, fit:"cover"|"contain"|"blurfill", zoom, ox, oy, cutouts?, transition:{type,dur} }
+// S29 M207: speedCurve / reverse / hold (Freeze) — thời lượng và giây nguồn lấy từ SpeedMap (engine/speed.js), chung với Studio.
 let CLIPS = [];
 function layoutClips() {
   CLIPS = [];
   let t = 0;
   for (const c of TL.clips || []) {
     if (c.hidden) continue;
-    const d = Math.max(1 / TL.fps, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1));
+    const d = SpeedMap.dur(c, TL.fps);
     CLIPS.push({ ...c, t0: t, t1: t + d });
     t += d;
   }
@@ -88,7 +89,7 @@ function clipAt(t) {
   let i = CLIPS.findIndex(c => t < c.t1);
   if (i < 0) i = CLIPS.length - 1;
   const c = CLIPS[i];
-  return { c, i, lt: t - c.t0, src: (c.in || 0) + Math.max(0, t - c.t0) * (c.speed || 1) };
+  return { c, i, lt: t - c.t0, src: SpeedMap.srcAt(c, t - c.t0) };
 }
 function srcFrame(c, srcT, cut) {
   if (typeof c.src === 'string') return cut ? (c.cutout_img || c.src) : c.src;
@@ -178,7 +179,7 @@ function mainTrack(t, extraFilter = '', extraStyle = '') {
   const cur = clipLayer(c, src, t, `${clipFilter(c)} ${extraFilter}`, extraStyle);
   if (!tr || !prev || lt >= (tr.dur ?? .4)) return cur;
   const p = clamp(lt / (tr.dur ?? .4)), [inS, outS] = (TRANS[tr.type] || TRANS.fade)(p);
-  const pSrc = (prev.out ?? 0) + lt * (prev.speed || 1);
+  const pSrc = SpeedMap.srcAt(prev, prev.t1 - prev.t0 + lt); // clip trước chạy tiếp dưới chuyển cảnh (ngược: lùi tiếp)
   const flash = FX.transOverlay(tr.type, p); // flash: lớp trắng phủ
   return `<div class="full">${clipLayer(prev, pSrc, t, clipFilter(prev), outS)}<div class="full" style="${inS}">${cur}</div>${flash}</div>`;
 }

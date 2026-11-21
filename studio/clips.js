@@ -11,7 +11,8 @@ const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`
 const r2 = v => Math.round(v * 100) / 100;
 const r3 =v => Math.round(v * 1000) / 1000;
 const deep = o => JSON.parse(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
-const clipDur = c => Math.max(1 / 30, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1));
+// S29 M207: thời lượng / giây nguồn theo tốc độ đều, đường cong, ngược, đứng hình: SpeedMap (engine/speed.js, chung với engine)
+const clipDur = c => SpeedMap.dur(c, 30);
 const srcLen = c => (typeof c.src === 'string' ? Infinity : (c.src?.count || 1) / (c.src?.fps || 30));
 // S28 M202: chuyển cảnh, bộ lọc, hoạt ảnh chữ đọc từ engine/fx_registry.js (window.FX, nạp trước file này ở studio/index.html)
 const TRANS_TYPES = FX.transTypes(); // [id, nhãn, icon]
@@ -25,7 +26,7 @@ function clipLayout() {
 const clipsTotal = () => clipLayout().reduce((a, k) => Math.max(a, k.t1), 0);
 function clipAtT(t) { const L = clipLayout().filter(k => k.t1 > k.t0); return L.find(k => t >= k.t0 - 1e-6 && t < k.t1) || L[L.length - 1] || null; }
 // Source time inside clip k at output time t.
-const srcAt = (k, t) => (k.c.in || 0) + Math.max(0, t - k.t0) * (k.c.speed || 1);
+const srcAt = (k, t) => SpeedMap.srcAt(k.c, t - k.t0);
 function clipFrameUrl(c, st) {
   if (!c?.src) return '';
   if (typeof c.src === 'string') return '/project/' + c.src;
@@ -68,19 +69,27 @@ function mapScene(s, f) {
   };
   walk(s, true);
   s.t0 = r2(f(s.t0)); s.t1 = r2(f(s.t1));
+  if (s.t1 < s.t0) [s.t0, s.t1] = [s.t1, s.t0]; // cảnh trong clip vừa đảo ngược
 }
 const fRemove = (a, b) => t => (t <= a ? t : t >= b ? t - (b - a) : a);
 const fInsert = (p, d) => t => (t < p - 1e-6 ? t : t + d);
 const fScale = (a, d0, d1) => t => (t <= a ? t : t >= a + d0 - 1e-6 ? t + (d1 - d0) : a + (t - a) * d1 / d0);
+// Clip k đổi từ bản `old` sang k.c (tốc độ, đường cong, ngược, điểm vào/ra): giờ trong clip đi theo giây nguồn, phía sau dồn theo thời lượng mới.
+function fClip(k, old) {
+  const d0 = k.t1 - k.t0, d1 = clipDur(k.c);
+  return t => (t <= k.t0 ? t : t >= k.t1 - 1e-6 ? t + (d1 - d0) : k.t0 + clamp(SpeedMap.ltAt(k.c, SpeedMap.srcAt(old, t - k.t0)), 0, d1));
+}
 // Apply f to every output time in the project. cut=[a,b] drops what lies inside the removed span.
 function remapAll(f, cut) {
   const inCut = t => cut && t > cut[0] + 1e-3 && t < cut[1] - 1e-3;
-  const span = (o, k0 = 't0', k1 = 't1') => { o[k0] = r2(f(o[k0])); o[k1] = r2(f(o[k1])); return o[k1] - o[k0] > .04; };
+  const span = (o, k0 = 't0', k1 = 't1') => { o[k0] = r2(f(o[k0])); o[k1] = r2(f(o[k1])); if (o[k1] < o[k0]) [o[k0], o[k1]] = [o[k1], o[k0]]; return o[k1] - o[k0] > .04; };
   CAP = CAP.filter(c => {
     c.words = (c.words || []).filter(w => !inCut((w.s + w.e) / 2));
     if (!c.words.length) return false;
-    for (const w of c.words) { w.s = r2(f(w.s)); w.e = r2(f(w.e)); }
-    c.t0 = r2(Math.min(f(c.t0), c.words[0].s)); c.t1 = r2(Math.max(f(c.t1), c.words[c.words.length - 1].e));
+    for (const w of c.words) { w.s = r2(f(w.s)); w.e = r2(f(w.e)); if (w.e < w.s) [w.s, w.e] = [w.e, w.s]; }
+    c.words.sort((a, b) => a.s - b.s);
+    const a = f(c.t0), b = f(c.t1);
+    c.t0 = r2(Math.min(a, b, c.words[0].s)); c.t1 = r2(Math.max(a, b, c.words[c.words.length - 1].e));
     return c.t1 - c.t0 > .04;
   });
   TL.scenes = (TL.scenes || []).filter(s => {
@@ -108,7 +117,12 @@ function splitClipAt(t) {
   if (!k) return null;
   if (t - k.t0 < 2 / 30 || k.t1 - t < 2 / 30) return null;
   const c = k.c, cut = r3(srcAt(k, t)), b = deep(c);
-  delete b.transition; b.in = cut; c.out = cut;
+  delete b.transition;
+  if (c.hold != null) { c.hold = r3(t - k.t0); b.hold = r3(k.t1 - t); }
+  else {
+    if (c.speedCurve) { const u = clamp(SpeedMap.fwd(c, t - k.t0) / (SpeedMap.span(c) || 1), 0, 1); b.speedCurve = SpeedMap.subCurve(c.speedCurve, u, 1); c.speedCurve = SpeedMap.subCurve(c.speedCurve, 0, u); }
+    if (c.reverse) { c.in = cut; b.out = cut; } else { b.in = cut; c.out = cut; } // ngược: nửa đầu phát phần nguồn phía sau
+  }
   TL.clips.splice(k.i + 1, 0, b);
   return b;
 }
@@ -141,6 +155,13 @@ function insertClipAt(clip, t) {
 // Ripple trim. edge 'l'|'r', d = output-time delta of that edge (positive = to the right).
 function trimClip(i, edge, d) {
   const k = clipLayout()[i], c = k.c, sp = c.speed || 1, min = 2 / 30 * sp;
+  if (!SpeedMap.plain(c)) { // đường cong / ngược / đứng hình: đổi đoạn nguồn rồi dồn theo giây nguồn (không cắt bỏ phụ đề)
+    const old = deep(c), d0 = k.t1 - k.t0;
+    if (c.hold != null) { c.hold = r3(clamp((+c.hold || 0) + (edge === 'r' ? d : -d), .1, 60)); remapAll(fScale(k.t0, d0, clipDur(c))); fixDuration(); return; }
+    const avg = SpeedMap.span(c) / d0 || 1, ds = (edge === 'r' ? d : -d) * avg; // ds > 0 = dài thêm
+    const atIn = (edge === 'r') === !!c.reverse; // mép đang kéo là điểm vào của nguồn
+    return setClipRange(i, atIn ? 'in' : 'out', atIn ? (c.in || 0) - ds : (c.out ?? 3) + ds, old);
+  }
   if (edge === 'r') {
     const nOut = clamp((c.out ?? 3) + d * sp, (c.in || 0) + min, srcLen(c)), dd = (nOut - (c.out ?? 3)) / sp;
     c.out = r3(nOut);
@@ -153,11 +174,53 @@ function trimClip(i, edge, d) {
   fixDuration();
 }
 function setClipSpeed(i, sp) {
-  const k = clipLayout()[i], d0 = k.t1 - k.t0;
+  const k = clipLayout()[i], old = deep(k.c);
+  delete k.c.speedCurve; // tốc độ đều thay đường cong
   k.c.speed = clamp(+sp, .25, 4); if (k.c.speed === 1) delete k.c.speed;
-  const d1 = clipDur(k.c);
-  if (Math.abs(d1 - d0) > 1e-4) remapAll(fScale(k.t0, d0, d1));
+  remapClip(k, old);
+}
+// S29 M207 ---------- đường cong tốc độ, ngược, đứng hình ----------
+function remapClip(k, old) {
+  remapAll(fClip(k, old));
   fixDuration();
+}
+// pts: tên preset (SpeedMap.PRESETS) | [{x, y}] | null = về tốc độ đều
+function setClipCurve(i, pts) {
+  const k = clipLayout()[i], c = k?.c; if (!c || c.hold != null) return false;
+  const old = deep(c);
+  if (pts == null || pts === '') delete c.speedCurve;
+  else if (typeof pts === 'string') { if (!SpeedMap.PRESETS[pts]) return false; c.speedCurve = pts; }
+  else { const p = SpeedMap.norm(pts); if (!p) return false; c.speedCurve = p.map(q => ({ x: r3(q.x), y: r3(q.y) })); }
+  if (c.speedCurve) delete c.speed;
+  remapClip(k, old);
+  return true;
+}
+function setClipReverse(i, on) {
+  const k = clipLayout()[i], c = k?.c; if (!c || c.hold != null || typeof c.src === 'string') return false;
+  const old = deep(c);
+  if (on) c.reverse = true; else delete c.reverse;
+  remapClip(k, old);
+  return true;
+}
+// Điểm vào / ra (giây nguồn) của clip không phải tốc độ đều: giữ phụ đề theo giây nguồn.
+function setClipRange(i, f, v, old) {
+  const k = clipLayout()[i], c = k.c; old = old || deep(c);
+  const min = 2 / 30 * Math.max(1, SpeedMap.span(c) / (k.t1 - k.t0 || 1));
+  if (f === 'in') c.in = r3(clamp(+v, 0, (c.out ?? 3) - min)); else c.out = r3(clamp(+v, (c.in || 0) + min, srcLen(c)));
+  remapClip(k, old);
+}
+// Freeze: chèn clip đứng hình d giây giữ nguyên khung tại t (tách clip nếu t ở giữa). Trả clip mới hoặc null.
+function freezeAt(t, d = 3) {
+  const k = clipAtT(t); if (!k || typeof k.c.src === 'string' || k.c.hold != null) return null;
+  const s = r3(srcAt(k, Math.min(t, k.t1 - 1e-3))), fr = deep(k.c);
+  for (const key of ['transition', 'speed', 'speedCurve', 'reverse', 'keys']) delete fr[key];
+  Object.assign(fr, { in: s, out: s, hold: r3(clamp(+d || 3, .1, 60)) });
+  let idx = k.i + 1, at = t;
+  if (t - k.t0 < 2 / 30) { idx = k.i; at = k.t0; } else if (k.t1 - t < 2 / 30) at = k.t1; else splitClipAt(t);
+  TL.clips.splice(idx, 0, fr);
+  remapAll(fInsert(at, fr.hold));
+  fixDuration();
+  return fr;
 }
 // Reorder: clip i → index j. Captions/sfx/scenes that live inside a moved clip move with it.
 function moveClip(i, j) {

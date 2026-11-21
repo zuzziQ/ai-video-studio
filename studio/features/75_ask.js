@@ -506,6 +506,11 @@
         const nm = p.type === 'none' ? 'Bỏ chuyển cảnh' : `Chuyển cảnh ${AC.TRANS_VI[p.type] || p.type}`;
         return pureReview(`${nm} vào ${sc.chip}`, Math.max(0, sc.t0 - 0.6), sc.t0 + 0.8, tl => AC.clipTransitionApply(tl, sc.idx, p));
       }
+      case 'clip_speed': { // S29 M207: tốc độ / Freeze / đảo ngược qua 59_speed.js, xem lại trước khi nhận (ripple đổi cả phụ đề)
+        if (!S.speed) return setOut('error', { err: 'Chưa có công cụ Tốc độ' });
+        const nm = { normal: `Tốc độ ${p.speed ?? 1}×`, freeze: 'Freeze', reverse: 'Đảo ngược', forward: 'Bỏ phát ngược' }[p.mode] || `Tốc độ ${SpeedMap.PRESET_VI[p.mode] || p.mode}`;
+        return viaReview(`${nm} cho ${sc.chip}`, async () => (S.speed.apply(sc.idx, p) ? {} : { error: 'Clip này không đổi được' }));
+      }
       case 'autofill': {
         if (!S.autofill) return setOut('error', { err: 'Chưa có công cụ Tự động' });
         if (p.mode !== 'sfx' && needCap()) return;
