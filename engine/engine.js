@@ -155,6 +155,7 @@ function fixReframe(stage, t) {
 // S28 M204: thứ tự ghép transform — định nghĩa MỘT lần ở đây, từ trong ra ngoài:
 //   clip chính: 1. ảnh: khung cắt tay / bám mặt (reframeCss: object-position + transform-origin) rồi lật + phóng (c.flip, c.zoom)
 //               2. hộp clip: mặt nạ (c.mask)   3. hoạt ảnh clip c.anim (Combo × Vào × Ra, quanh tâm khung; animWrap)
+//               3½. keyframe c.kf (S29 M209, quanh tâm khung; mask / màu theo key đã vào bước 1–2; thắng phần trùng của anim)
 //               4. chuyển cảnh mainTrack (inS / outS)   5. TL.zoom (arollTransform)   6. hiệu ứng cả khung TL.fx (fxWrap)
 //   cảnh b-roll / ảnh phủ: module → mặt nạ (s.mask) → hoạt ảnh s.anim → keyframe s.kf (sceneFx). Keyframe thắng phần trùng
 //               thuộc tính: x / y / scale / rot / opacity nào có trong s.kf thì bỏ phần đó của hoạt ảnh.
@@ -174,9 +175,17 @@ function animOrigin(s) {
   const b = s.type === 'photo' && s.mode === 'card' ? s.card : s.type === 'broll' && (s.layout || 'full') !== 'full' ? s : null;
   return b && Number.isFinite(+b.x) && Number.isFinite(+b.w) ? `${+b.x + b.w / 2}px ${+b.y + b.h / 2}px` : '50% 50%';
 }
+// S29 M209: keyframe clip chính (engine/kf.js): mặt nạ / màu theo key ở trong hộp clip (bước 2, và filter ảnh), biến đổi x / y / tỉ lệ /
+// xoay / mờ bọc NGOÀI hoạt ảnh (3½, quanh tâm khung) và thắng phần trùng của hoạt ảnh — như keyframe của cảnh.
+const kfClip = (c, t) => (c.kf?.length && c.t1 != null ? KF.clipAt(c, t - c.t0) : null);
+// mainTrack truyền `${clipFilter(c)} …`: có key màu thì thay phần đầu đó bằng filter tại t (mainTrack giữ nguyên, test so khung cũ)
 function clipLayer(c, srcT, t, extraFilter = '', style = '') {
-  const html = clipBox(c, srcT, t, extraFilter, style);
-  return c.anim && c.t1 != null ? animWrap(c.anim, t - c.t0, c.t1 - c.t0, html) : html;
+  const k = kfClip(c, t);
+  if (k && k.c.filter !== c.filter) { const f0 = clipFilter(c); if (extraFilter.startsWith(f0)) extraFilter = clipFilter(k.c) + extraFilter.slice(f0.length); }
+  let html = clipBox(k ? k.c : c, srcT, t, extraFilter, style);
+  if (c.anim && c.t1 != null) html = animWrap(c.anim, t - c.t0, c.t1 - c.t0, html, '50% 50%', c.kf);
+  if (k?.tr) html = `<div class="full" style="transform-origin:50% 50%;transform:${kfTr(k.tr)};opacity:${clamp(k.tr.opacity).toFixed(3)}">${html}</div>`;
+  return html;
 }
 function clipBox(c, srcT, t, extraFilter = '', style = '') {
   const rf = reframeCss(c, srcT);
@@ -308,13 +317,15 @@ function placeSub2(stage) {
 // ---------- free keyframes + masks (spec: references/keyframes-mask-broll.md) ----------
 // kf: [{t (absolute s), x, y (px offset), scale, rot (deg), opacity, ease: linear|in|out|inOut|back|bounce|hold}] — ease = curve leaving that key.
 const KF_EASE = { linear: k => k, in: E.inCubic, out: E.outCubic, inOut: E.inOutSine, back: k => E.outBack(k, 1.7), hold: () => 0,
-  bounce: k => { const n = 7.5625, d = 2.75; return k < 1 / d ? n * k * k : k < 2 / d ? n * (k -= 1.5 / d) * k + .75 : k < 2.5 / d ? n * (k -= 2.25 / d) * k + .9375 : n * (k -= 2.625 / d) * k + .984375; } };
+  bounce: k => { const n = 7.5625, d = 2.75; return k < 1 / d ? n * k * k : k < 2 / d ? n * (k -= 1.5 / d) * k + .75 : k < 2.5 / d ? n * (k -= 2.25 / d) * k + .9375 : n * (k -= 2.625 / d) * k + .984375; },
+  ...Object.fromEntries(Object.entries(KF.EASE).filter(([k]) => KF.BZ[k] || k === 'elastic')) }; // S29 M209: easeIn / easeOut / easeInOut / overshoot / elastic; a.bz tự chọn
+const kfEase = a => (a.bz ? KF.easeOf(a) : KF_EASE[a.ease] || KF_EASE.linear);
 const KF_DEF = { x: 0, y: 0, scale: 1, rot: 0, opacity: 1 };
 function kfAt(kf, t) {
   const ks = [...kf].sort((a, b) => a.t - b.t), v = k => ({ ...KF_DEF, ...k });
   const i = ks.findIndex(k => k.t > t);
   if (i === 0 || i < 0) return v(ks[i === 0 ? 0 : ks.length - 1]);
-  const a = v(ks[i - 1]), b = v(ks[i]), e = (KF_EASE[a.ease] || KF_EASE.linear)(clamp((t - a.t) / Math.max(1e-6, b.t - a.t)));
+  const a = v(ks[i - 1]), b = v(ks[i]), e = kfEase(a)(clamp((t - a.t) / Math.max(1e-6, b.t - a.t)));
   const o = { ...a }; for (const p in KF_DEF) o[p] = a[p] + (b[p] - a[p]) * e; return o;
 }
 const kfTr = v => `translate(${(+v.x).toFixed(2)}px,${(+v.y).toFixed(2)}px) rotate(${(+v.rot).toFixed(2)}deg) scale(${(+v.scale).toFixed(4)})`;

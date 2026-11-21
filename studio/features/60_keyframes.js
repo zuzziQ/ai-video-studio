@@ -2,7 +2,7 @@
 // Inspector tab "Keyframe", diamonds on timeline blocks, and preview drag edits the key at the playhead. Spec: references/keyframes-mask-broll.md.
 (() => {
   const { $, esc, fmt, sect } = Studio;
-  const EASES = [['linear', 'Đều'], ['inOut', 'Mượt'], ['in', 'Nhanh dần'], ['out', 'Chậm dần'], ['back', 'Nảy quá'], ['bounce', 'Nảy bóng'], ['hold', 'Giữ (nhảy)']];
+  const EASES = window.KF?.EASE_VI || [['linear', 'Đều'], ['inOut', 'Mượt'], ['in', 'Nhanh dần'], ['out', 'Chậm dần'], ['back', 'Nảy quá'], ['bounce', 'Nảy bóng'], ['hold', 'Giữ (nhảy)']]; // S29 M209: + 5 preset bezier (engine/kf.js)
   const PROPS = [['x', 'Dời X', -1280, 1280, 1, 'px'], ['y', 'Dời Y', -1280, 1280, 1, 'px'], ['scale', 'Tỉ lệ', .1, 4, .01, '×'], ['rot', 'Xoay', -360, 360, 1, '°'], ['opacity', 'Độ mờ', 0, 1, .01, '']];
   const DEF = { x: 0, y: 0, scale: 1, rot: 0, opacity: 1 };
   const EPS = .5 / 30, r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;

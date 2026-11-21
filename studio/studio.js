@@ -1248,7 +1248,7 @@ function renderTimeline() {
         return `<div class="clip ${on ? 'sel' : ''}" data-ci="${k.i}" data-dl="${k.t0 * PPS}" data-dw="${w}">
           <div class="strip">${clipStrip(k, w)}</div>
           <div class="ctop"><span class="cn">${k.i + 1}</span>${SpeedMap.label(c) ? `<span class="cb"><i class="ti ${c.hold != null ? 'ti-snowflake' : c.reverse ? 'ti-arrow-back-up' : 'ti-brand-speedtest'}"></i>${esc(SpeedMap.label(c))}</span>` : ''}${c.mute ? '<span class="cb"><i class="ti ti-volume-off"></i></span>' : ''}${c.filter ? '<span class="cb"><i class="ti ti-color-filter"></i></span>' : ''}${c.flip ? '<span class="cb"><i class="ti ti-flip-vertical"></i></span>' : ''}<span class="cd">${r2(k.t1 - k.t0)}s</span></div>
-          <span class="h l"></span><span class="h r"></span></div>`;
+          <span class="h l"></span><span class="h r"></span>${Studio._cblk.map(f => f(k, PPS)).join('')}</div>`;
       }).join('') + L.slice(1).map(k => `<button class="tb ${k.c.transition ? 'on' : ''}" data-tbi="${k.i}" data-dl="${k.t0 * PPS}" title="${k.c.transition ? 'Chuyển cảnh: ' + (TRANS_TYPES.find(x => x[0] === k.c.transition.type)?.[1] || k.c.transition.type) : 'Thêm chuyển cảnh'}"><i class="ti ${k.c.transition ? 'ti-transition-right' : 'ti-plus'}"></i></button>`).join('') + '</div>';
       lh += label(key, name, ic, VIDEO_H + 8);
       continue;
@@ -1449,7 +1449,7 @@ function syncClipAudio(force) {
   if (k && k.c.audio && !k.c.mute && !k.c.reverse && rate > 0 && rate <= 4 && T < k.t1 - .02) {
     want = audFor(k.c.audio);
     const st = srcAt(k, T);
-    want.playbackRate = clamp(rate, .25, 4); want.volume = clamp(k.c.volume ?? 1, 0, 1);
+    want.playbackRate = clamp(rate, .25, 4); want.volume = clamp((k.c.kf && window.KF?.valueAt(k.c.kf, 'volume', T - k.t0)) ?? k.c.volume ?? 1, 0, 1); // S29 M209: key âm lượng
     if (want.paused || force || curClip !== k.i || Math.abs(want.currentTime - st) > .25) { want.currentTime = st; want.play().catch(() => {}); }
   }
   curClip = k ? k.i : -1;
@@ -1494,6 +1494,7 @@ function tick() {
     const inside = T >= m.t0 && T < m.t1;
     if (inside && el.paused) { el.currentTime = (T - m.t0 + (m.offset || 0)) % (el.duration || 1e9); el.play().catch(() => {}); }
     if (!inside && !el.paused) el.pause();
+    if (inside && m.kf) { const g = window.KF?.valueAt(m.kf, 'gain', T - m.t0); if (g != null) el.volume = dbVol(g + 4); } // S29 M209: key âm lượng nhạc
   }
   for (const f of Studio._play) f('tick', T);
   lastT = T;
@@ -1870,7 +1871,7 @@ const Studio = window.Studio = {
   // S20 M142: bảng Lớp (67_layers.js): tab thêm của panel Thành phần, danh sách element, track khoá, cuộn timeline tới khối
   get comps() { return comps; }, trackLocked: c => !!TRK[c?.track]?.lock, revealOnTimeline: c => revealOnTimeline(c), pickAll: (x, y) => pickAll(x, y),
   addCompTab(key, label, fn, title, first) { if (!COMP_EXT[key]) { COMP_TABS[first ? 'unshift' : 'push']([key, label, title]); if (first) tab = key; } COMP_EXT[key] = fn; if (panel === 'comp') renderComps(); },
-  _insp: [], _ready: [], _blk: [], // _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
+  _insp: [], _ready: [], _blk: [], _cblk: [], // _cblk: fn(clipLayout item, PPS) -> HTML trong khối clip Video chính (S29 M209: chấm keyframe); _blk: fn(comp, PPS) -> extra HTML inside a timeline block (keyframe diamonds…)
   _tip: [], _itop: [], // S27 M194: _tip: fn(comp) -> chữ thêm vào tooltip khối timeline; _itop: fn(comp) -> HTML đầu Thuộc tính (dưới hàng Hỏi Claude)
   _snap: [], // S28 M210: fn() -> [giây] thêm mốc cho nam châm (mép clip, element, chỗ nối)
   _build: [], _play: [], // build(comps) hooks add timeline components; play('tick'|'stop', T) hooks follow playback
