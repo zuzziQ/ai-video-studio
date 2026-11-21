@@ -55,7 +55,7 @@
     btn.classList.toggle('on', !!ready);
     btn.setAttribute('aria-pressed', String(on));
     btn.innerHTML = `<span class="aspect sm">${wait ? '540…' : '540p'}</span>`;
-    const why = pref !== 'auto' ? '' : on ? (info.profile === 'tiet-kiem' ? ' (profile Tiết kiệm)' : ' (máy render bằng SwiftShader)') : ' (máy đủ mạnh: dùng khung gốc)';
+    const why = pref !== 'auto' ? '' : on ? (info.profile === 'tiet-kiem' ? ' (profile Tiết kiệm)' : ' (máy không có GPU, vẽ hình bằng CPU)') : ' (máy đủ mạnh: dùng khung gốc)';
     btn.title = `Khung xem trước 540p: ${{ auto: 'Tự động', on: 'Bật', off: 'Tắt' }[pref]}${why}. Chỉ preview nhẹ hơn, video xuất vẫn đủ nét. Bấm để đổi.`;
   }
   async function proxySync() {

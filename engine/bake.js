@@ -14,11 +14,11 @@
   const r2 = v => Math.round(v * 100) / 100;
   const HEX = /^#[0-9a-f]{6}$/i;
   const BANDS = ['all', 'r', 'y', 'g', 'c', 'b', 'm'];
-  const BAND_VI = { all: 'Mọi màu', r: 'Đỏ', y: 'Vàng', g: 'Lục', c: 'Lơ', b: 'Lam', m: 'Tím' };
+  const BAND_VI = { all: 'Mọi màu', r: 'Đỏ', y: 'Vàng', g: 'Xanh lục', c: 'Xanh lơ', b: 'Xanh lam', m: 'Tím' };
   // preset của bộ lọc curves trong ffmpeg
   const CURVES = ['none', 'lighter', 'darker', 'increase_contrast', 'medium_contrast', 'strong_contrast', 'linear_contrast', 'vintage', 'cross_process', 'color_negative', 'negative'];
   const CURVES_VI = { none: 'Không', lighter: 'Sáng hơn', darker: 'Tối hơn', increase_contrast: 'Tăng tương phản', medium_contrast: 'Tương phản vừa', strong_contrast: 'Tương phản mạnh',
-    linear_contrast: 'Tương phản tuyến tính', vintage: 'Cổ điển', cross_process: 'Cross process', color_negative: 'Âm bản màu', negative: 'Âm bản' };
+    linear_contrast: 'Tương phản đều', vintage: 'Cổ điển', cross_process: 'Cross process', color_negative: 'Âm bản màu', negative: 'Âm bản' };
   const LUT_FILE = /^\.studio\/bake\/luts\/[0-9a-f]{12,40}\.cube$/;
 
   // tham số đã kẹp, chỉ thao tác có tác dụng; không còn gì → null (clip không cần nướng)
@@ -147,7 +147,7 @@
   function label(o) {
     if (!o) return '';
     return [o.chroma && 'Phông xanh', o.lut && `LUT${o.lut.mix < 100 ? ' ' + o.lut.mix + '%' : ''}`, o.hsl && `HSL ${BAND_VI[o.hsl.band].toLowerCase()}`,
-      o.curves && `Curves${o.curves.preset !== 'none' ? ' ' + CURVES_VI[o.curves.preset].toLowerCase() : ''}`, o.stab && 'Ổn định hình'].filter(Boolean).join(', ');
+      o.curves && `Đường cong${o.curves.preset !== 'none' ? ' ' + CURVES_VI[o.curves.preset].toLowerCase() : ''}`, o.stab && 'Ổn định hình'].filter(Boolean).join(', ');
   }
   // .cube hợp lệ: có LUT_3D_SIZE 2–65 và đủ dòng số (size³)
   function cubeOk(text) {

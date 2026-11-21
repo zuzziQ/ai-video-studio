@@ -23,7 +23,7 @@
   };
 
   const GROUPS = {
-    trans: [['basic', 'Cơ bản'], ['slide', 'Trượt'], ['camera', 'Camera'], ['light', 'Ánh sáng'], ['mask', 'Mặt nạ'], ['distort', 'Nhiễu']],
+    trans: [['basic', 'Cơ bản'], ['slide', 'Trượt'], ['camera', 'Camera'], ['light', 'Ánh sáng'], ['mask', 'Mặt nạ'], ['distort', 'Méo hình']],
     text_in: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
     lut: [['tone', 'Tông màu'], ['mood', 'Không khí']],
     // S28 M205
@@ -37,8 +37,8 @@
   // qua màu, nhấp nháy), intensity (nhiễu, lắc, tách RGB). Nhãn hiện trong inspector chỗ nối: label + vl (nhãn từng giá trị).
   const DUR = { t: 'num', min: 0.1, max: 3, def: 0.4, label: 'Thời lượng' };
   const EASE = { auto: k => k, smooth: E.inOutSine, accel: k => k * k, decel: k => 1 - (1 - k) * (1 - k), snap: E.outExpo };
-  const EASE_P = { t: 'enum', values: Object.keys(EASE), def: 'auto', label: 'Nhịp',
-    vl: { auto: 'Mặc định', smooth: 'Mượt', accel: 'Nhanh dần', decel: 'Chậm dần', snap: 'Bật' } };
+  const EASE_P = { t: 'enum', values: Object.keys(EASE), def: 'auto', label: 'Kiểu chạy',
+    vl: { auto: 'Mặc định', smooth: 'Mượt', accel: 'Nhanh dần', decel: 'Chậm dần', snap: 'Dứt khoát' } };
   const DIR = def => ({ t: 'enum', values: ['l', 'r', 'u', 'd'], def, label: 'Hướng', vl: { l: 'Sang trái', r: 'Sang phải', u: 'Lên', d: 'Xuống' } });
   const COLORS = { white: '#fff', black: '#000', warm: '#ffb648', pink: '#ff4f9a', blue: '#4fb8ff' };
   const COLOR = def => ({ t: 'enum', values: Object.keys(COLORS), def, label: 'Màu', vl: { white: 'Trắng', black: 'Đen', warm: 'Vàng ấm', pink: 'Hồng', blue: 'Xanh' } });
@@ -108,7 +108,7 @@
 
     // ---- S29 M203: 24 loại mới (CSS thuần, hàm thuần theo k) ----
     // Cơ bản
-    { id: 'dip', label: 'Qua màu', group: 'basic', icon: 'ti-circle-half-2', params: { dur: DUR, ease: EASE_P, color: COLOR('black') },
+    { id: 'dip', label: 'Chuyển qua màu', group: 'basic', icon: 'ti-circle-half-2', params: { dur: DUR, ease: EASE_P, color: COLOR('black') },
       fn: k => [`opacity:${half(k)}`, ''],
       overlay: (k, p) => veil(COLORS[p.color] || '#000', bell(k)),
       ai: { mood: 'trầm, ngắt chương', nhip: 'chậm', khi_nao: 'hết một phần, chuyển thời gian, mở đầu/kết video (đen); trắng = mơ, hồi tưởng', tranh: 'giữa hai câu liền mạch; dur ngắn (< 0.4 s)' } },
@@ -168,7 +168,7 @@
           `<div class="full" style="mix-blend-mode:screen;transform:translateX(${f2(dx)}%)">${x}<div class="full" style="pointer-events:none;mix-blend-mode:multiply;background:${c}"></div></div>`).join('')}</div>`;
       },
       ai: { mood: 'công nghệ, gắt, MV', nhip: 'nhanh', khi_nao: 'tin AI/công nghệ, nhạc điện tử, cú twist', tranh: 'mỹ phẩm, BĐS cao cấp; máy yếu (render nặng)' } },
-    { id: 'ripple', label: 'Gợn', group: 'distort', icon: 'ti-ripple', params: { dur: DUR, ease: EASE_P },
+    { id: 'ripple', label: 'Gợn sóng', group: 'distort', icon: 'ti-ripple', params: { dur: DUR, ease: EASE_P },
       fn: k => [`clip-path:circle(${f2(E.outCubic(k) * 75)}% at 50% 50%);transform:scale(${f3t(1 + .05 * Math.sin(k * Math.PI * 6) * (1 - k))})`, `transform:scale(${f3t(1 + .03 * Math.sin(k * Math.PI * 6 + 1) * tri(k))})`],
       overlay: k => veil(`repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.4) 0 2px, transparent 2px ${f1(18 + 40 * k)}px)`, .5 * bell(k)),
       ai: { mood: 'mơ, nước, chuyển trạng thái', nhip: 'vừa', khi_nao: 'hồi tưởng, giấc mơ, đồ uống, spa', tranh: 'video hướng dẫn cần rõ' } },
@@ -205,7 +205,7 @@
     { id: 'curtain', label: 'Rèm mở', group: 'mask', icon: 'ti-layout-columns', params: { dur: DUR, ease: EASE_P },
       fn: k => { const v = f2((1 - E.inOutSine(k)) * 50); return [`clip-path:inset(0 ${v}% 0 ${v}%)`, '']; },
       ai: { mood: 'trang trọng, ra mắt', nhip: 'vừa', khi_nao: 'ra mắt sản phẩm, khai trương, mở màn sự kiện', tranh: 'giữa video nhịp nhanh' } },
-    { id: 'blinds', label: 'Lá sách', group: 'mask', icon: 'ti-blinds', params: { dur: DUR, ease: EASE_P },
+    { id: 'blinds', label: 'Rèm lá sách', group: 'mask', icon: 'ti-blinds', params: { dur: DUR, ease: EASE_P },
       fn: k => { const w = f2(E.inOutSine(k) * 10); return [msk(`repeating-linear-gradient(90deg,#000 0 ${w}%,transparent ${w}% 10%)`), '']; },
       ai: { mood: 'gọn, đồ hoạ, doanh nghiệp', nhip: 'vừa', khi_nao: 'trình bày, slide doanh nghiệp, nội thất', tranh: 'cảnh nhiều chi tiết dọc (rối mắt)' } },
     { id: 'grid', label: 'Lưới ô', group: 'mask', icon: 'ti-layout-grid', params: { dur: DUR, ease: EASE_P },
@@ -411,7 +411,7 @@
     ['exposure', 'Phơi sáng', -1, 1, .01, 0], ['brightness', 'Độ sáng', .5, 1.5, .01, 1], ['contrast', 'Tương phản', .5, 1.5, .01, 1],
     ['saturate', 'Bão hoà', 0, 2, .01, 1], ['temp', 'Nhiệt độ', -1, 1, .01, 0], ['hue', 'Sắc độ', -180, 180, 1, 0, '°'],
     ['highlights', 'Vùng sáng', -1, 1, .01, 0], ['shadows', 'Vùng tối', -1, 1, .01, 0], ['sharpen', 'Nét', 0, 1, .01, 0],
-    ['fade', 'Fade', 0, 1, .01, 0], ['vignette', 'Vignette', 0, 1, .01, 0], ['grain', 'Hạt', 0, 1, .01, 0], ['blur', 'Làm mờ', 0, 20, .5, 0, 'px'],
+    ['fade', 'Phai màu', 0, 1, .01, 0], ['vignette', 'Tối viền', 0, 1, .01, 0], ['grain', 'Hạt', 0, 1, .01, 0], ['blur', 'Làm mờ', 0, 20, .5, 0, 'px'],
   ].map(([id, label, min, max, step, def, unit = '']) => ({ id, label, min, max, step, def, unit }));
   // kẹp một bộ filter theo bảng (preset lạ → bỏ, strength 0–100); dùng cho dữ liệu Claude / dán
   function colorClean(f) {
@@ -472,7 +472,7 @@
   //   fn(lt, p, dur) → { filter?, transform?, over? (HTML phủ trên), wrap? (html → html) }; lt = giây từ đầu khối. Hàm thuần theo t
   //   (nhiễu dùng rnd tất định theo số khung), không CSS animation theo đồng hồ. Mỗi loại ≤ 3 thanh.
   // Nhấn cũ (legacy: true): chỉ dữ liệu (nhãn, thời lượng mặc định, mô tả cho Claude); hình vẫn ở engine.js fxWrap để timeline cũ y hệt.
-  GROUPS.fx = [['accent', 'Nhấn'], ['light', 'Ánh sáng'], ['retro', 'Cổ điển'], ['frame', 'Khung'], ['color', 'Màu']];
+  GROUPS.fx = [['accent', 'Nhấn mạnh'], ['light', 'Ánh sáng'], ['retro', 'Cổ điển'], ['frame', 'Khung hình'], ['color', 'Màu']];
   const clamp01 = v => Math.min(1, Math.max(0, v));
   const f3 = v => (+v).toFixed(3);
   const INT = def => ({ t: 'num', min: 0, max: 1, def, label: 'Cường độ' });
@@ -486,14 +486,14 @@
     params: { dur: { t: 'num', min: .1, max: 4, def: dur, label: 'Thời lượng' }, ...(amp ? { amp: { t: 'num', min: amp[0], max: amp[1], def: amp[2], label: 'Cường độ' } } : {}) }, ai });
   const FXS = [
     ACC('shake', 'Rung', 'ti-vibration', .35, [2, 40, 14], { mood: 'gắt, bất ngờ', nhip: 'rất nhanh', khi_nao: 'câu sốc, va chạm, beat mạnh', tranh: 'đặt liền nhau; nội dung nhẹ nhàng' }),
-    ACC('punch', 'Đấm zoom', 'ti-zoom-in-area', .25, [.03, .4, .12], { mood: 'nhấn, dứt khoát', nhip: 'nhanh', khi_nao: 'từ khoá, con số, câu đinh', tranh: 'quá 1 lần / 3 s' }),
+    ACC('punch', 'Zoom giật', 'ti-zoom-in-area', .25, [.03, .4, .12], { mood: 'nhấn, dứt khoát', nhip: 'nhanh', khi_nao: 'từ khoá, con số, câu đinh', tranh: 'quá 1 lần / 3 s' }),
     ACC('zoom_in', 'Phóng chậm', 'ti-zoom-in', .6, [.03, .4, .15], { mood: 'tập trung, kịch tính', nhip: 'vừa', khi_nao: 'nhấn một câu quan trọng, tiết lộ', tranh: 'khi đang có zoom khác' }),
     ACC('whip', 'Lia', 'ti-wind', .3, null, { mood: 'năng lượng', nhip: 'nhanh', khi_nao: 'chuyển ý dồn dập, montage', tranh: 'nội dung chậm' }),
     ACC('blur_in', 'Nhoè vào', 'ti-blur', .35, null, { mood: 'mở màn, tỉnh lại', nhip: 'vừa', khi_nao: 'đầu đoạn mới, sau cảnh đen', tranh: 'giữa câu đang nói' }),
     ACC('glitch', 'Nhiễu', 'ti-wave-saw-tool', .3, null, { mood: 'công nghệ, lỗi', nhip: 'nhanh', khi_nao: 'tin AI/công nghệ, bất ngờ tiêu cực', tranh: 'thương hiệu mềm mại' }),
     ACC('rgb', 'Lệch màu', 'ti-color-swatch', .3, null, { mood: 'điện tử, gắt', nhip: 'nhanh', khi_nao: 'nhạc điện tử, beat drop', tranh: 'cảnh sang trọng' }),
     ACC('flash', 'Loé trắng', 'ti-bolt', .25, null, { mood: 'cú đấm, khoảnh khắc', nhip: 'rất nhanh', khi_nao: 'beat drop, ảnh chụp', tranh: 'quá 2–3 lần mỗi video' }),
-    ACC('push', 'Đẩy vào mặt', 'ti-focus-centered', 2, [.03, .3, .1], { mood: 'thân mật, chú ý', nhip: 'chậm', khi_nao: 'câu tâm sự, nhấn lời người nói', tranh: 'đoạn có b-roll phủ kín' }),
+    ACC('push', 'Zoom vào mặt', 'ti-focus-centered', 2, [.03, .3, .1], { mood: 'thân mật, chú ý', nhip: 'chậm', khi_nao: 'câu tâm sự, nhấn lời người nói', tranh: 'đoạn có b-roll phủ kín' }),
     ACC('mono', 'Đen trắng nhấn', 'ti-contrast-2', 1.5, null, { mood: 'nghiêm, dừng lại', nhip: 'chậm', khi_nao: 'câu đinh, trích dẫn, khoảnh khắc "trước"', tranh: 'sản phẩm cần thấy màu' }),
     { id: 'light_leak', label: 'Rò sáng', group: 'light', icon: 'ti-sun-high', params: { intensity: INT(.6), speed: SPD(.5) },
       fn: (lt, p, dur) => {

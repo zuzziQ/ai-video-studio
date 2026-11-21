@@ -84,11 +84,11 @@ test('checkSpec: hash tính lại, đường dẫn phải trong dự án; readRe
     const ok = { seq: 'work/frames/%05d.jpg', fps: 30, n0: 1, n1: 30, ops: { hsl: { hue: 5 } } };
     const sp = checkSpec(dir, ok);
     assert.equal(sp.hash, B.spec({ src: { seq: ok.seq, fps: 30, count: 30 }, in: 0, out: 29 / 30, bake: ok.ops }).hash);
-    assert.throws(() => checkSpec(dir, { ...ok, hash: '0000000000000000' }), /hash lệch/);
-    assert.throws(() => checkSpec(dir, { ...ok, seq: '../x/%05d.jpg' }), /Chuỗi khung lạ/);
+    assert.throws(() => checkSpec(dir, { ...ok, hash: '0000000000000000' }), /Thiết lập đã đổi/);
+    assert.throws(() => checkSpec(dir, { ...ok, seq: '../x/%05d.jpg' }), /không nằm đúng chỗ/);
     assert.throws(() => checkSpec(dir, { ...ok, seq: 'nope/%05d.jpg' }), /Không thấy thư mục/);
     assert.throws(() => checkSpec(dir, { ...ok, ops: { lut: { file: LUT } } }), /Không thấy file LUT/);
-    assert.throws(() => checkSpec(dir, { ...ok, ops: {} }), /Không có thao tác/);
+    assert.throws(() => checkSpec(dir, { ...ok, ops: {} }), /Chưa bật hiệu chỉnh/);
     assert.equal(readResult(dir, sp.hash), null);
     fs.mkdirSync(path.join(dir, B.DIR, sp.hash), { recursive: true });
     fs.writeFileSync(path.join(dir, B.DIR, sp.hash, B.OK), JSON.stringify({ seq: sp.out, n: 30 }));

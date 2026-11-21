@@ -7,10 +7,10 @@
   // kind: 'run' = Studio làm rồi báo kết quả (vẫn hoàn tác được) · 'list' = dò rồi đưa danh sách để bạn tự chọn chỗ cắt ·
   // 'open' = mở công cụ để bạn tự chỉnh. need: điều kiện để chọn được. claude: việc này đi qua một lượt AI dựng của Claude.
   const TASKS = [
-    { id: 'cut', icon: 'ti-scissors', label: 'Cắt nhịp video', hint: 'Dò lỗi nói, từ đệm, khoảng lặng dài; bạn chọn chỗ cắt', kind: 'list', need: 'captions' },
+    { id: 'cut', icon: 'ti-scissors', label: 'Cắt chỗ thừa', hint: 'Dò lỗi nói, từ đệm, khoảng lặng dài; bạn chọn chỗ cắt', kind: 'list', need: 'captions' },
     { id: 'face', icon: 'ti-face-id', label: 'Cố định mặt', hint: 'Bám mặt người nói, giữ mặt trong khung khi đổi khổ', kind: 'run', need: 'video' },
     { id: 'look', icon: 'ti-adjustments', label: 'Tinh chỉnh hình', hint: 'Mở Bộ lọc: màu, sáng, tương phản', kind: 'open' },
-    { id: 'aroll', icon: 'ti-user-square', label: 'A-roll theo kịch bản', hint: 'Lời ngoài kịch bản để cắt, chọn take', kind: 'list', need: 'script' },
+    { id: 'aroll', icon: 'ti-user-square', label: 'A-roll theo kịch bản', hint: 'Tìm lời ngoài kịch bản để cắt, chọn lần quay tốt (take)', kind: 'list', need: 'script' },
     { id: 'broll', icon: 'ti-movie', label: 'Thêm B-roll', hint: 'Chữ nổi, ảnh, video minh hoạ đúng lúc nói', kind: 'run', need: 'captions' },
     { id: 'music', icon: 'ti-music', label: 'Thêm nhạc và SFX', hint: 'Nhạc nền theo đoạn, hiệu ứng âm thanh theo cảnh', kind: 'run' },
     { id: 'graphic', icon: 'ti-wand', label: 'Graphic và style', hint: 'Claude chọn gói style, viết hook, đặt graphic theo lời thoại', kind: 'run', need: 'captions', claude: true },

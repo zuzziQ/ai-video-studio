@@ -40,34 +40,34 @@
 
   function status(o) {
     const sp = BK.spec(o, fps()), st = BK.state(o, fps());
-    if (st === 'none') return `<div class="bkstat" id="bkstat">${typeof o.src === 'string' ? 'Ảnh tĩnh: chưa nướng được, chỉ clip video.' : 'Chưa có hiệu chỉnh nào.'}</div>`;
-    if (st === 'ready') return `<div class="bkstat ok" id="bkstat"><i class="ti ti-circle-check"></i> Đã nướng ${BK.label(BK.ops(o.bake))} · ${sp.n1 - sp.n0 + 1} khung${o.bake.p540 ? ' · có 540p' : ''}</div>`;
+    if (st === 'none') return `<div class="bkstat" id="bkstat">${typeof o.src === 'string' ? 'Ảnh tĩnh không dùng được tab này, chỉ clip video.' : 'Chưa có hiệu chỉnh nào.'}</div>`;
+    if (st === 'ready') return `<div class="bkstat ok" id="bkstat"><i class="ti ti-circle-check"></i> Đã xử lý xong: ${BK.label(BK.ops(o.bake))} · ${sp.n1 - sp.n0 + 1} khung${o.bake.p540 ? ' · có 540p' : ''}</div>`;
     const j = JOBS.get(sp.hash);
-    if (j && ['queued', 'running'].includes(j.state)) return `<div class="bkstat" id="bkstat"><i class="ti ti-loader-2 spin"></i><span>${esc(j.state === 'queued' ? 'Đang chờ lượt…' : j.step || 'Đang nướng…')}</span>
-      <span class="bar" style="--w:${Math.round((j.progress || 0) * 100)}%"><i></i></span><!-- design-token-ok: % tiến độ --><button data-bkact="cancel" title="Huỷ việc nướng"><i class="ti ti-x"></i> Huỷ</button></div>`;
-    if (j?.state === 'error') return `<div class="bkstat err" id="bkstat"><i class="ti ti-alert-triangle"></i> ${esc(j.error || 'Nướng lỗi')} <button data-bkact="run">Thử lại</button></div>`;
-    return `<div class="bkstat" id="bkstat"><i class="ti ti-eye"></i> Đang xem gần đúng (chưa nướng). <button data-bkact="run"><i class="ti ti-flame"></i> Nướng</button></div>`;
+    if (j && ['queued', 'running'].includes(j.state)) return `<div class="bkstat" id="bkstat"><i class="ti ti-loader-2 spin"></i><span>${esc(j.state === 'queued' ? 'Đang chờ lượt…' : j.step || 'Đang xử lý…')}</span>
+      <span class="bar" style="--w:${Math.round((j.progress || 0) * 100)}%"><i></i></span><!-- design-token-ok: % tiến độ --><button data-bkact="cancel" title="Huỷ xử lý"><i class="ti ti-x"></i> Huỷ</button></div>`;
+    if (j?.state === 'error') return `<div class="bkstat err" id="bkstat"><i class="ti ti-alert-triangle"></i> ${esc(j.error || 'Xử lý lỗi')} <button data-bkact="run">Thử lại</button></div>`;
+    return `<div class="bkstat" id="bkstat"><i class="ti ti-eye"></i> Đang xem gần đúng. Bấm Xử lý để có hình chính xác (chạy nền, vài giây). ${S.tip('Studio dùng ffmpeg xử lý trước từng khung hình của đoạn clip thành bản mới; xong thì xem trước và render đều đúng màu. Lúc chưa xử lý, khung xem trước chỉ mô phỏng gần đúng.')} <button data-bkact="run"><i class="ti ti-wand"></i> Xử lý</button></div>`;
   }
 
   function tab(c) {
     const o = c.obj, b = o.bake || {}, still = typeof o.src === 'string';
-    if (still) return sect('', '<div class="help">Hiệu chỉnh nướng sẵn chỉ cho clip video (chuỗi khung). Ảnh tĩnh dùng tab Màu.</div>');
+    if (still) return sect('', '<div class="help">Tab này xử lý từng khung hình của clip video, nên chỉ dùng cho clip video. Ảnh tĩnh dùng tab Màu.</div>');
     const k = b.chroma, band = b.hsl?.band || 'all';
     const chroma = `<div class="bkrow"><button data-bkact="chroma" class="${k ? 'on' : ''}"><i class="ti ti-${k ? 'toggle-right' : 'toggle-left'}"></i> ${k ? 'Đang tách nền' : 'Bật tách nền'}</button>
         <input type="color" data-bk="chroma.color" value="${esc(k?.color || GREEN)}" title="Màu nền cần xoá"><button data-bkact="pick" title="Hút màu nền trên khung"><i class="ti ti-color-picker"></i> Hút màu</button></div>
       <div class="bkframe" data-bkpick hidden style="--bk-ar:${(S.TL?.width || 9) / (S.TL?.height || 16)}"><img alt="Khung gốc để hút màu" data-bkimg></div><!-- design-token-ok: tỉ lệ khung -->
-      ${k ? slider(b, 'chroma.strength', 0, 100, 'Cường độ') + slider(b, 'chroma.edge', 0, 100, 'Viền mềm') + slider(b, 'chroma.spill', 0, 100, 'Khử ánh màu') : ''}
+      ${k ? slider(b, 'chroma.strength', 0, 100, 'Dải màu xoá') + slider(b, 'chroma.edge', 0, 100, 'Viền mềm') + slider(b, 'chroma.spill', 0, 100, 'Khử màu hắt') : ''}
       <div class="help">Phần nền xoá đi lộ lớp bên dưới. ${S.tip('Bấm Hút màu rồi chọn điểm nền trên khung xem trước (hoặc trên ảnh khung hiện ra).')}</div>`;
     const lut = `<div class="bkrow"><button data-bkact="lut"><i class="ti ti-file-upload"></i> ${b.lut ? 'Đổi file .cube' : 'Nhập file .cube'}</button>${b.lut ? `<span class="muted">${esc(b.lut.name || 'LUT')}</span><button data-bkact="lutoff" title="Bỏ LUT"><i class="ti ti-x"></i></button>` : ''}
       <input type="file" accept=".cube" data-bklut hidden></div>${b.lut ? slider(b, 'lut.mix', 0, 100, 'Độ mạnh', '%') : ''}`;
     const hsl = `<div class="bkrow">${BK.BANDS.map(x => `<button class="${band === x ? 'on' : ''}" data-bkband="${x}">${esc(BK.BAND_VI[x])}</button>`).join('')}</div>
-      ${slider(b, 'hsl.hue', -180, 180, 'Sắc độ', '°')}${slider(b, 'hsl.sat', -100, 100, 'Bão hoà')}${slider(b, 'hsl.light', -100, 100, 'Độ sáng')}`;
+      ${slider(b, 'hsl.hue', -180, 180, 'Sắc độ', '°')}${slider(b, 'hsl.sat', -100, 100, 'Bão hoà')}${slider(b, 'hsl.light', -100, 100, 'Độ sáng')}<div class="help">Chọn một dải màu rồi chỉnh sắc độ, bão hoà, độ sáng của riêng dải đó.</div>`;
     const pre = b.curves?.preset || 'none';
     const curves = `<div class="bkrow"><select data-bk="curves.preset">${BK.CURVES.map(x => `<option value="${x}" ${pre === x ? 'selected' : ''}>${esc(BK.CURVES_VI[x])}</option>`).join('')}</select></div>
       ${slider(b, 'curves.shadows', -50, 50, 'Vùng tối')}${slider(b, 'curves.highlights', -50, 50, 'Vùng sáng')}`;
     const stab = `${slider(b, 'stab.strength', 0, 100, 'Mức ổn định')}<div class="help">0 = tắt. Khung phóng nhẹ để giấu mép.</div>`;
     return `<div id="bkpanel">${status(o)}${sect('Phông xanh', chroma, 'ti-background')}${sect('LUT .cube', lut, 'ti-file-lambda')}${sect('HSL', hsl, 'ti-color-swatch')}
-      ${sect('Curves', curves, 'ti-chart-line')}${sect('Ổn định hình', stab, 'ti-focus-centered')}
+      ${sect('Đường cong (Curves)', curves, 'ti-chart-line')}${sect('Ổn định hình', stab, 'ti-focus-centered')}
       <div class="acts"><button data-bkact="reset" ${o.bake ? '' : 'disabled'}><i class="ti ti-restore"></i> Bỏ mọi hiệu chỉnh</button></div></div>`;
   }
 
@@ -185,12 +185,12 @@
       await new Promise(ok => setTimeout(ok, 1300));
       if (S.META?.pid !== pid) return JOBS.delete(sp.hash); // đổi dự án giữa lúc chờ
       const g = await S.api('/api/bake?hash=' + sp.hash).catch(() => null);
-      if (g?.ready) { JOBS.delete(sp.hash); if (attach(sp.hash, g.ready)) S.toast(`Đã nướng ${BK.label(sp.ops)}`); paintStat(); return; }
+      if (g?.ready) { JOBS.delete(sp.hash); if (attach(sp.hash, g.ready)) S.toast(`Đã xử lý xong: ${BK.label(sp.ops)}`); paintStat(); return; }
       const j = g?.job; if (!j) continue;
       JOBS.set(sp.hash, j); paintStat();
-      if (j.state === 'cancelled') { JOBS.delete(sp.hash); paintStat(); return S.toast('Đã huỷ nướng hiệu chỉnh'); }
-      if (j.state === 'error') return S.toast('Nướng lỗi: ' + (j.error || ''));
-      if (j.state === 'done') { JOBS.set(sp.hash, { state: 'error', error: 'Việc xong nhưng thiếu chuỗi nướng' }); return paintStat(); }
+      if (j.state === 'cancelled') { JOBS.delete(sp.hash); paintStat(); return S.toast('Đã huỷ xử lý hiệu chỉnh'); }
+      if (j.state === 'error') return S.toast('Xử lý lỗi: ' + (j.error || ''));
+      if (j.state === 'done') { JOBS.set(sp.hash, { state: 'error', error: 'Việc xong nhưng không thấy kết quả, bấm Thử lại' }); return paintStat(); }
     }
   }
   S.bakeTab = tab;

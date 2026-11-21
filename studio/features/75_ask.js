@@ -541,7 +541,7 @@
         return pureReview(`Màu ${lut} cho ${sc.chip}${r.why ? ' · ' + r.why : ''}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => AC.colorApply(tl, sc.idx, r.filter));
       }
       case 'clip_bake': { // S29 M212: hiệu chỉnh nướng sẵn (86_bake.js) — bản xem dùng CSS gần đúng; job nướng chỉ chạy khi Nhận (tl là S.TL)
-        const nm = { chroma: 'Tách phông xanh', hsl: 'HSL', curves: 'Curves', stab: 'Ổn định hình', lut: 'Độ mạnh LUT', none: 'Bỏ hiệu chỉnh' }[p.op] || 'Hiệu chỉnh';
+        const nm = { chroma: 'Tách phông xanh', hsl: 'HSL', curves: 'Đường cong', stab: 'Ổn định hình', lut: 'Độ mạnh LUT', none: 'Bỏ hiệu chỉnh' }[p.op] || 'Hiệu chỉnh';
         const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3;
         return pureReview(`${nm} cho ${sc.chip}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => {
           const ok = AC.bakeApply(tl, sc.idx, p);

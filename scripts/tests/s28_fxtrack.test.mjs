@@ -122,7 +122,7 @@ test('lõi Studio: khối đọc từ ba nguồn, sửa ghi ngược đúng ngu�
   const tl = { duration: 20, fx: [{ t: 2, type: 'punch' }], grade: [{ t0: 5, t1: 8, mode: 'bw' }], efx: [{ type: 'grain', start: 1, end: 6, params: { intensity: .2 } }] };
   const bs = FT.blocks(tl);
   assert.deepEqual(bs.map(b => [b.src, b.type, b.start, b.end, b.target]), [['efx', 'grain', 1, 6, 'all'], ['fx', 'punch', 2, 2.25, 'all'], ['grade', 'grade', 5, 8, 'main']]);
-  assert.equal(bs[1].label, 'Đấm zoom');
+  assert.equal(bs[1].label, 'Zoom giật');
   assert.equal(bs[2].label, 'Màu: Đen trắng');
   FT.setTimes('fx', tl.fx[0], 3, 3.25, true);
   assert.deepEqual(tl.fx[0], { t: 3, type: 'punch' }, 'dời nhấn cũ không ghi thêm dur');
