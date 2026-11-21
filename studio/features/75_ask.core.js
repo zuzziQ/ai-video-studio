@@ -192,11 +192,25 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     c.filter = f;
     return true;
   }
+  // S29 M209: keyframe của clip đang chọn (engine/kf.js) — một thuộc tính chạy from → to trong [start, end] giây của clip (bỏ trống = cả
+  //   clip), thay key cũ của thuộc tính đó. Đọc lười: /engine/kf.js nạp trước features trong trình duyệt, Node cần require.
+  let KF0 = null;
+  const KFM = () => KF0 || (KF0 = root.KF || (typeof require === 'function' ? require('../../engine/kf.js') : null));
+  const KF_PROPS = ['x', 'y', 'scale', 'rot', 'opacity', 'mask_x', 'mask_y', 'mask_w', 'mask_h', 'mask_feather', 'strength', ...(FX.ADJ || []).map(a => a.id), 'volume'];
+  const KF_EASES = ['linear', 'inOut', 'in', 'out', 'back', 'bounce', 'hold', 'easeIn', 'easeOut', 'easeInOut', 'overshoot', 'elastic'];
+  A.clip_kf = { what: 'Đặt keyframe cho clip đang chọn: thuộc tính prop chạy từ from tới to trong đoạn start → end giây TÍNH TỪ ĐẦU CLIP (bỏ trống = cả clip), ease = kiểu chuyển động. prop: x / y = dời (px), scale = tỉ lệ (1 = gốc; phóng chậm 1 → 1.15), rot = xoay (độ), opacity = mờ 0–1, mask_x / mask_y / mask_w / mask_h (% khung) và mask_feather = mặt nạ (chỉ khi clip có mặt nạ), strength = cường độ bộ lọc 0–100 (khi có bộ lọc), exposure / brightness / contrast / saturate / temp… = Adjust như trợ lý màu, volume = âm lượng clip × (0–2; 0 = tắt dần). ease: easeIn / easeOut / easeInOut = ease vào / ra / cả hai, overshoot = nảy, elastic = đàn hồi, hold = giữ rồi nhảy.',
+    params: { prop: { t: 'enum', values: KF_PROPS }, from: { t: 'num', min: -1280, max: 1280 }, to: { t: 'num', min: -1280, max: 1280 }, start: { t: 'num', min: 0, max: 600 }, end: { t: 'num', min: 0, max: 600 }, ease: { t: 'enum', values: KF_EASES } } };
+  function clipKfApply(tl, idx, p) {
+    const c = tl.clips?.[idx], K = KFM(); if (!c || !K || !p?.prop || !K.prop(p.prop)) return false;
+    if (p.prop.startsWith('mask_') && !c.mask) return false;
+    const d = SM ? SM.dur(c, tl.fps || 30) : 3, a = Math.min(Math.max(0, +p.start || 0), Math.max(0, d - 0.1)), b = p.end != null && +p.end > a ? Math.min(+p.end, d) : d;
+    return K.ramp(c, p.prop, p.from, p.to, a, b, p.ease);
+  }
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'fx_beats', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', ...(scope.ek === 'line' || scope.ek === 'scene' ? ['elem_anim'] : []), 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
-        : scope.kind === 'clip' ? [...(scope.idx > 0 ? ['clip_transition'] : []), 'clip_speed', 'clip_anim', 'color_pick', 'open_panel']
+        : scope.kind === 'clip' ? [...(scope.idx > 0 ? ['clip_transition'] : []), 'clip_speed', 'clip_anim', 'clip_kf', 'color_pick', 'open_panel']
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
@@ -435,7 +449,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, colorApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply, fxBeatsApply,
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, colorApply, clipKfApply, KF_PROPS, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply, fxBeatsApply,
     logEntry, logPush, logParse, changeSummary, regionOf, frameAt, ANIM_GUIDE, elemAnimApply }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;

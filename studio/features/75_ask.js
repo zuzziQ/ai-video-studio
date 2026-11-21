@@ -523,6 +523,11 @@
         const [a, b] = p.slot === 'out' ? [Math.max(sc.t0, t1 - d), t1] : [sc.t0, Math.min(t1, sc.t0 + (p.slot === 'in' ? d : 3))];
         return pureReview(`${nm} cho ${sc.chip}`, a, b, tl => AC.clipAnimApply(tl, sc.idx, p));
       }
+      case 'clip_kf': { // S29 M209: keyframe một thuộc tính của clip (engine/kf.js), xem lại đúng đoạn chạy rồi Nhận / Bỏ
+        const d = sc.t1 > sc.t0 ? sc.t1 - sc.t0 : 3, a = Math.min(Math.max(0, +p.start || 0), d), b = p.end != null && +p.end > a ? Math.min(+p.end, d) : d;
+        const nm = window.KF?.prop(p.prop)?.label || p.prop;
+        return pureReview(`Keyframe ${nm} ${p.from} → ${p.to} cho ${sc.chip}`, sc.t0 + a, sc.t0 + b, tl => AC.clipKfApply(tl, sc.idx, p));
+      }
       case 'elem_anim': { // S28 M205: Vào / Ra / Lặp của element đang chọn, xem lại trên khung trước khi nhận
         const nm = [p.in && `vào ${p.in}`, p.out && (p.out === 'none' ? 'bỏ ra' : `ra ${p.out}`), p.loop && (p.loop === 'none' ? 'bỏ lặp' : `lặp ${p.loop}`)].filter(Boolean).join(', ') || 'giữ nguyên';
         return pureReview(`Hoạt ảnh ${nm} cho ${sc.chip}`, Math.max(0, sc.t0 - 0.2), sc.t1 || sc.t0 + 3, tl => AC.elemAnimApply(tl, sc.cid, p));

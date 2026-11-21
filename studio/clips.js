@@ -115,6 +115,7 @@ function splitClipAt(t) {
     if (c.speedCurve) { const u = clamp(SpeedMap.fwd(c, t - k.t0) / (SpeedMap.span(c) || 1), 0, 1); b.speedCurve = SpeedMap.subCurve(c.speedCurve, u, 1); c.speedCurve = SpeedMap.subCurve(c.speedCurve, 0, u); }
     if (c.reverse) { c.in = cut; b.out = cut; } else { b.in = cut; c.out = cut; } // ngược: nửa đầu phát phần nguồn phía sau
   }
+  if (c.kf?.length && window.KF) { const [x, y] = KF.split(c.kf, t - k.t0); if (x?.length) c.kf = x; else delete c.kf; if (y?.length) b.kf = y; else delete b.kf; } // S29 M209: key theo giây trong clip
   TL.clips.splice(k.i + 1, 0, b);
   return b;
 }
