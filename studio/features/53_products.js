@@ -9,6 +9,9 @@
   const IND = { '': '— chưa chọn —', general: 'Chung', cosmetics: 'Mỹ phẩm / chăm sóc da', supplements: 'Thực phẩm chức năng', food: 'Thực phẩm & đồ uống', finance: 'Tài chính', health_device: 'Thiết bị sức khoẻ' };
   const ST = { approved: 'Đã duyệt', pending: 'Chờ duyệt', prohibited: 'Cấm nói', expired: 'Hết hạn' };
   let LIST = null, EDIT = null, AI = null, AI_FOR = null, PIMG = null; // AI: ô Điền bằng AI của bản đang sửa; PIMG: ảnh chọn cho AI (không lưu)
+  // ảnh của hồ sơ ($AVS_HOME/products/<id>/image.*): NEWIMG = ảnh chờ tải lên khi bấm Lưu, DROPIMG = bỏ ảnh đang có khi Lưu
+  let NEWIMG = null, DROPIMG = false, IMG_FOR = null, IMG_URL = '';
+  const IMG_MAX = 8 * 1024 * 1024;
   const css = document.createElement('style');
   css.textContent = `
   .pb-card { background: rgb(var(--color-surface-raised)); border: 1px solid rgb(var(--color-line)); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
@@ -34,6 +37,10 @@
   .pb-faq-qa { display: grid; gap: var(--space-1); }
   .pb-ai { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid rgb(var(--color-line)); }
   .pb-aisrc { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1); align-items: center; }
+  .pb-pimg { display: flex; gap: var(--space-2); align-items: center; }
+  .pb-pimg img, .pb-pimg .ph { width: 64px; height: 64px; flex: none; object-fit: contain; border-radius: var(--radius-sm); border: 1px solid rgb(var(--color-line)); background: rgb(var(--color-surface)); }
+  .pb-pimg .ph { display: grid; place-items: center; color: rgb(var(--color-fg-subtle)); font-size: var(--text-lg); }
+  .pb-pimg > div { display: flex; gap: var(--space-1); flex-wrap: wrap; min-width: 0; }
   .pb-imgname { display: block; margin-top: var(--space-1); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); overflow-wrap: anywhere; }`;
   document.head.appendChild(css);
 
@@ -60,9 +67,24 @@
     if (!C || !id || (!one && !C.needsFill(S.TL?.scenes, id))) return 0;
     const r = await S.api('/api/products/' + encodeURIComponent(id)).catch(() => null);
     if (!r || r.error || cur() !== id) return 0;
-    const h = C.heroOf(r, { logo: S.TL.brand?.logo }); // hồ sơ chưa có ảnh (references/products.md): đổi ảnh ở Thuộc tính, 87_prodimg.js
+    // ảnh hồ sơ chép vào media/product_<id>.<ext> của dự án; hồ sơ chưa có ảnh: đổi ảnh ở Thuộc tính (87_prodimg.js)
+    const img = r.image ? await S.api('/api/products/use-image', { id }).catch(() => null) : null;
+    if (cur() !== id) return 0;
+    const h = C.heroOf(r, { logo: S.TL.brand?.logo, image: img?.image || '' });
     const n = one ? +C.fillScene(one, h, undefined, true) : C.fillScenes(S.TL.scenes, h);
     if (n) { S.changed(true); S.toast(`Graphic sản phẩm lấy tên, giá theo hồ sơ “${r.name}”`); }
+    return n;
+  }
+  // vừa lưu ảnh cho hồ sơ dự án đang dùng: khối rv_product đã điền theo hồ sơ (cờ _prod) mà chưa có ảnh nhận ảnh này (một bước hoàn tác).
+  // Chỉ ngay sau khi lưu, không ở mỗi lần mở: khối người dùng đã "Bỏ ảnh" giữ nguyên.
+  async function fillImage(id) {
+    const want = s => s?.type === 'rv_product' && s._prod === id && !s.locked && !s.image;
+    if (cur() !== id || !(S.TL?.scenes || []).some(want)) return 0;
+    const r = await S.api('/api/products/use-image', { id }).catch(() => null);
+    if (!r?.image || cur() !== id) return 0;
+    S.pushUndo('product');
+    const n = S.TL.scenes.filter(want).map(s => (s.image = r.image)).length;
+    S.changed(true); S.toast(`${n} graphic sản phẩm dùng ảnh mới của hồ sơ`);
     return n;
   }
   S.onReady(() => setTimeout(fill, 0)); // sau khối _starter của studio.js (áp công thức gói lần mở đầu)
@@ -96,6 +118,8 @@
     return `<div class="pb-card pb-form"><b class="pb-title">${p.id ? 'Sửa hồ sơ sản phẩm' : 'Hồ sơ sản phẩm mới'}</b>
       <label>Tên sản phẩm</label><input id="pb-name" value="${esc(p.name || '')}" placeholder="VD: Serum B5 đầu nhỏ giọt">
       <label>Giá <span class="muted">· ghi như muốn hiện, ví dụ 350.000đ</span></label><input id="pb-price" value="${esc(p.price || '')}" placeholder="350.000đ">
+      <label>Ảnh sản phẩm <span class="muted">· graphic sản phẩm của Tự lái và AI dựng dùng ảnh này</span></label><div id="pb-imgbox">${imgBox()}</div>
+      <input type="file" id="pb-pimgf" accept="image/png,image/jpeg,image/webp" hidden>
       <div class="pb-g2"><div><label>Thương hiệu</label><input id="pb-brand" value="${esc(p.brand || '')}"></div>
         <div><label>Ngành</label><select id="pb-ind">${Object.entries(IND).map(([k, v]) => `<option value="${k}" ${(p.industry || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
       <label>Claim <span class="muted">· claim “Đã duyệt” phải có bằng chứng; quá ngày hết hạn thì tính là hết hạn</span></label>
@@ -110,12 +134,29 @@
         <input type="file" id="pb-img" accept="image/*" hidden><small class="pb-imgname" id="pb-imgname">${PIMG ? esc(PIMG.name) : ''}</small><div id="pb-ai"></div></div>` : ''}
       <div class="pb-act"><button class="primary" id="pb-save"><i class="ti ti-device-floppy"></i> Lưu</button><button id="pb-cancel">Huỷ</button></div></div>`;
   }
+  function imgBox() {
+    if (IMG_URL) { URL.revokeObjectURL(IMG_URL); IMG_URL = ''; }
+    const has = NEWIMG || (EDIT.image && !DROPIMG);
+    const src = NEWIMG ? (IMG_URL = URL.createObjectURL(NEWIMG)) : has ? avsUrl(`/api/products/image?id=${encodeURIComponent(EDIT.id)}&v=${encodeURIComponent(EDIT.updated || '')}`) : ''; // thẻ img không gửi header token (studio/auth.js)
+    return `<div class="pb-pimg">${src ? `<img src="${esc(src)}" alt="Ảnh sản phẩm">` : '<span class="ph"><i class="ti ti-photo"></i></span>'}
+      <div><button class="mini" data-pbimg="up"><i class="ti ti-upload"></i> ${has ? 'Đổi ảnh' : 'Tải ảnh lên'}</button>${has ? '<button class="mini" data-pbimg="drop"><i class="ti ti-x"></i> Bỏ ảnh</button>' : ''}
+      ${PIMG && PIMG !== NEWIMG ? '<button class="mini" data-pbimg="ai" title="Ảnh đã chọn ở Điền bằng AI"><i class="ti ti-photo-check"></i> Dùng ảnh của AI</button>' : ''}</div></div>
+      ${NEWIMG ? `<small class="pb-imgname">${esc(NEWIMG.name)} · lưu khi bấm Lưu</small>` : DROPIMG && EDIT.image ? '<small class="pb-imgname">Bỏ ảnh khi bấm Lưu</small>' : ''}`;
+  }
+  const redrawImg = () => { const b = $('#pb-imgbox'); if (b) b.innerHTML = imgBox(); };
+  function takeImg(f) {
+    if (!f) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return S.toast('Chỉ nhận ảnh PNG, JPG hoặc WebP');
+    if (f.size > IMG_MAX) return S.toast('Ảnh sản phẩm tối đa 8 MB');
+    NEWIMG = f; DROPIMG = false; redrawImg();
+  }
   function collect() {
     const v = el => el.value.trim();
     const claims = [...document.querySelectorAll('#pb-claims .pb-cl')].map(r => ({ id: r.dataset.cid || undefined, ...Object.fromEntries([...r.querySelectorAll('[data-f]')].map(i => [i.dataset.f, v(i)])) })).filter(c => c.text);
     const faq = [...document.querySelectorAll('#pb-faqs .pb-faq')].map(r => ({ q: v(r.querySelector('[data-f=q]')), a: v(r.querySelector('[data-f=a]')) })).filter(f => f.q);
     return { id: EDIT.id, created: EDIT.created, name: v($('#pb-name')), price: v($('#pb-price')), brand: v($('#pb-brand')), industry: $('#pb-ind').value, claims,
-      blocked: $('#pb-blocked').value.split('\n').map(s => s.trim()).filter(Boolean), faq, notes: $('#pb-notes').value };
+      blocked: $('#pb-blocked').value.split('\n').map(s => s.trim()).filter(Boolean), faq, notes: $('#pb-notes').value,
+      ...(DROPIMG && !NEWIMG ? { image: '' } : {}) };
   }
   function render() {
     $('#libact').innerHTML = '<button class="icon" id="pb-new" title="Hồ sơ mới"><i class="ti ti-plus"></i></button>';
@@ -150,6 +191,15 @@
       await load();
     }));
     if (!EDIT) return;
+    if (IMG_FOR !== EDIT) { IMG_FOR = EDIT; NEWIMG = null; DROPIMG = false; redrawImg(); }
+    const pf = $('#pb-pimgf');
+    pf.onchange = () => { const f = pf.files[0]; pf.value = ''; takeImg(f); };
+    $('#pb-imgbox').onclick = e => {
+      const a = e.target.closest('[data-pbimg]')?.dataset.pbimg;
+      if (a === 'up') pf.click();
+      else if (a === 'drop') { NEWIMG = null; DROPIMG = true; redrawImg(); }
+      else if (a === 'ai') takeImg(PIMG);
+    };
     mountAi();
     $('#pb-addc').onclick = () => $('#pb-claims').insertAdjacentHTML('beforeend', claimRow({ status: 'approved' }));
     $('#pb-addf').onclick = () => $('#pb-faqs').insertAdjacentHTML('beforeend', faqRow({}));
@@ -157,7 +207,13 @@
     $('#pb-save').onclick = async () => {
       const r = await S.api('/api/products/save', { product: collect() });
       if (r.error) return S.toast(r.error);
-      EDIT = null; await load(); S.toast(`Đã lưu hồ sơ “${r.name}”`);
+      if (NEWIMG) { // ảnh tải sau khi có id (hồ sơ mới); lỗi thì giữ form mở với ảnh chờ để thử lại
+        const q = await fetch('/api/products/image?id=' + encodeURIComponent(r.id), { method: 'POST', body: NEWIMG }).then(x => x.json()).catch(e => ({ error: e.message }));
+        if (q.error) { const f = NEWIMG; EDIT = r; IMG_FOR = r; NEWIMG = f; DROPIMG = false; await load(); return S.toast(`Đã lưu hồ sơ “${r.name}” · chưa lưu được ảnh: ${q.error}`); }
+      }
+      const img = !!NEWIMG;
+      EDIT = null; NEWIMG = null; if (IMG_URL) { URL.revokeObjectURL(IMG_URL); IMG_URL = ''; } await load(); S.toast(`Đã lưu hồ sơ “${r.name}”`);
+      if (img) fillImage(r.id);
     };
   }
   // ---- Điền bằng AI (M91): Nhận thì sửa thẳng ô của form (không vẽ lại form, giữ chữ đang gõ) ----
@@ -166,7 +222,10 @@
     if (AI_FOR !== EDIT) { AI_FOR = EDIT; PIMG = null; AI = null; }
     const pick = $('#pb-img');
     $('#pb-imgbtn').onclick = () => pick.click();
-    pick.onchange = () => { const f = pick.files[0]; if (!f || !/^image\//.test(f.type)) return; PIMG = f; $('#pb-imgname').textContent = f.name; $('#pb-imgbtn').innerHTML = '<i class="ti ti-photo"></i> Đổi ảnh'; };
+    pick.onchange = () => {
+      const f = pick.files[0]; if (!f || !/^image\//.test(f.type)) return; PIMG = f; $('#pb-imgname').textContent = f.name; $('#pb-imgbtn').innerHTML = '<i class="ti ti-photo"></i> Đổi ảnh';
+      redrawImg(); // hiện nút "Dùng ảnh của AI"
+    };
     AI ||= S.assistPanel({
       name: 'product', label: 'Điền bằng AI', hint: 'Tên, giá (giữ nguyên như nguồn), ngành, điểm mạnh, FAQ. Claim luôn ở Chờ duyệt kèm cờ rủi ro.',
       async input() {

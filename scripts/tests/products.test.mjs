@@ -9,7 +9,8 @@ import net from 'node:net';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { productFile, validId, newId, normalizeProduct, effectiveStatus, saveProduct, loadProduct, listProducts, deleteProduct } from '../products.mjs';
+import { productFile, validId, newId, normalizeProduct, effectiveStatus, saveProduct, loadProduct, listProducts, deleteProduct,
+  saveProductImage, productImage, copyProductImage, productHero, imageKind } from '../products.mjs';
 import { tokenFile } from '../../studio/security.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -28,7 +29,7 @@ const SERUM = { name: 'Serum Đầu Nhỏ Giọt', industry: 'cosmetics', claims
 ], blocked: 'tên đối thủ\n\ntên đối thủ\ngiá rẻ nhất', faq: [{ q: 'Dùng mấy lần?', a: 'Hai lần mỗi ngày' }, { q: '' }] };
 
 test('ids: only [a-z0-9_-], never a path', () => {
-  for (const bad of ['../config', '..', 'a/b', 'a\\b', 'C:x', 'Serum', '.x', 'a.json', 'x'.repeat(65), '', null, 5, 'ok\n'])
+  for (const bad of ['../config', '..', 'a/b', 'image', 'use-image', 'save', 'delete', 'a\\b', 'C:x', 'Serum', '.x', 'a.json', 'x'.repeat(65), '', null, 5, 'ok\n'])
     assert.throws(() => productFile(bad, DIR), e => e.status === 400, String(bad));
   assert.equal(validId('serum-x_1'), true);
   assert.match(newId('Kem Dưỡng Đêm!'), /^kem-duong-dem-[0-9a-f]{4}$/);
@@ -82,17 +83,92 @@ test('a symlink out of products/ is refused', t => {
   assert.deepEqual(listProducts(d), []);
 });
 
+// ---------- ảnh của hồ sơ: products/<id>/image.<ext> ----------
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(24, 1)]);
+const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(24, 2)]);
+const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(16, 3)]);
+
+test('imageKind: PNG / JPEG / WebP by their first bytes only', () => {
+  assert.equal(imageKind(PNG), 'png');
+  assert.equal(imageKind(JPG), 'jpg');
+  assert.equal(imageKind(WEBP), 'webp');
+  assert.equal(imageKind(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), '');
+  assert.equal(imageKind(Buffer.from('GIF89a......')), '');
+  assert.equal(imageKind(Buffer.alloc(3)), '');
+});
+
+test('image: save, replace, keep on profile save, clear, delete removes the folder', () => {
+  const d = path.join(TMP, 'img');
+  const old = saveProduct({ name: 'Hồ sơ cũ' }, d); // hồ sơ trước khi có trường ảnh: không có image, vẫn chạy như trước
+  assert.equal('image' in loadProduct(old.id, d), false);
+  assert.equal(productImage(old.id, d), null);
+  assert.equal(copyProductImage(path.join(TMP, 'p-none'), old.id, d), '');
+  assert.equal(productHero('.', { ads: { product: old.id } }, d).image, '');
+
+  const a = saveProduct({ name: 'Serum ảnh' }, d);
+  assert.equal(saveProductImage(a.id, PNG, d).image, 'image.png');
+  assert.ok(fs.existsSync(path.join(d, a.id, 'image.png')));
+  assert.equal(saveProductImage(a.id, JPG, d).image, 'image.jpg'); // thay ảnh: ảnh cũ khác đuôi bị xoá
+  assert.deepEqual(fs.readdirSync(path.join(d, a.id)), ['image.jpg']);
+  // lưu hồ sơ (client không gửi image, hoặc gửi tên lạ) giữ ảnh đang có; không đặt được tên file khác
+  assert.equal(saveProduct({ ...loadProduct(a.id, d), image: undefined, name: 'Serum ảnh 2' }, d).image, 'image.jpg');
+  assert.equal(saveProduct({ ...loadProduct(a.id, d), image: '../config.json' }, d).image, 'image.jpg');
+  assert.equal(saveProduct({ ...loadProduct(a.id, d), image: 'image.png' }, d).image, 'image.jpg');
+  assert.equal(normalizeProduct({ name: 'x', image: 'a/image.png' }).image, undefined);
+  assert.equal(productImage(a.id, d).type, 'image/jpeg');
+
+  assert.throws(() => saveProductImage(a.id, Buffer.from('<svg/>'.repeat(4)), d), e => e.status === 400);
+  assert.throws(() => saveProductImage(a.id, Buffer.alloc(8 * 1024 * 1024 + 1), d), e => e.status === 413);
+  assert.throws(() => saveProductImage('../config', PNG, d), e => e.status === 400);
+  assert.throws(() => saveProductImage('khong-co', PNG, d), e => e.status === 404);
+  assert.equal(fs.readdirSync(path.join(d, a.id)).some(f => f.endsWith('.tmp')), false);
+
+  // gắn vào dự án: chép vào media/product_<id>.<ext>, lần sau không chép lại khi giống
+  const proj = path.join(TMP, 'p-img');
+  const h = productHero(proj, { ads: { product: a.id } }, d);
+  assert.equal(h.image, `media/product_${a.id}.jpg`);
+  assert.ok(fs.readFileSync(path.join(proj, h.image)).equals(JPG));
+  const m = fs.statSync(path.join(proj, h.image)).mtimeMs;
+  assert.equal(copyProductImage(proj, a.id, d), h.image);
+  assert.equal(fs.statSync(path.join(proj, h.image)).mtimeMs, m);
+  saveProductImage(a.id, WEBP, d);
+  assert.equal(copyProductImage(proj, a.id, d), `media/product_${a.id}.webp`);
+
+  // image: '' = bỏ ảnh
+  const cleared = saveProduct({ ...loadProduct(a.id, d), image: '' }, d);
+  assert.equal('image' in cleared, false);
+  assert.deepEqual(fs.readdirSync(path.join(d, a.id)), []);
+
+  saveProductImage(a.id, PNG, d);
+  deleteProduct(a.id, d);
+  assert.equal(fs.existsSync(path.join(d, a.id)), false);
+  assert.equal(fs.existsSync(path.join(d, a.id + '.json')), false);
+});
+
+test('image: a product folder that is a link out of products/ is refused', t => {
+  const d = path.join(TMP, 'imglink');
+  const a = saveProduct({ name: 'Liên kết' }, d);
+  const out = path.join(TMP, 'outside'); fs.mkdirSync(out, { recursive: true });
+  try { fs.symlinkSync(out, path.join(d, a.id), 'junction'); } catch { return t.skip('no symlink permission'); }
+  assert.throws(() => saveProductImage(a.id, PNG, d), e => e.status === 403);
+  assert.throws(() => saveProduct({ ...a, image: '' }, d), e => e.status === 403);
+  fs.writeFileSync(path.join(out, 'giu.txt'), 'x');
+  assert.throws(() => deleteProduct(a.id, d), e => e.status === 403); // không đi theo liên kết xoá file bên ngoài
+  assert.deepEqual(fs.readdirSync(out), ['giu.txt']);
+  assert.ok(fs.existsSync(path.join(d, a.id + '.json')));
+});
+
 // ---------- the real server: token, routes, traversal ----------
 let srv, PORT, TOKEN;
 const freePort = () => new Promise(ok => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
-function call(p, { method = 'GET', body, token = TOKEN } = {}) {
+function call(p, { method = 'GET', body, raw, token = TOKEN } = {}) {
   return new Promise((ok, bad) => {
-    const h = {}, data = body === undefined ? undefined : JSON.stringify(body);
+    const h = {}, data = raw ?? (body === undefined ? undefined : JSON.stringify(body));
     if (token) h['X-AVS-Token'] = token;
-    if (data !== undefined) { h['Content-Type'] = 'application/json'; h['Content-Length'] = Buffer.byteLength(data); }
+    if (data !== undefined) { h['Content-Type'] = raw ? 'application/octet-stream' : 'application/json'; h['Content-Length'] = Buffer.byteLength(data); }
     const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method, headers: h }, res => {
       const c = []; res.on('data', d => c.push(d));
-      res.on('end', () => { const text = Buffer.concat(c).toString(); let json = null; try { json = JSON.parse(text); } catch { /* not json */ } ok({ status: res.statusCode, json }); });
+      res.on('end', () => { const buf = Buffer.concat(c), text = buf.toString(); let json = null; try { json = JSON.parse(text); } catch { /* not json */ } ok({ status: res.statusCode, json, buf, type: res.headers['content-type'] }); });
     });
     r.on('error', bad);
     r.end(data);
@@ -148,4 +224,34 @@ test('ids that try to leave products/ are refused', async () => {
   assert.equal((await call('/api/products/save', { method: 'POST', body: { product: { ...SERUM, id: '../config' } } })).status, 400);
   assert.equal((await call('/api/products/delete', { method: 'POST', body: { id: '../config' } })).status, 400);
   assert.ok(fs.existsSync(path.join(HOME, 'config.json')));
+});
+
+test('product image through the API: upload, get, use in the open project, size and id limits', async () => {
+  const id = (await call('/api/products/save', { method: 'POST', body: { product: { name: 'Ảnh qua API' } } })).json.id;
+  assert.equal((await call('/api/products/image?id=' + id)).status, 404);
+  assert.equal((await call('/api/products/use-image', { method: 'POST', body: { id } })).json.image, '');
+  assert.equal((await call('/api/products/image?id=' + id, { method: 'POST', raw: PNG, token: null })).status, 401);
+  const up = await call('/api/products/image?id=' + id, { method: 'POST', raw: PNG });
+  assert.equal(up.status, 200);
+  assert.equal(up.json.image, 'image.png');
+  const got = await call('/api/products/image?id=' + id);
+  assert.equal(got.status, 200);
+  assert.equal(got.type, 'image/png');
+  assert.ok(got.buf.equals(PNG));
+  const use = await call('/api/products/use-image', { method: 'POST', body: { id } });
+  assert.equal(use.json.image, `media/product_${id}.png`);
+  assert.ok(fs.readFileSync(path.join(PROJ, use.json.image)).equals(PNG));
+  // lưu hồ sơ từ form (không gửi image) giữ ảnh
+  assert.equal((await call('/api/products/save', { method: 'POST', body: { product: { id, name: 'Ảnh qua API 2' } } })).json.image, 'image.png');
+
+  assert.equal((await call('/api/products/image?id=' + id, { method: 'POST', raw: Buffer.from('not an image at all') })).status, 400);
+  assert.equal((await call('/api/products/image?id=' + id, { method: 'POST', raw: Buffer.alloc(8 * 1024 * 1024 + 1) })).status, 413);
+  for (const bad of ['..%2Fconfig', '', 'A'])
+    assert.equal((await call('/api/products/image?id=' + bad, { method: 'POST', raw: PNG })).status, 400, bad);
+  assert.equal((await call('/api/products/image?id=..%2Fconfig')).status, 400);
+  assert.equal((await call('/api/products/use-image', { method: 'POST', body: { id: '../config' } })).status, 400);
+  assert.ok(fs.readFileSync(path.join(DIR, id, 'image.png')).equals(PNG));
+
+  assert.equal((await call('/api/products/delete', { method: 'POST', body: { id } })).json.ok, true);
+  assert.equal(fs.existsSync(path.join(DIR, id)), false);
 });

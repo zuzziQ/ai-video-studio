@@ -1,6 +1,7 @@
 // M18: mục "Ảnh sản phẩm" trong Thuộc tính của khối có trường ảnh `image` (hero sản phẩm rv_product của gói review và khối
 // cùng kiểu): chọn ảnh từ Media của dự án, tải ảnh mới lên (vào media/ như ô Media), hoặc bỏ ảnh (khối hiện ô giữ chỗ).
-// Dự án trỏ hồ sơ sản phẩm (TL.ads.product) thì có thêm nút "Điền lại theo hồ sơ" (tên, thương hiệu, giá; 53_products.js fill).
+// Dự án trỏ hồ sơ sản phẩm (TL.ads.product) thì có thêm nút "Điền lại theo hồ sơ" (tên, thương hiệu, giá; 53_products.js fill)
+// và "Lưu làm ảnh của hồ sơ" (POST /api/products/image, ảnh dùng cho mọi dự án gắn hồ sơ).
 // Đổi ảnh = một bước hoàn tác. Không gọi Claude.
 'use strict';
 (() => {
@@ -32,7 +33,7 @@
       .map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`).join('');
     const thumb = cur && !/^(si:|https?:)/.test(cur) ? `<img class="pi-thumb" src="/project/${esc(cur)}" alt="">` : '';
     const prod = o.type === 'rv_product' && S.TL?.ads?.product
-      ? `<button data-piact="refill"><i class="ti ti-package"></i> Điền lại theo hồ sơ</button>` : '';
+      ? `<button data-piact="refill"><i class="ti ti-package"></i> Điền lại theo hồ sơ</button>${thumb && !cur.startsWith(`media/product_${S.TL.ads.product}.`) ? '<button data-piact="save" title="Ảnh này thành ảnh của hồ sơ sản phẩm, dùng cho mọi dự án gắn hồ sơ"><i class="ti ti-device-floppy"></i> Lưu làm ảnh của hồ sơ</button>' : ''}` : '';
     return sect(o.type === 'rv_product' ? 'Ảnh sản phẩm' : 'Ảnh', `<div id="pipanel">${thumb}
       <select data-pi="pick" aria-label="Ảnh của khối">${opts}</select>
       <div class="acts"><button data-piact="up" class="primary"><i class="ti ti-upload"></i> Tải ảnh lên</button>${cur ? '<button data-piact="clear"><i class="ti ti-x"></i> Bỏ ảnh</button>' : ''}${prod}</div>
@@ -75,6 +76,17 @@
     const o = target(); if (!o) return;
     if (b.dataset.piact === 'up') return document.getElementById('pi-file')?.click();
     if (b.dataset.piact === 'clear') return setImage(o, '');
+    if (b.dataset.piact === 'save') { // ảnh đang dùng trong dự án → $AVS_HOME/products/<id>/image.* (POST /api/products/image)
+      const id = S.TL?.ads?.product, rel = typeof o.image === 'string' ? o.image : '';
+      if (!id || !rel) return;
+      try {
+        const blob = await (await fetch('/project/' + rel.split('/').map(encodeURIComponent).join('/'))).blob();
+        const r = await (await fetch('/api/products/image?id=' + encodeURIComponent(id), { method: 'POST', body: blob })).json();
+        S.toast(r.error ? 'Chưa lưu được ảnh vào hồ sơ: ' + r.error : `Đã lưu làm ảnh của hồ sơ “${r.name}”`);
+        if (!r.error) S.products?.reload?.();
+      } catch (e) { S.toast('Chưa lưu được ảnh vào hồ sơ: ' + e.message); }
+      return;
+    }
     if (b.dataset.piact === 'refill') { // tên, thương hiệu, giá theo hồ sơ, kể cả khối tự thêm hoặc đã sửa tay (hoàn tác được)
       if (o.locked) return S.toast('Mục đang khoá · ⌥⇧L để mở khoá');
       S.pushUndo();
