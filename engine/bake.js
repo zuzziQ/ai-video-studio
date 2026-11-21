@@ -9,7 +9,7 @@
 // ngoài khoảng đó, hay ảnh nướng lỗi, đọc chuỗi gốc (không trắng khung).
 (function (root) {
   'use strict';
-  const DIR = '.studio/bake', OK = '.ok', V = 1;
+  const DIR = '.studio/bake', OK = '.ok', V = 2; // V 2: sửa trộn LUT bị đảo + strength của HSL → hash mới, chuỗi nướng cũ được nướng lại
   const num = (v, a, b, d = 0) => { const x = +v; return Number.isFinite(x) ? Math.min(b, Math.max(a, x)) : d; };
   const r2 = v => Math.round(v * 100) / 100;
   const HEX = /^#[0-9a-f]{6}$/i;
@@ -124,9 +124,12 @@
     if (o.lut) {
       const lut = `lut3d=file=${o.lut.file}:interp=tetrahedral`;
       if (o.lut.mix >= 100) f.push(lut);
-      else f.push(`split[bk0][bk1];[bk1]${lut}[bk2];[bk0][bk2]blend=all_mode=normal:all_opacity=${r2(o.lut.mix / 100)}`);
+      // blend: đầu vào thứ nhất là lớp trên, all_opacity là phần của lớp trên → LUT ([bk2]) phải đứng trước, mix 90 = 90% LUT
+      else f.push(`split[bk0][bk1];[bk1]${lut}[bk2];[bk2][bk0]blend=all_mode=normal:all_opacity=${r2(o.lut.mix / 100)}`);
     }
-    if (o.hsl) f.push(`huesaturation=hue=${o.hsl.hue}:saturation=${r2(o.hsl.sat / 100)}:intensity=${r2(o.hsl.light / 100)}:colors=${o.hsl.band === 'all' ? 'a' : o.hsl.band}`);
+    // strength mặc định của huesaturation là 1 (thang 0–100): gần như không đổi ảnh. 10 cho hue / sat / sáng cùng tầm với CSS xem
+    // trước của approxCss (hue-rotate, saturate, brightness); đo trên khung thật, cao hơn thì intensity tăng vọt
+    if (o.hsl) f.push(`huesaturation=hue=${o.hsl.hue}:saturation=${r2(o.hsl.sat / 100)}:intensity=${r2(o.hsl.light / 100)}:colors=${o.hsl.band === 'all' ? 'a' : o.hsl.band}:strength=10`);
     if (o.curves) {
       const c = o.curves, sh = r2(Math.min(1, Math.max(0, 0.25 + c.shadows / 200))), hi = r2(Math.min(1, Math.max(0, 0.75 + c.highlights / 200)));
       const m = c.shadows || c.highlights ? `master='0/0 0.25/${sh} 0.75/${hi} 1/1'` : '';
