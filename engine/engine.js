@@ -96,12 +96,19 @@ function clipAt(t) {
 function srcFrame(c, srcT, cut) {
   if (typeof c.src === 'string') return cut ? (c.cutout_img || c.src) : c.src;
   const fps = c.src.fps || TL.fps, n = Math.min(c.src.count || 1e9, Math.max(1, Math.floor(srcT * fps + 1e-6) + 1));
-  return fmtSeq(cut && c.cutouts ? c.cutouts : c.src.seq, n);
+  if (cut && c.cutouts) return fmtSeq(c.cutouts, n);
+  const bk = bakeOf(c); // S29 M212: chuỗi nướng khớp tham số, trong đoạn in–out đã nướng, chưa lỗi ảnh
+  if (bk && n >= bk.n0 && n <= bk.n1) return fmtSeq(bk.p540 && !BAKE_BAD[bk.seq + '_540'] && TL.preview_proxy && Object.hasOwn(TL.preview_proxy, c.src.seq) ? PreviewProxy.proxySeq(bk.seq) : bk.seq, n);
+  return fmtSeq(c.src.seq, n);
 }
+// S29 M212: nướng sẵn bằng ffmpeg (engine/bake.js). Chuỗi nướng lỗi ảnh → BAKE_BAD, clip đó đọc lại chuỗi gốc (+ CSS gần đúng).
+const BAKE_BAD = {};
+const bakeOf = c => { if (typeof BakeCore === 'undefined' || !c.bake) return null; const b = BakeCore.active(c, TL.fps); return b && !BAKE_BAD[b.seq] ? b : null; };
+const bakeCss = c => (typeof BakeCore !== 'undefined' && c.bake && !bakeOf(c) ? BakeCore.approxCss(c, TL.fps, true) : '');
 function clipPath(t, cut) { const k = clipAt(t); return k ? srcFrame(k.c, k.src, cut) : ''; }
 // S29 M208: màu của clip / cảnh (LUT có cường độ + Adjust) ở engine/fx_registry.js FX.colorFx; trường cũ in đúng chuỗi cũ.
 // filter (CSS, có url(#…) cho vùng sáng / tối, nét) gắn vào ảnh; over (defs SVG + vignette + hạt) đặt trong hộp clip (clipBox).
-const clipFilter = c => FX.colorFx(c.filter).filter;
+const clipFilter = c => `${FX.colorFx(c.filter).filter} ${bakeCss(c)}`.trim();
 const colorOver = (c, t) => (c.filter ? FX.colorFx(c.filter, { t }).over : '');
 // b-roll / ảnh phủ có s.filter: lọc cả lớp; vignette / hạt phủ ở lớp trên cùng của cảnh (front, không có thì back), cảnh dạng thẻ chỉ lọc
 function colorWrap(s, r, t) {
@@ -534,6 +541,17 @@ if (typeof document !== 'undefined' && typeof PreviewProxy !== 'undefined') docu
   if (im?.tagName !== 'IMG' || !TL?.preview_proxy) return;
   const s = PreviewProxy.fallback(TL.preview_proxy, im.getAttribute('src'), url);
   if (s) im.src = s;
+}, true);
+
+// S29 M212: ảnh của chuỗi nướng lỗi (bị xoá, chưa đủ) → bản 540p lỗi thì đọc bản nướng đủ cỡ; bản nướng lỗi thì đọc chuỗi gốc.
+if (typeof document !== 'undefined' && typeof BakeCore !== 'undefined') document.addEventListener('error', e => {
+  const im = e.target, s = im?.tagName === 'IMG' ? im.getAttribute('src') || '' : '', pre = url(BakeCore.DIR + '/');
+  if (!pre || !s.startsWith(pre)) return;
+  const m = /^([0-9a-f]{16})(_540)?\/(\d{5})\.(jpg|png)$/.exec(s.slice(pre.length).split('?')[0]); if (!m) return;
+  const seq = `${BakeCore.DIR}/${m[1]}/%05d.${m[4]}`, c = CLIPS.find(x => x.bake?.hash === m[1]);
+  if (m[2]) { BAKE_BAD[seq + '_540'] = 1; im.src = url(fmtSeq(seq, +m[3])); return; }
+  BAKE_BAD[seq] = 1;
+  if (c && typeof c.src === 'object') im.src = url(fmtSeq(c.src.seq, +m[3]));
 }, true);
 
 // Decode every image of the next frame BEFORE it replaces the visible one, so live playback never shows a

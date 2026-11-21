@@ -540,6 +540,15 @@
         const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3;
         return pureReview(`Màu ${lut} cho ${sc.chip}${r.why ? ' · ' + r.why : ''}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => AC.colorApply(tl, sc.idx, r.filter));
       }
+      case 'clip_bake': { // S29 M212: hiệu chỉnh nướng sẵn (86_bake.js) — bản xem dùng CSS gần đúng; job nướng chỉ chạy khi Nhận (tl là S.TL)
+        const nm = { chroma: 'Tách phông xanh', hsl: 'HSL', curves: 'Curves', stab: 'Ổn định hình', lut: 'Độ mạnh LUT', none: 'Bỏ hiệu chỉnh' }[p.op] || 'Hiệu chỉnh';
+        const t1 = sc.t1 > sc.t0 ? sc.t1 : sc.t0 + 3;
+        return pureReview(`${nm} cho ${sc.chip}`, sc.t0, Math.min(t1, sc.t0 + 3), tl => {
+          const ok = AC.bakeApply(tl, sc.idx, p);
+          if (ok && tl === S.TL) setTimeout(() => S.bake?.run(sc.idx), 0);
+          return ok;
+        });
+      }
       case 'clip_speed': { // S29 M207: tốc độ / Freeze / đảo ngược qua 59_speed.js, xem lại trước khi nhận (ripple đổi cả phụ đề)
         if (!S.speed) return setOut('error', { err: 'Chưa có công cụ Tốc độ' });
         const nm = { normal: `Tốc độ ${p.speed ?? 1}×`, freeze: 'Freeze', reverse: 'Đảo ngược', forward: 'Bỏ phát ngược' }[p.mode] || `Tốc độ ${SpeedMap.PRESET_VI[p.mode] || p.mode}`;
