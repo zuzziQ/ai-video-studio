@@ -457,7 +457,9 @@ function inspTabs(c) {
   if (o.type === 'logo_row') basic += sect('Logo (cách nhau dấu phẩy)', `<input data-f="icons" value="${esc((o.icons || []).map(i => (typeof i === 'object' ? i.icon : i)).join(', '))}"><div class="help">si:openai, si:claude, si:googlegemini, emoji 🤖…</div>`, 'ti-brand-apple');
   if (o.type === 'title_card') basic += sect('Thẻ kết', `<span class="lbl">Câu hỏi</span><input data-f="question" value="${esc(o.question ?? '')}"><span class="lbl">Chữ trong nhãn</span><input data-f="pilltext" value="${esc(o.pill?.text || 'Claude')}">`);
   if (o.type === 'photo') { const cur = o.media || o.src, list = (typeof MEDIA !== 'undefined' ? MEDIA : []).filter(m => m.kind !== 'audio');
-    basic += sect('Ảnh / clip', `<select data-f="pmedia">${opt([['', typeof cur === 'object' && cur ? 'Video đã chọn' : '— Chọn từ Media —'], ...list.map(m => [m.path, m.name])], typeof cur === 'string' ? cur : '')}</select><div class="help">Nhập ảnh/video mới ở mục Media bên trái.</div>`, 'ti-photo'); }
+    basic += sect('Ảnh / clip', Studio.mediaField // S30 M214: ô có ảnh nhỏ + tên, bấm mở bộ chọn chung (features/07_mediapick.js)
+      ? Studio.mediaField({ attr: 'data-f="pmedia"', value: cur, kinds: ['image', 'video'], title: 'Chọn ảnh hoặc clip', empty: '— Chọn từ Media —', clear: false })
+      : `<select data-f="pmedia">${opt([['', typeof cur === 'object' && cur ? 'Video đã chọn' : '— Chọn từ Media —'], ...list.map(m => [m.path, m.name])], typeof cur === 'string' ? cur : '')}</select><div class="help">Nhập ảnh/video mới ở mục Media bên trái.</div>`, 'ti-photo'); }
   if (o.type === 'frame_grid') basic += sect('Khung video', `<span class="lbl">Làm mờ video (px)</span>${num('blur', typeof o.blur === 'number' ? o.blur : Array.isArray(o.blur) ? o.blur[o.blur.length - 1].v : 0)}<span class="lbl">Vào cảnh</span><select data-f="enter">${opt([['cut', 'Cắt'], ['blur', 'Mờ dần'], ['zoom', 'Phóng to']], o.enter || 'cut')}</select>`);
   basic += timeBlock(c);
   return [['basic', 'Cơ bản', basic], ...(Studio.animTab && ['photo', 'broll'].includes(o.type) ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204
@@ -746,7 +748,7 @@ $('#insp').addEventListener('change', e => {
   const t = e.target, f = t.dataset.f, cf = t.dataset.cf;
   if (cf && t.type === 'number') return clipField(cf, t.value, t);
   if (cf && t.type === 'range') return renderInspector();
-  if (f === 'captext' || t.tagName === 'SELECT' || t.type === 'checkbox') applyField(f, t.value, t);
+  if (f === 'captext' || t.tagName === 'SELECT' || t.type === 'checkbox' || t.dataset.mpv != null) applyField(f, t.value, t); // mpv: ô ẩn của bộ chọn media (M213)
 });
 function projectField(pf, el) {
   pushUndo('proj' + pf);
@@ -1685,6 +1687,8 @@ function videoPicker(host, o = {}) {
     .vp-it:last-child { border-bottom: 0; } .vp-it:hover { background: rgb(var(--color-surface-hover)); }
     .vp-it.on { background: rgb(var(--color-accent-soft) / .24); }
     .vp-it .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vp-th { flex: none; position: relative; width: 48px; aspect-ratio: 16/9; border-radius: var(--radius-xs); background: rgb(var(--color-surface-muted)); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .vp-th img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; } .vp-th img.ok { opacity: 1; }
     .vp-it small { flex: none; color: rgb(var(--color-fg-subtle)); font-size: var(--text-2xs); }
     .vp-empty { padding: var(--space-3); font-size: var(--text-2xs); color: rgb(var(--color-fg-subtle)); text-align: center; line-height: 1.5; }
     .vp-row { display: flex; gap: var(--space-2); min-width: 0; } .vp-row > button { flex: none; } .vp-row > input { flex: 1; min-width: 0; }`;
@@ -1702,9 +1706,10 @@ function videoPicker(host, o = {}) {
   const set = (p, name) => { pathIn.value = p; draw(); o.onChange?.(p, name); };
   function draw() {
     const f = fold(q.value.trim()), shown = items.filter(x => !f || fold(x.rel).includes(f)), cur = pathIn.value.trim();
-    list.innerHTML = shown.length ? shown.slice(0, 200).map(x => `<button type="button" role="option" class="vp-it ${x.path === cur ? 'on' : ''}" data-i="${items.indexOf(x)}" title="${esc(x.rel)}"><i class="ti ti-movie"></i><span class="n">${esc(x.dir && x.dir !== 'Nguon' ? x.rel : x.name)}</span><small>${size(x.size)} · ${new Date(x.mtime).toLocaleDateString('vi-VN')}</small></button>`).join('')
+    list.innerHTML = shown.length ? shown.slice(0, 200).map(x => `<button type="button" role="option" class="vp-it ${x.path === cur ? 'on' : ''}" data-i="${items.indexOf(x)}" title="${esc(x.rel)}"><span class="vp-th"><i class="ti ti-movie"></i><img alt="" data-lz="${esc(avsUrl('/api/pick/thumb?' + new URLSearchParams({ brand, rel: x.rel })))}"></span><span class="n">${esc(x.dir && x.dir !== 'Nguon' ? x.rel : x.name)}</span><small>${size(x.size)} · ${new Date(x.mtime).toLocaleDateString('vi-VN')}</small></button>`).join('')
       : `<div class="vp-empty">${items.length ? 'Không có video khớp' : 'Kho chưa có video. Bấm “Chọn từ máy…” để chép video vào thư mục Nguon của Kho, hoặc chép thẳng vào thư mục đó.'}</div>`;
     list.querySelectorAll('[data-i]').forEach(b => (b.onclick = () => { const x = items[+b.dataset.i]; set(x.path, x.name); }));
+    Studio.lazyThumbs?.(list); // S30 M214: khung đầu của video Kho (một khung ffmpeg có cache, scripts/kho_thumb.mjs)
   }
   async function load() {
     const my = ++seq; list.innerHTML = '<div class="vp-empty"><i class="ti ti-loader-2 spin"></i></div>';

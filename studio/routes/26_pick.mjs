@@ -2,9 +2,13 @@
 // từ máy vào <Kho>/Nguon/ (không còn vào ~/.ai-video-studio/uploads/). Kho tính qua scripts/workspace.mjs.
 //   GET  /api/pick/sources?brand=&q=           → { kho: {root, brand, title, exists}, items: [{rel, path, name, dir, size, mtime}] }
 //                                                video trong Kho, Nguon/ trước rồi mới tới thư mục khác, trong mỗi nhóm mới nhất trước
+//   GET  /api/pick/thumb?brand=&rel=           → ảnh nhỏ (jpg) của một video trong Kho (scripts/kho_thumb.mjs, S30 M214); rel kiểm như
+//                                                /api/media/kho/file (resolveRel: không thoát Kho, không Du an/ hay Thanh pham/)
 //   POST /api/pick/upload?name=clip.mp4&brand= (raw body) → { path, rel, size } — chép vào <Kho>/Nguon/, tên trùng thì "clip (2).mp4"
 import fs from 'node:fs';
 import path from 'node:path';
+import { videoThumb } from '../../scripts/kho_thumb.mjs';
+import { resolveRel } from '../../scripts/kho_media.mjs';
 import { workspaceFor, ensureWorkspace, listWorkspace, sub, saveUpload, relTo, KHO_DIRS, KINDS } from '../../scripts/workspace.mjs';
 
 const BRAND = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -33,13 +37,20 @@ export async function uploadVideo(req, brand, name, kind = 'source') {
 }
 
 export default ctx => async (req, res, p, u) => {
-  if (p !== '/api/pick/upload' && p !== '/api/pick/sources') return false;
+  if (p !== '/api/pick/upload' && p !== '/api/pick/sources' && p !== '/api/pick/thumb') return false;
   try {
     const brand = brandParam(u.searchParams.get('brand'));
     if (p === '/api/pick/sources') {
       const ws = workspaceFor(brand);
       ctx.json(res, { kho: { root: ws.root, brand: ws.brand, title: ws.title, exists: fs.existsSync(ws.root), warning: ws.warning }, items: sourceList(ws, { q: u.searchParams.get('q') || '' }) });
       return true;
+    }
+    if (p === '/api/pick/thumb') {
+      if (req.method !== 'GET') return false;
+      const jpg = await videoThumb(resolveRel(workspaceFor(brand), String(u.searchParams.get('rel') || '')));
+      if (!jpg) return ctx.json(res, { error: 'Không có ảnh nhỏ' }, 404), true;
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      return ctx.sendFile(req, res, jpg), true;
     }
     if (req.method !== 'POST') return false;
     const r = await uploadVideo(req, brand, u.searchParams.get('name'));

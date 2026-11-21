@@ -215,6 +215,7 @@ body[data-focus] #lib, body[data-focus] #right { display: none; }
 .mcell { cursor: pointer; font-size: var(--text-2xs); min-width: 0; }
 .mcell .th { position: relative; aspect-ratio: 4/3; border-radius: var(--radius-control); background: rgb(var(--color-surface-muted)) center/cover no-repeat; display: flex; align-items: center; justify-content: center; border: 1px solid rgb(var(--color-line)); overflow: hidden; transition: border-color var(--duration-fast) var(--ease-standard); }
 .mcell .th > .ti { font-size: 24px; color: rgb(var(--color-fg-subtle)); }
+.mcell .th > img.kvth { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard); } .mcell .th > img.kvth.ok { opacity: 1; }
 .mcell:hover .th { border-color: rgb(var(--color-accent-text)); }
 .mcell .du { position: absolute; right: var(--space-1); bottom: var(--space-1); background: rgb(var(--color-black) / .65); color: rgb(var(--color-fg-on-media)); border-radius: var(--radius-xs); padding: 0 var(--space-1); font-size: var(--text-2xs); font-weight: 600; }
 .mcell .du .ti { font-size: 11px; vertical-align: -1px; }

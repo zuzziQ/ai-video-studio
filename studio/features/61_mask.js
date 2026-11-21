@@ -41,8 +41,8 @@
         ${has ? `<span class="lbl">Nền phía sau người</span><div class="seg5">${BG.map(([k, l, ic]) => `<button data-mbg="${k}" class="${(b.type || '') === k ? 'on' : ''}"><i class="ti ${ic}"></i>${l}</button>`).join('')}</div>
           ${b.type === 'blur' ? rng('bgblur', b.blur ?? 26, 4, 60, 1, 'Độ mờ', 'px') : ''}
           ${b.type === 'color' ? `<span class="lbl">Màu nền</span><input type="color" data-mbgc value="${b.color || CUT_BG0}">` : ''}
-          ${b.type === 'image' ? `<span class="lbl">Ảnh nền (từ Media)</span><select data-mbgi><option value="">— chọn ảnh —</option>${images().map(i => `<option value="${esc(i.path)}" ${b.src === i.path ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>
-            ${images().length ? '' : '<div class="help">Chưa có ảnh trong Media — tải ảnh lên ở thư viện Media trước.</div>'}` : ''}
+          ${b.type === 'image' ? `<span class="lbl">Ảnh nền (từ Media)</span>${Studio.mediaField ? Studio.mediaField({ attr: 'data-mbgi', value: b.src || '', kinds: ['image'], title: 'Chọn ảnh nền', empty: '— Chọn ảnh —' }) : `<select data-mbgi><option value="">— chọn ảnh —</option>${images().map(i => `<option value="${esc(i.path)}" ${b.src === i.path ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>`}
+            ${images().length || Studio.mediaField ? '' : '<div class="help">Chưa có ảnh trong Media — tải ảnh lên ở thư viện Media trước.</div>'}` : ''}
           ${b.type === 'none' ? `<div class="help">Phần nền trong suốt. ${Studio.tip('Thấy màu nền của khung (đen) hoặc thứ nằm dưới track chính.')}</div>` : ''}` : ''}`, 'ti-user-scan');
     }
     return ['mask', 'Mặt nạ', `<div id="mkpanel">${h}</div>`];
