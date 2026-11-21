@@ -66,7 +66,7 @@ const KS = [0, 1e-4, .001, .01, .049, .05, .1, .2, .25, .29, .3, .31, .333, .4, 
 for (let i = 0; i <= 200; i++) KS.push(i / 200);
 
 test('mọi id chuyển cảnh cũ vẫn có, cùng k cho cùng chuỗi [in, out] như engine trước M202', () => {
-  assert.deepEqual(FX.ids('trans'), Object.keys(OLD));
+  assert.deepEqual(FX.ids('trans').slice(0, 15), Object.keys(OLD)); // S29 M203: loại mới nối sau, id cũ giữ thứ tự
   const NEW = FX.transFns();
   for (const id of Object.keys(OLD)) for (const k of KS) assert.deepEqual(NEW[id](k, FX.params('trans', id)), OLD[id](k), `${id} @ ${k}`);
   for (const k of KS) {
@@ -104,7 +104,7 @@ test('mainTrack mới (engine.js đọc FX) dựng ra đúng HTML như mainTrack
 test('LUT, TRANS_TYPES, FILTERS, ANIM_LIST giữ đúng dữ liệu cũ', () => {
   assert.deepEqual(FX.lutCss(), OLD_LUT);
   for (const x of FX.LUT) assert.equal(x.fn(1, {}), OLD_LUT[x.id]);
-  assert.deepEqual(FX.transTypes(), OLD_TYPES);
+  assert.deepEqual(FX.transTypes().slice(0, 15), OLD_TYPES);
   assert.deepEqual(FX.filters(), OLD_FILTERS);
   assert.deepEqual(FX.animList(), OLD_ANIM);
   const clips = read('studio/clips.js'), lib = read('studio/library.js');
@@ -128,20 +128,20 @@ test('mỗi mục đủ trường: nhãn, nhóm hợp lệ, icon, tham số, mô
       if (kind === 'trans') assert.equal(typeof x.fn, 'function');
     }
   }
-  assert.deepEqual(FX.params('trans', 'zoom', { dur: 9 }), { dur: 1.5 });
-  assert.deepEqual(FX.params('trans', 'zoom', {}), { dur: 0.4 });
-  assert.deepEqual(FX.params('trans', 'zoom', { dur: '0.05' }), { dur: 0.1 });
+  assert.deepEqual(FX.params('trans', 'zoom', { dur: 9 }), { dur: 3, ease: 'auto' }); // S29 M203: 0.1–3 s + nhịp
+  assert.deepEqual(FX.params('trans', 'zoom', {}), { dur: 0.4, ease: 'auto' });
+  assert.deepEqual(FX.params('trans', 'zoom', { dur: '0.05' }), { dur: 0.1, ease: 'auto' });
 });
 
 test('Claude (75_ask.core.js) đọc chuyển cảnh và mô tả ai từ registry', () => {
   assert.deepEqual(AC.TRANS, FX.ids('trans'));
-  assert.deepEqual(AC.TRANS_VI, OLD_VI);
+  for (const [id, vi] of Object.entries(OLD_VI)) assert.equal(AC.TRANS_VI[id], vi);
   const acts = AC.actionsOf({ kind: 'video' });
   const tr = acts.find(a => a.id === 'transitions');
   assert.ok(tr, 'có việc transitions');
   for (const x of FX.TRANS) assert.ok(tr.what.includes(`${x.id} (`) && tr.what.includes(x.ai.khi_nao), `prompt thiếu ${x.id}`);
   assert.deepEqual(tr.params.type.values, [...FX.ids('trans'), 'none']);
-  assert.equal(tr.params.dur.max, 1.5);
+  assert.equal(tr.params.dur.max, 3); // S29 M203
   assert.ok(!/const TRANS = \['fade'/.test(read('studio/features/75_ask.core.js')));
 });
 
@@ -175,7 +175,7 @@ test('xem thử: TL tạm không đụng timeline thật, đoạn ±1 s quanh ch
   assert.equal(PC.durOf({ transition: { dur: .8 } }, '.3'), .8);
   assert.equal(PC.durOf({}, '.3'), .3);
   assert.equal(PC.durOf({}, undefined), .4);
-  assert.equal(PC.durOf({}, '9'), 1.5);
+  assert.equal(PC.durOf({}, '9'), 3); // S29 M203: 0.1–3 s
   const ui = read('studio/features/79_transpeek.js').replace(/^\s*\/\/.*$/gm, ''); // chỉ mã, bỏ chú thích
   assert.doesNotMatch(ui, /pushUndo|markDirty|changed\(|saveNow/, 'xem thử không ghi hoàn tác / không tự lưu');
   assert.match(ui, /S\.previewTL\(PC\.peekTL\(S\.TL/);

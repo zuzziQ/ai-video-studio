@@ -206,10 +206,11 @@ function mainTrack(t, extraFilter = '', extraStyle = '') {
   const { c, i, lt, src } = k, tr = c.transition, prev = CLIPS[i - 1];
   const cur = clipLayer(c, src, t, `${clipFilter(c)} ${extraFilter}`, extraStyle);
   if (!tr || !prev || lt >= (tr.dur ?? .4)) return cur;
-  const p = clamp(lt / (tr.dur ?? .4)), [inS, outS] = (TRANS[tr.type] || TRANS.fade)(p);
+  // S29 M203: tr.params (hướng, màu, cường độ, ease) — thiếu là mặc định, nên timeline cũ dựng ra giống hệt
+  const pr = tr.params, p = FX.ease(pr?.ease, clamp(lt / (tr.dur ?? .4))), [inS, outS] = (TRANS[tr.type] || TRANS.fade)(p, pr);
   const pSrc = SpeedMap.srcAt(prev, prev.t1 - prev.t0 + lt); // clip trước chạy tiếp dưới chuyển cảnh (ngược: lùi tiếp)
-  const flash = FX.transOverlay(tr.type, p); // flash: lớp trắng phủ
-  return `<div class="full">${clipLayer(prev, pSrc, t, clipFilter(prev), outS)}<div class="full" style="${inS}">${cur}</div>${flash}</div>`;
+  const flash = FX.transOverlay(tr.type, p, pr); // lớp phủ: loé sáng, qua màu, rò sáng…
+  return FX.transWrap(tr.type, p, pr, `<div class="full">${clipLayer(prev, pSrc, t, clipFilter(prev), outS)}<div class="full" style="${inS}">${cur}</div>${flash}</div>`);
 }
 
 const GRADES = {
