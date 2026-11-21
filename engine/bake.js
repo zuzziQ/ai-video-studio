@@ -71,7 +71,8 @@
     const b = c && c.bake;
     if (!b || typeof b.seq !== 'string' || !b.hash) return null;
     let s = cache && cache.get(b);
-    if (!s || s.k !== JSON.stringify([b, c.in, c.out, c.src && c.src.seq])) { s = { k: JSON.stringify([b, c.in, c.out, c.src && c.src.seq]), v: spec(c, tlFps) }; if (cache) cache.set(b, s); }
+    const k = JSON.stringify([b, c.in, c.out, c.src && c.src.seq, tlFps]);
+    if (!s || s.k !== k) { s = { k, v: spec(c, tlFps) }; if (cache) cache.set(b, s); }
     const sp = s.v;
     return sp && sp.hash === b.hash && sp.out === b.seq ? { seq: b.seq, n0: sp.n0, n1: sp.n1, p540: !!b.p540 } : null;
   }

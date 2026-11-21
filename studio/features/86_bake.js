@@ -190,6 +190,7 @@
       JOBS.set(sp.hash, j); paintStat();
       if (j.state === 'cancelled') { JOBS.delete(sp.hash); paintStat(); return S.toast('Đã huỷ nướng hiệu chỉnh'); }
       if (j.state === 'error') return S.toast('Nướng lỗi: ' + (j.error || ''));
+      if (j.state === 'done') { JOBS.set(sp.hash, { state: 'error', error: 'Việc xong nhưng thiếu chuỗi nướng' }); return paintStat(); }
     }
   }
   S.bakeTab = tab;

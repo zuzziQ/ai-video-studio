@@ -94,9 +94,10 @@ async function main(args) {
   if (pxOk && !fs.existsSync(path.join(outDir(dir, sp.hash, true), B.OK))) {
     const f540 = outDir(dir, sp.hash, true), src = `${B.DIR}/${sp.hash}/%05d.${sp.ext}`;
     const pa = PP.ffArgs(src, 'x', sp.n0), scale = pa[pa.indexOf('-vf') + 1]; // cùng cỡ 540p với chuỗi gốc
-    await bakeInto(dir, f540, want, rel => ['-v', 'error', '-y', '-start_number', String(sp.n0), '-i', src, '-frames:v', String(want), '-vf', scale,
+    // bản 540p chỉ để xem trước cho nhẹ: lỗi thì bỏ qua, chuỗi chính vẫn xong (engine đọc bản đủ cỡ)
+    try { await bakeInto(dir, f540, want, rel => ['-v', 'error', '-y', '-start_number', String(sp.n0), '-i', src, '-frames:v', String(want), '-vf', scale,
       ...(sp.ext === 'png' ? ['-compression_level', '3'] : ['-q:v', String(PP.Q)]), '-start_number', String(sp.n0), `${rel}/%05d.${sp.ext}`], 0.85, 0.98, 'Bản 540p');
-    fs.writeFileSync(path.join(f540, B.OK), JSON.stringify({ n: want }));
+      fs.writeFileSync(path.join(f540, B.OK), JSON.stringify({ n: want })); } catch (e) { console.log(`@@ 0.98 Bỏ qua bản 540p: ${String(e.message || e).slice(0, 120)}`); }
   }
   // .ok của chuỗi chính ghi sau cùng (sau cả bản 540p): Studio thấy "xong" là đã đủ mọi bản
   if (!readResult(dir, sp.hash)) fs.writeFileSync(path.join(final, B.OK), JSON.stringify({ seq: sp.out, n: want, n0: sp.n0, n1: sp.n1, ops: sp.ops, ms: Date.now() - t0, at: new Date().toISOString() }));
