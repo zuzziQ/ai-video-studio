@@ -57,7 +57,7 @@ function scopeText(input) {
   const s = input.scope, c = input.ctx, S = AskCore.STEPS;
   const base = `Video dài ${c.duration} s, ${c.clips} clip, ${c.scenes} cảnh / graphic, ${c.captions} dòng phụ đề${c.pack ? `, gói style ${c.pack}` : ''}.`
     + (c.beats ? `
-Nhạc nền ${c.beats.bpm} BPM, phách mạnh tại (giây): ${c.beats.strong.join(', ') || 'chưa rõ'}. Chuyển cảnh, chỗ cắt và b-roll nên rơi đúng phách mạnh; nút "Cắt theo nhịp" cạnh nút tách chia clip tại vạch nhịp.` : '');
+Nhạc nền ${c.beats.bpm} BPM, phách mạnh tại (giây): ${c.beats.strong.join(', ') || 'chưa rõ'}. Chuyển cảnh, chỗ cắt và b-roll nên rơi đúng phách mạnh; nút "Cắt theo nhịp" cạnh nút tách chia clip tại vạch nhịp; nhấn hình theo nhạc thì dùng fx_beats (khối ngắn tại mỗi phách mạnh thứ every).` : '');
   if (s.kind === 'elem') return `${base}\nPhạm vi: element đang chọn (${s.chip}).`;
   if (s.kind === 'clip') return `${base}\nPhạm vi: ${s.chip}${s.idx ? '' : ' (clip đầu, không có chuyển cảnh vào)'}.`;
   if (s.kind === 'region') return `${base}\nPhạm vi: một vùng người dùng khoanh trên khung hình ${c.dw}×${c.dh} px tại ${AskCore.stamp(s.t)}: x ${s.x}, y ${s.y}, rộng ${s.w}, cao ${s.h} px (gốc ở góc trên-trái).\n${c.image ? `Ảnh vùng đó (cắt từ video gốc, chưa có chữ / graphic) là tệp ${c.image} trong thư mục làm việc: đọc bằng công cụ Read rồi trả lời theo đúng những gì thấy.` : 'Không có ảnh của vùng: chỉ dựa vào toạ độ, đừng đoán nội dung ảnh.'}`;

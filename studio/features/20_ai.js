@@ -275,6 +275,8 @@
       if (!r.kept && plan.music && (!TL.audio.duck || typeof TL.audio.duck !== 'object')) TL.audio.duck = { ...DUCK0 }; // tự hạ nhạc dưới giọng
     } else TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [JSON.parse(JSON.stringify({ ...plan.music, t1: TL.duration }))] : [])];
     TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x))).map(x => JSON.parse(JSON.stringify(x)))];
+    // S28 M210: khối theo nhịp của lần dựng trước (chưa sửa tay) thay bằng khối của kế hoạch này (như scripts/ai_edit.mjs)
+    for (const k of ['fx', 'efx']) { const v = [...(TL[k] || []).filter(f => !(f._ai && f._beat && !f._orig)), ...JSON.parse(JSON.stringify(plan.beat_fx?.[k] || []))]; if (v.length || TL[k]) TL[k] = v; }
     let n = 0;
     for (const e of plan.captions) {
       const c = CAP.find(x => Math.abs(x.t0 - e.t0) < .02 && x.words.length === e.n);
@@ -308,7 +310,7 @@
   function planCard(plan, full) {
     const kinds = {}; for (const s of plan.scenes.filter(s => !s._base)) kinds[S.typeName(s.type)] = (kinds[S.typeName(s.type)] || 0) + 1;
     return `<div class="ai-card"><h4><i class="ti ti-sparkles ai-c-acc"></i> ${esc(plan.hook || 'Bản dựng AI')}</h4>
-      <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(musicText(plan.music))}</span><span>${plan.sfx.length} SFX</span></div>
+      <div class="ai-kv"><span>Gói: ${esc(packName(plan.pack))}</span><span>${plan.scenes.filter(s => !s._base).length} graphic</span><span>${plan.captions.length} dòng phụ đề sửa</span><span>Nhạc: ${esc(musicText(plan.music))}</span><span>${plan.sfx.length} SFX</span>${plan.beat_fx ? `<span>${plan.beat_fx.fx.length + plan.beat_fx.efx.length} hiệu ứng theo nhịp</span>` : ''}</div>
       ${plan.summary ? `<p>${esc(plan.summary)}</p>` : ''}
       ${placedNote(plan.placed)}
       ${plan.learned?.length ? `<p class="muted" title="${esc(plan.learned.join('\n'))}"><i class="ti ti-school"></i> Đã áp ${plan.learned.length} thói quen của thương hiệu${plan._dict ? ` · sửa chính tả ${plan._dict} từ` : ''}.</p>` : ''}
@@ -396,6 +398,7 @@
     S.pushUndo();
     TL.scenes = TL.scenes.filter(s => !s._ai || s._orig);
     if (TL.audio?.sfx) TL.audio.sfx = TL.audio.sfx.filter(x => !x._ai);
+    for (const k of ['fx', 'efx']) if (TL[k]) TL[k] = TL[k].filter(f => !(f._ai && f._beat && !f._orig)); // S28 M210
     S.changed(true); S.toast(`Đã xoá ${n} cảnh AI`);
   }
 

@@ -140,3 +140,19 @@ test('Hỏi Claude: việc clip_speed cho clip, thiếu mode thì về trả l�
   assert.equal(AC.frameAt(tl, 5.5).at, 4, 'đứng hình giữ khung');
   assert.deepEqual(AC.clipStarts(tl), [0, 4]);
 });
+
+test('đảo ngược: dòng phụ đề vắt qua mép clip được tách, không phủ cả clip chồng dòng khác (nghiệm thu S28)', () => {
+  const tl = { fps: 30, clips: [{ src: { seq: 'f/%05d.jpg', fps: 30, count: 300 }, in: 0, out: 4 }, { src: { seq: 'f/%05d.jpg', fps: 30, count: 300 }, in: 4, out: 8 }] };
+  const cap = []; words(cap, 3.1, 4, 0.5); words(cap, 5.1, 3, 0.5); // dòng 0: 3,1–5 s (2 từ ở clip 0, 2 từ ở clip 1); dòng 1: 5–6,5 s
+  const ctx = studio(tl, cap);
+  assert.ok(ctx.setClipReverse(1, true));
+  const lines = ctx.CAP.map(c => [c.t0, c.t1]);
+  for (let i = 1; i < lines.length; i++) assert.ok(lines[i][0] >= lines[i - 1][1] - 0.01, `dòng ${i - 1} và ${i} chồng nhau: ${JSON.stringify(lines)}`);
+  assert.equal(ctx.CAP.reduce((n, c) => n + c.words.length, 0), 7, 'không mất từ');
+  assert.ok(ctx.CAP[0].t1 <= 4 + 1e-6, 'nửa trong clip 0 giữ trước mép');
+  // một từ vắt qua mép (3,8–4,3 s, giữa từ ở clip 0): đuôi từ không nhảy sang cuối đoạn ngược
+  const c2 = []; words(c2, 3.4, 1, 0.5); c2[0].words[0].e = 4.3; c2[0].t1 = 4.3; words(c2, 5.1, 2, 0.5);
+  const x = studio({ fps: 30, clips: [{ src: { seq: 'f/%05d.jpg', fps: 30, count: 300 }, in: 0, out: 4 }, { src: { seq: 'f/%05d.jpg', fps: 30, count: 300 }, in: 4, out: 8 }] }, c2);
+  assert.ok(x.setClipReverse(1, true));
+  assert.ok(x.CAP[0].t1 <= 4 + 1e-6, `từ vắt mép bị kéo dài: ${JSON.stringify(x.CAP.map(c => [c.t0, c.t1]))}`);
+});

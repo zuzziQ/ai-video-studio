@@ -167,3 +167,74 @@ test('grid / brief: nhịp hỏng trong timeline.json (chuỗi, HTML) bị bỏ 
   assert.deepEqual(BC.grid([{ t0: 1, t1: 3, beats: { bpm: 120, t: ['0.5', 'x'], strong: ['0.5'] } }]).map(x => [x.t, x.strong]), [[1.5, true]]);
   assert.equal(BC.brief([{ t0: 0, t1: 3, beats: { bpm: 'abc', t: [1] } }]), null);
 });
+
+// ---------- hiệu ứng theo nhịp (phần còn lại của M210, sau M206) ----------
+const FT = createRequire(import.meta.url)('../../studio/features/81_fxtrack.core.js');
+const AC = createRequire(import.meta.url)('../../studio/features/75_ask.core.js');
+
+test('beatApply: khối ngắn tại mỗi phách mạnh thứ every trong vùng, làm lại thay khối cũ, giữ khối sửa tay / khoá', () => {
+  const tl = { duration: 10, fx: [{ t: 3, type: 'shake' }] };
+  assert.equal(FT.beatApply(tl, { type: 'punch', every: 2 }, [0.5, 2.5, 4.5, 6.5, 8.5]), 3);
+  assert.deepEqual(tl.fx.filter(f => f._beat).map(f => f.t), [0.5, 4.5, 8.5]);
+  assert.ok(tl.fx.some(f => f.t === 3 && !f._beat), 'khối nhấn có sẵn giữ nguyên');
+  // làm lại trong vùng 0–5 s với hiệu ứng mới: khối _beat trong vùng thay, ngoài vùng giữ
+  tl.fx.find(f => f.t === 0.5)._orig = { t: 0.5 }; // đã sửa tay
+  assert.equal(FT.beatApply(tl, { type: 'pulse', intensity: 0.8 }, [0.5, 2.5, 4.5, 6.5], { a: 0, b: 5 }), 3);
+  assert.deepEqual(tl.fx.filter(f => f._beat).map(f => f.t), [0.5, 8.5]);
+  assert.deepEqual(tl.efx.map(e => [e.start, e.end, e.params.intensity]), [[0.5, 0.9, 0.8], [2.5, 2.9, 0.8], [4.5, 4.9, 0.8]]);
+  assert.ok(FT.blocks(tl).some(b => b.src === 'efx' && b.type === 'pulse'), 'khối hiện trên track Hiệu ứng');
+  // loại lạ / không có phách / vùng rỗng: không đổi gì
+  assert.equal(FT.beatApply(tl, { type: 'nope' }, [1]), 0);
+  assert.equal(FT.beatApply({ duration: 5 }, { type: 'punch' }, []), 0);
+  // phách sát nhau hơn thời lượng khối: bỏ phách chồng
+  const t2 = { duration: 5 };
+  assert.equal(FT.beatApply(t2, { type: 'flash', dur: 0.5 }, [1, 1.2, 1.6, 2]), 2);
+  assert.ok(FT.BEAT_TYPES.includes('punch') && !FT.BEAT_TYPES.includes('vignette'));
+});
+
+test('Hỏi Claude: việc fx_beats trong phạm vi video / đoạn, áp bằng phách mạnh của nhạc', () => {
+  const video = AC.scopeOf({ step: 'build' });
+  assert.ok(AC.actionsOf(video).some(a => a.id === 'fx_beats'));
+  const pk = AC.checkPick({ action: 'fx_beats', params: { type: 'shake', every: 2.4, amp: 99 } }, video);
+  assert.deepEqual([pk.action, pk.params.type, pk.params.every, pk.params.amp], ['fx_beats', 'shake', 2, 40]);
+  assert.equal(AC.checkPick({ action: 'fx_beats', params: {} }, video).action, 'answer');
+  const tl = { duration: 8 };
+  assert.equal(AC.fxBeatsApply(tl, pk.params, { a: 0, b: 4 }, [0.5, 1.5, 2.5, 3.5, 4.5]), 2);
+  assert.deepEqual(tl.fx.map(f => [f.t, f.amp]), [[0.5, 40], [2.5, 40]]);
+});
+
+test('Hỏi Claude: fx_add tìm được lõi track Hiệu ứng khi nạp TRƯỚC 81_fxtrack.core.js (thứ tự nạp của trình duyệt)', async () => {
+  const vm = await import('node:vm');
+  const read = f => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
+  const win = {}; win.window = win; vm.createContext(win);
+  for (const f of ['engine/fx_registry.js', 'studio/features/75_ask.core.js', 'studio/features/81_fxtrack.core.js']) vm.runInContext(read(f), win, { filename: f });
+  assert.ok(win.AskCore && win.FxTrackCore, 'nạp được hai lõi');
+  const tl = { duration: 5 };
+  assert.equal(win.AskCore.fxAddApply(tl, { type: 'grain' }, null, 1), 1);
+  assert.equal(win.AskCore.fxBeatsApply(tl, { type: 'punch' }, null, [1, 3]), 2);
+});
+
+test('AI dựng: beat_fx của Claude thành khối _ai theo phách mạnh; dựng lại thay khối cũ, server = client', async () => {
+  const E = await import('../ai_edit.mjs');
+  const beats = BC.parse(RAW);
+  const tl0 = () => ({ duration: 6, width: 1080, height: 1920, fx: [{ t: 1, type: 'shake' }], audio: { music: [{ t0: 0, t1: 6, file: 'media/a.mp3', beats }] } });
+  const caps = [{ t0: 0, t1: 1, words: [{ w: 'Xin', s: 0, e: .5 }, { w: 'chào', s: .5, e: 1 }] }];
+  const cat = { packs: [{ id: 'basic', items: [], base: [] }], captionStyles: ['slate'] };
+  const lib = { broll: [], sfx: [], music: [{ mood: 'tech' }], tpls: [] };
+  const ctx = tl => ({ tl, caps, cat, lib, o: { pack: 'basic' } });
+  const plan = E.validate({ pack: 'basic', scenes: [], beat_fx: { type: 'punch', every: 1 } }, ctx(tl0()));
+  assert.deepEqual(plan.beat_fx.fx.map(f => [f.t, f._ai, f._beat]), [[0.5, true, true], [2.5, true, true], [4.5, true, true]]);
+  // nhạc chưa có nhịp hoặc type lạ: bỏ, ghi lý do
+  const noBeat = tl0(); delete noBeat.audio.music[0].beats;
+  assert.equal(E.validate({ pack: 'basic', scenes: [], beat_fx: { type: 'punch' } }, ctx(noBeat)).beat_fx, undefined);
+  assert.ok(E.validate({ pack: 'basic', scenes: [], beat_fx: { type: 'vignette' } }, ctx(tl0())).dropped.some(d => /theo nhịp/.test(d)));
+
+  // server và client (20_ai.js) áp như nhau; dựng lại không nhân đôi, khối nhấn của người dùng giữ
+  const src = fs.readFileSync(new URL('../../studio/features/20_ai.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  const userM = m =>'), b = src.indexOf('  // S13 · M104: what the placement step did');
+  const client = (tl, cs, p) => new Function('S', 'TL', 'CAP', src.slice(a, b) + '\n;applyPlan(JSON.parse(JSON.stringify(arguments[3])), { noUndo: true }); return CAP;')({ pushUndo() {}, changed() {} }, tl, cs, p);
+  const sTl = tl0(), cTl = tl0();
+  for (const p of [plan, plan, { ...plan, beat_fx: undefined }, plan]) { E.applyPlan(sTl, structuredClone(caps), structuredClone(p)); client(cTl, structuredClone(caps), p); }
+  assert.deepEqual(JSON.parse(JSON.stringify(sTl.fx)), JSON.parse(JSON.stringify(cTl.fx)));
+  assert.deepEqual(sTl.fx.map(f => f.t), [1, 0.5, 2.5, 4.5]);
+});

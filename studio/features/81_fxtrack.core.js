@@ -7,6 +7,8 @@
 //   setTimes(src, obj, t0, t1, moved) · setParam(src, obj, name, v) · make(type, t, total) → khối efx mới
 //   addApply(tl, p, range, at)     → Claude (75_ask.core.js): thêm một khối vào bản timeline; trả 1 nếu thêm được
 //   peekTL(tl, p, at)              → BẢN SAO timeline thêm khối p (dạng của addApply) tại at, để xem thử ±1 s; tl không đổi
+//   beatApply(tl, p, times, range) → S28 M210: khối ngắn loại p.type tại mỗi phách mạnh thứ p.every (times = giờ video, BeatsCore)
+//                                    trong range { a, b } (thiếu = cả video); khối _beat cũ trong range bị thay; trả số khối đặt
 'use strict';
 (function (root) {
   const FX = typeof module === 'object' && module.exports ? require('../../engine/fx_registry.js') : root.FX;
@@ -76,7 +78,39 @@
     if (p) addApply(o, p, null, at);
     return o;
   }
-  const api = { GRADE_VI, blocks, setTimes, setParam, make, addApply, peekTL, legacy, fresh };
+  // Nhấn cũ (shake, punch, flash…) dùng dur mặc định của nó; hiệu ứng mới mặc định 0,4 s. Hai khối cách nhau ≥ dur + 0,05 s để không
+  // chồng; tối đa BEAT_MAX khối mỗi lần. p.tag (vd { _ai: true }) gắn thêm vào từng khối (AI dựng thay được lần sau).
+  const BEAT_MAX = 60;
+  const BEAT_TYPES = FX.list('fx').filter(x => x.legacy || x.group === 'light' || x.id === 'mirror').map(x => x.id).filter(id => id !== 'push' && id !== 'mono'); // khối ngắn hợp nhịp
+  function beatApply(tl, p, times, range) {
+    if (!p?.type || !def(p.type) || !tl) return 0;
+    const total = tl.duration || 1e9, a = range ? Math.max(0, +range.a || 0) : 0, b = range ? Math.min(total, +range.b) : total;
+    if (!(b > a)) return 0;
+    const every = Math.max(1, Math.min(8, Math.round(+p.every || 1))), old = legacy(p.type);
+    const dur = r2(Math.max(.1, Math.min(old ? 4 : 2, +p.dur || (old ? DUR[p.type] ?? .3 : .4))));
+    const inR = t => t >= a - 1e-6 && t < b - .05;
+    tl.fx = (tl.fx || []).filter(f => !(f._beat && !f.locked && !f._orig && inR(f.t)));
+    tl.efx = (tl.efx || []).filter(e => !(e._beat && !e.locked && !e._orig && inR(e.start)));
+    if (!tl.efx.length) delete tl.efx;
+    const list = [...new Set((times || []).map(Number).filter(t => Number.isFinite(t) && inR(t)))].sort((x, y) => x - y);
+    let n = 0, last = -1e9;
+    list.forEach((t, i) => {
+      if (i % every || n >= BEAT_MAX || t - last < dur + .05 || t > total - .1) return;
+      const tag = { _beat: true, ...(p.tag || {}) };
+      if (old) {
+        const f = { t: r2(t), type: p.type, ...(p.dur != null ? { dur } : {}), ...tag };
+        if (p.amp != null && def(p.type).params.amp) { const s = def(p.type).params.amp; f.amp = r2(Math.min(s.max, Math.max(s.min, +p.amp))); }
+        (tl.fx ||= []).push(f);
+      } else {
+        const e = Object.assign(make(p.type, t, total, Math.min(dur, b - t), p.target), tag);
+        for (const k of ['intensity', 'speed', 'range']) if (p[k] != null) setParam('efx', e, k, p[k]);
+        (tl.efx ||= []).push(e);
+      }
+      last = t; n++;
+    });
+    return n;
+  }
+  const api = { GRADE_VI, BEAT_MAX, BEAT_TYPES, blocks, setTimes, setParam, make, addApply, peekTL, beatApply, legacy, fresh };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.FxTrackCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
