@@ -49,6 +49,8 @@
   .onb-tip { display: inline-flex; vertical-align: -2px; margin-left: 4px; color: var(--tx3); cursor: help; border-radius: 50%; } .onb-tip:hover, .onb-tip:focus-visible { color: var(--tx); outline: none; }
   .onb-tip .ti { font-size: 14px; }
   .onb-err { margin: 12px 0 0; font-size: 12px; color: var(--bad); display: flex; gap: 4px; align-items: center; } .onb-err:empty { display: none; }
+  .onb-kit { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--line2); } .onb-kit-h { margin: 8px 0 0; font-size: 12px; font-weight: 700; color: var(--tx2); }
+  .onb-kit input[type=color] { width: 100%; height: 32px; padding: 2px; background: var(--bg1); border: 1px solid var(--line2); border-radius: var(--r); }
   .onb-g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; } .onb-g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
   .onb-drop { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--line3); border-radius: var(--r); background: var(--bg1); cursor: pointer; color: var(--tx2); font-size: 13px; }
   .onb-drop:hover, .onb-drop.over { border-color: var(--acc); color: var(--tx); } .onb-drop.off { opacity: .5; cursor: default; pointer-events: none; }
@@ -184,7 +186,7 @@
     const mode = opt.fresh ? 'new' : opt.brand && kit ? 'edit' : '';
     W = { step: Math.min(step ?? ST?.step ?? 0, mode ? 1 : 2), mode, last: mode ? 1 : 2, kit, logoFile: null, logoUrl: kit?.logoUrl ? avsUrl(kit.logoUrl) : '', colors: [kit?.primary || '', kit?.accent || ''],
       name: kit?.title || kit?.name || '', phone: kit?.phone || '', website: kit?.website || '', handle: kit?.handle || '',
-      files: [], uploading: 0, kho: null, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: {}, pImage: null, pUrl: '', bAi: null, pAi: null,
+      files: [], uploading: 0, kho: null, product: { name: '', price: '', strengths: '', faq: [], industry: '' }, extra: kitExtra(kit), pImage: null, pUrl: '', bAi: null, pAi: null,
       purpose: ST?.purpose || '', aspect: ST?.aspect === '16:9' ? '16:9' : '9:16', platforms: [...(ST?.platforms || [])], busy: false };
     const ov = document.createElement('div');
     ov.className = 'onb-ov'; ov.id = 'onb-wiz';
@@ -254,14 +256,27 @@
     `<div class="onb-f"><label>Màu chủ đạo${tip(W.colors[0] ? 'Lấy từ logo. Bấm vào ô màu để đổi.' : 'Tự lấy sau khi có logo.')}</label><div class="onb-sw">${W.colors[0] ? `<input type="color" id="onb-c1" value="${esc(W.colors[0])}" aria-label="Màu chính">
       <input type="color" id="onb-c2" value="${esc(W.colors[1] || W.colors[0])}" aria-label="Màu nhấn">` : '<span class="onb-nosw"></span><span class="onb-nosw"></span>'}</div>
       </div>` +
-    (Studio.assistPanel ? '<div id="onb-ai-brand"></div>' : '') +
+    (Studio.assistPanel ? '<div id="onb-ai-brand"></div>' : '') + stepKit() +
     `<div class="onb-g3">${field('onb-phone', 'Số điện thoại <em>(không bắt buộc)</em>', 'Hiện ở lời kêu gọi cuối video.', text('onb-phone', W.phone, '0901 234 567', 'tel'))}
       ${field('onb-web', 'Website <em>(không bắt buộc)</em>', '', text('onb-web', W.website, 'nhadep.vn'))}
       ${field('onb-handle', 'Tên kênh <em>(không bắt buộc)</em>', '', text('onb-handle', W.handle, '@nhadep'))}</div>`;
+  // Bộ nhận diện đã có (Nhận từ AI hoặc lưu trước đó): hiện để xem và sửa; chưa có gì thì ẩn cho hướng dẫn gọn.
+  function stepKit() {
+    const x = W.extra; if (!BRAND_EXTRA.some(k => k in x)) return '';
+    const col = (k, l) => `<div class="onb-f"><label for="onb-x-${k}">${l}</label><input type="color" id="onb-x-${k}" data-x="${k}" value="${esc(/^#[0-9a-f]{6}$/i.test(x[k] || '') ? x[k] : k === 'dark' ? '#111214' : '#ffffff')}"></div>`; // design-token-ok: màu mặc định của brand kit là dữ liệu video
+    const t = (k, l, ph, v = x[k]) => field(`onb-x-${k}`, l, '', `<input id="onb-x-${k}" data-x="${k}" value="${esc(v || '')}" placeholder="${esc(ph)}">`);
+    return `<div class="onb-kit"><p class="onb-kit-h">Bộ nhận diện${tip('Đã lưu cùng thương hiệu. Sửa thêm ở Chuẩn bị → Thương hiệu.')}</p>
+      <div class="onb-g2">${col('dark', 'Nền tối')}${col('light', 'Chữ sáng')}</div>
+      <div class="onb-g2">${t('font', 'Font chữ', 'Mặc định của gói', fontLabel(x.font))}${t('disp', 'Font tiêu đề', 'Mặc định của gói', fontLabel(x.disp))}</div>
+      ${t('voice', 'Giọng văn', 'thân thiện, rõ ràng, tin cậy')}
+      <div class="onb-g2">${t('slogan', 'Slogan', 'Nhà đẹp, giá thật')}${t('cta', 'Lời kêu gọi ngắn', 'Gọi ngay')}</div>
+      ${t('outro', 'Chữ màn kết', 'Follow để xem thêm!')}</div>`;
+  }
   function wireBrand(box) {
     // box (.onb-card) sống qua mọi bước, listener cộng dồn: chỉ đọc ô khi đang ở bước này
     const sync = () => { if (W?.step !== 0 || !box.querySelector('#onb-name')) return; W.name = box.querySelector('#onb-name').value; W.phone = box.querySelector('#onb-phone').value; W.website = box.querySelector('#onb-web').value; W.handle = box.querySelector('#onb-handle').value;
-      const c1 = box.querySelector('#onb-c1'), c2 = box.querySelector('#onb-c2'); if (c1) W.colors[0] = c1.value; if (c2) W.colors[1] = c2.value; };
+      const c1 = box.querySelector('#onb-c1'), c2 = box.querySelector('#onb-c2'); if (c1) W.colors[0] = c1.value; if (c2) W.colors[1] = c2.value;
+      box.querySelectorAll('[data-x]').forEach(i => { const k = i.dataset.x; if (i.type === 'color' && !(k in W.extra) && i.value === i.defaultValue) return; W.extra[k] = k === 'font' || k === 'disp' ? fontValue(i.value, W.extra[k]) : i.value; }); };
     box.addEventListener('input', sync);
     mountBrandAi(box, sync);
     const dz = box.querySelector('#onb-logo-drop');
@@ -276,7 +291,14 @@
   }
   // M91: trợ lý Thương hiệu. Màu chính/nhấn vào hai ô màu; nền tối, chữ sáng, font, giọng văn, slogan, CTA, chữ màn kết lưu cùng bộ nhận diện.
   const AI_COLOR = { primary: 0, accent: 1 };
-  const fontLabel = v => String(v || '').split(',')[0].replace(/"/g, '');
+  // <pure:onbkit> phần bộ nhận diện ngoài tên/logo/màu chính (AI gợi ý hoặc sửa ở panel Thương hiệu). test scripts/tests/onboarding_kit.test.mjs
+  // Sửa thương hiệu: dựng lại từ kit đã lưu để hiện và sửa được; chỉ khoá kit có giá trị, khoá vắng không gửi lên nên server giữ nguyên.
+  const BRAND_EXTRA = ['dark', 'light', 'font', 'disp', 'voice', 'slogan', 'cta', 'outro'];
+  const kitExtra = kit => Object.fromEntries(BRAND_EXTRA.filter(k => kit && kit[k] != null && kit[k] !== '').map(k => [k, String(kit[k])]));
+  const fontLabel = v => String(v || '').split(',')[0].replace(/"/g, '').trim();
+  // ô font hiện tên; giữ nguyên chuỗi CSS cũ khi tên không đổi, tên mới thành "Tên", sans-serif, ô trống = bỏ (về font của gói)
+  const fontValue = (label, prev) => { const t = String(label || '').replace(/["<>;{}]/g, '').trim(); return !t ? '' : t === fontLabel(prev) ? prev : `"${t}", sans-serif`; };
+  // </pure:onbkit>
   function mountBrandAi(box, sync) {
     const host = box.querySelector('#onb-ai-brand'); if (!host) return;
     W.bAi ||= Studio.assistPanel({
