@@ -356,7 +356,7 @@ function khoCell(it, i) {
   const th = it.kind === 'image' ? avsUrl('/api/media/kho/file?rel=' + encodeURIComponent(it.rel)) : '';
   const ic = it.kind === 'image' ? 'ti-photo' : it.kind === 'video' ? 'ti-video' : 'ti-music';
   return `<div class="mcell" data-k="${i}" draggable="true" title="${esc(it.rel)}">
-      <div class="th" data-dbg="${esc(th)}">${th ? '' : `<i class="ti ${it.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}
+      <div class="th" data-dbg="${esc(th)}">${th ? '' : `<i class="ti ${it.kind === 'audio' ? 'ti-music' : 'ti-movie'}"></i>`}${it.kind === 'video' ? `<img class="kvth" alt="" data-lz="${esc(avsUrl('/api/media/kho/thumb?rel=' + encodeURIComponent(it.rel)))}">` : ''}
         ${it.used ? '<span class="kused" title="Đã có trong dự án (media/kho_*)"><i class="ti ti-check"></i></span>' : ''}
         <span class="du"><i class="ti ${ic}"></i> ${fsize(it.size)}</span>
         ${khoBusy === it.rel ? '<div class="kwait"><i class="ti ti-loader-2 spin"></i></div>' : `<div class="hov">${hovBtns(it.kind, 'kadd')}</div>`}</div>
@@ -386,6 +386,7 @@ function panelMedia() {
       ${list.length ? `<div class="mgrid">${list.map(it => khoCell(it, all.indexOf(it))).join('')}</div><div class="help">Bấm hoặc kéo vào timeline để dùng. ${tip('File được liên kết vào media/ của dự án, không chép thêm nên không tốn dung lượng.')}</div>`
         : all.length ? empty('ti-filter-off', 'Không có file phù hợp', 'Chọn nhóm khác hoặc xoá ô tìm.')
           : empty('ti-building-warehouse', 'Kho chưa có file', 'Thêm ảnh, b-roll, nhạc vào Kho ở bước 1 Chuẩn bị (hoặc chép thẳng vào thư mục Kho) rồi bấm làm mới.')}`;
+    window.Studio?.lazyThumbs?.($('#libbody')); // S30 M214: khung đầu của video Kho
     return;
   }
   const q = query.toLowerCase(), list = MEDIA.filter(m => !q || m.name.toLowerCase().includes(q));

@@ -34,8 +34,9 @@
     const prod = o.type === 'rv_product' && S.TL?.ads?.product
       ? `<button data-piact="refill"><i class="ti ti-package"></i> Điền lại theo hồ sơ</button>` : '';
     return sect(o.type === 'rv_product' ? 'Ảnh sản phẩm' : 'Ảnh', `<div id="pipanel">${thumb}
-      <select data-pi="pick" aria-label="Ảnh của khối">${opts}</select>
-      <div class="acts"><button data-piact="up" class="primary"><i class="ti ti-upload"></i> Tải ảnh lên</button>${cur ? '<button data-piact="clear"><i class="ti ti-x"></i> Bỏ ảnh</button>' : ''}${prod}</div>
+      ${S.mediaField ? S.mediaField({ attr: 'data-pi="pick"', value: cur, kinds: ['image'], title: o.type === 'rv_product' ? 'Chọn ảnh sản phẩm' : 'Chọn ảnh', empty: '— Chưa có ảnh (ô giữ chỗ) —' }) // S30 M214
+        : `<select data-pi="pick" aria-label="Ảnh của khối">${opts}</select>`}
+      <div class="acts">${S.mediaField ? '' : '<button data-piact="up" class="primary"><i class="ti ti-upload"></i> Tải ảnh lên</button>'}${cur ? '<button data-piact="clear"><i class="ti ti-x"></i> Bỏ ảnh</button>' : ''}${prod}</div>
       <input type="file" id="pi-file" accept="image/png,image/jpeg,image/webp" hidden>
       <div class="help">Ảnh nền trong suốt (PNG) hoặc nền trơn trông đẹp nhất. Ảnh mới vào mục Media của dự án.</div></div>`, 'ti-photo');
   });

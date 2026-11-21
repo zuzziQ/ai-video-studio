@@ -2,6 +2,8 @@
 //   GET  /api/media/kho?group=image|broll|music|source&q=  → { kho:{title, brand, root, exists, found, warning}, items:[{rel, name, kind, group, size, mtime, used}] }
 //                                                            Kho của dự án đang mở (workspaceOfProject); used = media/kho_* đã có trong dự án
 //   GET  /api/media/kho/file?rel=                                → ảnh / âm thanh trong Kho để xem trước (chỉ đọc)
+//   GET  /api/media/kho/thumb?rel=                               → ảnh nhỏ (jpg) của video trong Kho, một khung ffmpeg có cache
+//                                                            ($AVS_HOME/cache/kho_thumbs, scripts/kho_thumb.mjs; S30 M214); 404 khi không tạo được
 //   POST /api/media/kho/use {rel}                                → liên kết vào media/kho_<tên> (+ khung + audio.m4a nếu là video),
 //                                                            trả mục như /api/media để client chèn ngay; rel thoát Kho, video > 3 phút → 400
 //   POST /api/media/kho/upload?name=  (thân = file âm thanh thô) → { rel, name } vào Nhac/ của Kho CHỨA DỰ ÁN (S19 M138, "Nhạc của
@@ -14,6 +16,7 @@ import { pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { shortErr } from '../../scripts/err_text.mjs';
 import * as W from '../../scripts/workspace.mjs';
+import { videoThumb } from '../../scripts/kho_thumb.mjs';
 
 const AUDIO = /\.(mp3|wav|m4a|aac|flac|ogg|aiff?)$/i, MUSIC_MAX = 1.5 * 1024 ** 3;
 const fileName = raw => { // như 12_workspace: chỉ phần tên, NFC, đuôi chữ thường an toàn
@@ -28,7 +31,7 @@ export default ctx => {
   const km = async () => (KM ||= await import(pathToFileURL(path.join(ctx.SKILL, 'scripts/kho_media.mjs')).href));
   const tl = () => { try { return JSON.parse(fs.readFileSync(ctx.project.tlFile, 'utf8')); } catch { return null; } };
   return async (req, res, p, u) => {
-    if (!['/api/media/kho', '/api/media/kho/file', '/api/media/kho/use', '/api/media/kho/upload'].includes(p)) return false; // không dùng /api/kho/*: 12_workspace (M97) nạp trước, bắt cả tiền tố đó và đọc body POST
+    if (!['/api/media/kho', '/api/media/kho/file', '/api/media/kho/thumb', '/api/media/kho/use', '/api/media/kho/upload'].includes(p)) return false; // không dùng /api/kho/*: 12_workspace (M97) nạp trước, bắt cả tiền tố đó và đọc body POST
     if (!ctx.project) return ctx.json(res, { error: 'Chưa mở dự án' }, 400), true;
     const K = await km();
     try {
@@ -45,6 +48,12 @@ export default ctx => {
         if (!/\.(jpe?g|png|webp|gif|mp3|wav|m4a|aac|flac|ogg)$/i.test(f)) return ctx.json(res, { error: 'Chỉ xem trước ảnh hoặc âm thanh' }, 400), true;
         res.setHeader('X-Content-Type-Options', 'nosniff');
         return ctx.sendFile(req, res, f), true;
+      }
+      if (p === '/api/media/kho/thumb' && req.method === 'GET') {
+        const jpg = await videoThumb(K.resolveRel(ws, String(u.searchParams.get('rel') || '')));
+        if (!jpg) return ctx.json(res, { error: 'Không có ảnh nhỏ' }, 404), true;
+        res.setHeader('Cache-Control', 'private, max-age=86400');
+        return ctx.sendFile(req, res, jpg), true;
       }
       if (p === '/api/media/kho/use' && req.method === 'POST') {
         const b = await ctx.body(req);
