@@ -56,7 +56,7 @@ test('lệnh ffmpeg: giữ số khung gốc, đúng bộ lọc, LUT đường d�
   assert.deepEqual(a.filter((x, i) => a[i - 1] === '-start_number'), ['31', '31']);
   assert.equal(a[a.indexOf('-frames:v') + 1], '61');
   for (const re of [/^deshake=rx=48:ry=48/, /chromakey=color=0x00ff00/, /despill=type=green/, /split\[bk0\]\[bk1\];\[bk1\]lut3d=file=\.studio\/bake\/luts\/abcdef123456\.cube/,
-    /blend=all_mode=normal:all_opacity=0\.6/, /huesaturation=hue=10:.*colors=r/, /curves=preset=vintage:master='0\/0 0\.25\/0\.3 0\.75\/0\.75 1\/1'/, /format=rgba$/]) assert.match(vf, re);
+    /\[bk2\]\[bk0\]blend=all_mode=normal:all_opacity=0\.6/, /huesaturation=hue=10:.*colors=r:strength=10/, /curves=preset=vintage:master='0\/0 0\.25\/0\.3 0\.75\/0\.75 1\/1'/, /format=rgba$/]) assert.match(vf, re);
   assert.ok(vf.indexOf('deshake') < vf.indexOf('chromakey') && vf.indexOf('chromakey') < vf.indexOf('lut3d'), 'ổn định → tách nền → màu');
   const j = B.ffArgs(B.spec(clip({ hsl: { hue: 5 } })), 'o/%05d.jpg');
   assert.ok(j.includes('-q:v') && /format=yuvj420p$/.test(j[j.indexOf('-vf') + 1]));
