@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 
 const FX = createRequire(import.meta.url)('../engine/fx_registry.js');
 const DOC = new URL('../references/clips.md', import.meta.url);
-export const KINDS = ['trans', 'lut', 'text_in'];
+export const KINDS = ['trans', 'lut', 'text_in', 'clip_in', 'clip_out', 'clip_combo']; // S28 M204: clip_*
 
 export function render(md) {
   let out = md;

@@ -24,6 +24,8 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const has = k => args.includes(k);
 const say = (p, s) => console.log(`@@ ${p.toFixed(2)} ${s}`);
+// S28 M204: ảnh tĩnh do AI đặt toàn khung → Combo Ken Burns (lia + phóng, engine/fx_registry.js) thay kb chỉ phóng; video giữ kb nhẹ
+const stillKb = (seq, dir) => (seq ? { kb: .04, kb_dir: dir } : { kb: 0, anim: { combo: { type: 'ken_burns', speed: 1 } } });
 const fold = s => String(s).toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, '');
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -550,7 +552,7 @@ function sceneFor(s, c, lay) {
   if (['media', 'kho', 'lib', 'stock', 'stockvid', 'aiimg'].includes(c.kind)) {
     const m = c.media; if (!m) return null;
     const media = m.seq ? { ...m.seq, t0: s.t0 } : m.path, credit = m.credit ? { credit: m.credit } : {};
-    if (full) return { ...base, t1: r2(Math.min(s.t1, s.t0 + (m.seq ? 2.2 : 1.6))), type: 'photo', mode: 'full', media, kb: m.seq ? .04 : .12, kb_dir: s.i % 2 ? -1 : 1, ...credit };
+    if (full) return { ...base, t1: r2(Math.min(s.t1, s.t0 + (m.seq ? 2.2 : 1.6))), type: 'photo', mode: 'full', media, ...stillKb(m.seq, s.i % 2 ? -1 : 1), ...credit };
     return { ...base, type: 'photo', mode: 'card', media, kb: .08, card: { x: box[0], y: box[1], w: box[2], h: box[3], r: 20 }, ...credit };
   }
   if (c.kind === 'hf') {

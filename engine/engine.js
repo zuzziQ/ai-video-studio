@@ -152,7 +152,33 @@ function fixReframe(stage, t) {
     im.style.objectPosition = op; if (own) im.style.transformOrigin = to;
   }
 }
+// S28 M204: thứ tự ghép transform — định nghĩa MỘT lần ở đây, từ trong ra ngoài:
+//   clip chính: 1. ảnh: khung cắt tay / bám mặt (reframeCss: object-position + transform-origin) rồi lật + phóng (c.flip, c.zoom)
+//               2. hộp clip: mặt nạ (c.mask)   3. hoạt ảnh clip c.anim (Combo × Vào × Ra, quanh tâm khung; animWrap)
+//               4. chuyển cảnh mainTrack (inS / outS)   5. TL.zoom (arollTransform)   6. hiệu ứng cả khung TL.fx (fxWrap)
+//   cảnh b-roll / ảnh phủ: module → mặt nạ (s.mask) → hoạt ảnh s.anim → keyframe s.kf (sceneFx). Keyframe thắng phần trùng
+//               thuộc tính: x / y / scale / rot / opacity nào có trong s.kf thì bỏ phần đó của hoạt ảnh.
+// Tốc độ (M207) chỉ đổi srcT (giây nguồn); hoạt ảnh theo giây trên timeline (t − t0), nên tua ngược / đường cong không đổi nhịp hoạt ảnh.
+const ANIM_SCENES = new Set(['photo', 'broll']);
+const KF_OWN = ['x', 'y', 'scale', 'rot', 'opacity'];
+const kfOwned = kf => (kf?.length ? new Set(KF_OWN.filter(p => kf.some(k => k[p] != null))) : null);
+function animWrap(anim, lt, D, html, origin = '50% 50%', kf = null) {
+  const v = html && FX.clipAnimAt(anim, lt, D);
+  if (!v) return html;
+  const css = FX.clipAnimCss(v, kfOwned(kf));
+  return css ? `<div class="full" style="transform-origin:${origin};${css}">${html}</div>` : html;
+}
+// tâm hoạt ảnh của cảnh: s.anchor, hoặc tâm thẻ (ảnh dạng thẻ, b-roll không toàn khung), không thì tâm khung
+function animOrigin(s) {
+  if (s.anchor) return `${s.anchor[0]}px ${s.anchor[1]}px`;
+  const b = s.type === 'photo' && s.mode === 'card' ? s.card : s.type === 'broll' && (s.layout || 'full') !== 'full' ? s : null;
+  return b && Number.isFinite(+b.x) && Number.isFinite(+b.w) ? `${+b.x + b.w / 2}px ${+b.y + b.h / 2}px` : '50% 50%';
+}
 function clipLayer(c, srcT, t, extraFilter = '', style = '') {
+  const html = clipBox(c, srcT, t, extraFilter, style);
+  return c.anim && c.t1 != null ? animWrap(c.anim, t - c.t0, c.t1 - c.t0, html) : html;
+}
+function clipBox(c, srcT, t, extraFilter = '', style = '') {
   const rf = reframeCss(c, srcT);
   const tr = `${c.flip ? 'scaleX(-1) ' : ''}scale(${c.zoom || 1})`;
   const img = `<img src="${url(srcFrame(c, srcT))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:${c.fit === 'contain' || c.fit === 'blurfill' ? 'contain' : 'cover'};
@@ -312,6 +338,7 @@ function maskCss(m) {
 function sceneFx(s, html, t) {
   if (!html) return html;
   if (s.mask) html = `<div class="full" style="${maskCss(s.mask)}">${html}</div>`;
+  if (s.anim && ANIM_SCENES.has(s.type)) html = animWrap(s.anim, t - s.t0, s.t1 - s.t0, html, animOrigin(s), s.kf); // S28 M204
   if (s.kf?.length) {
     const v = kfAt(s.kf, t), [ax, ay] = s.anchor || [s.x ?? STAGE_WH[0] / 2, s.y ?? STAGE_WH[1] / 2];
     html = `<div class="full" style="transform-origin:${ax}px ${ay}px;transform:${kfTr(v)};opacity:${clamp(v.opacity).toFixed(3)}">${html}</div>`;
@@ -405,6 +432,10 @@ function compose(t) {
     if (!fn) { console.warn('unknown module', s.type); continue; }
     const r = fn(s, t, t - s.t0) || {};
     if (s.kf?.length || s.mask) { r.back = sceneFx(s, r.back, t); r.front = sceneFx(s, r.front, t); r.cover = false; }
+    else if (s.anim && ANIM_SCENES.has(s.type)) { // S28 M204: hoạt ảnh không keyframe/mặt nạ; đoạn Vào / Ra để lộ a-roll bên dưới
+      r.back = sceneFx(s, r.back, t); r.front = sceneFx(s, r.front, t);
+      if (FX.clipAnimAt(s.anim, t - s.t0, s.t1 - s.t0)?.edge) r.cover = false;
+    }
     const full = h || isFull(s, r), v = envelope(s0, t, full, h);
     if (v) { r.back = envWrap(r.back, v, full); r.front = envWrap(r.front, v, full); r.cover = false; }
     if (r.cover) cover = true;

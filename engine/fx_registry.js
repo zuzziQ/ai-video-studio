@@ -260,6 +260,127 @@
     FXS, fxApply,
     accentDur: () => Object.fromEntries(FXS.filter(x => x.legacy).map(x => [x.id, x.dur])),
   };
+  // ---------- S28 M204: nhóm clip_anim — hoạt ảnh clip Vào / Ra / Combo (clip.anim của clip Video chính, b-roll, ảnh phủ) ----------
+  // anim = { in: {type, dur}, out: {type, dur}, combo: {type, speed} }; ghép ở engine/engine.js (animWrap: clipLayer, sceneFx).
+  // Mỗi mục trả props { x, y (% khung), scale, rot (độ), rx, ry (độ, xoay 3D), opacity, blur (px) }; thiếu = trung tính.
+  //   in.fn(k): k 0→1 trong in.dur đầu clip, k = 1 là trạng thái nghỉ. out.fn(k): k 0→1 trong out.dur cuối (đối xứng của Vào).
+  //   combo.fn(p, lt, speed): suốt clip, p = 0→1 theo thời lượng clip, lt giây. Hàm thuần theo t: cùng t cho cùng chuỗi.
+  // Combo có xoay / trôi tự phóng nhẹ để không lộ mép khung.
+  (() => {
+    const bounce = k => { const n = 7.5625, d = 2.75; return k < 1 / d ? n * k * k : k < 2 / d ? n * (k -= 1.5 / d) * k + .75 : k < 2.5 / d ? n * (k -= 2.25 / d) * k + .9375 : n * (k -= 2.625 / d) * k + .984375; };
+    const ADUR = { t: 'num', min: 0.1, max: 3, def: 0.5 }, ASPD = { t: 'num', min: 0.25, max: 3, def: 1 };
+    const fadeUp = k => Math.min(1, k * 2);
+    const IN = {
+      fade: k => ({ opacity: k }),
+      zoom_in: k => ({ scale: lerp(.6, 1, E.outCubic(k)), opacity: fadeUp(k) }),
+      zoom_out: k => ({ scale: lerp(1.4, 1, E.outCubic(k)), opacity: fadeUp(k) }),
+      slide_l: k => ({ x: (1 - E.outCubic(k)) * 100 }),
+      slide_r: k => ({ x: -(1 - E.outCubic(k)) * 100 }),
+      slide_up: k => ({ y: (1 - E.outCubic(k)) * 100 }),
+      slide_down: k => ({ y: -(1 - E.outCubic(k)) * 100 }),
+      rotate: k => ({ rot: (1 - E.outCubic(k)) * -90, scale: lerp(.4, 1, E.outCubic(k)), opacity: fadeUp(k) }),
+      shake: k => ({ x: Math.sin(k * Math.PI * 8) * (1 - k) * 6, scale: lerp(1.08, 1, k) }),
+      sway: k => ({ rot: Math.sin(k * Math.PI * 5) * (1 - k) * 8, scale: lerp(1.15, 1, k) }),
+      bounce: k => ({ scale: lerp(.3, 1, bounce(k)), opacity: Math.min(1, k * 3) }),
+      blur: k => ({ blur: (1 - k) * 24, opacity: k, scale: lerp(1.08, 1, E.outCubic(k)) }),
+    };
+    const ai = (mood, nhip, khi_nao, tranh) => ({ mood, nhip, khi_nao, tranh });
+    const mk = (group, p) => (id, label, icon, fn, a) => ({ id, label, group, icon, params: { [p === ASPD ? 'speed' : 'dur']: p }, fn, ai: a });
+    const ci = mk('in', ADUR), co = mk('out', ADUR), cc = mk('combo', ASPD);
+    const CLIP_IN = [
+      ci('fade', 'Mờ dần', 'ti-blur', IN.fade, ai('nhẹ, trung tính', 'chậm–vừa', 'mở clip đầu, ảnh phủ vào nhẹ', 'cần cú đấm ngay khung đầu')),
+      ci('zoom_in', 'Phóng to vào', 'ti-zoom-in', IN.zoom_in, ai('bật ra, hào hứng', 'nhanh', 'sản phẩm, chi tiết, câu hook', 'nội dung trang trọng')),
+      ci('zoom_out', 'Thu vào', 'ti-zoom-out', IN.zoom_out, ai('mạnh, điện ảnh', 'vừa', 'cảnh rộng, mở chương, ảnh phủ toàn khung', 'clip quá ngắn (< 1 s)')),
+      ci('slide_l', 'Trượt sang trái', 'ti-arrow-big-left-lines', IN.slide_l, ai('tiến tới, gọn', 'vừa–nhanh', 'ý tiếp theo, ảnh minh hoạ đi vào từ phải', 'dùng cho mọi clip liền nhau')),
+      ci('slide_r', 'Trượt sang phải', 'ti-arrow-big-right-lines', IN.slide_r, ai('quay lại, so sánh', 'vừa–nhanh', 'nhắc ý trước, đối chiếu', 'dùng cho mọi clip liền nhau')),
+      ci('slide_up', 'Trượt lên', 'ti-arrow-big-up-lines', IN.slide_up, ai('tích cực, lướt feed', 'nhanh', 'video dọc, kết quả, con số tăng', 'tin buồn')),
+      ci('slide_down', 'Trượt xuống', 'ti-arrow-big-down-lines', IN.slide_down, ai('rơi vào, đóng dấu', 'vừa', 'kết luận, thẻ giá, ảnh rơi vào khung', 'mở đầu video')),
+      ci('rotate', 'Xoay vào', 'ti-rotate-clockwise-2', IN.rotate, ai('vui, bất ngờ', 'nhanh', 'twist, giải trí, sticker ảnh', 'thương hiệu sang trọng')),
+      ci('shake', 'Lắc', 'ti-vibration', IN.shake, ai('gắt, sốc', 'rất nhanh', 'tin sốc, beat drop, lỗi', 'nội dung nhẹ nhàng; dùng dày')),
+      ci('sway', 'Lắc lư', 'ti-wave-sine', IN.sway, ai('tinh nghịch, mềm', 'vừa', 'lifestyle, đồ ăn, trẻ em', 'tin tức, hướng dẫn kỹ thuật')),
+      ci('bounce', 'Nảy', 'ti-ball-basketball', IN.bounce, ai('vui, năng lượng', 'nhanh', 'ảnh sản phẩm dạng thẻ, khuyến mãi', 'cảnh toàn khung nghiêm túc')),
+      ci('blur', 'Mờ nhoè', 'ti-blur-off', IN.blur, ai('mơ màng, sang', 'chậm–vừa', 'hồi tưởng, BĐS cao cấp, mỹ phẩm', 'màn có chữ cần đọc ngay')),
+    ];
+    // Ra = Vào chạy ngược; hướng đổi chiều để clip đi tiếp ra ngoài (trượt ra trái = vào từ trái chạy ngược, phóng ra = thu vào chạy ngược)
+    const back = id => k => IN[id](1 - k);
+    const CLIP_OUT = [
+      co('fade', 'Mờ dần', 'ti-blur', back('fade'), ai('nhẹ, kết', 'chậm–vừa', 'clip cuối, ảnh phủ rút đi', 'ngay trước chuyển cảnh mạnh')),
+      co('zoom_in', 'Phóng ra', 'ti-zoom-in', back('zoom_out'), ai('lao tới, dồn dập', 'nhanh', 'trước cảnh hook, đẩy sang ý mới', 'kết video')),
+      co('zoom_out', 'Thu nhỏ', 'ti-zoom-out', back('zoom_in'), ai('khép lại', 'vừa', 'tổng kết, ảnh thẻ rút đi', 'clip chính đang nói')),
+      co('slide_l', 'Trượt ra trái', 'ti-arrow-big-left-lines', back('slide_r'), ai('tiến tới', 'vừa–nhanh', 'nhường chỗ ý tiếp theo', 'dùng cho mọi clip')),
+      co('slide_r', 'Trượt ra phải', 'ti-arrow-big-right-lines', back('slide_l'), ai('lùi lại', 'vừa–nhanh', 'quay về ý trước', 'dùng cho mọi clip')),
+      co('slide_up', 'Trượt ra trên', 'ti-arrow-big-up-lines', back('slide_down'), ai('lướt đi', 'nhanh', 'video dọc kiểu lướt feed', 'tin buồn')),
+      co('slide_down', 'Trượt ra dưới', 'ti-arrow-big-down-lines', back('slide_up'), ai('hạ xuống, kết', 'vừa', 'kết đoạn, rút ảnh minh hoạ', 'mở đầu')),
+      co('rotate', 'Xoay ra', 'ti-rotate-clockwise-2', back('rotate'), ai('vui, bất ngờ', 'nhanh', 'kết đoạn giải trí', 'thương hiệu sang trọng')),
+      co('sway', 'Lắc lư ra', 'ti-wave-sine', back('sway'), ai('tinh nghịch', 'vừa', 'lifestyle, đồ ăn', 'tin tức')),
+      co('blur', 'Mờ nhoè', 'ti-blur-off', back('blur'), ai('mơ màng', 'chậm–vừa', 'chuyển sang hồi tưởng, cảnh sang', 'màn có chữ cần đọc')),
+    ];
+    const TAU = Math.PI * 2;
+    // xoay θ độ: phóng đủ để khung 9:16 / 16:9 (tỉ lệ ≤ 1,78) vẫn phủ kín
+    const cover = deg => { const a = Math.abs(deg % 180) * Math.PI / 180; return Math.abs(Math.cos(a)) + 1.78 * Math.abs(Math.sin(a)); };
+    const CLIP_COMBO = [
+      cc('ken_burns', 'Ken Burns', 'ti-camera', (p, lt, v) => ({ scale: 1.04 + .14 * v * p, x: lerp(-1.5, 1.5, p), y: lerp(1, -1, p) }),
+        ai('kể chuyện, sống động', 'chậm', 'b-roll ảnh tĩnh (ảnh AI, ảnh stock) cho khỏi đứng hình, BĐS, du lịch', 'video quay sẵn đã chuyển động mạnh')),
+      cc('pendulum', 'Con lắc', 'ti-clock-pause', (p, lt, v) => ({ rot: Math.sin(lt * v * TAU / 3) * 3, scale: 1.12 }),
+        ai('đung đưa, thư thả', 'chậm', 'ảnh minh hoạ vui, đồ chơi, thời trang', 'tin tức, dữ liệu')),
+      cc('zoom_pulse', 'Zoom vào-ra', 'ti-arrows-diagonal', (p, lt, v) => ({ scale: 1 + .08 * (1 - Math.cos(lt * v * TAU / 2.5)) / 2 }),
+        ai('nhấn nhá, sôi động', 'vừa', 'ảnh sản phẩm, khuyến mãi, nhạc vui', 'clip chính đang nói dài (chóng mặt)')),
+      cc('shake3d', 'Lắc 3D', 'ti-rotate-3d', (p, lt, v) => ({ ry: Math.sin(lt * v * TAU / 2.2) * 10, rx: Math.sin(lt * v * TAU / 3.1) * 5, scale: 1.15 }),
+        ai('công nghệ, hiện đại', 'vừa', 'ảnh màn hình app, sản phẩm công nghệ', 'mặt người cận')),
+      cc('breathe', 'Thở', 'ti-lungs', (p, lt, v) => ({ scale: 1.03 + .03 * Math.sin(lt * v * TAU / 3) }),
+        ai('êm, sống', 'chậm', 'ảnh tĩnh giữ lâu, chân dung, cảnh đẹp', 'chồng với Ken Burns')),
+      cc('drift', 'Trôi', 'ti-wind', (p, lt, v) => ({ x: Math.sin(lt * v * .9) * 2.5, y: Math.cos(lt * v * .7) * 1.8, scale: 1.08 }),
+        ai('mơ màng, điện ảnh', 'chậm', 'cảnh thiên nhiên, BĐS, hồi tưởng', 'ảnh có chữ sát mép')),
+      cc('beat_shake', 'Rung nhịp', 'ti-wave-square', (p, lt, v) => { const e = Math.exp(-((lt * v * 2) % 1) * 7); return { x: Math.sin(lt * 60) * e * 1.2, scale: 1.04 + .05 * e }; },
+        ai('mạnh, theo nhạc', 'nhanh (2 nhịp/giây × speed)', 'montage, nhạc EDM, khoảnh khắc bùng nổ', 'đoạn nói chậm, tâm sự')),
+      cc('slow_spin', 'Xoay chậm', 'ti-rotate', (p, lt, v) => { const r = lt * v * 4; return { rot: r, scale: cover(r) }; },
+        ai('lạ, nghệ thuật', 'chậm', 'ảnh sản phẩm trưng bày, intro nghệ thuật', 'clip dài (> 5 s, phóng quá to)')),
+    ];
+    Object.assign(GROUPS, { clip_in: [['in', 'Vào']], clip_out: [['out', 'Ra']], clip_combo: [['combo', 'Combo']] });
+    Object.assign(LISTS, { clip_in: CLIP_IN, clip_out: CLIP_OUT, clip_combo: CLIP_COMBO });
+    const SLOT = { in: 'clip_in', out: 'clip_out', combo: 'clip_combo' };
+    const NEUTRAL = { x: 0, y: 0, scale: 1, rot: 0, rx: 0, ry: 0, opacity: 1, blur: 0 };
+    // Props đã ghép tại giây lt của clip dài D (null = không có hoạt ảnh nào đang chạy → engine không bọc gì, giữ HTML cũ).
+    // edge = đang ở đoạn Vào / Ra (clip có thể hở nền: engine bỏ cờ cover của cảnh).
+    function clipAnimAt(anim, lt, D) {
+      if (!anim || typeof anim !== 'object' || !(D > 0)) return null;
+      const P = { ...NEUTRAL }; let any = false, edge = false;
+      const add = q => { any = true; for (const k in q) P[k] = k === 'scale' || k === 'opacity' ? P[k] * q[k] : P[k] + q[k]; };
+      const fi = anim.in && get('clip_in', anim.in.type), fo = anim.out && get('clip_out', anim.out.type), fc = anim.combo && get('clip_combo', anim.combo.type);
+      let di = fi ? params('clip_in', fi.id, anim.in).dur : 0, dout = fo ? params('clip_out', fo.id, anim.out).dur : 0;
+      if (di + dout > D) { const s = D / (di + dout); di *= s; dout *= s; } // clip ngắn: chia thời gian Vào / Ra theo tỉ lệ
+      const x = Math.min(Math.max(lt, 0), D);
+      if (fc) add(fc.fn(x / D, x, params('clip_combo', fc.id, anim.combo).speed));
+      if (di && x < di) { add(fi.fn(x / di)); edge = true; }
+      if (dout && x > D - dout) { add(fo.fn((x - (D - dout)) / dout)); edge = true; }
+      return any ? { ...P, edge } : null;
+    }
+    // CSS của props; skip = thuộc tính keyframe đã giữ (x/y/scale/rot/opacity) → bỏ phần đó của hoạt ảnh (keyframe thắng).
+    function clipAnimCss(P, skip) {
+      const has = k => !skip?.has(k), n = (v, d = 2) => (+v).toFixed(d), tr = [];
+      if (P.rx || P.ry) tr.push('perspective(900px)');
+      const x = has('x') ? P.x : 0, y = has('y') ? P.y : 0;
+      if (x || y) tr.push(`translate(${n(x)}%,${n(y)}%)`);
+      if (P.rx) tr.push(`rotateX(${n(P.rx)}deg)`);
+      if (P.ry) tr.push(`rotateY(${n(P.ry)}deg)`);
+      if (has('rot') && P.rot) tr.push(`rotate(${n(P.rot)}deg)`);
+      if (has('scale') && P.scale !== 1) tr.push(`scale(${n(P.scale, 4)})`);
+      let css = tr.length ? `transform:${tr.join(' ')};` : '';
+      if (has('opacity') && P.opacity < 1) css += `opacity:${n(Math.max(0, P.opacity), 3)};`;
+      if (P.blur > .3) css += `filter:blur(${n(P.blur, 1)}px);`;
+      return css;
+    }
+    // Đặt một slot của anim: type rỗng / 'none' / không có trong nhóm → bỏ slot; trả anim mới (null = hết slot). Studio + Claude dùng chung.
+    function clipAnimSet(anim, slot, type, v) {
+      const kind = SLOT[slot]; if (!kind) return anim || null;
+      const o = { ...(anim && typeof anim === 'object' ? anim : {}) };
+      if (!type || type === 'none' || !get(kind, type)) delete o[slot];
+      else o[slot] = { type, ...params(kind, type, { ...(o[slot] || {}), ...(v || {}) }) };
+      return Object.keys(o).length ? o : null;
+    }
+    Object.assign(FX, { CLIP_IN, CLIP_OUT, CLIP_COMBO, CLIP_SLOT: SLOT, clipAnimAt, clipAnimCss, clipAnimSet });
+  })();
+
   if (typeof module === 'object' && module.exports) module.exports = FX;
   else root.FX = FX;
 })(typeof window !== 'undefined' ? window : globalThis);
