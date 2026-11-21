@@ -1,6 +1,7 @@
 // Hình khối (S20 M144): cảnh `shape` — chữ nhật, bo góc, tròn, đường, mũi tên vẽ bằng SVG đúng hộp s.card.
 // Trường: shape 'rect'|'rounded'|'circle'|'line'|'arrow' · card {x, y, w, h} (px thiết kế, góc trên trái) · fill · stroke ·
-// stroke_w · radius (rounded) · opacity 0..1 · anim 'fade'|'pop'|'wipe' (mặc định fade). Ra: phong bì chung của engine.js
+// stroke_w · radius (rounded) · opacity 0..1 · anim 'fade'|'pop'|'wipe' (mặc định fade) hoặc id vào của bộ chung FX (M205),
+// anim_dur / anim_out / anim_loop (FX.animOf). Không có anim_out thì Ra là phong bì chung của engine.js
 // (mọi cảnh overlay mờ dần quanh t1); xoay: s.rot qua applyRot (data-cid). Studio: features/64_shapes.js, tay nắm cạnh nhờ
 // StageCore.GEO.shape = 'card' (features/09_stage.core.js). Chạy trong trình duyệt (MODULES.shape) và trong Node (module.exports)
 // cho scripts/tests/s20_shape.test.mjs. Spec: references/modules.md mục "shape".
@@ -15,6 +16,8 @@
   // Màu đi thẳng vào thuộc tính SVG: chỉ nhận dạng màu CSS (#hex, rgb()/hsl(), tên, var(--x)), còn lại dùng mặc định.
   const color = (v, d) => (typeof v === 'string' && /^(#[0-9a-f]{3,8}|(rgba?|hsla?)\([\d\s.,%/]+\)|[a-z]{3,20}|var\(--[\w-]+\))$/i.test(v.trim()) ? v.trim() : d);
   const f1 = v => Math.round(v * 10) / 10;
+  // S28 M205: bộ anim chung (engine/fx_registry.js). Trong trình duyệt là window.FX, trong Node require.
+  const FXR = typeof FX !== 'undefined' ? FX : typeof require === 'function' ? require('./fx_registry.js') : null;
 
   function shapeBox(s, landscape = false) {
     const c = { ...DEF[landscape ? 1 : 0], ...(s.card || {}) };
@@ -31,7 +34,7 @@
       sw: cl(num(s.stroke_w, liney ? 8 : 0), 0, 200),
       radius: cl(num(s.radius, 32), 0, 2000),
       opacity: cl(num(s.opacity, 1), 0, 1),
-      anim: DUR[s.anim] ? s.anim : 'fade',
+      anim: DUR[s.anim] || FXR?.get('anim_in', s.anim) ? s.anim : 'fade',
     };
   }
   // SVG của hình trong hộp w×h; nét nằm trong hộp (thụt nửa độ dày) để khung chọn của Studio khớp hình nhìn thấy.
@@ -60,11 +63,19 @@
   }
   function shape(s, t, lt) {
     const W = typeof STAGE_WH !== 'undefined' && STAGE_WH ? STAGE_WH : null;
-    const b = shapeBox(s, W ? W[0] > W[1] : false), p = shapeProps(s), a = shapeAnim(p.anim, lt);
+    const b = shapeBox(s, W ? W[0] > W[1] : false), p = shapeProps(s), legacy = !!DUR[p.anim];
+    const a = legacy ? shapeAnim(p.anim, lt) : { o: 1, s: 1, reveal: 1 };
+    // Vào kiểu cũ (fade / pop / wipe) vẽ như trước; vào loại khác, Ra (tắt ở t1) và Lặp lấy từ bộ chung
+    const an = FXR ? FXR.animOf(s, 'fade') : { in: null, out: null, loop: null };
+    const r = FXR && (!legacy || an.out || an.loop)
+      ? FXR.animAt(legacy ? { in: null, out: an.out, loop: an.loop } : an, lt, s.t1 != null && Number.isFinite(+s.t1) ? s.t1 - t : Infinity, {}) : null;
     const cid = s.cid ? ` data-cid="${s.cid}"` : '';
-    const clip = a.reveal < 1 ? `clip-path:inset(-50% ${f1((1 - a.reveal) * 100)}% -50% -50%);` : '';
-    const tr = a.s !== 1 ? `transform:scale(${a.s.toFixed(3)});` : '';
-    return { front: `<div class="abs"${cid} style="left:${f1(b.x)}px;top:${f1(b.y)}px;width:${f1(b.w)}px;height:${f1(b.h)}px;opacity:${(p.opacity * a.o).toFixed(3)};${tr}${clip}">${shapeSVG(p, b.w, b.h)}</div>` };
+    const rev = Math.min(a.reveal, r ? r.clip : 1);
+    const clip = rev < 1 ? `clip-path:inset(-50% ${f1((1 - rev) * 100)}% -50% -50%);` : '';
+    const trs = [a.s !== 1 ? `scale(${a.s.toFixed(3)})` : '', r?.tr || ''].filter(Boolean).join(' ');
+    const tr = trs ? `transform:${trs};` : '';
+    const fl = r?.fl ? `filter:${r.fl};` : '';
+    return { front: `<div class="abs"${cid} style="left:${f1(b.x)}px;top:${f1(b.y)}px;width:${f1(b.w)}px;height:${f1(b.h)}px;opacity:${(p.opacity * a.o * (r ? r.o : 1)).toFixed(3)};${tr}${fl}${clip}">${shapeSVG(p, b.w, b.h)}</div>` };
   }
   const api = { KINDS, DEF, shapeBox, shapeProps, shapeSVG, shapeAnim, shape };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -34,12 +34,17 @@
     const font = `<select data-cb="font" title="Font" aria-label="Font">${S.fontOpt ? S.fontOpt(o.font) : opt(S.FONTS, o.font)}</select>`; // S21 M148: font thương hiệu đứng đầu
     if (k === 'text') return font + sizeCtl + color +
       btn('bold', 'ti-bold', 'Đậm', `class="${(o.weight ?? 900) >= 700 ? 'on' : ''}" aria-pressed="${(o.weight ?? 900) >= 700}"`) +
-      `<select data-cb="anim" title="Hoạt ảnh vào" aria-label="Hoạt ảnh vào">${opt(S.ANIM_LIST, o.anim || 'pop')}</select>` + layerBtns(c) + btn('more', 'ti-dots', 'Thêm');
+      `<select data-cb="anim" title="Hoạt ảnh vào" aria-label="Hoạt ảnh vào">${opt(S.ANIM_LIST, o.anim || 'pop')}</select>` + animOutLoop(c) + layerBtns(c) + btn('more', 'ti-dots', 'Thêm');
     if (k === 'cap') return font + sizeCtl + color + btn('more', 'ti-dots', 'Thêm');
     return `<button data-cb="replace" class="txt" title="Thay bằng mục khác trong thư viện"><i class="ti ti-replace"></i> Thay</button>` + layerBtns(c) +
       `<span class="sep"></span>${btn('dup', 'ti-copy', 'Nhân bản (⌘D)')}${btn('del', 'ti-trash', 'Xoá (Delete)', 'class="danger"')}${btn('more', 'ti-dots', 'Thêm')}`;
   }
-  const keyOf = c => JSON.stringify([c.obj.cid, c.kind, c.obj.font, c.obj.weight, c.obj.color, c.obj.anim, Math.round(S.getPos(c)?.size || 0), scenes().length,
+  // S28 M205: Ra / Lặp của dòng chữ (bộ anim chung, FX.ANIM_OUT / FX.ANIM_LOOP); '' = không có (Ra = mờ dần chung như cũ)
+  const typeOf = v => (v && typeof v === 'object' ? v.type : v) || '';
+  const animOutLoop = c => (c.kind !== 'line' || !window.FX ? '' :
+    `<select data-cba="out" title="Hoạt ảnh ra" aria-label="Hoạt ảnh ra">${opt([['', 'Ra: mờ'], ...FX.animOutList()], typeOf(c.obj.anim_out))}</select>` +
+    `<select data-cba="loop" title="Hoạt ảnh lặp" aria-label="Hoạt ảnh lặp">${opt([['', 'Lặp: không'], ...FX.animLoopList()], typeOf(c.obj.anim_loop))}</select>`);
+  const keyOf = c => JSON.stringify([c.obj.cid, c.kind, c.obj.font, c.obj.weight, c.obj.color, c.obj.anim, typeOf(c.obj.anim_out), typeOf(c.obj.anim_loop), Math.round(S.getPos(c)?.size || 0), scenes().length,
     C.layerOf(c, scenes())?.arr?.indexOf(C.layerOf(c, scenes())?.item)]);
 
   // Đặt lại thanh nổi sau mỗi lần vẽ khung chọn (drawOverlay → Studio._ov).
@@ -96,7 +101,11 @@
   }
   bar.addEventListener('mousedown', e => { if (!e.target.closest('select')) e.preventDefault(); }); // không lấy focus khỏi preview
   bar.addEventListener('click', e => { const b = e.target.closest('button[data-cb]'); if (b && !b.disabled) run(b.dataset.cb, b); });
-  bar.addEventListener('change', e => { const s = e.target.closest('select[data-cb]'); if (s) setField(s.dataset.cb, s.value); });
+  bar.addEventListener('change', e => {
+    const s = e.target.closest('select[data-cb]'); if (s) return setField(s.dataset.cb, s.value);
+    const a = e.target.closest('select[data-cba]'); if (!a || !sel()) return;
+    const o = sel().obj; S.touch(o, 'anim_' + a.dataset.cba); C.animSet(o, a.dataset.cba, a.value); S.changed(true);
+  });
 
   // Bảng màu nhỏ dưới nút Màu
   function togglePop(anchor) {

@@ -391,7 +391,8 @@ function textBlock(o, withStyle) {
 }
 function animBlock(c) {
   const o = c.obj, cur = o.anim || 'pop', d = r2(c.t1 - c.t0);
-  return sect('Hoạt ảnh vào', `<div class="angrid">${ANIM_LIST.map(([k, l]) => `<button class="an ${cur === k ? 'on' : ''}" data-anim="${k}"><span class="ad"><b class="an-${k}">Aa</b></span><small>${l}</small></button>`).join('')}</div>`, 'ti-sparkles') +
+  // S28 M205: khối Vào / Ra / Lặp dùng chung (features/83_anim.js); chưa nạp thì lưới Vào cũ
+  return (window.Studio?.animPick ? Studio.animPick(o) : sect('Hoạt ảnh vào', `<div class="angrid">${ANIM_LIST.map(([k, l]) => `<button class="an ${cur === k ? 'on' : ''}" data-anim="${k}"><span class="ad"><b class="an-${k}">Aa</b></span><small>${l}</small></button>`).join('')}</div>`, 'ti-sparkles')) +
     sect('Thời lượng', `<div class="slrow"><span>Hiển thị</span><input type="range" data-f="dur" min=".3" max="10" step=".1" value="${d}"><b>${d}s</b></div>
     <div class="help">Chữ hiện từ ${fmt(c.t0)}. Kéo mép khối trên timeline để chỉnh chính xác.</div>`, 'ti-clock');
 }
@@ -453,6 +454,7 @@ function inspTabs(c) {
   // scene
   let basic = '';
   if (o.text != null || ['led_text', 'neon_text'].includes(o.type)) basic += sect('Nội dung', `<input data-f="text" value="${esc(o.text || '')}">${colorBlock(o.color)}`, 'ti-letter-t');
+  if (o.type === 'sticker' && window.Studio?.animPick) basic += Studio.animPick(o, { def: '', inNone: 'Theo hướng bay' }); // S28 M205
   if (o.type === 'emoji_pop') basic += sect('Emoji', `<input data-f="emoji" value="${esc(o.src || '')}"><div class="help">Dán một emoji bất kỳ. Thư viện Sticker bên trái có sẵn emoji 3D.</div>`, 'ti-mood-smile');
   if (o.type === 'logo_row') basic += sect('Logo (cách nhau dấu phẩy)', `<input data-f="icons" value="${esc((o.icons || []).map(i => (typeof i === 'object' ? i.icon : i)).join(', '))}"><div class="help">si:openai, si:claude, si:googlegemini, emoji 🤖…</div>`, 'ti-brand-apple');
   if (o.type === 'title_card') basic += sect('Thẻ kết', `<span class="lbl">Câu hỏi</span><input data-f="question" value="${esc(o.question ?? '')}"><span class="lbl">Chữ trong nhãn</span><input data-f="pilltext" value="${esc(o.pill?.text || 'Claude')}">`);

@@ -516,6 +516,10 @@
         const [a, b] = p.slot === 'out' ? [Math.max(sc.t0, t1 - d), t1] : [sc.t0, Math.min(t1, sc.t0 + (p.slot === 'in' ? d : 3))];
         return pureReview(`${nm} cho ${sc.chip}`, a, b, tl => AC.clipAnimApply(tl, sc.idx, p));
       }
+      case 'elem_anim': { // S28 M205: Vào / Ra / Lặp của element đang chọn, xem lại trên khung trước khi nhận
+        const nm = [p.in && `vào ${p.in}`, p.out && (p.out === 'none' ? 'bỏ ra' : `ra ${p.out}`), p.loop && (p.loop === 'none' ? 'bỏ lặp' : `lặp ${p.loop}`)].filter(Boolean).join(', ') || 'giữ nguyên';
+        return pureReview(`Hoạt ảnh ${nm} cho ${sc.chip}`, Math.max(0, sc.t0 - 0.2), sc.t1 || sc.t0 + 3, tl => AC.elemAnimApply(tl, sc.cid, p));
+      }
       case 'clip_speed': { // S29 M207: tốc độ / Freeze / đảo ngược qua 59_speed.js, xem lại trước khi nhận (ripple đổi cả phụ đề)
         if (!S.speed) return setOut('error', { err: 'Chưa có công cụ Tốc độ' });
         const nm = { normal: `Tốc độ ${p.speed ?? 1}×`, freeze: 'Freeze', reverse: 'Đảo ngược', forward: 'Bỏ phát ngược' }[p.mode] || `Tốc độ ${SpeedMap.PRESET_VI[p.mode] || p.mode}`;

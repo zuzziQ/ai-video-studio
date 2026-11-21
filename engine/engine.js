@@ -377,14 +377,15 @@ const DEFAULT_HIDE_CAPS = new Set(['slam_bg', 'mega', 'orbit', 'mosaic', 'mosaic
 // scene followed straight away by another scene ("handoff": next t0 within 0.1 s of its t1) stays whole and keeps running
 // for 0.32 s UNDER the next one, which crossfades in on top, so two backdrops/panels never dip to the raw camera between them.
 // Not applied at the very start/end of the video, to scenes with their own fades (broll, photo), or when s.cut = true
-// (a deliberate hard cut on the beat); `keep` scenes (stay to the end) only get the ease-in.
+// (a deliberate hard cut on the beat); `keep` scenes (stay to the end) only get the ease-in. S28 M205: a scene with its own
+// Ra (FX.hasOut: anim_out on the scene or on a line / sticker in it) keeps the ease-in only; its Ra replaces the fade-out.
 const ENV = { in: .2, out: .26, fin: .32, fout: .32 }, OWN_FADE = new Set(['broll', 'photo']);
 const enveloped = s => !s.cut && !OWN_FADE.has(s.type);
 function envelope(s, t, full, hand) {
   if (!enveloped(s)) return null;
   const D = TL.duration || 1e9, di = full ? ENV.fin : ENV.in, dout = full ? ENV.fout : ENV.out;
   const ki = s.t0 > .05 ? clamp((t - s.t0) / di) : 1;
-  const ko = s.keep ? 0 : hand ? clamp((t - s.t1 - ENV.fin * .5) / (ENV.fin * .5)) : s.t1 < D - .05 ? clamp((t - (s.t1 - dout / 2)) / dout) : 0;
+  const ko = s.keep || (!hand && FX.hasOut(s)) ? 0 : hand ? clamp((t - s.t1 - ENV.fin * .5) / (ENV.fin * .5)) : s.t1 < D - .05 ? clamp((t - (s.t1 - dout / 2)) / dout) : 0;
   if (ki >= 1 && ko <= 0) return null;
   return { ki, ko, o: (full ? E.inOutSine(ki) : E.outCubic(ki)) * (1 - E.inOutSine(ko)) };
 }

@@ -150,10 +150,25 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     if (a) c.anim = a; else delete c.anim;
     return true;
   }
+  // S28 M205: hoạt ảnh Vào / Ra / Lặp của element đang chọn (chữ, hình khối, element riêng, sticker) — bộ chung FX.animOf
+  const ANIM_IN = FX.ids('anim_in'), ANIM_LOOP = FX.ids('anim_loop');
+  const ANIM_GUIDE = `Vào (in, trường anim): ${FX.aiGuide('anim_in', ' | ')}. Ra (out, trường anim_out): cùng id với Vào, chạy ngược tới lúc element tắt, thay mờ dần chung; chỉ đặt khi element cần rời khung có chủ ý. Lặp (loop, trường anim_loop, chạy sau khi vào xong): ${FX.aiGuide('anim_loop', ' | ')}.`;
+  A.elem_anim = { what: `Đặt hoạt ảnh cho element đang chọn: in = vào, out = ra ("none" = bỏ), loop = lặp ("none" = bỏ); dur / out_dur = giây (bỏ trống = mặc định), speed = tốc độ lặp. ${ANIM_GUIDE}`,
+    params: { in: { t: 'enum', values: ANIM_IN }, out: { t: 'enum', values: [...ANIM_IN, 'none'] }, loop: { t: 'enum', values: [...ANIM_LOOP, 'none'] },
+      dur: { t: 'num', min: 0.1, max: 3 }, out_dur: { t: 'num', min: 0.1, max: 3 }, speed: { t: 'num', min: 0.25, max: 3 } } };
+  // Ghi vào element có cid (cảnh hoặc dòng chữ trong cảnh) của bản timeline tl. Trả true khi tìm thấy element.
+  function elemAnimApply(tl, cid, p) {
+    const all = (tl?.scenes || []).flatMap(s => [s, ...(s.lines || [])]), o = all.find(x => x && x.cid === cid);
+    if (!o || !p) return false;
+    if (p.in) { o.anim = p.in; if (p.dur) o.anim_dur = p.dur; else delete o.anim_dur; }
+    if (p.out === 'none') delete o.anim_out; else if (p.out) o.anim_out = p.out_dur ? { type: p.out, dur: p.out_dur } : { type: p.out };
+    if (p.loop === 'none') delete o.anim_loop; else if (p.loop) o.anim_loop = p.speed ? { type: p.loop, speed: p.speed } : { type: p.loop };
+    return true;
+  }
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'elem_create']
-      : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
+      : scope.kind === 'elem' ? ['elem_edit', ...(scope.ek === 'line' || scope.ek === 'scene' ? ['elem_anim'] : []), 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
         : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'clip_speed', 'clip_anim', 'open_panel'] : ['clip_speed', 'clip_anim', 'open_panel'])
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
@@ -391,7 +406,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
   }
 
   const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
-    logEntry, logPush, logParse, changeSummary, regionOf, frameAt }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
+    logEntry, logPush, logParse, changeSummary, regionOf, frameAt, ANIM_GUIDE, elemAnimApply }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
