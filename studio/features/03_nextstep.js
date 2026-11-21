@@ -39,9 +39,9 @@
       burn: ['wf-new', ['.wf-burn-opts button', '.wf-burn']],
     },
     build: {
-      template: ['wf-aihelp', ['[data-ai="build"]', '.ai-card']],
+      template: ['wf-aihelp', ['#bt-box', '[data-ai="build"]', '.ai-card']], // S27 M201: Bạn muốn làm gì? (26_tasks.js)
       captions: ['text', ['.cslist button.on', '.cslist']],
-      gap: ['wf-aihelp', ['[data-ai="build"]']],
+      gap: ['wf-aihelp', ['#bt-box', '[data-ai="build"]']],
       broll: ['aibroll', []],
       music: ['audio', []],
       script: ['wf-aihelp', ['.scn-sum']], // S27 M200: fix → mở panel AI dựng rồi Studio.scriptNotes.jump (tua + chọn mục cần xem)

@@ -305,7 +305,8 @@ function phrasesIn(ws, n = 5, max = 3) {
 }
 
 // ---------- HyperFrames blocks as b-roll: vars written from the speech ----------
-let HF = {}; try { const w = {}; new Function('window', fs.readFileSync(path.join(SKILL, 'engine/hf/catalog.js'), 'utf8'))(w); HF = w.HF_CATALOG || {}; } catch {}
+// catalog.json = cùng dữ liệu window.HF_CATALOG của catalog.js (scripts/hf_import.mjs ghi cả hai); đọc JSON, không chạy mã
+let HF = {}; try { HF = JSON.parse(fs.readFileSync(path.join(SKILL, 'engine/hf/catalog.json'), 'utf8')) || {}; } catch {}
 const cap1 = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const sentShort = (s, n = 60) => { const t = String(s || '').trim(); return t.length <= n ? t : t.slice(0, n).replace(/\s+\S*$/, '') + '…'; };
 const HF_SPEC = {

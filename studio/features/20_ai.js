@@ -214,6 +214,30 @@
         return { text: 'Đã dựng xong: xem và nhận ở thanh Hỏi Claude' };
       } }).then(r => { if (!r.ok && r.job?.state !== 'done') ok({ error: r.job?.step || 'AI dựng đã dừng' }); }));
   }
+  // S27 M201: một lượt Claude cho các việc đã chọn ở "Bạn muốn làm gì?" (26_tasks.js): kế hoạch đầy đủ vẫn về, chỉ áp phần đã chọn
+  // (applyPlan {only}), một bước hoàn tác. o = { only: {graphic, caption, music}, extra } → Promise<{ plan } | { error }>
+  async function runParts(o = {}) {
+    if (!CAP.length) return { error: 'Cần lời thoại trước: bước Nguồn → Lời thoại' };
+    const only = o.only || {}, starter = !TL.pack || !!TL._starter;
+    const want = [only.graphic && 'graphic, hook, gói style', only.caption && 'sửa lỗi nhận dạng trong phụ đề', only.music && 'nhạc nền và SFX'].filter(Boolean);
+    const body = { goal: 'Khác', tone: TONES[0], pack: only.graphic && starter ? 'auto' : 'keep', density: 'vua',
+      extra: [`Người dùng chỉ cần: ${want.join('; ')}.`, String(o.extra || '').trim()].filter(Boolean).join(' ').slice(0, 600), skip: skipHabits() };
+    if (!await S.saveNow()) return { error: 'Chưa lưu được dự án' };
+    const r = await S.api('/api/ai/edit', body);
+    if (!r.ok) { S.jobs.refuse(r); return { error: r.error || 'Đang có tác vụ khác chạy' }; }
+    return new Promise(ok => S.jobs.track({ kind: 'ai', title: 'Claude: ' + want.join(', '), lock: true,
+      onFail: j => { ok({ error: j.step || 'Claude chưa dựng được' }); return { text: 'Claude chưa dựng được: ' + (j.step || '') }; },
+      onDone: async () => {
+        const plan = await S.api('/api/ai/plan');
+        if (plan.error) { ok({ error: plan.error }); return { error: true, text: plan.error }; }
+        prevPlan = lastPlan; planDropped = false; lastPlan = plan; applyPlan(plan, { only });
+        try { if (await S.saveNow()) await S.api('/api/ai/delivered', { source: 'ai' }); } catch { /* không học được lần này */ }
+        if (panel === 'wf-aihelp') renderAi();
+        ok({ plan });
+        return { text: 'Claude xong: ' + want.join(', ') + '. Hoàn tác trả về bản trước.',
+          acts: [{ label: 'Hoàn tác', icon: 'ti-arrow-back-up', on: () => { undo(); S.toast('Đã hoàn tác'); if (panel === 'wf-aihelp') renderAi(); return 'close'; } }] };
+      } }).then(r => { if (!r.ok && r.job?.state !== 'done') ok({ error: r.job?.step || 'Claude đã dừng' }); }));
+  }
   // hai tuỳ chọn chạy nối sau AI dựng (lưu ở 80_autofill.js); pre: tiền tố id ô (panel / hộp)
   const afterOpts = pre => S.autofill ? `<div class="ai-after"><label class="ai-row ai-click"><input type="checkbox" id="${pre}-broll" class="ai-nf" ${S.autofill.opts.ai_broll ? 'checked' : ''}><span>Thêm b-roll <span class="muted">· chữ nổi, emoji, ảnh của bạn đúng lúc nói</span></span></label>
     <label class="ai-row ai-click"><input type="checkbox" id="${pre}-sfx" class="ai-nf" ${S.autofill.opts.ai_sfx ? 'checked' : ''}><span>Thêm âm thanh <span class="muted">· SFX theo cảnh, nhạc theo đoạn</span></span></label></div>` : '';
@@ -255,8 +279,14 @@
   // S27 M194: như applyPlan của scripts/ai_edit.mjs (scripts/tests/s27_m194.test.mjs so hai bản trên cùng đầu vào). Kế hoạch theo
   // kịch bản (plan.script) thay cả mục _sheet cũ chưa sửa tay; mục _sheet bạn sửa tay giữ, mục mới cùng đoạn cùng loại không thêm lần nữa.
   // Kế hoạch không kèm kịch bản giữ mục _sheet và nền nhạc của nó.
+  // S27 M201: o.only = { graphic, caption, music } (TasksCore.onlyOf): chỉ áp phần người dùng chọn ở "Bạn muốn làm gì?"; phần
+  // không chọn giữ nguyên như đang có trên timeline. Không có o.only = áp hết như cũ (AI dựng từ hộp, Hỏi Claude).
   function applyPlan(plan, o = {}) {
     if (!o.noUndo) S.pushUndo();
+    const only = o.only || { graphic: true, caption: true, music: true }, src = plan;
+    if (!only.graphic) plan = { ...plan, pack: TL.pack, caption_style: TL.caption_style, hook: null, scenes: null };
+    if (!only.caption) plan = { ...plan, captions: [], dict: [] };
+    if (!only.music) plan = { ...plan, music: undefined, sfx: null };
     const merged = !!plan.script, key = x => `${x._sheet}|${x.type || x.name}`;
     const mine = s => (s._ai || s._recipe) && !s._orig && (merged || s._sheet == null);
     const mineS = new Set(merged ? (TL.scenes || []).filter(s => s._sheet != null && s._orig).map(key) : []);
@@ -264,19 +294,22 @@
     if (plan.pack !== TL.pack && TL.fx) TL.fx = TL.fx.filter(f => !f._recipe || f._orig);
     TL.pack = plan.pack; TL.caption_style = plan.caption_style || undefined;
     if (plan.hook) TL.title = plan.hook;
-    TL.scenes = [...(TL.scenes || []).filter(s => !mine(s)), ...JSON.parse(JSON.stringify(plan.scenes)).filter(s => s._sheet == null || !mineS.has(key(s)))];
+    if (plan.scenes) TL.scenes = [...(TL.scenes || []).filter(s => !mine(s)), ...JSON.parse(JSON.stringify(plan.scenes)).filter(s => s._sheet == null || !mineS.has(key(s)))];
     TL.audio = TL.audio || {};
     // M62: also drop the per-section beds of "Tự động" (_auto), else they play under the new AI bed.
     // S19 M134: plan.music null = thói quen "không nhạc": bỏ nhạc _ai/_auto, không thêm (nhạc file / tay giữ nguyên, bài học ai-video-studio-020)
     const keepM = (TL.audio.music || []).some(m => bedOf(userM, m) || (!merged && m._sheet != null && !m.hidden)); // M195: nền theo kịch bản nhiều khúc
-    if (merged && (Array.isArray(plan.music) || (TL.audio.music || []).some(m => m._sheet != null && m._orig))) {
+    if (!plan.sfx) { /* M201: không chọn Nhạc và SFX → giữ nguyên nhạc, SFX */ } else if (merged && (Array.isArray(plan.music) || (TL.audio.music || []).some(m => m._sheet != null && m._orig))) {
       const r = sheetMusic(TL.audio.music, JSON.parse(JSON.stringify(plan.music ?? null)), TL.duration);
       TL.audio.music = r.music;
       if (!r.kept && plan.music && (!TL.audio.duck || typeof TL.audio.duck !== 'object')) TL.audio.duck = { ...DUCK0 }; // tự hạ nhạc dưới giọng
     } else TL.audio.music = [...(TL.audio.music || []).filter(m => userM(m) || (!merged && m._sheet != null) || !(m._ai || m._auto || m._sheet != null || (plan.music && m.t0 <= .05 && m.t1 >= TL.duration - .1))), ...(plan.music && !keepM ? [JSON.parse(JSON.stringify({ ...plan.music, t1: TL.duration }))] : [])];
-    TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x))).map(x => JSON.parse(JSON.stringify(x)))];
-    // S28 M210: khối theo nhịp của lần dựng trước (chưa sửa tay) thay bằng khối của kế hoạch này (như scripts/ai_edit.mjs)
-    for (const k of ['fx', 'efx']) { const v = [...(TL[k] || []).filter(f => !(f._ai && f._beat && !f._orig)), ...JSON.parse(JSON.stringify(plan.beat_fx?.[k] || []))]; if (v.length || TL[k]) TL[k] = v; }
+    if (plan.sfx) {
+      TL.audio.sfx = [...(TL.audio.sfx || []).filter(x => !x._ai || (x._sheet != null && (!merged || x._orig))), ...plan.sfx.filter(x => x._sheet == null || !mineX.has(key(x))).map(x => JSON.parse(JSON.stringify(x)))];
+      // S28 M210: khối theo nhịp của lần dựng trước (chưa sửa tay) thay bằng khối của kế hoạch này (như scripts/ai_edit.mjs).
+      // M201: hiệu ứng theo nhịp đi cùng lựa chọn "Nhạc và SFX"; không chọn thì giữ nguyên khối nhịp đang có.
+      for (const k of ['fx', 'efx']) { const v = [...(TL[k] || []).filter(f => !(f._ai && f._beat && !f._orig)), ...JSON.parse(JSON.stringify(plan.beat_fx?.[k] || []))]; if (v.length || TL[k]) TL[k] = v; }
+    }
     let n = 0;
     for (const e of plan.captions) {
       const c = CAP.find(x => Math.abs(x.t0 - e.t0) < .02 && x.words.length === e.n);
@@ -286,7 +319,7 @@
     }
     CAP = CAP.filter(c => c.words.length);
     plan._dict = dictFix(CAP, plan.dict); // S19 M134: chính tả đã học của thương hiệu, mọi dòng phụ đề
-    plan._applied = n;
+    plan._applied = n; src._applied = n; src._dict = plan._dict; // bản lọc M201 là bản sao: kết quả ghi về kế hoạch gốc (hộp Đã dựng xong đọc)
     S.changed(true);
   }
   // S19 M134: như applyDict của scripts/ai_edit.mjs (từng từ, không phân biệt hoa thường, giữ dấu câu hai đầu)
@@ -407,7 +440,8 @@
   async function detect() {
     const W = allWords().map(x => ({ w: x.w.w, s: x.w.s, e: x.w.e }));
     if (!W.length) return S.needCaptions(null, 'Dò lỗi nói');
-    const body = { words: W, pause: +$('#flpause').value || .7, fillers: $('#fllist').value.trim(), claude: $('#flclaude').checked };
+    // S27 M201: gọi từ "Bạn muốn làm gì?" (bước Dựng) thì không có ô của panel Làm sạch lời nói: dùng mặc định
+    const body = { words: W, pause: +$('#flpause')?.value || .7, fillers: ($('#fllist')?.value || '').trim(), claude: !!$('#flclaude')?.checked };
     flBusy = true; renderAi();
     const done = res => { flBusy = false; if (res.error) { S.toast('Lỗi dò: ' + res.error); fl = null; } else { fl = res; flSel = new Set(res.cuts.map((c, i) => (c.conf >= .6 ? i : -1)).filter(i => i >= 0)); } renderAi(); };
     // S26 M186: nhờ Claude dò chạy nền trong khay việc (không khoá: chỉ đọc lời thoại, cắt là bước người dùng tự bấm). Xong thì thẻ có "Xem chỗ cắt"
@@ -441,10 +475,11 @@
     if (panel === 'wf-aihelp') {
       const sc = TL.scenes || [], nAi = sc.filter(s => s._ai && !s._base).length, nEd = sc.filter(s => s._ai && s._orig).length, nAuto = sc.filter(s => s._auto).length;
       // data-ai="build" (không phải "open"): thẻ QC của 16_qc.js chỉ chèn vào bước Kiểm tra
-      $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng')) + `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng</button>
-        ${afterOpts('aip')}<div id="aip-hab"></div>
+      // S27 M201: mở đầu bằng "Bạn muốn làm gì?" (26_tasks.js): mỗi việc một lựa chọn, không tick sẵn; nút AI dựng làm hết chỉ còn ở hộp (⌘K)
+      $('#libbody').innerHTML = (CAP.length ? '' : S.ctaTranscribe('AI dựng')) + (S.tasks ? S.tasks.html() : `<button class="wide primary" data-ai="build"><i class="ti ti-wand"></i> AI dựng</button>
+        ${afterOpts('aip')}`) + `<div id="aip-hab"></div>
         ${S.aroll?.line() || '' /* S27 M196: lời ngoài kịch bản · nhiều take (24_aroll.js) */}
-        <div class="help">Claude dựng từ lời thoại: style, graphic, nhạc, SFX. ${S.tip('Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX; rồi thêm b-roll, âm thanh nếu bạn chọn. Xong có QC nhanh 3 khung. Cần Claude Code (lệnh claude) trên máy.')}${S.autofill ? ' <button class="ai-lnk" data-ai="af">Tuỳ chỉnh b-roll, âm thanh</button>' : ''}</div>
+        ${S.tasks ? '' : `<div class="help">Claude dựng từ lời thoại: style, graphic, nhạc, SFX. ${S.tip('Claude đọc lời thoại rồi chọn gói style, sửa lỗi nhận dạng trong phụ đề (giữ nguyên thời gian từng từ), viết hook, đặt 6–15 graphic đúng lúc nói từ khoá, chọn nhạc và SFX; rồi thêm b-roll, âm thanh nếu bạn chọn. Xong có QC nhanh 3 khung. Cần Claude Code (lệnh claude) trên máy.')}${S.autofill ? ' <button class="ai-lnk" data-ai="af">Tuỳ chỉnh b-roll, âm thanh</button>' : ''}</div>`}
         ${S.scriptNotes?.line(lastPlan) || '' /* S27 M194: Theo kịch bản x/y (23_scriptnotes.js) */}${lastPlan ? planCard(lastPlan, true) : ''}
         <div class="ai-card"><h4><i class="ti ti-info-circle"></i> Trên timeline</h4><p>${nAi} cảnh do AI tạo${nEd ? `, ${nEd} cảnh bạn đã chỉnh (sẽ được giữ khi dựng lại)` : ''}${nAuto ? `, ${nAuto} b-roll tự động` : ''}.</p>
         <div class="acts"><button class="mini" data-ai="qc" ${nAi + nAuto ? '' : 'disabled'}><i class="ti ti-photo-check"></i> Render thử 3 khung</button><button class="mini danger" data-ai="clear" ${nAi ? '' : 'disabled'}><i class="ti ti-trash"></i> Xoá cảnh AI</button></div></div>`;
@@ -506,5 +541,5 @@
   }
   // S23 M159: Bỏ bản AI dựng trong Studio.review (75_ask.js) → thẻ kế hoạch của panel về lượt trước, không nạp lại bản vừa bỏ
   const forget = () => { lastPlan = prevPlan; planDropped = !prevPlan; if (panel === 'wf-aihelp') renderAi(); };
-  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, forget, previewRange, detect: () => detect(), cleanup, renderBuild: renderAi, openQuick /* cột phải M113 */, get fillers() { return fl; } };
+  S.ai = { cutRanges, wordSpan, allWords, applyPlan, build, forget, previewRange, detect: () => detect(), cleanup, renderBuild: renderAi, runParts /* S27 M201 */, openQuick /* cột phải M113 */, get fillers() { return fl; } };
 })();

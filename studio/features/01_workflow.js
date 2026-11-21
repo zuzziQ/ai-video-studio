@@ -21,7 +21,8 @@
     brands: ['prep', 1], 'wf-project': ['prep', 1.5], products: ['prep', 2], kho: ['prep', 3], media: ['build', 2],
     // S13 (M107): Nguồn = video của dự án này (thẻ Video nguồn) + Lời thoại (tab Làm sạch lời nói); Cắt clip từ video dài chỉ
     // hiện trên thanh trái khi video nguồn > 5 phút, lúc nào cũng mở được từ menu ⋯
-    'wf-new': ['source', 1], words: ['source', 2], ai: ['source', 3], longform: ['source', 4],
+    // S27 M201: Kịch bản là mục riêng ngay dưới Video nguồn (thêm video → thêm kịch bản → bước Dựng hỏi cần làm gì)
+    'wf-new': ['source', 1], 'wf-script': ['source', 1.5], words: ['source', 2], ai: ['source', 3], longform: ['source', 4],
     // S13 (M108): bước Dựng mở đầu bằng một nút "AI dựng" (wf-aihelp, kèm tuỳ chọn Thêm b-roll / Thêm âm thanh = Tự động chạy
     // nối sau); tab Tự động (tuỳ chỉnh b-roll + âm thanh) sang mục B-roll. C15: Tự lái không thuộc bước nào, mở từ nút trên thanh đầu.
     autopilot: ['queue', 1], 'wf-aihelp': ['build', 1], autofill: ['build', 6], comp: ['build', 2.5], tpl: ['build', 3], text: ['build', 4], audio: ['build', 5], audioplus: ['build', 5],
@@ -341,11 +342,20 @@
       ${burnBox}
       <div class="wf-acts"><button data-wf="src-change" title="Chọn video khác: Studio tạo dự án mới, dự án này vẫn giữ trong Kho"><i class="ti ti-replace"></i>Đổi video</button>
         <button data-wf="src-new" title="Trang chủ: mẫu, video dài, hàng loạt, dự án gần đây"><i class="ti ti-plus"></i>Tạo dự án khác</button></div></div>
-      <div class="wf-card"><h4><i class="ti ti-file-text"></i>Kịch bản</h4><div id="wf-script"></div></div>
       ${cap || mute || !S.ctaTranscribe ? '' : S.ctaTranscribe('')}
+      <div class="wf-card"><h4><i class="ti ti-arrow-right"></i>Tiếp theo: kịch bản</h4><p>Có kịch bản thì thêm vào để phụ đề đúng chữ và AI dựng theo dấu. Không có thì bỏ qua, sang chọn việc cần làm.</p>
+        <div class="wf-acts"><button class="primary" data-wf="src-next"><i class="ti ti-file-text"></i>Thêm kịch bản</button><button data-wf="src-skip"><i class="ti ti-list-check"></i>Bỏ qua, chọn việc cần làm</button></div></div>
       ${d > LONG_SRC ? `<div class="wf-card"><h4><i class="ti ti-scissors"></i>Video dài ${Math.round(d / 60)} phút</h4><p>Cắt thành nhiều clip ngắn: AI chọn đoạn hay, mỗi đoạn thành một dự án.</p>
         <button data-wf="src-long"><i class="ti ti-scissors"></i>Cắt clip từ video dài</button></div>` : ''}
       <p class="wf-hint"><i class="ti ti-stack-2"></i> Có nhiều video? Thả vào <code>Nguon/Tha vao day/</code>${SRC?.kho ? ` trong Kho ${esc(SRC.kho.title)}` : ''} để Tự lái làm hết.</p>`;
+  }
+  // S27 M201: mục Kịch bản (trước là thẻ trong Video nguồn): ô kịch bản của 19_script.js + nút sang bước Dựng (Bạn muốn làm gì?)
+  function renderScript() {
+    if (!TL) return card('ti-video-plus', 'Thêm video trước', 'Kịch bản gắn với một dự án: chọn video quay sẵn ở mục Video nguồn trước.', 'Chọn video', newVideo);
+    $('#libbody').innerHTML = `<p class="wf-hint"><i class="ti ti-info-circle"></i> Không bắt buộc. Dán chữ hoặc mở .txt, .docx, Excel; dấu như [B-ROLL: …] [NHẠC: …] để AI dựng làm theo.</p>
+      <div class="wf-card"><h4><i class="ti ti-file-text"></i>Kịch bản</h4><div id="wf-script"></div></div>
+      <div class="wf-card"><h4><i class="ti ti-arrow-right"></i>Tiếp theo: chọn việc cần làm</h4><p>Bước Dựng hỏi bạn cần gì: cắt nhịp, cố định mặt, A-roll, B-roll, nhạc… Studio chỉ làm việc bạn chọn.</p>
+        <button class="primary" data-wf="scr-next"><i class="ti ti-list-check"></i>Chọn việc cần làm</button></div>`;
     S.scriptCard?.mount($('#wf-script')); // S17 M123: kịch bản có sẵn (studio/features/19_script.js)
   }
   $('#libbody').addEventListener('click', e => {
@@ -355,6 +365,8 @@
     if (a === 'src-change') newVideo();
     if (a === 'src-new') (S.openHome || newVideo)();
     if (a === 'src-long') openPanel('longform');
+    if (a === 'src-next') openPanel('wf-script');
+    if (a === 'src-skip') goStep('build');
     if (a === 'src-reveal') S.api('/api/source/reveal', {}).then(r => { if (!r.ok) S.toast(r.error || 'Không mở được thư mục'); });
     if (a === 'src-burn-scan') { if (SRC) SRC.canScan = true; scanBurn(); renderSource(); }
     const m = a.startsWith('src-burn-') && a.slice(9), B = SRC?.burnin;
@@ -365,6 +377,8 @@
     }
   });
   S.addPanel('wf-new', 'ti-video', 'Video nguồn', renderSource);
+  S.addPanel('wf-script', 'ti-file-text', 'Kịch bản', renderScript);
+  $('#libbody').addEventListener('click', e => { if (panel === 'wf-script' && e.target.closest('[data-wf="scr-next"]')) goStep('build'); });
   // trạng thái AI dựng giúp (kế hoạch, cảnh AI, QC nhanh) do 20_ai.js vẽ (S.ai.renderBuild); chưa có thì thẻ mở hộp như cũ
   S.addPanel('wf-aihelp', 'ti-wand', 'AI dựng', () => (S.ai?.renderBuild ? S.ai.renderBuild() : card('ti-wand', 'AI dựng',
     'Claude đọc lời thoại rồi đặt graphic, phụ đề, nhạc và hiệu ứng âm thanh. Bạn xem lại và sửa từng thứ sau.', 'AI dựng', clickEl('aibtn', 'Tính năng AI chưa sẵn sàng'))));
