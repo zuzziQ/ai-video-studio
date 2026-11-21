@@ -36,7 +36,10 @@
   function grid(cur, attr = 'tr', q = '') {
     const all = FX.TRANS.filter(x => match(x, q)), list = all.filter(x => !group || x.group === group);
     const n = g => all.filter(x => x.group === g).length;
-    const tabs = `<div class="trtabs" role="tablist">${[['', 'Tất cả'], ...GROUPS].map(([g, l]) => `<button role="tab" aria-selected="${g === group}" class="${g === group ? 'on' : ''}" data-trg="${g}">${l}<span>${g ? n(g) : all.length}</span></button>`).join('')}</div>`;
+    // S29 M211: tab "Của tôi" = preset chuyển cảnh người dùng đã lưu (84_presets.js)
+    const mine = S.presets ? [['mine', 'Của tôi']] : [], nMine = S.presets ? PresetsCore.listFor(S.presets.items, 'trans', S.META?.kho?.brand || '').length : 0;
+    const tabs = `<div class="trtabs" role="tablist">${[['', 'Tất cả'], ...GROUPS, ...mine].map(([g, l]) => `<button role="tab" aria-selected="${g === group}" class="${g === group ? 'on' : ''}" data-trg="${g}">${l}<span>${g === 'mine' ? nMine : g ? n(g) : all.length}</span></button>`).join('')}</div>`;
+    if (group === 'mine' && S.presets) return tabs + S.presets.block('trans');
     const none = `<button class="tr ${cur ? '' : 'on'}" data-${attr}=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>`;
     return `${tabs}<div class="trgrid ${attr === 'ctr' ? 'sm' : ''}">${none}${list.map(x => cell(x, cur === x.id, attr)).join('')}</div>${list.length ? '' : `<div class="trempty">Không có loại nào khớp “${esc(q)}”.</div>`}`;
   }

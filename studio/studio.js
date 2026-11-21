@@ -387,7 +387,7 @@ function textBlock(o, withStyle) {
     <div><span class="lbl">Độ đậm</span><select data-f="weight">${opt([['', 'Mặc định'], ['500', '500'], ['600', '600'], ['700', '700'], ['800', '800'], ['900', '900']], o.weight || '')}</select></div></div>
     ${withStyle ? `<span class="lbl">Kiểu chữ</span><div class="pills">${STYLES.map(([v, l]) => `<button class="${(o.style || 'white') === v ? 'on' : ''}" data-sty="${v}">${l}</button>`).join('')}</div>
     <label class="check"><input type="checkbox" data-f="italic" ${o.italic === false ? '' : 'checked'}> Nghiêng</label>` : ''}
-    ${colorBlock(o.color)}`, 'ti-typography');
+    ${colorBlock(o.color)}`, 'ti-typography') + (window.Studio?.presets ? sect('Kiểu chữ của tôi', Studio.presets.block('text'), 'ti-bookmark') : ''); // S29 M211
 }
 function animBlock(c) {
   const o = c.obj, cur = o.anim || 'pop', d = r2(c.t1 - c.t0);

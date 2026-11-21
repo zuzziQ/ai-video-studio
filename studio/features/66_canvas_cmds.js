@@ -88,6 +88,8 @@
       case 'dup': return S.duplicateSel();
       case 'cut': case 'copy': return S.copySel(id === 'cut');
       case 'paste': return S.pasteClip();
+      case 'pcopy': return copyProps();
+      case 'ppaste': return pasteDlg();
       case 'lock': return S.toggleLock();
       case 'del': return S.removeSel();
       case 'split': return S.splitAtPlayhead();
@@ -125,10 +127,65 @@
   }
   function closePop() { pop?.remove(); pop = null; }
 
+  // ---- S29 M211: Chép / Dán thuộc tính (lõi KeysCore.propsCopy / propsApply của 67_keys.core.js, đọc lúc chạy) ----
+  // Clipboard thuộc tính trong trang, riêng với clipboard element (⌘C / ⌘V). Dán: hộp tích chọn nhóm, lên mục đang chọn (cả nhóm
+  // Shift) hoặc mọi mục cùng loại; một bước hoàn tác. Tốc độ đi qua clips.js (setClipSpeed / setClipCurve / setClipReverse: ripple).
+  let PCLIP = null;
+  const K = () => window.KeysCore;
+  const kindOf = c => (c && K() ? K().propKind(c, c.kind === 'efx' && !!window.FX?.get('fx', c.obj?.type)?.color) : null);
+  const KIND_VI = { clip: 'clip', media: 'b-roll / ảnh phủ', elem: 'hình khối / sticker / element', text: 'dòng chữ', efx: 'khối Điều chỉnh' };
+  function copyProps() {
+    const c = sel(), k = kindOf(c), clip = k && K().propsCopy(c.obj, k, c.t0);
+    if (!clip) return S.toast('Mục này chưa đặt hoạt ảnh, màu, mặt nạ, chuyển cảnh, tốc độ hay keyframe để chép');
+    PCLIP = clip;
+    S.toast(`Đã chép: ${K().PROP_GROUPS.filter(g => clip.groups[g.id]).map(g => g.label).join(', ')} · chuột phải mục khác → Dán thuộc tính`);
+  }
+  function pasteDlg() {
+    const c = sel(); if (!c || !PCLIP) return;
+    const kinds = [...new Set([c, ...S.multi].map(kindOf).filter(Boolean))];
+    const groups = K().PROP_GROUPS.filter(g => kinds.some(k => K().pasteGroups(PCLIP, k).includes(g.id)));
+    if (!groups.length) return S.toast('Thuộc tính đã chép không hợp với mục này');
+    const k0 = kindOf(c), many = S.multi.length ? ` (${S.multi.length + 1} mục đang chọn)` : '';
+    modal(`<h3><i class="ti ti-clipboard-check"></i> Dán thuộc tính${esc(many)}</h3>
+      <p>Chọn nhóm cần dán. Nhóm được dán thay hẳn thiết lập cũ của nhóm đó; ⌘Z hoàn tác cả lần dán.</p>
+      <div class="pp-list">${groups.map(g => `<label class="check"><input type="checkbox" data-pp="${g.id}" checked> ${esc(g.label)}</label>`).join('')}</div>
+      ${k0 ? `<label class="check pp-all"><input type="checkbox" data-ppall> Dán cho mọi ${esc(KIND_VI[k0])} trong dự án</label>` : ''}
+      <div class="actions"><button data-ppgo class="primary"><i class="ti ti-clipboard-check"></i> Dán</button><button data-ppno>Huỷ</button></div>`);
+  }
+  function speedTo(i, v) {
+    if (v.speedCurve != null) setClipCurve(i, v.speedCurve); else setClipSpeed(i, v.speed ?? 1);
+    setClipReverse(i, !!v.reverse);
+  }
+  function pasteProps(ids, all) {
+    const c = sel(); if (!c || !PCLIP || !ids.length) return;
+    const k0 = kindOf(c), list = (all ? (S.comps || []).filter(x => kindOf(x) === k0) : [c, ...S.multi]).filter(x => kindOf(x) && !x.obj.locked);
+    if (!list.length) return S.toast('Mục đang khoá · ⌥⇧L để mở khoá');
+    S.pushUndo();
+    let m = 0;
+    for (const x of list) {
+      const k = kindOf(x), use = k === 'clip' && !x.idx ? ids.filter(i => i !== 'trans') : ids; // clip đầu không có chuyển cảnh vào
+      if (x.kind !== 'clip' && !x.obj._orig) x.obj._orig = JSON.parse(JSON.stringify(x.obj, (q, v) => (q === 'cid' || q === '_orig' ? undefined : v)));
+      const r = K().propsApply(x.obj, k, PCLIP, use, x.t0);
+      if (r.speed && x.kind === 'clip' && x.obj.hold == null) speedTo(x.idx, r.speed);
+      if (r.n) m++;
+    }
+    S.changed(true);
+    S.toast(m ? `Đã dán thuộc tính cho ${m} mục` : 'Không mục nào nhận được nhóm đã chọn');
+  }
+  document.addEventListener('click', e => {
+    const box = e.target.closest?.('#modalbox'); if (!box?.querySelector('[data-ppgo]')) return;
+    if (e.target.closest('[data-ppno]')) return closeModal();
+    if (!e.target.closest('[data-ppgo]')) return;
+    const ids = [...box.querySelectorAll('[data-pp]:checked')].map(i => i.dataset.pp), all = !!box.querySelector('[data-ppall]:checked');
+    closeModal(); pasteProps(ids, all);
+  });
+  S.props = { copy: copyProps, paste: pasteProps, get clip() { return PCLIP; } };
+
   // ---- menu chuột phải ----
   function openMenu(x, y) {
     const c = sel(); if (!c) return;
-    const items = C.menuItems(c, { scenes: scenes(), hasOrig: !!c.obj._orig, hidden: !!c.obj.hidden, canEditText: !!window.StageCore?.canEditText(c.kind, c.obj), canSplit: c.kind === 'clip', locked: !!c.obj.locked, canPaste: S.canPaste });
+    const items = C.menuItems(c, { scenes: scenes(), hasOrig: !!c.obj._orig, hidden: !!c.obj.hidden, canEditText: !!window.StageCore?.canEditText(c.kind, c.obj), canSplit: c.kind === 'clip', locked: !!c.obj.locked, canPaste: S.canPaste,
+      props: !!kindOf(c), canPasteProps: [c, ...S.multi].some(x => window.KeysCore?.pasteGroups(PCLIP, kindOf(x)).length > 0) });
     if (!items.length) return;
     closePop();
     menu.innerHTML = items.map(it => (it === '-' ? '<hr>' : `<button role="menuitem" data-mi="${it.id}" class="${it.danger ? 'danger' : ''}" ${it.off ? 'disabled' : ''}>

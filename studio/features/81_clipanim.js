@@ -8,7 +8,7 @@
   const S = window.Studio, PC = window.TransPeekCore;
   if (!S || !window.FX?.clipAnimSet) return;
   const { esc, sect, tip } = S;
-  const SLOTS = [['in', 'Vào', 'ti-login-2'], ['out', 'Ra', 'ti-logout-2'], ['combo', 'Combo', 'ti-repeat']];
+  const SLOTS = [['in', 'Vào', 'ti-login-2'], ['out', 'Ra', 'ti-logout-2'], ['combo', 'Combo', 'ti-repeat'], ['mine', 'Của tôi', 'ti-bookmark']]; // S29 M211: mine = preset
   const r2 = v => Math.round(v * 100) / 100;
   const SCENES = new Set(['photo', 'broll']);
   let slot = 'in';
@@ -25,7 +25,8 @@
   S.animTab = c => {
     const T = target(c); if (!T) return '';
     const a = T.obj.anim && typeof T.obj.anim === 'object' ? T.obj.anim : {}, cur = a[slot], list = FX.list(kindOf(slot)), D = T.t1 - T.t0;
-    const tabs = `<div class="ca-tabs" role="tablist">${SLOTS.map(([k, l, ic]) => `<button role="tab" aria-selected="${k === slot}" data-caslot="${k}" class="${k === slot ? 'on' : ''}"><i class="ti ${ic}"></i> ${l}${a[k] ? ' <b class="ca-dot"></b>' : ''}</button>`).join('')}</div>`;
+    const tabs = `<div class="ca-tabs" role="tablist">${SLOTS.filter(s => s[0] !== 'mine' || S.presets).map(([k, l, ic]) => `<button role="tab" aria-selected="${k === slot}" data-caslot="${k}" class="${k === slot ? 'on' : ''}"><i class="ti ${ic}"></i> ${l}${a[k] ? ' <b class="ca-dot"></b>' : ''}</button>`).join('')}</div>`;
+    if (slot === 'mine') return `<div id="capanel">${tabs}${S.presets ? sect('Hoạt ảnh của tôi', S.presets.block('clip_anim'), 'ti-bookmark') : ''}</div>`;
     const grid = `<div class="ca-grid"><button class="ca ${cur ? '' : 'on'}" data-catype=""><span class="ca-ic"><i class="ti ti-ban"></i></span><small>Không</small></button>${list.map(x =>
       `<button class="ca ${cur?.type === x.id ? 'on' : ''}" data-catype="${x.id}" title="${esc(x.ai.khi_nao)}"><span class="ca-ic"><i class="ti ${x.icon}"></i></span><small>${esc(x.label)}</small></button>`).join('')}</div>`;
     const p = slot === 'combo' ? FX.CLIP_COMBO[0].params.speed : FX.CLIP_IN[0].params.dur;

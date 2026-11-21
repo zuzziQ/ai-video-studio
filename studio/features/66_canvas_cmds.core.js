@@ -43,13 +43,16 @@
     return true;
   }
 
-  // Bảng lệnh của menu chuột phải (cũng là nút ⋯ của thanh nổi). ctx: {scenes, hasOrig, hidden, canEditText, canSplit, locked, canPaste}.
+  // Bảng lệnh của menu chuột phải (cũng là nút ⋯ của thanh nổi). ctx: {scenes, hasOrig, hidden, canEditText, canSplit, locked, canPaste,
+  //   props, canPasteProps} — S29 M211: props = mục có thuộc tính chép được (KeysCore.propKind), canPasteProps = clipboard thuộc tính hợp.
   // Mỗi mục {id, label, icon, key?, off?}; '-' là gạch ngăn. S20 M141: Cắt / Chép / Dán, Khoá (element khoá: không cắt, xoá, đổi lớp).
   function menuItems(c, ctx = {}) {
     if (!c) return [];
     const clip = (cut = true) => [...(cut ? [{ id: 'cut', label: 'Cắt', icon: 'ti-cut', key: '⌘X', off: !!ctx.locked }] : []),
       { id: 'copy', label: c.kind === 'clip' ? 'Chép (dán = nhân bản sau clip)' : 'Chép', icon: 'ti-clipboard-copy', key: '⌘C' },
-      { id: 'paste', label: 'Dán tại playhead', icon: 'ti-clipboard', key: '⌘V', off: !ctx.canPaste }];
+      { id: 'paste', label: 'Dán tại playhead', icon: 'ti-clipboard', key: '⌘V', off: !ctx.canPaste }, ...props];
+    const props = !ctx.props ? [] : [{ id: 'pcopy', label: 'Chép thuộc tính', icon: 'ti-clipboard-data' },
+      { id: 'ppaste', label: 'Dán thuộc tính…', icon: 'ti-clipboard-check', off: !ctx.canPasteProps || !!ctx.locked }];
     if (c.kind === 'clip') return [
       { id: 'split', label: 'Tách tại playhead', icon: 'ti-scissors', key: '⌘B', off: !ctx.canSplit },
       { id: 'dup', label: 'Nhân bản', icon: 'ti-copy', key: '⌘D' }, '-', ...clip(false), '-',

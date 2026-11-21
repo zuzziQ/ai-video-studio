@@ -27,9 +27,9 @@
       ${cout ? rng('out_dur', numOf(o.anim_out, 'dur'), 0, 3, .05, 'Thời lượng ra', secs) : '<div class="help">Mờ dần = như cũ: engine mờ cả cảnh quanh lúc tắt.</div>'}`;
     const paneLoop = `<div class="angrid">${none('loop', 'Không', !cloop)}${FX.ANIM_LOOP.map(x => cell('loop', x.id, x.label, cloop === x.id, `<i class="ti ${x.icon}"></i>`)).join('')}</div>
       ${cloop ? rng('speed', numOf(o.anim_loop, 'speed') || 1, .25, 3, .05, 'Tốc độ', v => `${v}×`) : ''}`;
-    const tabs = [['in', 'Vào', cin], ['out', 'Ra', cout], ['loop', 'Lặp', cloop]];
+    const tabs = [['in', 'Vào', cin], ['out', 'Ra', cout], ['loop', 'Lặp', cloop], ...(S.presets ? [['mine', 'Của tôi', '']] : [])]; // S29 M211
     return sect('Hoạt ảnh', `<div class="antabs" role="tablist">${tabs.map(([k, l, cur]) => `<button role="tab" data-antab="${k}" aria-selected="${tab === k}" class="${tab === k ? 'on' : ''}">${l}${cur ? ' <i class="ti ti-point-filled"></i>' : ''}</button>`).join('')}</div>
-      <div data-anpane="in" ${tab === 'in' ? '' : 'hidden'}>${paneIn}</div><div data-anpane="out" ${tab === 'out' ? '' : 'hidden'}>${paneOut}</div><div data-anpane="loop" ${tab === 'loop' ? '' : 'hidden'}>${paneLoop}</div>
+      <div data-anpane="in" ${tab === 'in' ? '' : 'hidden'}>${paneIn}</div><div data-anpane="out" ${tab === 'out' ? '' : 'hidden'}>${paneOut}</div><div data-anpane="loop" ${tab === 'loop' ? '' : 'hidden'}>${paneLoop}</div>${S.presets ? `<div data-anpane="mine" ${tab === 'mine' ? '' : 'hidden'}>${S.presets.block('anim')}</div>` : ''}
       <div class="help">Thời lượng hoạt ảnh riêng, không đổi thời lượng hiển thị của lớp. Lặp chạy sau khi vào xong.</div>`, 'ti-sparkles');
   }
   S.animPick = animPick;
@@ -57,7 +57,7 @@
 
   const st = document.createElement('style');
   st.textContent = `
-.antabs { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-1); margin-bottom:var(--space-2); }
+.antabs { display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:var(--space-1); margin-bottom:var(--space-2); }
 .antabs button { font-size:var(--text-xs); }
 .antabs button.on { background:rgb(var(--color-accent-soft) / .24); border-color:rgb(var(--color-accent-text) / .5); color:rgb(var(--color-fg)); }
 .antabs .ti { font-size:var(--text-2xs); color:rgb(var(--color-accent-text)); }
