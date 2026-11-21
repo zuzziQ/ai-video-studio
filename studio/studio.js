@@ -130,8 +130,8 @@ function changed(inspector = false) {
 }
 
 // ---------- preview ----------
-function previewTL() {
-  const o = JSON.parse(JSON.stringify(TL));
+function previewTL(src = TL) { // S28 M202: src = TL tạm của xem thử chuyển cảnh (79_transpeek.js)
+  const o = JSON.parse(JSON.stringify(src));
   o.captions = JSON.parse(JSON.stringify(CAP)); o.base = PB(); o.width = DW; o.height = DH;
   if (o.aroll) o.aroll.count = META.frames || undefined;
   // Track "hide" toggles only affect the preview, never the saved timeline.
@@ -1849,6 +1849,8 @@ const Studio = window.Studio = {
   $, esc, tip, fmt, api, toast, modal, closeModal, pollJob, videoPicker, setTime, saveNow, newProject, openTemplates: openTemplatesFor, pushUndo, changed, renderTimeline, renderInspector, renderPanel, build, draw, fit, zoomFit, get zoomPending() { return ZFIT; },
   select, sect, openSect, typeName, compOf: obj => compOf(obj),
   // S20 M140: bảng lệnh trên khung (66_canvas_cmds.js): đọc trạng thái preview, gọi lại đúng hàm của inspector / phím tắt
+  // S28 M202: xem thử trên khung chính bằng TL tạm (79_transpeek.js): previewTL(tl) = bản engine của tl; redraw() = dựng lại từ TL thật
+  previewTL: src => previewTL(src), redraw() { needInit = true; draw(); },
   get K() { return K; }, get playing() { return playing; }, get dragging() { return !!drag; }, get editing() { return !!inEdit; }, get multi() { return multi; },
   FONTS, SWATCH, ANIM_LIST, fontOpt, setTimes: (c, t0, t1) => setTimes(c, t0, t1, false), rectOf: obj => rectOf(obj), pick: (x, y) => pick(x, y), getPos: c => getPos(c), setPos: (c, p) => setPos(c, p), touch,
   removeSel, duplicateSel, splitAtPlayhead,

@@ -96,12 +96,7 @@ function srcFrame(c, srcT, cut) {
   return fmtSeq(cut && c.cutouts ? c.cutouts : c.src.seq, n);
 }
 function clipPath(t, cut) { const k = clipAt(t); return k ? srcFrame(k.c, k.src, cut) : ''; }
-const LUT = {
-  warm: 'sepia(.22) saturate(1.2) hue-rotate(-8deg)', cool: 'saturate(1.05) hue-rotate(12deg) brightness(1.02)',
-  vivid: 'saturate(1.45) contrast(1.1)', bw: 'grayscale(1) contrast(1.15)', film: 'sepia(.3) contrast(1.08) saturate(.85)',
-  fade: 'contrast(.86) brightness(1.08) saturate(.8)', night: 'brightness(.8) saturate(1.2) hue-rotate(195deg) contrast(1.1)',
-  pop: 'saturate(1.6) contrast(1.15) brightness(1.04)',
-};
+const LUT = FX.lutCss(); // S28 M202: engine/fx_registry.js
 function clipFilter(c) {
   const f = c.filter || {};
   let s = f.preset ? LUT[f.preset] || '' : '';
@@ -174,23 +169,8 @@ function clipLayer(c, srcT, t, extraFilter = '', style = '') {
   return c.mask?.bg ? `<div class="full"><div class="full" style="background:${c.mask.bg}"></div>${inner}</div>` : inner;
 }
 // Transition INTO clip c over its first `dur` seconds; the previous clip keeps playing underneath.
-const TRANS = {
-  fade: k => [`opacity:${k}`, ''],
-  dissolve: k => [`opacity:${k}`, ''],
-  slide_l: k => [`transform:translateX(${((1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
-  slide_r: k => [`transform:translateX(${(-(1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
-  slide_up: k => [`transform:translateY(${((1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
-  push: k => [`transform:translateX(${((1 - E.inOutSine(k)) * 100).toFixed(2)}%)`, `transform:translateX(${(-E.inOutSine(k) * 100).toFixed(2)}%)`],
-  zoom: k => [`opacity:${k};transform:scale(${lerp(1.35, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, .85, k).toFixed(3)})`],
-  zoom_out: k => [`opacity:${k};transform:scale(${lerp(.7, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, 1.25, k).toFixed(3)})`],
-  blur: k => [`opacity:${k};filter:blur(${((1 - k) * 22).toFixed(1)}px)`, `filter:blur(${(k * 22).toFixed(1)}px)`],
-  whip: k => [`transform:translateX(${((1 - E.outExpo(k)) * 110).toFixed(2)}%);filter:blur(${((1 - k) * 26).toFixed(1)}px)`, `transform:translateX(${(-E.inCubic(k) * 110).toFixed(2)}%);filter:blur(${(k * 26).toFixed(1)}px)`],
-  spin: k => [`opacity:${k};transform:rotate(${((1 - E.outCubic(k)) * -25).toFixed(1)}deg) scale(${lerp(1.4, 1, E.outCubic(k)).toFixed(3)})`, ''],
-  wipe: k => [`clip-path:inset(0 ${((1 - E.inOutSine(k)) * 100).toFixed(2)}% 0 0)`, ''],
-  circle: k => [`clip-path:circle(${(E.outCubic(k) * 75).toFixed(2)}% at 50% 50%)`, ''],
-  flash: k => [`opacity:${k > .5 ? 1 : 0}`, ''],
-  glitch: k => [`opacity:${k > .3 ? 1 : 0};transform:translateX(${k < .9 ? ((rnd(Math.floor(k * 20)) - .5) * 60).toFixed(0) : 0}px)`, ''],
-};
+// S28 M202: danh sách + hàm (k) → [inStyle, outStyle] nằm ở engine/fx_registry.js (FX.TRANS).
+const TRANS = FX.transFns();
 function mainTrack(t, extraFilter = '', extraStyle = '') {
   const k = clipAt(t);
   if (!k) return '<div class="full" style="background:#000"></div>';
@@ -199,7 +179,7 @@ function mainTrack(t, extraFilter = '', extraStyle = '') {
   if (!tr || !prev || lt >= (tr.dur ?? .4)) return cur;
   const p = clamp(lt / (tr.dur ?? .4)), [inS, outS] = (TRANS[tr.type] || TRANS.fade)(p);
   const pSrc = (prev.out ?? 0) + lt * (prev.speed || 1);
-  const flash = tr.type === 'flash' ? `<div class="full" style="background:#fff;opacity:${(1 - Math.abs(p - .5) * 2).toFixed(3)}"></div>` : '';
+  const flash = FX.transOverlay(tr.type, p); // flash: lớp trắng phủ
   return `<div class="full">${clipLayer(prev, pSrc, t, clipFilter(prev), outS)}<div class="full" style="${inS}">${cur}</div>${flash}</div>`;
 }
 
