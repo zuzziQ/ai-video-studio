@@ -3,7 +3,9 @@
 // Dự án trỏ tới hồ sơ bằng `timeline.ads.product = "<id>"`; scripts/ad_gates.py tự giải hồ sơ khi soát quảng cáo.
 //
 // Hồ sơ: {version, id, name, brand, industry, price (chuỗi giữ nguyên như người dùng/trang ghi, M91), claims:[{id, text, status, evidence, source, expires}],
-//         blocked:[cụm từ], faq:[{q, a}], notes, created, updated}
+//         blocked:[cụm từ], faq:[{q, a}], notes, image?, created, updated}
+// image (tuỳ chọn): tên file `image.<jpg|png|webp>` trong `$AVS_HOME/products/<id>/` (như logo của thương hiệu ở brands/<id>/).
+// Chỉ POST /api/products/image ghi trường này; lưu hồ sơ giữ nguyên ảnh đang có, `image: ''` thì bỏ ảnh.
 // claims[].status: approved (phải có evidence) | pending | prohibited | expired. `expires` (YYYY-MM-DD) đã qua
 // thì claim approved được coi là expired.
 import fs from 'node:fs';
@@ -29,7 +31,9 @@ export class ProductError extends Error {
   constructor(msg, status = 400) { super(msg); this.status = status; }
 }
 
-export const validId = id => typeof id === 'string' && ID_RE.test(id);
+// tên route con của /api/products/ (image, use-image, save, delete) không làm id hồ sơ được
+const RESERVED = new Set(['image', 'use-image', 'save', 'delete']);
+export const validId = id => typeof id === 'string' && ID_RE.test(id) && !RESERVED.has(id);
 
 /** Đường dẫn file của hồ sơ `id`, chỉ khi id hợp lệ và file (kể cả qua symlink) nằm trong thư mục products/. */
 export function productFile(id, dir = productsDir()) {
@@ -49,6 +53,10 @@ export function newId(name) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'san-pham';
   return `${base}-${crypto.randomBytes(2).toString('hex')}`;
 }
+
+export const IMAGE_RE = /^image\.(jpg|png|webp)$/;
+export const IMAGE_MAX = 8 * 1024 * 1024;
+const IMAGE_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
 const str = (v, n) => (v == null ? '' : String(v)).replace(/\s+/g, ' ').trim().slice(0, n);
 const date = v => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
@@ -80,6 +88,7 @@ export function normalizeProduct(raw, { strict = true } = {}) {
     version: 1, id: raw.id, name, brand: str(raw.brand, LIM.brand), price: str(raw.price, LIM.price),
     industry: INDUSTRIES.includes(raw.industry) ? raw.industry : '',
     claims, blocked, faq, notes: String(raw.notes || '').slice(0, LIM.notes),
+    ...(typeof raw.image === 'string' && IMAGE_RE.test(raw.image) ? { image: raw.image } : {}),
     created: raw.created, updated: raw.updated,
   };
 }
@@ -118,28 +127,110 @@ export function saveProduct(raw, dir = productsDir()) {
   let id = raw.id;
   if (id == null || id === '') { do id = newId(p.name); while (fs.existsSync(path.join(dir, id + '.json'))); }
   const f = productFile(id, dir);
-  let created = now;
-  if (fs.existsSync(f)) { try { created = JSON.parse(fs.readFileSync(f, 'utf8')).created || now; } catch { /* ghi đè file hỏng */ } }
-  const out = { ...p, id, created, updated: now };
+  let created = now, old = null;
+  if (fs.existsSync(f)) { try { old = JSON.parse(fs.readFileSync(f, 'utf8')); created = old.created || now; } catch { /* ghi đè file hỏng */ } }
+  // ảnh chỉ đổi qua saveProductImage: client không đặt được tên file; `image: ''` = bỏ ảnh (xoá file trong <id>/)
+  delete p.image;
+  const keep = raw.image !== '' && typeof old?.image === 'string' && IMAGE_RE.test(old.image) && fs.existsSync(path.join(dir, id, old.image));
+  if (raw.image === '') clearImages(id, dir);
+  const out = { ...p, ...(keep ? { image: old.image } : {}), id, created, updated: now };
+  writeJson(f, out, dir);
+  return out;
+}
+
+function writeJson(f, out, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const tmp = `${f}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(out, null, 1));
   fs.renameSync(tmp, f);
-  return out;
+}
+
+/** Thư mục file kèm của hồ sơ (`products/<id>/`), chỉ khi nó (kể cả qua symlink) nằm ngay trong products/. */
+export function productDataDir(id, dir = productsDir()) {
+  productFile(id, dir);
+  const d = path.join(dir, id);
+  if (fs.existsSync(d)) {
+    const nc = s => (process.platform === 'win32' ? s.toLowerCase() : s);
+    if (fs.lstatSync(d).isSymbolicLink() || nc(path.dirname(fs.realpathSync.native(d))) !== nc(fs.realpathSync.native(dir)))
+      throw new ProductError('thư mục hồ sơ sản phẩm trỏ ra ngoài products/', 403);
+  }
+  return d;
+}
+
+function clearImages(id, dir) {
+  const d = productDataDir(id, dir);
+  let names = [];
+  try { names = fs.readdirSync(d); } catch { return; }
+  for (const n of names) if (/^image\.\w+$/.test(n)) rmSync(path.join(d, n), { force: true });
+}
+
+/** Loại ảnh theo byte đầu (PNG, JPEG, WebP); khác → ''. Không tin đuôi tên file hay Content-Type của trình duyệt. */
+export function imageKind(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12) return '';
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return '';
+}
+
+/** Ghi ảnh của hồ sơ `id` (thay ảnh cũ) rồi ghi `image` vào hồ sơ. → hồ sơ mới. */
+export function saveProductImage(id, buf, dir = productsDir()) {
+  const f = productFile(id, dir);
+  if (!fs.existsSync(f)) throw new ProductError(`không thấy hồ sơ sản phẩm “${id}”`, 404);
+  if (!Buffer.isBuffer(buf) || !buf.length) throw new ProductError('chưa có ảnh');
+  if (buf.length > IMAGE_MAX) throw new ProductError('ảnh sản phẩm tối đa 8 MB', 413);
+  const ext = imageKind(buf);
+  if (!ext) throw new ProductError('chỉ nhận ảnh PNG, JPG hoặc WebP');
+  const d = productDataDir(id, dir), name = `image.${ext}`;
+  fs.mkdirSync(d, { recursive: true });
+  const tmp = path.join(d, `.${name}.${process.pid}.tmp`);
+  const cur = JSON.parse(fs.readFileSync(f, 'utf8')); // hồ sơ hỏng: dừng trước khi đụng ảnh
+  fs.writeFileSync(tmp, buf);
+  fs.renameSync(tmp, path.join(d, name)); // ảnh mới vào chỗ trước, ghi hồ sơ, rồi mới dọn ảnh cũ khác đuôi
+  writeJson(f, { ...cur, id, image: name, updated: new Date().toISOString() }, dir);
+  for (const n of fs.readdirSync(d)) if (/^image\.\w+$/.test(n) && n !== name) rmSync(path.join(d, n), { force: true });
+  return { ...loadProduct(id, dir), image: name };
+}
+
+/** {file, type} của ảnh hồ sơ, hoặc null khi hồ sơ không có ảnh / file đã mất. */
+export function productImage(id, dir = productsDir()) {
+  const p = loadProduct(id, dir);
+  if (!p.image) return null;
+  const file = path.join(productDataDir(id, dir), p.image);
+  return fs.existsSync(file) ? { file, type: IMAGE_TYPES[p.image.split('.')[1]] } : null;
+}
+
+/** Chép ảnh hồ sơ vào `<projDir>/media/product_<id>.<ext>` (chỉ khi thiếu hoặc khác). → đường dẫn tương đối, '' khi không có ảnh. */
+export function copyProductImage(projDir, id, dir = productsDir()) {
+  const img = productImage(id, dir);
+  if (!img) return '';
+  const rel = `media/product_${id}${path.extname(img.file)}`, dst = path.join(projDir, rel);
+  const src = fs.readFileSync(img.file);
+  if (fs.existsSync(dst) && fs.lstatSync(dst).isFile() && fs.readFileSync(dst).equals(src)) return rel;
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  if (fs.existsSync(dst) && !fs.lstatSync(dst).isFile()) throw new ProductError(`${rel} không phải file`, 409);
+  const tmp = `${dst}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, src);
+  fs.renameSync(tmp, dst);
+  return rel;
 }
 
 export function deleteProduct(id, dir = productsDir()) {
   const f = productFile(id, dir);
   if (!fs.existsSync(f)) throw new ProductError(`không thấy hồ sơ sản phẩm “${id}”`, 404);
+  const d = productDataDir(id, dir);
   rmSync(f);
+  rmSync(d, { recursive: true, force: true });
   return { ok: true };
 }
 
 /** M18: dữ liệu graphic sản phẩm của dự án (timeline.ads.product) cho ai_edit / Tự lái; null khi dự án không trỏ hồ sơ.
- *  Logo lấy của bộ thương hiệu dự án đang dùng. Hồ sơ mất / id sai: ném lỗi như loadProduct. */
+ *  Logo lấy của bộ thương hiệu dự án đang dùng; ảnh hồ sơ (nếu có) chép vào media/product_<id>.<ext> của dự án. Hồ sơ mất / id sai: ném lỗi như loadProduct. */
 export function productHero(dir, tl, pdir = productsDir()) {
   const id = tl?.ads?.product;
   if (typeof id !== 'string' || !id) return null;
   const p = loadProduct(id, pdir);
-  return ProductsCore.heroOf(p, { logo: tl.brand?.logo || '' });
+  let image = '';
+  try { image = copyProductImage(dir, id, pdir); } catch (e) { console.log('Ảnh hồ sơ sản phẩm: ' + e.message); }
+  return ProductsCore.heroOf(p, { logo: tl.brand?.logo || '', image });
 }
