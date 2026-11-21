@@ -143,3 +143,29 @@ test('engine + Studio nạp bake.js; Thuộc tính clip có tab Hiệu chỉnh; 
   const pick = AC.checkPick({ action: 'clip_bake', params: { op: 'curves', preset: 'vintage', hue: 999 } }, { kind: 'clip', idx: 0 });
   assert.equal(pick.action, 'clip_bake'); assert.equal(pick.params.preset, 'vintage');
 });
+
+// M212 sửa phông nền nhạt: chromakey chỉ so màu sắc → nền gần xám (#9bb1ca) ở similarity 0,17 xoá cả người. Số đo trên video
+// 576×1024 nền xám xanh (khung 00335): similarity 0,02 → nền alpha 19, mặt 248, tóc 254, váy 247 (cũ 0,17: mọi vùng ≈ 0).
+test('M212: phông nền nhạt màu giữ người, phông xanh lá như cũ', () => {
+  const vfOf = color => B.vf(B.ops({ chroma: { color } }));
+  assert.equal(B.V, 3, 'đổi bộ lọc tách nền → nâng V để chuỗi nướng cũ được xử lý lại');
+  // xanh lá / xanh dương thật: ánh xạ cũ, có despill
+  for (const c of ['#00ff00', '#00b140', '#0000ff', '#4caf50']) assert.equal(B.keyInfo(c).mode, 'chroma', c);
+  assert.match(vfOf('#00ff00'), /^chromakey=color=0x00ff00:similarity=0\.17:blend=0\.03,format=rgba,despill=type=green/);
+  // nhạt có màu: chromakey similarity luôn < r (khoảng cách tới xám), không despill
+  const ki = B.keyInfo('#9bb1ca');
+  assert.equal(ki.mode, 'pale'); assert.ok(ki.pale);
+  const vf = vfOf('#9bb1ca');
+  assert.match(vf, /^chromakey=color=0x9bb1ca:similarity=0\.02:blend=0\.004,format=rgba$/);
+  for (const strength of [0, 40, 100]) {
+    const sim = +/similarity=([\d.]+)/.exec(B.vf(B.ops({ chroma: { color: '#9bb1ca', strength } })))[1];
+    assert.ok(sim < ki.r, `độ mạnh ${strength}: similarity ${sim} < r ${ki.r}`);
+  }
+  // xám / trắng: colorkey so RGB (có độ sáng)
+  for (const c of ['#808080', '#ffffff', '#a3a9ad']) {
+    assert.equal(B.keyInfo(c).mode, 'gray', c);
+    assert.match(vfOf(c), new RegExp(`^colorkey=color=0x${c.slice(1)}:similarity=0\.1:blend=0\.01,format=rgba$`));
+  }
+  // cảnh báo ở tab Hiệu chỉnh
+  assert.match(read('../../studio/features/86_bake.js'), /Phông nền nhạt màu, khoá có thể không sạch/);
+});
