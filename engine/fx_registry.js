@@ -8,7 +8,7 @@
 //   chuyển cảnh: fn(k, params) → [inStyle, outStyle] (k 0→1 trong đoạn chuyển; in = clip mới, out = clip trước chạy dưới nền);
 //                overlay(k) → HTML phủ lên trên (chỉ flash). Hàm thuần: cùng k cho cùng chuỗi (glitch dùng rnd tất định).
 //   LUT: css = chuỗi CSS filter; fn(k, params) → css (k chưa dùng, để M208 làm cường độ).
-//   hoạt ảnh chữ: chỉ dữ liệu (nhãn, nhóm, mô tả); hình vẫn vẽ ở engine/vertical.js textLine (M205 sẽ gom vào đây).
+//   hoạt ảnh (M205): anim_in (= text_in) / anim_out / anim_loop — hàm thuần + animOf / animAt, dùng chung cho chữ, hình, element, sticker.
 // Thêm một loại = thêm một mục ở đây; danh sách của Studio, prompt Claude và bảng references/clips.md (node scripts/fx_doc.mjs) đọc từ đó.
 'use strict';
 (function (root) {
@@ -27,6 +27,10 @@
     trans: [['basic', 'Cơ bản'], ['slide', 'Trượt'], ['camera', 'Camera'], ['light', 'Ánh sáng'], ['mask', 'Mặt nạ'], ['distort', 'Nhiễu']],
     text_in: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
     lut: [['tone', 'Tông màu'], ['mood', 'Không khí']],
+    // S28 M205
+    anim_in: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
+    anim_out: [['basic', 'Cơ bản'], ['move', 'Chuyển động'], ['letter', 'Từng chữ']],
+    anim_loop: [['move', 'Chuyển động'], ['light', 'Ánh sáng'], ['letter', 'Từng chữ']],
   };
 
   const TRANS = [
@@ -99,6 +103,122 @@
     { id: 'type', label: 'Đánh máy', group: 'letter', icon: 'ti-keyboard', params: {},
       ai: { mood: 'công nghệ, tò mò', nhip: 'chậm', khi_nao: 'câu hỏi, prompt AI, ghi chú', tranh: 'chữ hiện quá ngắn (< 1 s)' } },
   ];
+
+  // ---- S28 M205: bộ hoạt ảnh chung { in, out, loop } cho dòng chữ, hình khối, element riêng, sticker ----
+  // Dữ liệu trên element (giữ trường cũ để mọi chỗ đọc `o.anim` như chuỗi vẫn chạy):
+  //   anim: id vào (chuỗi, như cũ) · anim_dur: thời lượng vào (s) · anim_out: { type, dur } · anim_loop: { type, speed }.
+  // Hàm vào fn(lt, c) → { tr, fl, o, clip, chars }: lt giây từ lúc hiện (đã quy về thời lượng gốc D0), c = { x, y, from_x,
+  // from_y, from_scale, hold, stagger, n, text }. Chữ (c.text) có chars = [{ hide } | { o, tr } | {}] cho từng ký tự.
+  // Công thức vào là bản chuyển nguyên từ engine/vertical.js textLine trước M205 (timeline cũ dựng ra giống hệt, test s28_anim).
+  // Ra = cùng hàm vào chạy ngược theo thời gian còn lại tới lúc tắt (đối xứng). Lặp chạy sau khi vào xong.
+  const c01 = v => Math.min(1, Math.max(0, v));
+  const pg = (t, t0, d) => c01((t - t0) / d);
+  const oBack = (k, s = 1.70158) => 1 + (s + 1) * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
+  const stg = (c, def) => c.stagger ?? def;
+  const IN_FN = {
+    pop: lt => ({ tr: `scale(${lerp(.3, 1, oBack(pg(lt, 0, .28), 2)).toFixed(3)})`, o: c01(lt / .12) }),
+    fade: lt => ({ o: E.outCubic(pg(lt, 0, .25)) }),
+    slide_l: lt => slide(lt, -1), slide_r: lt => slide(lt, 1),
+    drop: lt => ({ tr: `translateY(${((1 - oBack(pg(lt, 0, .3), 1.6)) * -90).toFixed(1)}px)`, o: c01(lt / .1) }),
+    blur_zoom: lt => { const k = E.outCubic(pg(lt, 0, .35)); return { tr: `scale(${lerp(1.7, 1, k).toFixed(3)})`, fl: `blur(${((1 - k) * 16).toFixed(1)}px)`, o: c01(lt / .1) }; },
+    fly: (lt, c) => {
+      // hiện ở from_x/from_y (bật), giữ, rồi bay về x/y — "VIẾT NHƯ NGƯỜI THẬT" ở hook
+      const x = c.x ?? 0, y = c.y ?? 0, hold = c.hold ?? .25, fk = E.inOutSine(pg(lt, .2 + hold, .22)), pk = oBack(pg(lt, 0, .25), 2);
+      const fx = (c.from_x ?? x) - x, fy = (c.from_y ?? y + 120) - y, fs = c.from_scale ?? .8;
+      return { tr: `translate(${(fx * (1 - fk)).toFixed(1)}px,${(fy * (1 - fk)).toFixed(1)}px) scale(${(lerp(.3, fs, pk) * (1 - fk) + fk).toFixed(3)})`, o: c01(lt / .1) };
+    },
+    tumble: (lt, c) => {
+      const tumb = k => { const e = oBack(k, 1.8); return { o: c01(k * 3), tr: `perspective(300px) rotateX(${((1 - e) * -95).toFixed(1)}deg) translateY(${((1 - e) * 26).toFixed(1)}px)` }; };
+      if (!c.text) return tumb(pg(lt, 0, .28)); // hình khối / element: lật cả khối
+      const st = stg(c, .06);
+      return { chars: Array.from({ length: c.n || 0 }, (_, i) => { const k = pg(lt, i * st, .28); return k <= 0 ? { hide: true } : tumb(k); }) };
+    },
+    type: (lt, c) => {
+      if (!c.text) return { clip: pg(lt, 0, .5) }; // hình khối / element: lộ dần từ trái
+      const st = stg(c, .035);
+      return { chars: Array.from({ length: c.n || 0 }, (_, i) => (pg(lt, i * st, .001) <= 0 ? { hide: true } : {})) };
+    },
+  };
+  function slide(lt, dir) {
+    const k = E.outExpo(pg(lt, 0, .35));
+    return { tr: `translateX(${(dir * (1 - k) * 420).toFixed(1)}px) skewX(${(dir * (1 - k) * -12).toFixed(1)}deg)`, fl: `blur(${((1 - k) * 10).toFixed(1)}px)` };
+  }
+  // Thời lượng gốc D0 của từng loại vào (s) — anim_dur / anim_out.dur co giãn thời gian theo tỉ lệ D0 / dur
+  const D0 = { pop: .28, fade: .25, slide_l: .35, slide_r: .35, drop: .3, blur_zoom: .35,
+    fly: c => .42 + (c.hold ?? .25), tumble: c => (c.text ? .28 + stg(c, .06) * Math.max(0, (c.n || 1) - 1) : .28), type: c => (c.text ? stg(c, .035) * (c.n || 1) : .5) };
+  const d0 = (id, c) => (typeof D0[id] === 'function' ? D0[id](c) : D0[id] || .3);
+  TEXT_IN.forEach(x => { x.fn = IN_FN[x.id]; x.params = { dur: { t: 'num', min: .1, max: 3, def: 0 } }; });
+  // Ra: 9 loại đối xứng với Vào (cùng id, cùng hàm chạy ngược)
+  const OUT_LABEL = { pop: 'Thu nhỏ', fade: 'Mờ đi', slide_l: 'Trượt sang trái', slide_r: 'Trượt sang phải', drop: 'Bay lên', blur_zoom: 'Nhoè ra', fly: 'Bay đi', tumble: 'Lật đi', type: 'Xoá chữ' };
+  const ANIM_OUT = TEXT_IN.map(x => ({ id: x.id, label: OUT_LABEL[x.id], group: x.group, icon: x.icon, params: { dur: { t: 'num', min: .1, max: 3, def: 0 } }, fn: x.fn,
+    ai: { mood: x.ai.mood, nhip: x.ai.nhip, khi_nao: `rời khung đối xứng với vào "${x.id}"; ${x.ai.khi_nao}`, tranh: x.ai.tranh } }));
+  // Lặp: fn(lt, sp, c) → { tr, fl, o, chars }; lt tính từ lúc vào xong, sp = tốc độ (1 = vừa)
+  const TAU = Math.PI * 2;
+  const loop = (id, label, group, icon, fn, ai) => ({ id, label, group, icon, params: { speed: { t: 'num', min: .25, max: 3, def: 1 } }, fn, ai });
+  const ANIM_LOOP = [
+    loop('pulse', 'Nhịp đập', 'move', 'ti-heartbeat', (lt, sp) => ({ tr: `scale(${(1 + .07 * Math.pow(Math.max(0, Math.sin(TAU * 1.2 * sp * lt)), 3)).toFixed(3)})` }),
+      { mood: 'nhấn, gấp', nhip: 'vừa', khi_nao: 'giá, ưu đãi, nút CTA, con số cần nhớ', tranh: 'chữ dài, đặt nhiều dòng cùng lúc' }),
+    loop('sway', 'Lắc lư', 'move', 'ti-wave-sine', (lt, sp) => ({ tr: `rotate(${(Math.sin(TAU * .7 * sp * lt) * 5).toFixed(2)}deg)` }),
+      { mood: 'vui, thả lỏng', nhip: 'chậm', khi_nao: 'sticker, nhãn vui, video giải trí', tranh: 'thương hiệu nghiêm túc' }),
+    loop('bounce', 'Nảy', 'move', 'ti-ball-basketball', (lt, sp) => ({ tr: `translateY(${(-Math.abs(Math.sin(Math.PI * 1.4 * sp * lt)) * 16).toFixed(1)}px)` }),
+      { mood: 'năng động, trẻ', nhip: 'nhanh', khi_nao: 'mũi tên chỉ, "bấm vào đây", emoji', tranh: 'chữ lớn chiếm khung' }),
+    loop('blink', 'Nhấp nháy', 'light', 'ti-bulb', (lt, sp) => ({ o: .35 + .65 * (Math.cos(TAU * 1.2 * sp * lt) + 1) / 2 }),
+      { mood: 'cảnh báo, gây chú ý', nhip: 'nhanh', khi_nao: '"LIVE", "MỚI", cảnh báo ngắn', tranh: 'đoạn chữ cần đọc; người nhạy sáng' }),
+    loop('float', 'Trôi', 'move', 'ti-cloud', (lt, sp) => ({ tr: `translate(${(Math.cos(TAU * .35 * sp * lt) * 4).toFixed(1)}px,${(Math.sin(TAU * .5 * sp * lt) * 10).toFixed(1)}px)` }),
+      { mood: 'nhẹ, mơ màng, sang', nhip: 'chậm', khi_nao: 'tiêu đề giữ lâu, logo, thẻ sản phẩm cao cấp', tranh: 'chữ sát mép khung' }),
+    loop('spin', 'Xoay', 'move', 'ti-rotate-clockwise', (lt, sp) => ({ tr: `rotate(${((lt * sp * 120) % 360).toFixed(1)}deg)` }),
+      { mood: 'vui, kỹ thuật', nhip: 'vừa', khi_nao: 'huy hiệu tròn, icon, ngôi sao, "SALE" dạng tem', tranh: 'chữ (khó đọc khi xoay)' }),
+    loop('sparkle', 'Lấp lánh', 'light', 'ti-sparkles', (lt, sp) => {
+      const s = Math.pow(Math.max(0, Math.sin(TAU * 1.1 * sp * lt)), 2);
+      return { fl: `brightness(${(1 + .35 * s).toFixed(3)}) drop-shadow(0 0 ${(4 + 10 * s).toFixed(1)}px rgba(255,255,255,${(.25 + .5 * s).toFixed(2)}))` };
+    }, { mood: 'sang, lấp lánh, quà tặng', nhip: 'vừa', khi_nao: 'mỹ phẩm, trang sức, giải thưởng, chữ vàng', tranh: 'nền trắng (không thấy sáng)' }),
+    loop('wave', 'Sóng chữ', 'letter', 'ti-wave-square', (lt, sp, c) => {
+      const f = i => `translateY(${(Math.sin(TAU * .9 * sp * lt - i * .55) * 10).toFixed(1)}px)`;
+      return c.text ? { chars: Array.from({ length: c.n || 0 }, (_, i) => ({ tr: f(i) })) } : { tr: f(0) };
+    }, { mood: 'vui, nhạc, sinh động', nhip: 'vừa', khi_nao: 'tên bài hát, lời chào, câu ngắn theo nhạc', tranh: 'câu dài (> 20 ký tự); hình khối chỉ nhấp nhô cả khối' }),
+  ];
+  const isObj = v => v != null && typeof v === 'object' && !Array.isArray(v);
+  const numOr = (v, d) => (v != null && v !== '' && Number.isFinite(+v) ? +v : d);
+  // Đọc bộ anim của element: { in: {type, dur}|null, out: {type, dur}|null, loop: {type, speed}|null }. Dữ liệu cũ (chỉ `anim`
+  // chuỗi) = in, không out → engine giữ phong bì cũ. id vào lạ vẫn trả về (module cũ như shape 'wipe' tự vẽ); out / loop lạ bỏ.
+  function animOf(o, def) {
+    const id = typeof o?.anim === 'string' && o.anim ? o.anim : def;
+    const inn = id ? { type: id, dur: Math.min(3, Math.max(0, numOr(o?.anim_dur, 0))) } : null;
+    const ro = typeof o?.anim_out === 'string' ? { type: o.anim_out } : isObj(o?.anim_out) ? o.anim_out : null;
+    const rl = typeof o?.anim_loop === 'string' ? { type: o.anim_loop } : isObj(o?.anim_loop) ? o.anim_loop : null;
+    const out = ro && IN_FN[ro.type] ? { type: ro.type, dur: Math.min(3, Math.max(0, numOr(ro.dur, 0))) } : null;
+    const lp = rl && ANIM_LOOP.some(x => x.id === rl.type) ? { type: rl.type, speed: Math.min(3, Math.max(.25, numOr(rl.speed, 1))) } : null;
+    return { in: inn, out, loop: lp };
+  }
+  // Trạng thái gộp ở lt (giây từ lúc hiện) và left (giây còn lại tới lúc tắt, Infinity = không tắt). Chỉ có vào → đúng chuỗi cũ.
+  function animAt(an, lt, left, c = {}) {
+    const parts = [];
+    const fnIn = an.in && IN_FN[an.in.type];
+    let dIn = 0;
+    if (fnIn) { const b = d0(an.in.type, c); dIn = an.in.dur > 0 ? an.in.dur : b; parts.push(fnIn(an.in.dur > 0 ? lt * b / an.in.dur : lt, c)); }
+    if (an.out && Number.isFinite(left)) { const b = d0(an.out.type, c), d = an.out.dur > 0 ? an.out.dur : b; const p = IN_FN[an.out.type](Math.max(0, left) * b / d, c); p.o = (p.o ?? 1) * c01(left / .08); parts.push(p); } // 0.08 s cuối luôn tắt hẳn (trượt không có độ mờ)
+    if (an.loop) parts.push(ANIM_LOOP.find(x => x.id === an.loop.type).fn(Math.max(0, lt - dIn), an.loop.speed, c));
+    const r = { tr: '', fl: '', o: 1, clip: 1, chars: null };
+    parts.forEach((p, i) => {
+      if (p.tr) r.tr = r.tr ? `${r.tr} ${p.tr}` : p.tr;
+      if (p.fl) r.fl = r.fl ? `${r.fl} ${p.fl}` : p.fl;
+      if (p.o != null) r.o = i ? r.o * p.o : p.o;
+      if (p.clip != null) r.clip = Math.min(r.clip, p.clip);
+      if (p.chars) r.chars = r.chars ? r.chars.map((a, j) => mergeChar(a, p.chars[j] || {})) : p.chars;
+    });
+    return r;
+  }
+  function mergeChar(a, b) {
+    if (a.hide || b.hide) return { hide: true };
+    const m = {};
+    if (a.o != null || b.o != null) m.o = (a.o ?? 1) * (b.o ?? 1);
+    if (a.tr || b.tr) m.tr = [a.tr, b.tr].filter(Boolean).join(' ');
+    return m;
+  }
+  // Cảnh có Ra riêng (cảnh hoặc dòng chữ / sticker / keyword bên trong) → engine.js bỏ nửa "ra" của phong bì mờ chung ENV
+  const hasOut = s => !!(animOf(s).out || (s.lines || []).some(L => animOf(L).out) || (s.sticker && animOf(s.sticker).out) || (s.keyword && animOf(s.keyword).out));
+  // Style thêm cho hình khối / element / sticker (không có từng ký tự): transform, filter, hệ số mờ, clip lộ từ trái
+  const clipCss = r => (r.clip < 1 ? `clip-path:inset(-50% ${((1 - r.clip) * 100).toFixed(1)}% -50% -50%);` : '');
 
   const lut = (id, label, group, icon, css, ai) => ({ id, label, group, icon, params: {}, css, fn: () => css, ai });
   const LUT = [
@@ -223,7 +343,7 @@
     return { html, tr, fl, over };
   }
 
-  const LISTS = { trans: TRANS, text_in: TEXT_IN, lut: LUT, fx: FXS };
+  const LISTS = { trans: TRANS, text_in: TEXT_IN, lut: LUT, fx: FXS, anim_in: TEXT_IN, anim_out: ANIM_OUT, anim_loop: ANIM_LOOP };
   const list = kind => LISTS[kind] || [];
   const get = (kind, id) => list(kind).find(x => x.id === id) || null;
   const ids = kind => list(kind).map(x => x.id);
@@ -259,6 +379,10 @@
     // S28 M206: track Hiệu ứng (engine.js fxWrap / mainFx, studio/features/81_fxtrack*.js, 75_ask.core.js)
     FXS, fxApply,
     accentDur: () => Object.fromEntries(FXS.filter(x => x.legacy).map(x => [x.id, x.dur])),
+    // S28 M205: bộ anim chung (engine/vertical.js, shape.js, celem.js; studio/features/83_anim.js)
+    ANIM_OUT, ANIM_LOOP, animOf, animAt, hasOut, clipCss,
+    animOutList: () => ANIM_OUT.map(x => [x.id, x.label]),
+    animLoopList: () => ANIM_LOOP.map(x => [x.id, x.label]),
   };
   // ---------- S28 M204: nhóm clip_anim — hoạt ảnh clip Vào / Ra / Combo (clip.anim của clip Video chính, b-roll, ảnh phủ) ----------
   // anim = { in: {type, dur}, out: {type, dur}, combo: {type, speed} }; ghép ở engine/engine.js (animWrap: clipLayer, sceneFx).

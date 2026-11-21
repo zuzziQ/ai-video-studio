@@ -28,45 +28,30 @@ const TEXT_STYLE = {
 };
 
 // One line: { text, t, out?, style:white|yellow|ink|fire|glow|neon, size, x=360, y, anim, from_y, from_x, upper, weight, italic }
-// anim: pop | slide_l | slide_r | tumble | blur_zoom | fly | type | fade | drop
+// anim (vào): pop | slide_l | slide_r | tumble | blur_zoom | fly | type | fade | drop · anim_dur · anim_out {type, dur} · anim_loop
+// {type, speed}. Hình vẽ ở engine/fx_registry.js (FX.animAt, S28 M205). Không có anim_out → mờ 0.12 s trước lúc tắt như cũ.
 function textLine(L, t, sceneOut) {
   if (t < L.t || L.hidden) return '';
   const lt = t - L.t, size = L.size || 48, x = L.x ?? VW / 2, y = L.y;
   const tout = L.out ?? sceneOut;
+  const an = FX.animOf(L, 'pop');
   let o = 1;
-  if (tout != null) o *= 1 - E.inCubic(prog(t, tout - .12, .12));
+  if (tout != null && !an.out) o *= 1 - E.inCubic(prog(t, tout - .12, .12));
   const style = (TEXT_STYLE[L.style || 'white'] || TEXT_STYLE.white)();
   const txt = L.upper === false ? L.text : (L.upper ? L.text.toUpperCase() : L.text);
   const base = `position:absolute;left:${x}px;top:${y}px;font-family:${L.font || 'var(--disp)'};font-weight:${L.weight || 900};font-style:${L.italic === false ? 'normal' : 'italic'};
     font-size:${size}px;line-height:1.05;white-space:nowrap;letter-spacing:-.01em;${style};${L.color ? `color:${L.color};` : ''}`;
-  let tr = '', fl = '', inner = esc(txt);
-  const a = L.anim || 'pop';
-  if (a === 'pop') { const k = E.outBack(prog(lt, 0, .28), 2); tr = `scale(${lerp(.3, 1, k).toFixed(3)})`; o *= clamp(lt / .12); }
-  if (a === 'fade') o *= E.outCubic(prog(lt, 0, .25));
-  if (a === 'slide_l' || a === 'slide_r') {
-    const k = E.outExpo(prog(lt, 0, .35)), dir = a === 'slide_l' ? -1 : 1;
-    tr = `translateX(${(dir * (1 - k) * 420).toFixed(1)}px) skewX(${(dir * (1 - k) * -12).toFixed(1)}deg)`; fl = `blur(${((1 - k) * 10).toFixed(1)}px)`;
-  }
-  if (a === 'drop') { const k = E.outBack(prog(lt, 0, .3), 1.6); tr = `translateY(${((1 - k) * -90).toFixed(1)}px)`; o *= clamp(lt / .1); }
-  if (a === 'blur_zoom') { const k = E.outCubic(prog(lt, 0, .35)); tr = `scale(${lerp(1.7, 1, k).toFixed(3)})`; fl = `blur(${((1 - k) * 16).toFixed(1)}px)`; o *= clamp(lt / .1); }
-  if (a === 'fly') {
-    // appears at from_x/from_y (pop), holds, then flies to its final x/y — "VIẾT NHƯ NGƯỜI THẬT" in the hook.
-    const hold = L.hold ?? .25, fk = E.inOutSine(prog(lt, .2 + hold, .22)), pk = E.outBack(prog(lt, 0, .25), 2);
-    const fx = (L.from_x ?? x) - x, fy = (L.from_y ?? y + 120) - y, fs = L.from_scale ?? .8;
-    tr = `translate(${(fx * (1 - fk)).toFixed(1)}px,${(fy * (1 - fk)).toFixed(1)}px) scale(${(lerp(.3, fs, pk) * (1 - fk) + fk).toFixed(3)})`;
-    o *= clamp(lt / .1);
-  }
-  if (a === 'tumble' || a === 'type') {
-    const chars = [...txt], st = L.stagger ?? (a === 'type' ? .035 : .06);
-    inner = chars.map((c, i) => {
-      const k = prog(lt, i * st, a === 'type' ? .001 : .28);
-      if (k <= 0) return `<span style="opacity:0">${esc(c)}</span>`;
-      if (a === 'type') return esc(c);
-      const e = E.outBack(k, 1.8);
-      return `<span style="display:inline-block;white-space:pre;opacity:${clamp(k * 3).toFixed(2)};transform:perspective(300px) rotateX(${((1 - e) * -95).toFixed(1)}deg) translateY(${((1 - e) * 26).toFixed(1)}px)">${esc(c)}</span>`;
-    }).join('');
-  }
-  return `<div${L.cid ? ` data-cid="${L.cid}"` : ''} style="${base}transform:translate(-50%,-50%) ${tr};filter:${fl || 'none'};opacity:${o.toFixed(3)}">${inner}</div>`;
+  const chars = [...txt];
+  const r = FX.animAt(an, lt, tout != null ? tout - t : Infinity,
+    { x, y, from_x: L.from_x, from_y: L.from_y, from_scale: L.from_scale, hold: L.hold, stagger: L.stagger, n: chars.length, text: true });
+  o *= r.o;
+  const inner = r.chars ? chars.map((c, i) => {
+    const k = r.chars[i] || {};
+    if (k.hide) return `<span style="opacity:0">${esc(c)}</span>`;
+    if (k.o == null && !k.tr) return esc(c);
+    return `<span style="display:inline-block;white-space:pre;opacity:${(k.o ?? 1).toFixed(2)};transform:${k.tr || 'none'}">${esc(c)}</span>`;
+  }).join('') : esc(txt);
+  return `<div${L.cid ? ` data-cid="${L.cid}"` : ''} style="${base}transform:translate(-50%,-50%) ${r.tr};filter:${r.fl || 'none'};opacity:${o.toFixed(3)}">${inner}</div>`;
 }
 const lines = (s, t) => (s.lines || []).map(L => textLine(L, t, s.keep ? null : s.t1)).join('');
 
@@ -220,21 +205,32 @@ const entering = (s, t) => s.enter && s.enter !== 'cut' && t < s.t0 + .32;
 
 // ---------- sticker / icon ----------
 // Image with a thick white die-cut outline + soft shadow. src = png (ideally transparent) | emoji char.
-function stickerHTML(st, t) {
+// S28 M205: st.anim (id vào của bộ chung) thay cho from; anim_out tắt ở tout (cảnh t1); anim_loop thay cho bob lắc nhẹ.
+function stickerHTML(st, t, tout) {
   if (!st || t < st.t) return '';
   const lt = t - st.t, sz = st.size || 320, x = st.x ?? 360, y = st.y ?? 960;
-  const from = st.from || 'left', k = E.outCubic(prog(lt, 0, .3)), dir = from === 'left' ? -1 : from === 'right' ? 1 : 0;
-  const trUp = from === 'up' || from === 'down'
-    ? `translateY(${((from === 'up' ? 1 : -1) * (1 - E.outBack(prog(lt, 0, .35), 1.4)) * 420).toFixed(1)}px)` : '';
-  let tr = trUp || (from === 'pop' ? `scale(${lerp(.2, 1, E.outBack(prog(lt, 0, .3), 2)).toFixed(3)})` : `translateX(${(dir * (1 - k) * 520).toFixed(1)}px)`);
-  tr += ` ${st.bob === false ? '' : `rotate(${(Math.sin(lt * 2.2) * 2).toFixed(2)}deg)`}`;
-  const blur = from === 'pop' ? 0 : trUp ? (1 - k) * 8 : (1 - k) * 18;
+  const an = FX.animOf(st), regIn = !!(an.in && FX.get('anim_in', an.in.type));
+  let tr = '', fl = '', op = clamp(lt / .08), clip = '';
+  if (!regIn) {
+    const from = st.from || 'left', k = E.outCubic(prog(lt, 0, .3)), dir = from === 'left' ? -1 : from === 'right' ? 1 : 0;
+    const trUp = from === 'up' || from === 'down'
+      ? `translateY(${((from === 'up' ? 1 : -1) * (1 - E.outBack(prog(lt, 0, .35), 1.4)) * 420).toFixed(1)}px)` : '';
+    tr = trUp || (from === 'pop' ? `scale(${lerp(.2, 1, E.outBack(prog(lt, 0, .3), 2)).toFixed(3)})` : `translateX(${(dir * (1 - k) * 520).toFixed(1)}px)`);
+    tr += ` ${st.bob === false || an.loop ? '' : `rotate(${(Math.sin(lt * 2.2) * 2).toFixed(2)}deg)`}`;
+    fl = `blur(${(from === 'pop' ? 0 : trUp ? (1 - k) * 8 : (1 - k) * 18).toFixed(1)}px)`;
+  }
+  if (regIn || an.out || an.loop) {
+    const r = FX.animAt(regIn ? an : { in: null, out: an.out, loop: an.loop }, lt, tout != null ? tout - t : Infinity, { x, y });
+    if (r.tr) tr = tr ? `${tr} ${r.tr}` : r.tr;
+    if (r.fl) fl = fl ? `${fl} ${r.fl}` : r.fl;
+    op = regIn ? r.o : op * r.o; clip = FX.clipCss(r);
+  }
   const ol = st.outline ?? 7;
   const outline = Array.from({ length: 12 }, (_, i) => { const r = i / 12 * Math.PI * 2; return `drop-shadow(${(Math.cos(r) * ol).toFixed(1)}px ${(Math.sin(r) * ol).toFixed(1)}px 0 #fff)`; }).join(' ');
   const inner = /\.(png|jpe?g|webp|svg|gif)$/i.test(st.src || '') || /^(https?:|data:)/.test(st.src || '')
     ? `<img src="${url(st.src)}" style="width:100%;height:100%;object-fit:contain">`
     : emoji(st.src || '✅', 0, 0, sz, 'position:absolute');
-  return `<div class="abs" style="left:${x - sz / 2}px;top:${y - sz / 2}px;width:${sz}px;height:${sz}px;transform:${tr};filter:${st.outline === 0 ? '' : outline} drop-shadow(0 10px 18px rgba(0,0,0,.35)) blur(${blur.toFixed(1)}px);opacity:${clamp(lt / .08).toFixed(2)}">${inner}</div>`;
+  return `<div class="abs" style="left:${x - sz / 2}px;top:${y - sz / 2}px;width:${sz}px;height:${sz}px;transform:${tr};filter:${st.outline === 0 ? '' : outline} drop-shadow(0 10px 18px rgba(0,0,0,.35)) ${fl};opacity:${op.toFixed(2)}${clip ? ';' + clip : ''}">${inner}</div>`;
 }
 // Brand/logo icons: "si:openai" → Simple Icons SVG (CC0) via jsDelivr; else image path / emoji.
 const SI_CDN = CDN + 'npm/simple-icons@13.0.0/icons/';
@@ -277,7 +273,7 @@ const VMOD = {
     const en = enterTr(s.enter, t, s.t0);
     return {
       back: `<div class="full" style="${en}">${body}</div>` + bubble,
-      front: lines(s, t) + (s.sticker ? stickerHTML(s.sticker, t) : ''),
+      front: lines(s, t) + (s.sticker ? stickerHTML(s.sticker, t, s.keep ? null : s.t1) : ''),
       cover: !entering(s, t), hideCaptions: s.hideCaptions ?? true,
     };
   },
@@ -286,7 +282,7 @@ const VMOD = {
   spotlight(s, t, lt) {
     const blurK = E.outCubic(prog(lt, 0, .18));
     const bg = `<div class="full" style="overflow:hidden">${arollImg(t, `blur(${(blurK * (s.blur ?? 16)).toFixed(1)}px) brightness(${lerp(1, .92, blurK).toFixed(3)})`, 'transform:scale(1.08)')}</div>`;
-    return { back: bg + faceCircle(t, s, 'pip'), front: lines(s, t) + stickerHTML(s.sticker, t), cover: true, hideCaptions: true };
+    return { back: bg + faceCircle(t, s, 'pip'), front: lines(s, t) + stickerHTML(s.sticker, t, s.keep ? null : s.t1), cover: true, hideCaptions: true };
   },
 
   // Icon + pixel hand tapping it (e.g. "si:openai" when the speaker says "vô ChatGPT").
@@ -307,7 +303,7 @@ const VMOD = {
   text(s, t) { return { front: lines(s, t), hideCaptions: s.hideCaptions ?? true }; },
 
   // Sticker on its own.
-  sticker(s, t) { return { front: stickerHTML({ ...s, t: s.t ?? s.t0 }, t) }; },
+  sticker(s, t) { return { front: stickerHTML({ ...s, t: s.t ?? s.t0 }, t, s.keep ? null : s.t1) }; },
 
   // CTA: black "Follow" pill grows open, then a neon keyword ("GPT") pops under it.
   follow_cta(s, t, lt) {

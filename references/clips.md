@@ -72,7 +72,10 @@ Rê chuột hoặc focus một ô chuyển cảnh (thư viện Chuyển cảnh h
 <!-- /fx:lut -->
 
 ### Hoạt ảnh vào của chữ (`lines[].anim`)
-Hình vẫn vẽ ở `engine/vertical.js` `textLine`; registry giữ nhãn, nhóm và mô tả (`M205` gom hàm vào registry).
+Bộ chung `{in, out, loop}` (S28 `M205`) cho dòng chữ, hình khối (`shape`), element riêng (`celem`), sticker: hàm thuần ở registry
+(`FX.animOf`, `FX.animAt`). Trường: `anim` (vào, chuỗi như cũ), `anim_dur`, `anim_out: {type, dur}`, `anim_loop: {type, speed}`;
+thời lượng hoạt ảnh độc lập với thời lượng lớp. Không có `anim_out` thì Ra là phong bì mờ chung của engine như cũ.
+Hình khối giữ `fade` / `pop` / `wipe` cũ; element riêng: `anim` của cảnh thay `spec.in`; sticker: `anim` thay `from`, `anim_loop` thay `bob`.
 <!-- fx:text_in -->
 | `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |
 |---|---|---|---|---|---|
@@ -143,6 +146,34 @@ Combo:
 | `beat_shake` | Rung nhịp | Combo | mạnh, theo nhạc | montage, nhạc EDM, khoảnh khắc bùng nổ | đoạn nói chậm, tâm sự |
 | `slow_spin` | Xoay chậm | Combo | lạ, nghệ thuật | ảnh sản phẩm trưng bày, intro nghệ thuật | clip dài (> 5 s, phóng quá to) |
 <!-- /fx:clip_combo -->
+### Hoạt ảnh ra (`anim_out.type`): đối xứng với Vào, chạy ngược tới lúc tắt
+<!-- fx:anim_out -->
+| `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |
+|---|---|---|---|---|---|
+| `pop` | Thu nhỏ | Cơ bản | vui, nổi bật | rời khung đối xứng với vào "pop"; từ khoá, con số, nhãn ngắn (mặc định) | đoạn chữ dài |
+| `fade` | Mờ đi | Cơ bản | nhẹ, sang | rời khung đối xứng với vào "fade"; câu trích dẫn, thương hiệu cao cấp | hook cần giật mắt |
+| `slide_l` | Trượt sang trái | Chuyển động | năng động | rời khung đối xứng với vào "slide_l"; tiêu đề đi vào từ phải, danh sách | chữ đặt sát mép trái |
+| `slide_r` | Trượt sang phải | Chuyển động | năng động | rời khung đối xứng với vào "slide_r"; tiêu đề đi vào từ trái, đối xứng với slide_l | chữ đặt sát mép phải |
+| `drop` | Bay lên | Chuyển động | chắc, đóng dấu | rời khung đối xứng với vào "drop"; kết luận, giá, nhãn "MỚI" | nhiều dòng cùng lúc |
+| `blur_zoom` | Nhoè ra | Chuyển động | điện ảnh, mạnh | rời khung đối xứng với vào "blur_zoom"; tiêu đề lớn, mở màn, câu hook | chữ nhỏ, phụ |
+| `fly` | Bay đi | Chuyển động | kể chuyện, dẫn mắt | rời khung đối xứng với vào "fly"; chữ hiện ở một chỗ rồi bay về vị trí (from_x / from_y) | không có vị trí bắt đầu rõ |
+| `tumble` | Lật đi | Từng chữ | vui, sinh động | rời khung đối xứng với vào "tumble"; câu ngắn cần chú ý từng chữ | câu dài (> 20 ký tự) |
+| `type` | Xoá chữ | Từng chữ | công nghệ, tò mò | rời khung đối xứng với vào "type"; câu hỏi, prompt AI, ghi chú | chữ hiện quá ngắn (< 1 s) |
+<!-- /fx:anim_out -->
+
+### Hoạt ảnh lặp (`anim_loop.type`): chạy sau khi vào xong, `speed` 0.25–3
+<!-- fx:anim_loop -->
+| `id` | Tên | Nhóm | Không khí | Dùng khi | Tránh |
+|---|---|---|---|---|---|
+| `pulse` | Nhịp đập | Chuyển động | nhấn, gấp | giá, ưu đãi, nút CTA, con số cần nhớ | chữ dài, đặt nhiều dòng cùng lúc |
+| `sway` | Lắc lư | Chuyển động | vui, thả lỏng | sticker, nhãn vui, video giải trí | thương hiệu nghiêm túc |
+| `bounce` | Nảy | Chuyển động | năng động, trẻ | mũi tên chỉ, "bấm vào đây", emoji | chữ lớn chiếm khung |
+| `blink` | Nhấp nháy | Ánh sáng | cảnh báo, gây chú ý | "LIVE", "MỚI", cảnh báo ngắn | đoạn chữ cần đọc; người nhạy sáng |
+| `float` | Trôi | Chuyển động | nhẹ, mơ màng, sang | tiêu đề giữ lâu, logo, thẻ sản phẩm cao cấp | chữ sát mép khung |
+| `spin` | Xoay | Chuyển động | vui, kỹ thuật | huy hiệu tròn, icon, ngôi sao, "SALE" dạng tem | chữ (khó đọc khi xoay) |
+| `sparkle` | Lấp lánh | Ánh sáng | sang, lấp lánh, quà tặng | mỹ phẩm, trang sức, giải thưởng, chữ vàng | nền trắng (không thấy sáng) |
+| `wave` | Sóng chữ | Từng chữ | vui, nhạc, sinh động | tên bài hát, lời chào, câu ngắn theo nhạc | câu dài (> 20 ký tự); hình khối chỉ nhấp nhô cả khối |
+<!-- /fx:anim_loop -->
 
 ## Thời gian
 - Clip `i` bắt đầu tại tổng thời lượng các clip đứng trước. `TL.duration` nên bằng tổng các clip, cộng thêm phần đuôi nếu có thẻ kết.

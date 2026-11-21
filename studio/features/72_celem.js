@@ -212,6 +212,7 @@
     if (hasText(o.spec)) h += sect('Chữ', `<input data-cetext value="${esc(o.text || '')}" maxlength="120" placeholder="Chữ trong element">`, 'ti-typography');
     if (vars.length) h += sect('Màu chung', `<div class="ce-vrow">${vars.map(([n, v]) => `<label><input type="color" data-cevar="${esc(n)}" value="${esc(v)}"><small>${esc(n)}</small></label>`).join('')}</div>`, 'ti-palette');
     h += sect('Các lớp', layersHTML(o), 'ti-stack-2');
+    if (S.animPick) h += S.animPick(o, { def: '', inNone: 'Theo thiết kế' }); // S28 M205: Vào / Ra / Lặp của cả element (thay spec.in / out)
     h += sect('Claude sửa', `<div class="row"><input data-ceask maxlength="300" placeholder="Ví dụ: nền đỏ, chữ to hơn"><button data-ce="edit"><i class="ti ti-sparkles"></i> Sửa</button></div>
       <div class="help">Ra 3 phương án ở panel Element riêng, Nhận thì thay element này (⌘Z được).${o.elem_id ? ' ' + S.tip('Claude dùng lại ảnh ví dụ đã lưu cùng element trong thư viện (nếu có). Đính ảnh mới ở tab Claude để thay.') : ''}</div>`, 'ti-message-chatbot');
     return ['celem', 'Element riêng', `<div id="cepanel">${h}</div>`];

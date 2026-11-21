@@ -94,7 +94,24 @@
   // Cỡ chữ ±: bước 10 % cỡ hiện tại, kẹp 8–400 px thiết kế.
   const stepSize = (size, dir) => Math.round(Math.min(400, Math.max(8, size * (dir > 0 ? 1.1 : 1 / 1.1))) * 10) / 10;
 
-  const T = { barKind, replacePanel, layerOf, layerTarget, moveLayer, menuItems, placeBar, placeMenu, stepSize };
+  // S28 M205: ghi bộ anim chung của element (engine/fx_registry.js FX.animOf): which = 'in' | 'out' | 'loop' (id, '' = bỏ),
+  // 'in_dur' | 'out_dur' (giây, 0 = mặc định) | 'speed' (tốc độ lặp). Dùng chung cho thanh nổi chữ và khối Hoạt ảnh (83_anim.js).
+  function animSet(o, which, v) {
+    const obj = x => (x && typeof x === 'object' ? { ...x } : typeof x === 'string' ? { type: x } : null), n = +v;
+    if (which === 'in') { if (v) o.anim = v; else delete o.anim; return o; }
+    if (which === 'in_dur') { if (n > 0) o.anim_dur = Math.min(3, n); else delete o.anim_dur; return o; }
+    const f = which === 'out' || which === 'out_dur' ? 'anim_out' : 'anim_loop';
+    if (which === 'out' || which === 'loop') { if (!v) delete o[f]; else o[f] = { ...(obj(o[f]) || {}), type: v }; return o; }
+    const cur = obj(o[f]); if (!cur) return o;
+    if (which === 'out_dur') { if (n > 0) cur.dur = Math.min(3, n); else delete cur.dur; }
+    if (which === 'speed') { if (n > 0) cur.speed = Math.min(3, Math.max(.25, n)); else delete cur.speed; }
+    o[f] = cur; return o;
+  }
+  // Element có khối Vào / Ra / Lặp: dòng chữ (chữ thêm, chữ graphic) và cảnh hình khối / element riêng / sticker
+  const ANIM_SCENES = new Set(['shape', 'celem', 'sticker']);
+  const animCan = c => !!c && (c.kind === 'line' || (c.kind === 'scene' && ANIM_SCENES.has(c.obj?.type)));
+
+  const T = { barKind, replacePanel, layerOf, layerTarget, moveLayer, menuItems, placeBar, placeMenu, stepSize, animSet, animCan };
   if (typeof module === 'object' && module.exports) module.exports = T;
   else root.CanvasCmds = T;
 })(typeof window !== 'undefined' ? window : globalThis);

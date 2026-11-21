@@ -112,9 +112,9 @@ test('LUT, TRANS_TYPES, FILTERS, ANIM_LIST giữ đúng dữ liệu cũ', () => 
   assert.match(clips, /const FILTERS = FX\.filters\(\);/);
   assert.match(clips, /const LUT_CSS = FX\.lutCss\(\);/);
   assert.match(lib, /const ANIM_LIST = FX\.animList\(\);/);
-  // vertical.js vẫn vẽ đủ 9 hoạt ảnh vào có trong registry (M205 mới gom hàm)
-  const vert = read('engine/vertical.js');
-  for (const id of FX.ids('text_in')) assert.ok(vert.includes(`'${id}'`), `vertical.js thiếu anim ${id}`);
+  // M205: hình 9 hoạt ảnh vào đã gom vào registry, vertical.js gọi FX.animAt (so khung cũ ở s28_anim.test.mjs)
+  for (const x of FX.TEXT_IN) assert.equal(typeof x.fn, 'function', `registry thiếu hàm anim ${x.id}`);
+  assert.match(read('engine/vertical.js'), /FX\.animAt\(/);
 });
 
 test('mỗi mục đủ trường: nhãn, nhóm hợp lệ, icon, tham số, mô tả ai cho Claude', () => {
