@@ -134,6 +134,7 @@ function previewTL(src = TL) { // S28 M202: src = TL tạm của xem thử chuy�
   const o = JSON.parse(JSON.stringify(src));
   o.captions = JSON.parse(JSON.stringify(CAP)); o.base = PB(); o.width = DW; o.height = DH;
   if (o.aroll) o.aroll.count = META.frames || undefined;
+  if (window.Studio?.proxyMap) o.preview_proxy = { ...window.Studio.proxyMap }; // S29 M213: chuỗi 540p đã trích (63_frames.js), chỉ xem trước
   // Track "hide" toggles only affect the preview, never the saved timeline.
   if (TRK.video.hide) for (const c of o.clips || []) c.filter = { ...(c.filter || {}), brightness: 0 };
   if (TRK.cap.hide) o.caption_style = 'none';

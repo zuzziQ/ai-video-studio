@@ -42,8 +42,10 @@ const url = p => (!p ? '' : /^(https?:|file:|data:)/.test(p) ? p : TL.base + p);
 const pad = (n, w) => String(n).padStart(w, '0');
 // '@clip' / '@cut' are virtual patterns for the main track (TL.clips): frame n of the OUTPUT maps to the
 // right clip's source frame, so every module that reads TL.aroll.frames follows cuts, speed and reorder.
+// S29 M213: xem trước của Studio có TL.preview_proxy → đọc chuỗi 540p (engine/preview_proxy.js); render không có, đọc chuỗi gốc.
+const PX = p => (typeof PreviewProxy === 'undefined' ? p : PreviewProxy.pick(TL.preview_proxy, p));
 const fmtSeq = (pattern, n) => (pattern === '@clip' || pattern === '@cut' ? clipPath((n - 1) / TL.fps, pattern === '@cut')
-  : pattern.replace(/%0(\d)d/, (_, w) => pad(n, +w)));
+  : PX(pattern).replace(/%0(\d)d/, (_, w) => pad(n, +w)));
 const frameAt = t => Math.min(TL.aroll?.count || 1e9, Math.max(1, Math.floor(t * TL.fps + 1e-6) + 1));
 
 // Media item: "x.jpg" | {src} | {seq:"dir/%05d.jpg", fps, count, t0}
@@ -469,6 +471,14 @@ window.init = async (timeline) => {
   await document.fonts.ready;
   return true;
 };
+
+// S29 M213: ảnh 540p lỗi (chưa trích đủ, hỏng) → đổi về ảnh gốc, chuỗi đó thôi dùng 540p (bắt ở pha capture: lỗi ảnh không nổi bọt).
+if (typeof document !== 'undefined' && typeof PreviewProxy !== 'undefined') document.addEventListener('error', e => {
+  const im = e.target;
+  if (im?.tagName !== 'IMG' || !TL?.preview_proxy) return;
+  const s = PreviewProxy.fallback(TL.preview_proxy, im.getAttribute('src'), url);
+  if (s) im.src = s;
+}, true);
 
 // Decode every image of the next frame BEFORE it replaces the visible one, so live playback never shows a
 // half-loaded (black) frame. Decoded images are kept in a small LRU so the swap paints them immediately.
