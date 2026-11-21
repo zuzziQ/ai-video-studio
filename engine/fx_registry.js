@@ -21,7 +21,6 @@
     outExpo: k => (k >= 1 ? 1 : 1 - Math.pow(2, -10 * k)),
     inOutSine: k => -(Math.cos(Math.PI * k) - 1) / 2,
   };
-  const DUR = { t: 'num', min: 0.1, max: 1.5, def: 0.4 };
 
   const GROUPS = {
     trans: [['basic', 'Cơ bản'], ['slide', 'Trượt'], ['camera', 'Camera'], ['light', 'Ánh sáng'], ['mask', 'Mặt nạ'], ['distort', 'Nhiễu']],
@@ -33,54 +32,206 @@
     anim_loop: [['move', 'Chuyển động'], ['light', 'Ánh sáng'], ['letter', 'Từng chữ']],
   };
 
+  // ---- S29 M203: tham số chuyển cảnh. Chung: dur (0.1–3 s), ease (5 preset, đường cong thời gian áp lên k trước fn; 'auto' = giữ
+  // nhịp riêng của loại, nên dữ liệu cũ không có params dựng ra giống hệt). Riêng: dir (trượt, đẩy, gạt, lia, lật), color (flash,
+  // qua màu, nhấp nháy), intensity (nhiễu, lắc, tách RGB). Nhãn hiện trong inspector chỗ nối: label + vl (nhãn từng giá trị).
+  const DUR = { t: 'num', min: 0.1, max: 3, def: 0.4, label: 'Thời lượng' };
+  const EASE = { auto: k => k, smooth: E.inOutSine, accel: k => k * k, decel: k => 1 - (1 - k) * (1 - k), snap: E.outExpo };
+  const EASE_P = { t: 'enum', values: Object.keys(EASE), def: 'auto', label: 'Nhịp',
+    vl: { auto: 'Mặc định', smooth: 'Mượt', accel: 'Nhanh dần', decel: 'Chậm dần', snap: 'Bật' } };
+  const DIR = def => ({ t: 'enum', values: ['l', 'r', 'u', 'd'], def, label: 'Hướng', vl: { l: 'Sang trái', r: 'Sang phải', u: 'Lên', d: 'Xuống' } });
+  const COLORS = { white: '#fff', black: '#000', warm: '#ffb648', pink: '#ff4f9a', blue: '#4fb8ff' };
+  const COLOR = def => ({ t: 'enum', values: Object.keys(COLORS), def, label: 'Màu', vl: { white: 'Trắng', black: 'Đen', warm: 'Vàng ấm', pink: 'Hồng', blue: 'Xanh' } });
+  const TINT = { t: 'num', min: 0.2, max: 2, def: 1, label: 'Cường độ' };
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), f3t = v => v.toFixed(3);
+  const tri = k => 1 - Math.abs(k - .5) * 2, bell = k => Math.sin(Math.PI * k), half = k => (k >= .5 ? 1 : 0);
+  const AX = { l: ['X', 1], r: ['X', -1], u: ['Y', 1], d: ['Y', -1] };
+  const mv = (d, v) => { const [a, s] = AX[d] || AX.l; return `translate${a}(${(s * v).toFixed(2)}%)`; };
+  const INSET = { r: v => `inset(0 ${v}% 0 0)`, l: v => `inset(0 0 0 ${v}%)`, d: v => `inset(0 0 ${v}% 0)`, u: v => `inset(${v}% 0 0 0)` };
+  const veil = (bg, a, extra = '') => `<div class="full" style="pointer-events:none;${extra}background:${bg};opacity:${f3t(a)}"></div>`;
+  const msk = m => `-webkit-mask-image:${m};mask-image:${m}`;
+  // Hình mặt nạ (điểm quanh tâm, bán kính ~1): tim, sao 5 cánh, thoi. cover = hệ số phóng để phủ kín góc khung ở k = 1.
+  const SHAPES = {
+    heart: { cover: 2.6, pts: Array.from({ length: 40 }, (_, i) => { const t = i / 40 * Math.PI * 2; return [16 * Math.sin(t) ** 3 / 17, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 17 - .1]; }) },
+    star: { cover: 2.1, pts: Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? .45 : 1; return [r * Math.cos(a), r * Math.sin(a)]; }) },
+    diamond: { cover: 1.05, pts: [[0, -1], [1, 0], [0, 1], [-1, 0]] },
+  };
+  const shapeClip = (id, k) => { const S = SHAPES[id], s = E.inOutSine(k) * S.cover * 100; return `clip-path:polygon(${S.pts.map(([x, y]) => `${f2(50 + x * s)}% ${f2(50 + y * s)}%`).join(',')})`; };
+
   const TRANS = [
-    { id: 'fade', label: 'Mờ dần', group: 'basic', icon: 'ti-blur', params: { dur: DUR },
+    { id: 'fade', label: 'Mờ dần', group: 'basic', icon: 'ti-blur', params: { dur: DUR, ease: EASE_P },
       fn: k => [`opacity:${k}`, ''],
       ai: { mood: 'nhẹ, trung tính', nhip: 'chậm–vừa', khi_nao: 'đổi ý trong cùng mạch kể, chuyển giữa hai đoạn nói', tranh: 'video bán hàng nhịp nhanh, cần cú đấm' } },
-    { id: 'dissolve', label: 'Hoà tan', group: 'basic', icon: 'ti-droplet-half-2', params: { dur: DUR },
+    { id: 'dissolve', label: 'Hoà tan', group: 'basic', icon: 'ti-droplet-half-2', params: { dur: DUR, ease: EASE_P },
       fn: k => [`opacity:${k}`, ''],
       ai: { mood: 'mềm, cảm xúc, hoài niệm', nhip: 'chậm', khi_nao: 'cảnh đẹp, kể chuyện, trước/sau theo thời gian', tranh: 'nội dung tin tức, hướng dẫn cần rõ ràng' } },
-    { id: 'slide_l', label: 'Trượt trái', group: 'slide', icon: 'ti-arrow-big-left-lines', params: { dur: DUR },
-      fn: k => [`transform:translateX(${((1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
+    { id: 'slide_l', label: 'Trượt trái', group: 'slide', icon: 'ti-arrow-big-left-lines', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outCubic(k)) * 100)}`, ''],
       ai: { mood: 'gọn, tiến tới', nhip: 'vừa', khi_nao: 'sang ý tiếp theo, bước kế trong danh sách', tranh: 'dùng liên tục mọi chỗ nối (đơn điệu)' } },
-    { id: 'slide_r', label: 'Trượt phải', group: 'slide', icon: 'ti-arrow-big-right-lines', params: { dur: DUR },
-      fn: k => [`transform:translateX(${(-(1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
+    { id: 'slide_r', label: 'Trượt phải', group: 'slide', icon: 'ti-arrow-big-right-lines', params: { dur: DUR, ease: EASE_P, dir: DIR('r') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outCubic(k)) * 100)}`, ''],
       ai: { mood: 'gọn, quay lại', nhip: 'vừa', khi_nao: 'nhắc lại ý trước, so sánh ngược', tranh: 'dùng liên tục mọi chỗ nối (đơn điệu)' } },
-    { id: 'slide_up', label: 'Trượt lên', group: 'slide', icon: 'ti-arrow-big-up-lines', params: { dur: DUR },
-      fn: k => [`transform:translateY(${((1 - E.outCubic(k)) * 100).toFixed(2)}%)`, ''],
+    { id: 'slide_up', label: 'Trượt lên', group: 'slide', icon: 'ti-arrow-big-up-lines', params: { dur: DUR, ease: EASE_P, dir: DIR('u') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outCubic(k)) * 100)}`, ''],
       ai: { mood: 'hướng lên, tích cực', nhip: 'vừa–nhanh', khi_nao: 'kết quả, con số tăng, video dọc kiểu lướt feed', tranh: 'tin buồn, nội dung trầm' } },
-    { id: 'push', label: 'Đẩy', group: 'slide', icon: 'ti-arrows-right', params: { dur: DUR },
-      fn: k => [`transform:translateX(${((1 - E.inOutSine(k)) * 100).toFixed(2)}%)`, `transform:translateX(${(-E.inOutSine(k) * 100).toFixed(2)}%)`],
+    { id: 'push', label: 'Đẩy', group: 'slide', icon: 'ti-arrows-right', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.inOutSine(k)) * 100)}`, `transform:${mv(p.dir, -E.inOutSine(k) * 100)}`],
       ai: { mood: 'liền mạch, chuyên nghiệp', nhip: 'vừa', khi_nao: 'chuyển địa điểm, sản phẩm này sang sản phẩm khác', tranh: 'hai clip gần giống nhau (trông như giật)' } },
-    { id: 'zoom', label: 'Phóng vào', group: 'camera', icon: 'ti-zoom-in', params: { dur: DUR },
+    { id: 'zoom', label: 'Phóng vào', group: 'camera', icon: 'ti-zoom-in', params: { dur: DUR, ease: EASE_P },
       fn: k => [`opacity:${k};transform:scale(${lerp(1.35, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, .85, k).toFixed(3)})`],
       ai: { mood: 'mạnh, nhấn, hào hứng', nhip: 'nhanh', khi_nao: 'câu hook, tiết lộ, chi tiết sản phẩm, nhịp mạnh của nhạc', tranh: 'đặt dày đặc; nội dung trang trọng' } },
-    { id: 'zoom_out', label: 'Thu ra', group: 'camera', icon: 'ti-zoom-out', params: { dur: DUR },
+    { id: 'zoom_out', label: 'Thu ra', group: 'camera', icon: 'ti-zoom-out', params: { dur: DUR, ease: EASE_P },
       fn: k => [`opacity:${k};transform:scale(${lerp(.7, 1, E.outCubic(k)).toFixed(3)})`, `transform:scale(${lerp(1, 1.25, k).toFixed(3)})`],
       ai: { mood: 'mở rộng, toàn cảnh', nhip: 'vừa', khi_nao: 'từ chi tiết ra toàn cảnh, tổng kết, cảnh BĐS rộng', tranh: 'đầu video (mất hook)' } },
-    { id: 'blur', label: 'Nhoè', group: 'light', icon: 'ti-blur-off', params: { dur: DUR },
+    { id: 'blur', label: 'Nhoè', group: 'light', icon: 'ti-blur-off', params: { dur: DUR, ease: EASE_P },
       fn: k => [`opacity:${k};filter:blur(${((1 - k) * 22).toFixed(1)}px)`, `filter:blur(${(k * 22).toFixed(1)}px)`],
       ai: { mood: 'mơ màng, chuyển trạng thái', nhip: 'chậm–vừa', khi_nao: 'hồi tưởng, chuyển sang suy nghĩ, cảnh sang trọng', tranh: 'video hướng dẫn cần đọc chữ trên màn' } },
-    { id: 'whip', label: 'Lia nhanh', group: 'slide', icon: 'ti-wind', params: { dur: DUR },
-      fn: k => [`transform:translateX(${((1 - E.outExpo(k)) * 110).toFixed(2)}%);filter:blur(${((1 - k) * 26).toFixed(1)}px)`, `transform:translateX(${(-E.inCubic(k) * 110).toFixed(2)}%);filter:blur(${(k * 26).toFixed(1)}px)`],
+    { id: 'whip', label: 'Lia nhanh', group: 'slide', icon: 'ti-wind', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => [`transform:${mv(p.dir, (1 - E.outExpo(k)) * 110)};filter:blur(${((1 - k) * 26).toFixed(1)}px)`, `transform:${mv(p.dir, -E.inCubic(k) * 110)};filter:blur(${(k * 26).toFixed(1)}px)`],
       ai: { mood: 'năng lượng, trẻ, vlog', nhip: 'nhanh', khi_nao: 'đổi cảnh dồn dập, montage, đúng nhịp mạnh', tranh: 'nội dung chậm, tâm sự; dur dài (> 0.5 s)' } },
-    { id: 'spin', label: 'Xoay', group: 'camera', icon: 'ti-rotate-clockwise-2', params: { dur: DUR },
+    { id: 'spin', label: 'Xoay', group: 'camera', icon: 'ti-rotate-clockwise-2', params: { dur: DUR, ease: EASE_P },
       fn: k => [`opacity:${k};transform:rotate(${((1 - E.outCubic(k)) * -25).toFixed(1)}deg) scale(${lerp(1.4, 1, E.outCubic(k)).toFixed(3)})`, ''],
       ai: { mood: 'vui, bất ngờ, giải trí', nhip: 'nhanh', khi_nao: 'twist, chuyển chủ đề vui, video giải trí', tranh: 'thương hiệu sang trọng, nội dung nghiêm túc' } },
-    { id: 'wipe', label: 'Gạt', group: 'mask', icon: 'ti-layout-sidebar-left-expand', params: { dur: DUR },
-      fn: k => [`clip-path:inset(0 ${((1 - E.inOutSine(k)) * 100).toFixed(2)}% 0 0)`, ''],
+    { id: 'wipe', label: 'Gạt', group: 'mask', icon: 'ti-layout-sidebar-left-expand', params: { dur: DUR, ease: EASE_P, dir: DIR('r') },
+      fn: (k, p) => [`clip-path:${(INSET[p.dir] || INSET.r)(((1 - E.inOutSine(k)) * 100).toFixed(2))}`, ''],
       ai: { mood: 'rõ ràng, so sánh', nhip: 'vừa', khi_nao: 'trước/sau, so sánh hai lựa chọn, đổi chương', tranh: 'dùng cho mọi chỗ nối' } },
-    { id: 'circle', label: 'Vòng tròn', group: 'mask', icon: 'ti-circle-dashed', params: { dur: DUR },
+    { id: 'circle', label: 'Vòng tròn', group: 'mask', icon: 'ti-circle-dashed', params: { dur: DUR, ease: EASE_P },
       fn: k => [`clip-path:circle(${(E.outCubic(k) * 75).toFixed(2)}% at 50% 50%)`, ''],
       ai: { mood: 'tập trung, tiết lộ', nhip: 'vừa', khi_nao: 'mở màn sản phẩm, tiết lộ kết quả ở giữa khung', tranh: 'chủ thể lệch mép khung' } },
-    { id: 'flash', label: 'Loé sáng', group: 'light', icon: 'ti-bolt', params: { dur: DUR },
+    { id: 'flash', label: 'Loé sáng', group: 'light', icon: 'ti-bolt', params: { dur: DUR, ease: EASE_P, color: COLOR('white') },
       fn: k => [`opacity:${k > .5 ? 1 : 0}`, ''],
-      overlay: k => `<div class="full" style="background:#fff;opacity:${(1 - Math.abs(k - .5) * 2).toFixed(3)}"></div>`,
-      ai: { mood: 'sốc, cú đấm, khoảnh khắc', nhip: 'rất nhanh', khi_nao: 'đúng beat drop, câu đinh, ảnh chụp/khoảnh khắc', tranh: 'quá 2–3 lần mỗi video; người xem nhạy sáng' } },
-    { id: 'glitch', label: 'Nhiễu', group: 'distort', icon: 'ti-wave-saw-tool', params: { dur: DUR },
-      fn: k => [`opacity:${k > .3 ? 1 : 0};transform:translateX(${k < .9 ? ((rnd(Math.floor(k * 20)) - .5) * 60).toFixed(0) : 0}px)`, ''],
+      overlay: (k, p) => `<div class="full" style="background:${COLORS[p.color] || '#fff'};opacity:${(1 - Math.abs(k - .5) * 2).toFixed(3)}"></div>`,
+      ai: { mood: 'sốc, cú đấm, khoảnh khắc', nhip: 'rất nhanh', khi_nao: 'đúng beat drop, câu đinh, ảnh chụp/khoảnh khắc (color black = chớp đen)', tranh: 'quá 2–3 lần mỗi video; người xem nhạy sáng' } },
+    { id: 'glitch', label: 'Nhiễu', group: 'distort', icon: 'ti-wave-saw-tool', params: { dur: DUR, ease: EASE_P, intensity: TINT },
+      fn: (k, p) => [`opacity:${k > .3 ? 1 : 0};transform:translateX(${k < .9 ? ((rnd(Math.floor(k * 20)) - .5) * 60 * p.intensity).toFixed(0) : 0}px)`, ''],
       ai: { mood: 'công nghệ, gắt, căng', nhip: 'nhanh', khi_nao: 'tin công nghệ/AI, lỗi, bất ngờ tiêu cực, nhạc điện tử', tranh: 'thương hiệu mềm mại, mỹ phẩm, BĐS cao cấp' } },
+
+    // ---- S29 M203: 24 loại mới (CSS thuần, hàm thuần theo k) ----
+    // Cơ bản
+    { id: 'dip', label: 'Qua màu', group: 'basic', icon: 'ti-circle-half-2', params: { dur: DUR, ease: EASE_P, color: COLOR('black') },
+      fn: k => [`opacity:${half(k)}`, ''],
+      overlay: (k, p) => veil(COLORS[p.color] || '#000', bell(k)),
+      ai: { mood: 'trầm, ngắt chương', nhip: 'chậm', khi_nao: 'hết một phần, chuyển thời gian, mở đầu/kết video (đen); trắng = mơ, hồi tưởng', tranh: 'giữa hai câu liền mạch; dur ngắn (< 0.4 s)' } },
+    { id: 'soft_zoom', label: 'Mờ phóng nhẹ', group: 'basic', icon: 'ti-zoom-pan', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(k)};transform:scale(${f3t(lerp(1.08, 1, E.outCubic(k)))})`, ''],
+      ai: { mood: 'nhẹ, có hồn', nhip: 'vừa', khi_nao: 'thay mờ dần cho video sang, lifestyle, BĐS', tranh: 'montage nhanh' } },
+    { id: 'soft_slide', label: 'Mờ trượt nhẹ', group: 'basic', icon: 'ti-arrow-move-up', params: { dur: DUR, ease: EASE_P, dir: DIR('u') },
+      fn: (k, p) => [`opacity:${f3t(k)};transform:${mv(p.dir, (1 - E.outCubic(k)) * 8)}`, ''],
+      ai: { mood: 'gọn, hiện đại', nhip: 'vừa', khi_nao: 'chuyển ý trong video hướng dẫn, khoá học, giới thiệu sản phẩm', tranh: 'cần cú đấm mạnh' } },
+    { id: 'blink', label: 'Chớp mắt', group: 'basic', icon: 'ti-eye-closed', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const o = f2(E.inCubic(c01(k * 2)) * 50), i = f2((1 - E.outCubic(c01((k - .5) * 2))) * 50);
+        return [k < .5 ? 'opacity:0' : `clip-path:inset(${i}% 0 ${i}% 0)`, `clip-path:inset(${o}% 0 ${o}% 0)`];
+      },
+      ai: { mood: 'tò mò, góc nhìn nhân vật', nhip: 'vừa', khi_nao: 'tỉnh dậy, "nhìn lại", chuyển sang góc nhìn người nói', tranh: 'dùng nhiều lần; nội dung nghiêm túc' } },
+    // Camera
+    { id: 'pull_in', label: 'Kéo vào', group: 'camera', icon: 'ti-focus-centered', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(c01((k - .35) / .4))};transform:scale(${f3t(lerp(1.3, 1, E.outCubic(k)))})`, `transform:scale(${f3t(lerp(1, 2.4, E.inCubic(k)))});filter:blur(${f1(k * 10)}px)`],
+      ai: { mood: 'lao tới, cuốn vào', nhip: 'nhanh', khi_nao: 'đi sâu vào chi tiết, "bên trong có gì", vlog du lịch', tranh: 'chủ thể nằm sát mép khung' } },
+    { id: 'zoom_blur', label: 'Zoom mờ', group: 'camera', icon: 'ti-zoom-scan', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const g = E.inCubic(c01(k * 2)), h = E.outCubic(c01((k - .5) * 2));
+        return [k < .5 ? 'opacity:0' : `transform:scale(${f3t(lerp(1.5, 1, h))});filter:blur(${f1((1 - h) * 18)}px)`, `transform:scale(${f3t(lerp(1, 1.5, g))});filter:blur(${f1(g * 18)}px)`];
+      },
+      ai: { mood: 'tốc độ, kịch tính', nhip: 'nhanh', khi_nao: 'nối hai cảnh hành động, beat drop, thể thao, xe', tranh: 'nội dung nhẹ nhàng, chữ trên màn cần đọc' } },
+    { id: 'shake', label: 'Lắc', group: 'camera', icon: 'ti-vibration', params: { dur: DUR, ease: EASE_P, intensity: TINT },
+      fn: (k, p) => {
+        const a = 4 * p.intensity * tri(k), f = Math.floor(k * 24);
+        const t = `transform:translate(${f2((rnd(f) - .5) * 2 * a)}%,${f2((rnd(f + 97) - .5) * 2 * a)}%) rotate(${f2((rnd(f + 31) - .5) * a)}deg) scale(${f3t(1 + .02 * a)})`;
+        return [`opacity:${half(k)};${t}`, t];
+      },
+      ai: { mood: 'sốc, rung động', nhip: 'rất nhanh', khi_nao: 'tin sốc, cú va, tiếng bass mạnh, phản ứng bất ngờ', tranh: 'quá 2 lần mỗi video; nội dung sang trọng' } },
+    // Ánh sáng
+    { id: 'leak', label: 'Rò sáng', group: 'light', icon: 'ti-sun-high', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(k)}`, ''],
+      overlay: k => { const x = f1(lerp(-10, 110, k)), y = f1(lerp(110, -10, k)); return veil(`radial-gradient(ellipse 60% 80% at ${x}% 30%, rgba(255,170,70,.95), rgba(255,70,110,.5) 45%, transparent 75%),radial-gradient(ellipse 45% 60% at ${y}% 80%, rgba(255,220,140,.7), transparent 70%)`, bell(k), 'mix-blend-mode:screen;'); },
+      ai: { mood: 'ấm, hoài niệm, phim', nhip: 'chậm–vừa', khi_nao: 'vlog, đám cưới, du lịch, kỷ niệm, hoàng hôn', tranh: 'công nghệ, tin tức' } },
+    { id: 'burn', label: 'Cháy phim', group: 'light', icon: 'ti-flame', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${half(k)}`, ''],
+      overlay: k => { const a = bell(k), r = 20 + a * 110; return veil(`radial-gradient(circle at 18% 82%, rgba(255,255,230,.95) 0%, rgba(255,170,50,.9) ${f1(r * .35)}%, rgba(210,50,0,.75) ${f1(r * .7)}%, transparent ${f1(r)}%)`, a, 'mix-blend-mode:screen;'); },
+      ai: { mood: 'cổ điển, phim nhựa, mạnh', nhip: 'vừa', khi_nao: 'kể chuyện kiểu phim, chuyển thời kỳ, retro', tranh: 'thương hiệu sạch, y tế, văn phòng' } },
+    { id: 'bloom', label: 'Sáng loá', group: 'light', icon: 'ti-sun', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`opacity:${f3t(k)};filter:brightness(${f3t(1 + 2 * (1 - k))})`, `filter:brightness(${f3t(1 + 2 * k)})`],
+      ai: { mood: 'mơ, thiên đường, tích cực', nhip: 'vừa', khi_nao: 'kết quả đẹp, tiết lộ sản phẩm, cảnh nắng', tranh: 'cảnh đã cháy sáng sẵn' } },
+    { id: 'strobe', label: 'Nhấp nháy', group: 'light', icon: 'ti-bulb', params: { dur: DUR, ease: EASE_P, color: COLOR('white') },
+      fn: k => [`opacity:${half(k)}`, ''],
+      overlay: (k, p) => veil(COLORS[p.color] || '#fff', (Math.floor(k * 7) % 2 ? 0 : 1) * (.9 - .5 * k)),
+      ai: { mood: 'tiệc, sân khấu, dồn dập', nhip: 'rất nhanh', khi_nao: 'nhạc EDM, sự kiện, đếm ngược', tranh: 'người xem nhạy sáng; dùng quá 1 lần' } },
+    // Nhiễu
+    { id: 'rgb_split', label: 'Tách RGB', group: 'distort', icon: 'ti-layers-difference', params: { dur: DUR, ease: EASE_P, intensity: TINT },
+      fn: k => [`opacity:${half(k)}`, ''],
+      // 3 bản sao (đỏ / lục / lam) lệch ngang, cộng sáng lại; bản giữa giữ data-cid. Nặng gấp 3 lần vẽ khung trong đoạn chuyển.
+      wrap: (k, p) => h => {
+        const o = 3 * p.intensity * tri(k);
+        if (o < .02) return h;
+        return `<div class="full" style="background:#000;isolation:isolate">${[['#f00', -o, noCid(h)], ['#0f0', 0, h], ['#00f', o, noCid(h)]].map(([c, dx, x]) =>
+          `<div class="full" style="mix-blend-mode:screen;transform:translateX(${f2(dx)}%)">${x}<div class="full" style="pointer-events:none;mix-blend-mode:multiply;background:${c}"></div></div>`).join('')}</div>`;
+      },
+      ai: { mood: 'công nghệ, gắt, MV', nhip: 'nhanh', khi_nao: 'tin AI/công nghệ, nhạc điện tử, cú twist', tranh: 'mỹ phẩm, BĐS cao cấp; máy yếu (render nặng)' } },
+    { id: 'ripple', label: 'Gợn', group: 'distort', icon: 'ti-ripple', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`clip-path:circle(${f2(E.outCubic(k) * 75)}% at 50% 50%);transform:scale(${f3t(1 + .05 * Math.sin(k * Math.PI * 6) * (1 - k))})`, `transform:scale(${f3t(1 + .03 * Math.sin(k * Math.PI * 6 + 1) * tri(k))})`],
+      overlay: k => veil(`repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.4) 0 2px, transparent 2px ${f1(18 + 40 * k)}px)`, .5 * bell(k)),
+      ai: { mood: 'mơ, nước, chuyển trạng thái', nhip: 'vừa', khi_nao: 'hồi tưởng, giấc mơ, đồ uống, spa', tranh: 'video hướng dẫn cần rõ' } },
+    { id: 'stretch', label: 'Kéo giãn', group: 'distort', icon: 'ti-arrows-horizontal', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const g = E.inCubic(c01(k * 2)), h = E.outCubic(c01((k - .5) * 2));
+        return [k < .5 ? 'opacity:0' : `transform:scale(${f3t(lerp(3, 1, h))},${f3t(lerp(.3, 1, h))});filter:blur(${f1((1 - h) * 8)}px)`, `transform:scale(${f3t(lerp(1, 3, g))},${f3t(lerp(1, .3, g))});filter:blur(${f1(g * 8)}px)`];
+      },
+      ai: { mood: 'vui, đàn hồi, meme', nhip: 'nhanh', khi_nao: 'giải trí, phản ứng hài, đổi cảnh bất ngờ', tranh: 'nội dung trang trọng, mặt người cận' } },
+    { id: 'tv', label: 'TV tắt', group: 'distort', icon: 'ti-device-tv-old', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const g = c01(k * 2), h = c01((k - .5) * 2);
+        return [k < .5 ? 'opacity:0' : `transform:scale(1,${f3t(Math.max(.004, E.outCubic(h)))});filter:brightness(${f3t(1 + 2 * (1 - h))})`,
+          `transform:scale(${f3t(lerp(1, 1.04, g))},${f3t(Math.max(.004, 1 - E.inCubic(g)))});filter:brightness(${f3t(1 + 2 * g)})`];
+      },
+      ai: { mood: 'retro, kết thúc, hài', nhip: 'nhanh', khi_nao: 'tắt một ý/chủ đề, "hết giờ", nội dung retro, chuyển kênh', tranh: 'giữa hai câu liền mạch' } },
+    { id: 'scan', label: 'Vạch quét', group: 'distort', icon: 'ti-scan', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`clip-path:inset(0 0 ${f2((1 - E.inOutSine(k)) * 100)}% 0)`, ''],
+      overlay: k => { const y = E.inOutSine(k) * 100; return veil(`linear-gradient(180deg, transparent ${f1(y - 3)}%, rgba(120,220,255,.9) ${f1(y)}%, transparent ${f1(y + .6)}%),repeating-linear-gradient(rgba(0,0,0,.25) 0 1px, transparent 1px 3px)`, bell(k)); },
+      ai: { mood: 'công nghệ, phân tích', nhip: 'vừa', khi_nao: 'quét/phân tích dữ liệu, demo app, AI, giao diện', tranh: 'cảnh thiên nhiên, cảm xúc' } },
+    // Mặt nạ
+    { id: 'heart', label: 'Lau hình tim', group: 'mask', icon: 'ti-heart', params: { dur: DUR, ease: EASE_P },
+      fn: k => [shapeClip('heart', k), ''],
+      ai: { mood: 'dễ thương, yêu thương', nhip: 'vừa', khi_nao: 'cặp đôi, quà tặng, mẹ và bé, cảm ơn khách', tranh: 'tin tức, công nghệ, nội dung nghiêm túc' } },
+    { id: 'star', label: 'Lau hình sao', group: 'mask', icon: 'ti-star', params: { dur: DUR, ease: EASE_P },
+      fn: k => [shapeClip('star', k), ''],
+      ai: { mood: 'vui, nổi bật, giải thưởng', nhip: 'vừa', khi_nao: 'khoảnh khắc nổi bật, đánh giá 5 sao, trẻ em, chúc mừng', tranh: 'thương hiệu sang trọng' } },
+    { id: 'diamond', label: 'Lau hình thoi', group: 'mask', icon: 'ti-diamond', params: { dur: DUR, ease: EASE_P },
+      fn: k => [shapeClip('diamond', k), ''],
+      ai: { mood: 'sắc, hình học, thời trang', nhip: 'vừa', khi_nao: 'thời trang, trang sức, giới thiệu bộ sưu tập', tranh: 'chủ thể lệch mép khung' } },
+    { id: 'diagonal', label: 'Lau chéo', group: 'mask', icon: 'ti-slash', params: { dur: DUR, ease: EASE_P },
+      fn: k => { const x = E.inOutSine(k) * 200; return [`clip-path:polygon(0 0,${f2(x)}% 0,${f2(x - 100)}% 100%,0 100%)`, '']; },
+      ai: { mood: 'động, thể thao', nhip: 'vừa–nhanh', khi_nao: 'so sánh, đổi chương nhanh, thể thao, ưu đãi', tranh: 'dùng cho mọi chỗ nối' } },
+    { id: 'curtain', label: 'Rèm mở', group: 'mask', icon: 'ti-layout-columns', params: { dur: DUR, ease: EASE_P },
+      fn: k => { const v = f2((1 - E.inOutSine(k)) * 50); return [`clip-path:inset(0 ${v}% 0 ${v}%)`, '']; },
+      ai: { mood: 'trang trọng, ra mắt', nhip: 'vừa', khi_nao: 'ra mắt sản phẩm, khai trương, mở màn sự kiện', tranh: 'giữa video nhịp nhanh' } },
+    { id: 'blinds', label: 'Lá sách', group: 'mask', icon: 'ti-blinds', params: { dur: DUR, ease: EASE_P },
+      fn: k => { const w = f2(E.inOutSine(k) * 10); return [msk(`repeating-linear-gradient(90deg,#000 0 ${w}%,transparent ${w}% 10%)`), '']; },
+      ai: { mood: 'gọn, đồ hoạ, doanh nghiệp', nhip: 'vừa', khi_nao: 'trình bày, slide doanh nghiệp, nội thất', tranh: 'cảnh nhiều chi tiết dọc (rối mắt)' } },
+    { id: 'grid', label: 'Lưới ô', group: 'mask', icon: 'ti-layout-grid', params: { dur: DUR, ease: EASE_P },
+      fn: k => {
+        const r = E.inOutSine(k) * 50, a = f2(50 - r), b = f2(50 + r), band = d => `linear-gradient(${d},transparent ${a}%,#000 ${a}% ${b}%,transparent ${b}%)`;
+        return [`${msk(`${band('90deg')},${band('180deg')}`)};-webkit-mask-size:12.5% 12.5%;mask-size:12.5% 12.5%;-webkit-mask-composite:source-in;mask-composite:intersect`, ''];
+      },
+      ai: { mood: 'công nghệ, sắp xếp, vui', nhip: 'vừa', khi_nao: 'tổng hợp nhiều sản phẩm, danh sách, giao diện app', tranh: 'cảnh mặt người cận' } },
+    // Trượt
+    { id: 'flip', label: 'Lật 3D', group: 'slide', icon: 'ti-rotate-3d', params: { dur: DUR, ease: EASE_P, dir: DIR('l') },
+      fn: (k, p) => {
+        const v = p.dir === 'u' || p.dir === 'd', s = p.dir === 'r' || p.dir === 'u' ? -1 : 1, A = v ? 'X' : 'Y';
+        const g = E.inCubic(c01(k * 2)), h = E.outCubic(c01((k - .5) * 2));
+        return [k < .5 ? 'opacity:0' : `transform:perspective(1600px) rotate${A}(${f1(s * 90 * (1 - h))}deg)`, `${k < .5 ? '' : 'opacity:0;'}transform:perspective(1600px) rotate${A}(${f1(-s * 90 * g)}deg)`];
+      },
+      ai: { mood: 'vui, lật mặt, trước/sau', nhip: 'vừa', khi_nao: 'trước/sau, lật thẻ, đáp án câu hỏi, mặt sau sản phẩm', tranh: 'dùng liên tục; nội dung trầm' } },
+    { id: 'page', label: 'Lật trang', group: 'slide', icon: 'ti-book-2', params: { dur: DUR, ease: EASE_P },
+      fn: k => [`transform-origin:0 50%;transform:perspective(1800px) rotateY(${f1(-(1 - E.outCubic(k)) * 90)}deg)`, `filter:brightness(${f3t(1 - .45 * bell(k))})`],
+      ai: { mood: 'kể chuyện, sách, hướng dẫn', nhip: 'vừa', khi_nao: 'chương mới, bước tiếp theo trong hướng dẫn, khoá học', tranh: 'montage nhanh' } },
   ];
+  // Hàm của mục luôn nhận tham số đã kẹp (thiếu → mặc định): fn(k) cũ vẫn đúng như trước, fn(k, {dir:'r'}) đổi hướng.
+  for (const x of TRANS) for (const f of ['fn', 'overlay', 'wrap']) {
+    const raw = x[f];
+    if (raw) x[f] = (k, p) => raw(k, params('trans', x.id, p));
+  }
+  const ease = (id, k) => (EASE[id] || EASE.auto)(k);
 
   // Hoạt ảnh vào của dòng chữ (L.anim, engine/vertical.js textLine). Thứ tự = thứ tự nút trong Studio.
   const TEXT_IN = [
@@ -370,7 +521,9 @@
     GROUPS, TRANS, TEXT_IN, LUT, list, get, ids, groupLabel, params, aiGuide, docTable,
     // engine/engine.js
     transFns: () => Object.fromEntries(TRANS.map(x => [x.id, x.fn])),
-    transOverlay: (id, k) => get('trans', id)?.overlay?.(k) || '',
+    transOverlay: (id, k, p) => get('trans', id)?.overlay?.(k, p) || '',
+    // S29 M203: nhịp (ease) áp lên k trước fn / overlay / wrap; wrap gói cả lớp chuyển cảnh (tách RGB), không có thì giữ html
+    ease, transWrap: (id, k, p, html) => { const w = get('trans', id)?.wrap; return w ? w(k, p)(html) : html; },
     lutCss: () => Object.fromEntries(LUT.map(x => [x.id, x.css])),
     // studio (dạng mảng cũ của clips.js / library.js)
     transTypes: () => TRANS.map(x => [x.id, x.label, x.icon]),

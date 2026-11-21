@@ -142,7 +142,7 @@ test('checkPick: việc lạ → answer; tham số ngoài bảng bỏ, số kẹ
   p = AC.checkPick({ action: 'elem_edit', params: { ask: 'to' } }, video); // việc của phạm vi khác
   assert.equal(p.action, 'answer');
   p = AC.checkPick({ tool: 'Transitions', args: { type: 'whip', dur: '9', src: '/etc/passwd' } }, video);
-  assert.equal(p.action, 'transitions'); assert.deepEqual(p.params, { type: 'whip', dur: 1.5 }); assert.ok(p.warnings.some(w => /src/.test(w)));
+  assert.equal(p.action, 'transitions'); assert.deepEqual(p.params, { type: 'whip', dur: 3 }); // S29 M203: dur tới 3 s assert.ok(p.warnings.some(w => /src/.test(w)));
   p = AC.checkPick({ action: 'transitions', params: { type: 'explode' } }, video);
   assert.equal(p.action, 'answer'); assert.ok(p.reply);
   p = AC.checkPick({ action: 'autofill', params: {} }, video); assert.deepEqual(p.params, { mode: 'all' });

@@ -26,6 +26,18 @@
   // Mô tả cho mô hình chọn chuyển cảnh theo nội dung (không chọn bừa): một dòng mỗi loại từ FX.TRANS[].ai
   const TRANS_GUIDE = `Chọn type theo nội dung và nhịp: ${FX.aiGuide('trans', ' | ')}.`;
   const TDUR = FX.TRANS[0].params.dur;
+  // S29 M203: tham số riêng của chuyển cảnh (ease mọi loại; dir / color / intensity chỉ loại có) — Claude đặt kèm type
+  const TP = FX.TRANS.find(x => x.id === 'whip').params, TPC = FX.get('trans', 'flash').params.color, TPI = FX.get('trans', 'glitch').params.intensity;
+  const TPARAMS = { ease: { t: 'enum', values: TP.ease.values }, dir: { t: 'enum', values: TP.dir.values }, color: { t: 'enum', values: TPC.values }, intensity: { t: 'num', min: TPI.min, max: TPI.max } };
+  const TPARAM_HELP = ' ease = nhịp (auto mặc định, smooth, accel, decel, snap); dir = hướng l/r/u/d (trượt, đẩy, gạt, lia, lật); color = màu (flash, dip, strobe); intensity = cường độ 0.2–2 (glitch, shake, rgb_split). Bỏ trống = mặc định.';
+  // giữ các tham số loại `type` có (đã kẹp), bỏ dur và giá trị bằng mặc định; không còn gì → undefined
+  function transParams(type, p) {
+    const d = FX.get('trans', type); if (!d || !p) return undefined;
+    const v = FX.params('trans', type, p), out = {};
+    for (const [n, s] of Object.entries(d.params)) if (n !== 'dur' && p[n] != null && v[n] !== s.def) out[n] = v[n];
+    return Object.keys(out).length ? out : undefined;
+  }
+  const transOf = p => { const params = transParams(p.type, p); return { type: p.type, dur: r2(p.dur ?? 0.4), ...(params ? { params } : {}) }; };
   const AUTOFILL = ['all', 'broll', 'sfx'];
   const DENS = ['thua', 'vua', 'day'];
   // = /api/publish/platforms (scripts/publish.mjs); 'all' = mọi nền tảng đang tích ở hộp Đăng
@@ -81,8 +93,8 @@
     ai_build: { what: 'AI dựng lại cả video (gói style, graphic, phụ đề, nhạc). Dùng khi muốn đổi phong cách, nhịp, "sôi động hơn", "sang hơn".',
       params: { extra: { t: 'str', max: 200 }, density: { t: 'enum', values: DENS } } },
     autofill: { what: 'Tự thêm b-roll (broll), âm thanh SFX + nhạc (sfx) hoặc cả hai (all).', params: { mode: { t: 'enum', values: AUTOFILL } } },
-    transitions: { what: `Đặt cùng một chuyển cảnh cho mọi chỗ nối giữa các clip (type "none" = bỏ hết). ${TRANS_GUIDE}`,
-      params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max } } },
+    transitions: { what: `Đặt cùng một chuyển cảnh cho mọi chỗ nối giữa các clip (type "none" = bỏ hết). ${TRANS_GUIDE}${TPARAM_HELP}`,
+      params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max }, ...TPARAMS } },
     elem_edit: { what: 'Sửa element đang chọn (kiểu, màu, font, vị trí, cỡ, hoạt ảnh, thời lượng, viết lại chữ). ask = câu yêu cầu ngắn gọn bằng tiếng Việt.',
       params: { ask: { t: 'str', max: 200 } } },
     elem_variants: { what: 'Đưa 3 biến thể của element đang chọn để người dùng xem và chọn.', params: {} },
@@ -90,7 +102,7 @@
     // S27 M199: Claude dựng element riêng (box, nền box chữ, khung, nhãn…) khi thư viện không có cái hợp (72_celem.js)
     elem_create: { what: 'Dựng MỚI một element đồ hoạ riêng theo thương hiệu (box chữ, nền chữ, khung, nhãn giá, thẻ…) rồi chèn tại playhead; 3 phương án xem bằng ảnh. ask = mô tả element bằng tiếng Việt.',
       params: { ask: { t: 'str', max: 300 } } },
-    clip_transition: { what: `Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ). ${TRANS_GUIDE}`, params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max } } },
+    clip_transition: { what: `Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ). ${TRANS_GUIDE}${TPARAM_HELP}`, params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max }, ...TPARAMS } },
     // ---- M154: Chuẩn bị ----
     brand_ai: { what: 'Dựng bộ thương hiệu (vai trò 4 màu, cặp font, giọng văn, slogan, CTA) từ logo đã tải, tên và website. website = link nếu người dùng đưa.',
       params: { website: { t: 'str', max: 200 } } },
@@ -262,13 +274,13 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
       if (!i) return;
       if (range && (starts[i] < range.a - 0.05 || starts[i] > range.b + 0.05)) return;
       if (!p.type || p.type === 'none') { if (c.transition) { delete c.transition; n++; } return; }
-      c.transition = { type: p.type, dur: r2(p.dur ?? 0.4) }; n++;
+      c.transition = transOf(p); n++;
     });
     return n;
   }
   function clipTransitionApply(tl, idx, p) {
     const c = tl.clips?.[idx]; if (!c || idx <= 0) return false;
-    if (!p.type || p.type === 'none') delete c.transition; else c.transition = { type: p.type, dur: r2(p.dur ?? 0.4) };
+    if (!p.type || p.type === 'none') delete c.transition; else c.transition = transOf(p);
     return true;
   }
   // Khoảng thời gian có đổi giữa hai bản { TL, CAP }: cảnh / phụ đề / sfx / nhạc mới hoặc khác; chỗ nối đổi chuyển cảnh.
@@ -405,7 +417,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply,
     logEntry, logPush, logParse, changeSummary, regionOf, frameAt, ANIM_GUIDE, elemAnimApply }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;

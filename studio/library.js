@@ -41,7 +41,7 @@ function openPanel(p) {
 }
 const PANEL_TITLE = Object.fromEntries(RAIL.map(r => [r[0], r[2]]));
 const EXTRA_PANELS = {}; // id -> render fn, added by features via Studio.addPanel
-const SEARCH_PH = { media: 'Tìm media / b-roll (Enter)…', audio: 'Tìm nhạc, SFX…', fx: 'Tìm hiệu ứng…', comp: 'Tìm chữ…', sticker: '', tpl: 'Tìm mẫu…', text: '', trans: '', filter: '' };
+const SEARCH_PH = { media: 'Tìm media / b-roll (Enter)…', audio: 'Tìm nhạc, SFX…', fx: 'Tìm hiệu ứng…', comp: 'Tìm chữ…', sticker: '', tpl: 'Tìm mẫu…', text: '', trans: 'Tìm chuyển cảnh…', filter: '' };
 function renderPanel() {
   $('#libtitle').textContent = PANEL_TITLE[panel];
   $('#libsearch').style.display = SEARCH_PH[panel] ? '' : 'none';
@@ -500,7 +500,9 @@ function libAct(kind, id, how) {
   if (kind === 'sfx') return addSfx(id);
   if (kind === 'trans') {
     if (how === 'all') {
-      pushUndo(); TL.clips.forEach((c, i) => { if (i) { if (id) c.transition = { type: id, dur: r2(transDur) }; else delete c.transition; } }); changed(true); renderPanel();
+      // S29 M203: chỗ nối đang chọn cùng loại thì chép nguyên { type, dur, params } (giữ tham số)
+      const src = sel?.kind === 'clip' && sel.obj.transition?.type === id ? sel.obj.transition : id ? { type: id, dur: r2(transDur) } : null;
+      pushUndo(); TL.clips.forEach((c, i) => { if (i) { if (src) c.transition = JSON.parse(JSON.stringify(src)); else delete c.transition; } }); changed(true); renderPanel();
       return toast(id ? `Đã áp dụng “${id}” cho ${TL.clips.length - 1} chỗ nối` : 'Đã bỏ chuyển cảnh ở mọi chỗ nối');
     }
     if (sel?.kind !== 'clip') { const k = clipAtT(T); if (k && k.i > 0) { select(compOf(k.c)); } else return toast('Chọn một clip (không phải clip đầu)'); }
@@ -674,15 +676,18 @@ async function addPackItem(i, j, o = {}) {
 function panelTrans() {
   const c = sel?.kind === 'clip' ? sel : null, cur = c?.obj.transition?.type || '';
   $('#libbody').innerHTML = `<div class="help">${c ? (c.idx === 0 ? 'Clip đầu tiên không có chuyển cảnh vào — chọn clip phía sau.' : `Áp dụng cho chuyển cảnh <b>vào clip ${c.idx + 1}</b>.`) : `Chọn một clip trên track chính. ${tip('Hoặc kéo hiệu ứng thả vào chỗ nối giữa hai clip.')}`}</div>
-    <div class="slrow"><span>Thời lượng</span><input type="range" min=".1" max="1.5" step=".05" value="${c?.obj.transition?.dur ?? transDur}" data-transdur><b id="tdv">${(c?.obj.transition?.dur ?? transDur).toFixed(2)}s</b></div>
-    <div class="trgrid"><button class="tr ${cur ? '' : 'on'}" data-tr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
-    ${TRANS_TYPES.map(([k, l, ic]) => `<button class="tr ${cur === k ? 'on' : ''}" data-tr="${k}" draggable="true"><span class="demo t-${k}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
+    <div class="slrow"><span>Thời lượng</span><input type="range" min=".1" max="3" step=".05" value="${c?.obj.transition?.dur ?? transDur}" data-transdur><b id="tdv">${(c?.obj.transition?.dur ?? transDur).toFixed(2)}s</b></div>
+    ${window.Studio?.transUI ? Studio.transUI.grid(cur, 'tr', query) /* S29 M203: tab nhóm + tìm (83_transui.js) */ : `<div class="trgrid"><button class="tr ${cur ? '' : 'on'}" data-tr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
+    ${TRANS_TYPES.map(([k, l, ic]) => `<button class="tr ${cur === k ? 'on' : ''}" data-tr="${k}" draggable="true"><span class="demo t-${k}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>`}
+    ${c?.obj.transition ? `<div class="help">Nhịp, hướng, màu, cường độ: mục Chuyển cảnh trong Thuộc tính của clip.</div>` : ''}
     <button class="wide" data-trall><i class="ti ti-copy"></i> Áp dụng cho mọi clip</button>`;
 }
 function setTransition(i, type, dur = transDur) {
   const c = TL.clips?.[i]; if (!c || i === 0) return toast('Clip đầu tiên không có chuyển cảnh vào');
   pushUndo();
-  if (type) c.transition = { type, dur: r2(dur) }; else delete c.transition;
+  // S29 M203: đổi loại giữ tham số loại mới cũng có (ease, dir…)
+  const params = type && window.Studio?.transUI?.cleanParams(type, c.transition?.params);
+  if (type) c.transition = { type, dur: r2(dur), ...(params ? { params } : {}) }; else delete c.transition;
   changed(true); if (panel === 'trans') renderPanel();
 }
 

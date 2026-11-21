@@ -36,7 +36,9 @@
     const my = ++gen;
     P = { btn, type, sp: PC.span(k.t0, S.TL.duration), t0: 0 };
     tag(`Xem thử: ${type ? FX.get('trans', type)?.label || type : 'Không chuyển cảnh'}`);
-    try { await S.win.init(S.previewTL(PC.peekTL(S.TL, idx, type, dur))); } catch (e) { console.error(e); }
+    // S29 M203: xem thử với tham số của chỗ nối (cùng loại: nguyên params; loại khác: phần loại đó cũng có, như khi bấm áp)
+    const params = clip.transition?.type === type ? clip.transition.params : S.transUI?.cleanParams(type, clip.transition?.params);
+    try { await S.win.init(S.previewTL(PC.peekTL(S.TL, idx, type, dur, params))); } catch (e) { console.error(e); }
     if (my !== gen) return;
     P.t0 = performance.now();
     const loop = async () => {

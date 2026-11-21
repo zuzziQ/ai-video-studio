@@ -422,10 +422,10 @@ function clipTabs(c) {
       sect('Điều chỉnh', `${rng('brightness', f.brightness ?? 1, .5, 1.5, .01, 'Độ sáng')}${rng('contrast', f.contrast ?? 1, .5, 1.5, .01, 'Tương phản')}${rng('saturate', f.saturate ?? 1, 0, 2, .01, 'Bão hoà')}
         ${rng('temp', f.temp ?? 0, -1, 1, .01, 'Nhiệt độ')}${rng('hue', f.hue ?? 0, -180, 180, 1, 'Sắc độ', '°')}${rng('blur', f.blur ?? 0, 0, 20, .5, 'Làm mờ', 'px')}
         <div class="acts"><button data-cact="resetcolor"><i class="ti ti-restore"></i> Đặt lại màu</button></div>`, 'ti-adjustments')],
-    ['trans', 'Chuyển cảnh', c.idx === 0 ? sect('', `<div class="help">Clip đầu tiên không có chuyển cảnh vào. ${tip('Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối giữa hai clip.')}</div>`)
+    ['trans', 'Chuyển cảnh', Studio.transUI ? Studio.transUI.insp(c) /* S29 M203: 83_transui.js */ : c.idx === 0 ? sect('', `<div class="help">Clip đầu tiên không có chuyển cảnh vào. ${tip('Chọn clip phía sau, hoặc kéo hiệu ứng từ thư viện Chuyển cảnh thả vào chỗ nối giữa hai clip.')}</div>`)
       : sect('Chuyển cảnh vào clip này', `<div class="trgrid sm"><button class="tr ${o.transition ? '' : 'on'}" data-ctr=""><span class="demo none"><i class="ti ti-ban"></i></span><small>Không</small></button>
         ${TRANS_TYPES.map(([kk, l, ic]) => `<button class="tr ${o.transition?.type === kk ? 'on' : ''}" data-ctr="${kk}"><span class="demo t-${kk}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
-        ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 1.5, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
+        ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 3, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
     ...(Studio.animTab ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204: 81_clipanim.js
   ];
 }

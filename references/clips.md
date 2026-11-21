@@ -28,11 +28,13 @@ Có `TL.clips` (mảng không rỗng) thì engine dựng video nền từ các c
 | `fit` | `cover` (mặc định), `contain`, `blurfill` (vừa khung, nền là chính nó làm mờ, dùng cho clip ngang trong video dọc) |
 | `zoom`, `ox`, `oy` | phóng to 1–3 quanh điểm ox/oy (%) |
 | `cutouts` | chuỗi PNG người đã tách nền, cùng cách đánh số với `src.seq` |
-| `transition` | chuyển cảnh **vào** clip này: `{type, dur}`. `type` là một `id` của bảng *Chuyển cảnh* bên dưới, `dur` 0.1–1.5 s (mặc định 0.4). Clip trước tiếp tục chạy bên dưới, nên tổng thời lượng không đổi |
+| `transition` | chuyển cảnh **vào** clip này: `{type, dur, params?}`. `type` là một `id` của bảng *Chuyển cảnh* bên dưới, `dur` 0.1–3 s (mặc định 0.4). `params` (S29 M203, chỉ ghi giá trị khác mặc định): `ease` nhịp `auto` (đường cong riêng của loại) / `smooth` / `accel` / `decel` / `snap`; `dir` `l` / `r` / `u` / `d` (trượt, đẩy, gạt, lia, lật 3D, mờ trượt); `color` `white` / `black` / `warm` / `pink` / `blue` (loé sáng, qua màu, nhấp nháy); `intensity` 0.2–2 (nhiễu, lắc, tách RGB). Clip trước tiếp tục chạy bên dưới, nên tổng thời lượng không đổi |
 | `hidden` | bỏ qua clip |
 
 ## Danh sách hiệu ứng (sinh từ `engine/fx_registry.js`)
 Nguồn duy nhất là `engine/fx_registry.js` (S28 `M202`): engine, Studio và prompt Claude đều đọc từ đó. Thêm hoặc sửa một loại ở registry rồi chạy `node scripts/fx_doc.mjs` để ghi lại các bảng này (test `s28_registry` kiểm khớp). Cột "Không khí / Dùng khi / Tránh" là mô tả `ai` Claude đọc khi chọn.
+
+Panel Chuyển cảnh chia tab theo nhóm và có ô tìm (tên, không khí, dùng khi); mục Chuyển cảnh trong Thuộc tính của clip đặt thời lượng, nhịp và tham số riêng, nút *Áp cho tất cả chỗ nối* chép nguyên tham số (`studio/features/83_transui.js`). Loại `rgb_split` vẽ 3 bản sao khung trong đoạn chuyển nên nặng nhất khi render.
 
 Rê chuột hoặc focus một ô chuyển cảnh (thư viện Chuyển cảnh hoặc mục Chuyển cảnh của clip) thì khung xem trước phát ±1 s quanh chỗ nối của clip đang chọn với loại đó, trên footage thật (`studio/features/79_transpeek.js`). Chỉ là bản xem tạm: không ghi hoàn tác, không tự lưu; rời ô là trả lại.
 
@@ -53,8 +55,33 @@ Rê chuột hoặc focus một ô chuyển cảnh (thư viện Chuyển cảnh h
 | `spin` | Xoay | Camera | vui, bất ngờ, giải trí | twist, chuyển chủ đề vui, video giải trí | thương hiệu sang trọng, nội dung nghiêm túc |
 | `wipe` | Gạt | Mặt nạ | rõ ràng, so sánh | trước/sau, so sánh hai lựa chọn, đổi chương | dùng cho mọi chỗ nối |
 | `circle` | Vòng tròn | Mặt nạ | tập trung, tiết lộ | mở màn sản phẩm, tiết lộ kết quả ở giữa khung | chủ thể lệch mép khung |
-| `flash` | Loé sáng | Ánh sáng | sốc, cú đấm, khoảnh khắc | đúng beat drop, câu đinh, ảnh chụp/khoảnh khắc | quá 2–3 lần mỗi video; người xem nhạy sáng |
+| `flash` | Loé sáng | Ánh sáng | sốc, cú đấm, khoảnh khắc | đúng beat drop, câu đinh, ảnh chụp/khoảnh khắc (color black = chớp đen) | quá 2–3 lần mỗi video; người xem nhạy sáng |
 | `glitch` | Nhiễu | Nhiễu | công nghệ, gắt, căng | tin công nghệ/AI, lỗi, bất ngờ tiêu cực, nhạc điện tử | thương hiệu mềm mại, mỹ phẩm, BĐS cao cấp |
+| `dip` | Qua màu | Cơ bản | trầm, ngắt chương | hết một phần, chuyển thời gian, mở đầu/kết video (đen); trắng = mơ, hồi tưởng | giữa hai câu liền mạch; dur ngắn (< 0.4 s) |
+| `soft_zoom` | Mờ phóng nhẹ | Cơ bản | nhẹ, có hồn | thay mờ dần cho video sang, lifestyle, BĐS | montage nhanh |
+| `soft_slide` | Mờ trượt nhẹ | Cơ bản | gọn, hiện đại | chuyển ý trong video hướng dẫn, khoá học, giới thiệu sản phẩm | cần cú đấm mạnh |
+| `blink` | Chớp mắt | Cơ bản | tò mò, góc nhìn nhân vật | tỉnh dậy, "nhìn lại", chuyển sang góc nhìn người nói | dùng nhiều lần; nội dung nghiêm túc |
+| `pull_in` | Kéo vào | Camera | lao tới, cuốn vào | đi sâu vào chi tiết, "bên trong có gì", vlog du lịch | chủ thể nằm sát mép khung |
+| `zoom_blur` | Zoom mờ | Camera | tốc độ, kịch tính | nối hai cảnh hành động, beat drop, thể thao, xe | nội dung nhẹ nhàng, chữ trên màn cần đọc |
+| `shake` | Lắc | Camera | sốc, rung động | tin sốc, cú va, tiếng bass mạnh, phản ứng bất ngờ | quá 2 lần mỗi video; nội dung sang trọng |
+| `leak` | Rò sáng | Ánh sáng | ấm, hoài niệm, phim | vlog, đám cưới, du lịch, kỷ niệm, hoàng hôn | công nghệ, tin tức |
+| `burn` | Cháy phim | Ánh sáng | cổ điển, phim nhựa, mạnh | kể chuyện kiểu phim, chuyển thời kỳ, retro | thương hiệu sạch, y tế, văn phòng |
+| `bloom` | Sáng loá | Ánh sáng | mơ, thiên đường, tích cực | kết quả đẹp, tiết lộ sản phẩm, cảnh nắng | cảnh đã cháy sáng sẵn |
+| `strobe` | Nhấp nháy | Ánh sáng | tiệc, sân khấu, dồn dập | nhạc EDM, sự kiện, đếm ngược | người xem nhạy sáng; dùng quá 1 lần |
+| `rgb_split` | Tách RGB | Nhiễu | công nghệ, gắt, MV | tin AI/công nghệ, nhạc điện tử, cú twist | mỹ phẩm, BĐS cao cấp; máy yếu (render nặng) |
+| `ripple` | Gợn | Nhiễu | mơ, nước, chuyển trạng thái | hồi tưởng, giấc mơ, đồ uống, spa | video hướng dẫn cần rõ |
+| `stretch` | Kéo giãn | Nhiễu | vui, đàn hồi, meme | giải trí, phản ứng hài, đổi cảnh bất ngờ | nội dung trang trọng, mặt người cận |
+| `tv` | TV tắt | Nhiễu | retro, kết thúc, hài | tắt một ý/chủ đề, "hết giờ", nội dung retro, chuyển kênh | giữa hai câu liền mạch |
+| `scan` | Vạch quét | Nhiễu | công nghệ, phân tích | quét/phân tích dữ liệu, demo app, AI, giao diện | cảnh thiên nhiên, cảm xúc |
+| `heart` | Lau hình tim | Mặt nạ | dễ thương, yêu thương | cặp đôi, quà tặng, mẹ và bé, cảm ơn khách | tin tức, công nghệ, nội dung nghiêm túc |
+| `star` | Lau hình sao | Mặt nạ | vui, nổi bật, giải thưởng | khoảnh khắc nổi bật, đánh giá 5 sao, trẻ em, chúc mừng | thương hiệu sang trọng |
+| `diamond` | Lau hình thoi | Mặt nạ | sắc, hình học, thời trang | thời trang, trang sức, giới thiệu bộ sưu tập | chủ thể lệch mép khung |
+| `diagonal` | Lau chéo | Mặt nạ | động, thể thao | so sánh, đổi chương nhanh, thể thao, ưu đãi | dùng cho mọi chỗ nối |
+| `curtain` | Rèm mở | Mặt nạ | trang trọng, ra mắt | ra mắt sản phẩm, khai trương, mở màn sự kiện | giữa video nhịp nhanh |
+| `blinds` | Lá sách | Mặt nạ | gọn, đồ hoạ, doanh nghiệp | trình bày, slide doanh nghiệp, nội thất | cảnh nhiều chi tiết dọc (rối mắt) |
+| `grid` | Lưới ô | Mặt nạ | công nghệ, sắp xếp, vui | tổng hợp nhiều sản phẩm, danh sách, giao diện app | cảnh mặt người cận |
+| `flip` | Lật 3D | Trượt | vui, lật mặt, trước/sau | trước/sau, lật thẻ, đáp án câu hỏi, mặt sau sản phẩm | dùng liên tục; nội dung trầm |
+| `page` | Lật trang | Trượt | kể chuyện, sách, hướng dẫn | chương mới, bước tiếp theo trong hướng dẫn, khoá học | montage nhanh |
 <!-- /fx:trans -->
 
 ### Bộ lọc (`filter.preset`)
