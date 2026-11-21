@@ -44,7 +44,6 @@
   const COLOR = def => ({ t: 'enum', values: Object.keys(COLORS), def, label: 'Màu', vl: { white: 'Trắng', black: 'Đen', warm: 'Vàng ấm', pink: 'Hồng', blue: 'Xanh' } });
   const TINT = { t: 'num', min: 0.2, max: 2, def: 1, label: 'Cường độ' };
   const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), f3t = v => v.toFixed(3);
-  const c01 = v => Math.min(1, Math.max(0, v));
   const tri = k => 1 - Math.abs(k - .5) * 2, bell = k => Math.sin(Math.PI * k), half = k => (k >= .5 ? 1 : 0);
   const AX = { l: ['X', 1], r: ['X', -1], u: ['Y', 1], d: ['Y', -1] };
   const mv = (d, v) => { const [a, s] = AX[d] || AX.l; return `translate${a}(${(s * v).toFixed(2)}%)`; };
