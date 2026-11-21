@@ -8,6 +8,7 @@
 // nên mô hình không chạm được type, đường dẫn file, khoá lạ hay JSON tự do của element.
 
 import { createRequire as _cr } from 'node:module';
+const FX = _cr(import.meta.url)('../engine/fx_registry.js');
 
 export class ElemAiError extends Error {
   constructor(msg, status = 400) { super(msg); this.name = 'ElemAiError'; this.status = status; }
@@ -17,13 +18,13 @@ const str = (v, n) => (v == null ? '' : String(v)).replace(/\s+/g, ' ').trim().s
 const HEX = /^#[0-9A-F]{6}$/;
 const hex = v => { let s = String(v ?? '').trim().toUpperCase(); if (/^#[0-9A-F]{3}$/.test(s)) s = '#' + [...s.slice(1)].map(c => c + c).join(''); return HEX.test(s) ? s : null; };
 
-// Cùng bảng với studio/studio.js (FONTS, STYLES) và studio/library.js (ANIM_LIST). Đổi ở đó thì đổi ở đây.
+// Cùng bảng với studio/studio.js (FONTS, STYLES); hoạt ảnh chữ lấy từ engine/fx_registry.js (FX.TEXT_IN). Đổi ở đó thì đổi ở đây.
 export const FONTS = [['var(--sans)', 'Be Vietnam Pro'], ['var(--disp)', 'Montserrat'], ["'Inter'", 'Inter'], ["'Playfair Display',serif", 'Playfair Display'],
   ["'Lexend'", 'Lexend'], ["'Oswald'", 'Oswald'], ["'Nunito'", 'Nunito'], ["'Bungee'", 'Bungee'], ["'Pacifico'", 'Pacifico']];
 export const STYLES = ['white', 'yellow', 'clean', 'muted', 'ink', 'fire', 'glow', 'neon', 'dark', 'hl', 'grad_blue', 'grad_teal'];
-export const ANIMS = ['pop', 'fade', 'slide_l', 'slide_r', 'drop', 'blur_zoom', 'fly', 'tumble', 'type'];
+export const ANIMS = FX.ids('text_in'); // S28 M202: engine/fx_registry.js
 const STYLE_VI = { white: 'trắng', yellow: 'vàng', clean: 'sạch', muted: 'dịu', ink: 'mực', fire: 'lửa', glow: 'phát sáng', neon: 'neon', dark: 'tối', hl: 'nhấn nền', grad_blue: 'gradient xanh', grad_teal: 'gradient ngọc' };
-const ANIM_VI = { pop: 'bật', fade: 'mờ dần', slide_l: 'trượt trái', slide_r: 'trượt phải', drop: 'rơi', blur_zoom: 'nhoè', fly: 'bay', tumble: 'lật', type: 'đánh máy' };
+const ANIM_VI = Object.fromEntries(FX.TEXT_IN.map(x => [x.id, x.label.toLocaleLowerCase('vi')]));
 
 // Trường cho phép (trừu tượng) và cách kiểm. bound(input, cur) → [min, max] cho số.
 export const FIELDS = {

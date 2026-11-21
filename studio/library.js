@@ -26,7 +26,7 @@ const TEXT_PRESETS = [
   { name: 'Chữ tối', text: 'Ghi chú', p: { style: 'dark', size: 52, anim: 'slide_l', italic: false, weight: 800, upper: false }, css: 'color:#111;font:800 19px Montserrat,var(--font-sans);background:#fff;padding:2px 8px;border-radius:4px' }, // design-token-ok: preset preview = text colours of the video
   { name: 'Oswald', text: 'TIN NÓNG', p: { style: 'white', size: 70, anim: 'slide_r', font: "'Oswald'", italic: false, weight: 700 }, css: 'color:#fff;font:700 22px Oswald,var(--font-sans);text-shadow:2px 2px 0 #000;letter-spacing:.02em' }, // design-token-ok: preset preview = text colours of the video
 ];
-const ANIM_LIST = [['pop', 'Bật'], ['fade', 'Mờ dần'], ['slide_l', 'Trượt trái'], ['slide_r', 'Trượt phải'], ['drop', 'Rơi'], ['blur_zoom', 'Nhoè'], ['fly', 'Bay'], ['tumble', 'Lật'], ['type', 'Đánh máy']];
+const ANIM_LIST = FX.animList(); // S28 M202: engine/fx_registry.js FX.TEXT_IN
 
 function renderRail() {
   $('#rail').innerHTML = RAIL.map(([k, ic, name]) => `<button data-p="${k}" class="${panel === k ? 'on' : ''}"><i class="ti ${ic}"></i><span>${name}</span></button>`).join('');

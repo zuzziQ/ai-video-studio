@@ -13,16 +13,10 @@ const r3 =v => Math.round(v * 1000) / 1000;
 const deep = o => JSON.parse(JSON.stringify(o, (k, v) => (k === 'cid' || k === '_orig' ? undefined : v)));
 const clipDur = c => Math.max(1 / 30, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1));
 const srcLen = c => (typeof c.src === 'string' ? Infinity : (c.src?.count || 1) / (c.src?.fps || 30));
-const TRANS_TYPES = [['fade', 'Mờ dần', 'ti-blur'], ['dissolve', 'Hoà tan', 'ti-droplet-half-2'], ['slide_l', 'Trượt trái', 'ti-arrow-big-left-lines'], ['slide_r', 'Trượt phải', 'ti-arrow-big-right-lines'],
-  ['slide_up', 'Trượt lên', 'ti-arrow-big-up-lines'], ['push', 'Đẩy', 'ti-arrows-right'], ['zoom', 'Phóng vào', 'ti-zoom-in'], ['zoom_out', 'Thu ra', 'ti-zoom-out'], ['blur', 'Nhoè', 'ti-blur-off'],
-  ['whip', 'Lia nhanh', 'ti-wind'], ['spin', 'Xoay', 'ti-rotate-clockwise-2'], ['wipe', 'Gạt', 'ti-layout-sidebar-left-expand'], ['circle', 'Vòng tròn', 'ti-circle-dashed'], ['flash', 'Loé sáng', 'ti-bolt'], ['glitch', 'Nhiễu', 'ti-wave-saw-tool']];
-const FILTERS = [['', 'Gốc'], ['warm', 'Ấm'], ['cool', 'Lạnh'], ['vivid', 'Rực rỡ'], ['bw', 'Đen trắng'], ['film', 'Phim'], ['fade', 'Phai'], ['night', 'Đêm'], ['pop', 'Pop']];
-const LUT_CSS = {
-  warm: 'sepia(.22) saturate(1.2) hue-rotate(-8deg)', cool: 'saturate(1.05) hue-rotate(12deg) brightness(1.02)',
-  vivid: 'saturate(1.45) contrast(1.1)', bw: 'grayscale(1) contrast(1.15)', film: 'sepia(.3) contrast(1.08) saturate(.85)',
-  fade: 'contrast(.86) brightness(1.08) saturate(.8)', night: 'brightness(.8) saturate(1.2) hue-rotate(195deg) contrast(1.1)',
-  pop: 'saturate(1.6) contrast(1.15) brightness(1.04)',
-};
+// S28 M202: chuyển cảnh, bộ lọc, hoạt ảnh chữ đọc từ engine/fx_registry.js (window.FX, nạp trước file này ở studio/index.html)
+const TRANS_TYPES = FX.transTypes(); // [id, nhãn, icon]
+const FILTERS = FX.filters(); // [preset, nhãn], '' = Gốc
+const LUT_CSS = FX.lutCss();
 
 function clipLayout() {
   let t = 0;

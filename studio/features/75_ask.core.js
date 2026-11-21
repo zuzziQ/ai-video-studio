@@ -19,10 +19,13 @@
     : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(kk => [kk, v[kk]])) : v));
   const STEPS = { prep: 'Chuẩn bị', source: 'Nguồn', build: 'Dựng', check: 'Kiểm tra', ship: 'Xuất và đăng' };
   const ELEM_KINDS = ['line', 'cap', 'node', 'badge', 'scene'];
-  // = TRANS_TYPES của studio/clips.js (id); đổi ở đó thì đổi ở đây
-  const TRANS = ['fade', 'dissolve', 'slide_l', 'slide_r', 'slide_up', 'push', 'zoom', 'zoom_out', 'blur', 'whip', 'spin', 'wipe', 'circle', 'flash', 'glitch'];
-  const TRANS_VI = { fade: 'mờ dần', dissolve: 'hoà tan', slide_l: 'trượt trái', slide_r: 'trượt phải', slide_up: 'trượt lên', push: 'đẩy', zoom: 'phóng vào',
-    zoom_out: 'thu ra', blur: 'nhoè', whip: 'lia nhanh', spin: 'xoay', wipe: 'gạt', circle: 'vòng tròn', flash: 'loé sáng', glitch: 'nhiễu' };
+  // S28 M202: chuyển cảnh đọc từ engine/fx_registry.js (trình duyệt: window.FX nạp trước clips.js; Node: require)
+  const FX = typeof module === 'object' && module.exports ? require('../../engine/fx_registry.js') : root.FX;
+  const TRANS = FX.ids('trans');
+  const TRANS_VI = Object.fromEntries(FX.TRANS.map(x => [x.id, x.label.toLocaleLowerCase('vi')]));
+  // Mô tả cho mô hình chọn chuyển cảnh theo nội dung (không chọn bừa): một dòng mỗi loại từ FX.TRANS[].ai
+  const TRANS_GUIDE = `Chọn type theo nội dung và nhịp: ${FX.aiGuide('trans', ' | ')}.`;
+  const TDUR = FX.TRANS[0].params.dur;
   const AUTOFILL = ['all', 'broll', 'sfx'];
   const DENS = ['thua', 'vua', 'day'];
   // = /api/publish/platforms (scripts/publish.mjs); 'all' = mọi nền tảng đang tích ở hộp Đăng
@@ -78,8 +81,8 @@
     ai_build: { what: 'AI dựng lại cả video (gói style, graphic, phụ đề, nhạc). Dùng khi muốn đổi phong cách, nhịp, "sôi động hơn", "sang hơn".',
       params: { extra: { t: 'str', max: 200 }, density: { t: 'enum', values: DENS } } },
     autofill: { what: 'Tự thêm b-roll (broll), âm thanh SFX + nhạc (sfx) hoặc cả hai (all).', params: { mode: { t: 'enum', values: AUTOFILL } } },
-    transitions: { what: 'Đặt cùng một chuyển cảnh cho mọi chỗ nối giữa các clip (type "none" = bỏ hết).',
-      params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: 0.1, max: 1.5 } } },
+    transitions: { what: `Đặt cùng một chuyển cảnh cho mọi chỗ nối giữa các clip (type "none" = bỏ hết). ${TRANS_GUIDE}`,
+      params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max } } },
     elem_edit: { what: 'Sửa element đang chọn (kiểu, màu, font, vị trí, cỡ, hoạt ảnh, thời lượng, viết lại chữ). ask = câu yêu cầu ngắn gọn bằng tiếng Việt.',
       params: { ask: { t: 'str', max: 200 } } },
     elem_variants: { what: 'Đưa 3 biến thể của element đang chọn để người dùng xem và chọn.', params: {} },
@@ -87,7 +90,7 @@
     // S27 M199: Claude dựng element riêng (box, nền box chữ, khung, nhãn…) khi thư viện không có cái hợp (72_celem.js)
     elem_create: { what: 'Dựng MỚI một element đồ hoạ riêng theo thương hiệu (box chữ, nền chữ, khung, nhãn giá, thẻ…) rồi chèn tại playhead; 3 phương án xem bằng ảnh. ask = mô tả element bằng tiếng Việt.',
       params: { ask: { t: 'str', max: 300 } } },
-    clip_transition: { what: 'Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ).', params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: 0.1, max: 1.5 } } },
+    clip_transition: { what: `Đặt chuyển cảnh vào clip đang chọn (type "none" = bỏ). ${TRANS_GUIDE}`, params: { type: { t: 'enum', values: [...TRANS, 'none'] }, dur: { t: 'num', min: TDUR.min, max: TDUR.max } } },
     // ---- M154: Chuẩn bị ----
     brand_ai: { what: 'Dựng bộ thương hiệu (vai trò 4 màu, cặp font, giọng văn, slogan, CTA) từ logo đã tải, tên và website. website = link nếu người dùng đưa.',
       params: { website: { t: 'str', max: 200 } } },
