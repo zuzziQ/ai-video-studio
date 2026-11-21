@@ -41,7 +41,7 @@
       ${curve ? curveHtml(o, k) : flatHtml}
       ${sect('Đứng hình và tua ngược', `<div class="acts"><button data-spact="freeze" ${still ? 'disabled' : ''}><i class="ti ti-snowflake"></i> Freeze 3 s tại playhead</button>
         <button data-spact="reverse" class="${o.reverse ? 'on' : ''}" ${still ? 'disabled' : ''}><i class="ti ti-arrow-back-up"></i> ${o.reverse ? 'Đang phát ngược' : 'Đảo ngược'}</button></div>
-        <div class="help">${still ? 'Ảnh tĩnh không cần đứng hình hay đảo ngược.' : `Freeze chèn 3 s giữ khung tại playhead, phía sau tự dồn. ${tip('Freeze im lặng. Đảo ngược đọc khung từ cuối về đầu, không tạo file video mới; tiếng phát ngược khi xuất, lúc xem trước tắt tiếng.')}`}</div>`, 'ti-player-track-prev')}</div>`;
+        <div class="help">${still ? 'Ảnh tĩnh không cần đứng hình hay đảo ngược.' : `Đứng hình: chèn 3 s giữ khung tại playhead, phía sau tự dồn. ${tip('Lúc đứng hình không có tiếng. Đảo ngược đọc khung từ cuối về đầu, không tạo file video mới; tiếng phát ngược khi xuất, lúc xem trước tắt tiếng.')}`}</div>`, 'ti-player-track-prev')}</div>`;
   };
 
   // Một việc cho thanh Hỏi Claude (75_ask.js, việc clip_speed): mode = preset | normal | freeze | reverse | forward; speed khi normal.

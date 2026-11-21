@@ -99,7 +99,7 @@ export const KINDS = {
   // S28 M210: nhịp của một file nhạc (scripts/beats_job.mjs → beats.py): input = thư mục dự án, opts.file | opts.mood; chỉ ghi .studio/beats/, Studio gắn vào khối nhạc
   beats: { name: 'Phân tích nhịp nhạc', script: 'beats_job.mjs' },
   // S29 M212: nướng chuỗi khung của một clip bằng ffmpeg (scripts/bake_job.mjs, lõi engine/bake.js): input = thư mục dự án, opts.spec; chỉ ghi .studio/bake/
-  bake: { name: 'Nướng hiệu chỉnh clip', script: 'bake_job.mjs' },
+  bake: { name: 'Xử lý hiệu chỉnh clip', script: 'bake_job.mjs' },
 };
 // own keys only: KINDS['constructor'] / KINDS['toString'] are inherited functions, not job kinds
 export const isKind = kind => typeof kind === 'string' && Object.hasOwn(KINDS, kind);

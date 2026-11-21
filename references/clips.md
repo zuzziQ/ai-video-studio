@@ -56,8 +56,8 @@ Rê chuột hoặc focus một ô chuyển cảnh (thư viện Chuyển cảnh h
 | `wipe` | Gạt | Mặt nạ | rõ ràng, so sánh | trước/sau, so sánh hai lựa chọn, đổi chương | dùng cho mọi chỗ nối |
 | `circle` | Vòng tròn | Mặt nạ | tập trung, tiết lộ | mở màn sản phẩm, tiết lộ kết quả ở giữa khung | chủ thể lệch mép khung |
 | `flash` | Loé sáng | Ánh sáng | sốc, cú đấm, khoảnh khắc | đúng beat drop, câu đinh, ảnh chụp/khoảnh khắc (color black = chớp đen) | quá 2–3 lần mỗi video; người xem nhạy sáng |
-| `glitch` | Nhiễu | Nhiễu | công nghệ, gắt, căng | tin công nghệ/AI, lỗi, bất ngờ tiêu cực, nhạc điện tử | thương hiệu mềm mại, mỹ phẩm, BĐS cao cấp |
-| `dip` | Qua màu | Cơ bản | trầm, ngắt chương | hết một phần, chuyển thời gian, mở đầu/kết video (đen); trắng = mơ, hồi tưởng | giữa hai câu liền mạch; dur ngắn (< 0.4 s) |
+| `glitch` | Nhiễu | Méo hình | công nghệ, gắt, căng | tin công nghệ/AI, lỗi, bất ngờ tiêu cực, nhạc điện tử | thương hiệu mềm mại, mỹ phẩm, BĐS cao cấp |
+| `dip` | Chuyển qua màu | Cơ bản | trầm, ngắt chương | hết một phần, chuyển thời gian, mở đầu/kết video (đen); trắng = mơ, hồi tưởng | giữa hai câu liền mạch; dur ngắn (< 0.4 s) |
 | `soft_zoom` | Mờ phóng nhẹ | Cơ bản | nhẹ, có hồn | thay mờ dần cho video sang, lifestyle, BĐS | montage nhanh |
 | `soft_slide` | Mờ trượt nhẹ | Cơ bản | gọn, hiện đại | chuyển ý trong video hướng dẫn, khoá học, giới thiệu sản phẩm | cần cú đấm mạnh |
 | `blink` | Chớp mắt | Cơ bản | tò mò, góc nhìn nhân vật | tỉnh dậy, "nhìn lại", chuyển sang góc nhìn người nói | dùng nhiều lần; nội dung nghiêm túc |
@@ -68,17 +68,17 @@ Rê chuột hoặc focus một ô chuyển cảnh (thư viện Chuyển cảnh h
 | `burn` | Cháy phim | Ánh sáng | cổ điển, phim nhựa, mạnh | kể chuyện kiểu phim, chuyển thời kỳ, retro | thương hiệu sạch, y tế, văn phòng |
 | `bloom` | Sáng loá | Ánh sáng | mơ, thiên đường, tích cực | kết quả đẹp, tiết lộ sản phẩm, cảnh nắng | cảnh đã cháy sáng sẵn |
 | `strobe` | Nhấp nháy | Ánh sáng | tiệc, sân khấu, dồn dập | nhạc EDM, sự kiện, đếm ngược | người xem nhạy sáng; dùng quá 1 lần |
-| `rgb_split` | Tách RGB | Nhiễu | công nghệ, gắt, MV | tin AI/công nghệ, nhạc điện tử, cú twist | mỹ phẩm, BĐS cao cấp; máy yếu (render nặng) |
-| `ripple` | Gợn | Nhiễu | mơ, nước, chuyển trạng thái | hồi tưởng, giấc mơ, đồ uống, spa | video hướng dẫn cần rõ |
-| `stretch` | Kéo giãn | Nhiễu | vui, đàn hồi, meme | giải trí, phản ứng hài, đổi cảnh bất ngờ | nội dung trang trọng, mặt người cận |
-| `tv` | TV tắt | Nhiễu | retro, kết thúc, hài | tắt một ý/chủ đề, "hết giờ", nội dung retro, chuyển kênh | giữa hai câu liền mạch |
-| `scan` | Vạch quét | Nhiễu | công nghệ, phân tích | quét/phân tích dữ liệu, demo app, AI, giao diện | cảnh thiên nhiên, cảm xúc |
+| `rgb_split` | Tách RGB | Méo hình | công nghệ, gắt, MV | tin AI/công nghệ, nhạc điện tử, cú twist | mỹ phẩm, BĐS cao cấp; máy yếu (render nặng) |
+| `ripple` | Gợn sóng | Méo hình | mơ, nước, chuyển trạng thái | hồi tưởng, giấc mơ, đồ uống, spa | video hướng dẫn cần rõ |
+| `stretch` | Kéo giãn | Méo hình | vui, đàn hồi, meme | giải trí, phản ứng hài, đổi cảnh bất ngờ | nội dung trang trọng, mặt người cận |
+| `tv` | TV tắt | Méo hình | retro, kết thúc, hài | tắt một ý/chủ đề, "hết giờ", nội dung retro, chuyển kênh | giữa hai câu liền mạch |
+| `scan` | Vạch quét | Méo hình | công nghệ, phân tích | quét/phân tích dữ liệu, demo app, AI, giao diện | cảnh thiên nhiên, cảm xúc |
 | `heart` | Lau hình tim | Mặt nạ | dễ thương, yêu thương | cặp đôi, quà tặng, mẹ và bé, cảm ơn khách | tin tức, công nghệ, nội dung nghiêm túc |
 | `star` | Lau hình sao | Mặt nạ | vui, nổi bật, giải thưởng | khoảnh khắc nổi bật, đánh giá 5 sao, trẻ em, chúc mừng | thương hiệu sang trọng |
 | `diamond` | Lau hình thoi | Mặt nạ | sắc, hình học, thời trang | thời trang, trang sức, giới thiệu bộ sưu tập | chủ thể lệch mép khung |
 | `diagonal` | Lau chéo | Mặt nạ | động, thể thao | so sánh, đổi chương nhanh, thể thao, ưu đãi | dùng cho mọi chỗ nối |
 | `curtain` | Rèm mở | Mặt nạ | trang trọng, ra mắt | ra mắt sản phẩm, khai trương, mở màn sự kiện | giữa video nhịp nhanh |
-| `blinds` | Lá sách | Mặt nạ | gọn, đồ hoạ, doanh nghiệp | trình bày, slide doanh nghiệp, nội thất | cảnh nhiều chi tiết dọc (rối mắt) |
+| `blinds` | Rèm lá sách | Mặt nạ | gọn, đồ hoạ, doanh nghiệp | trình bày, slide doanh nghiệp, nội thất | cảnh nhiều chi tiết dọc (rối mắt) |
 | `grid` | Lưới ô | Mặt nạ | công nghệ, sắp xếp, vui | tổng hợp nhiều sản phẩm, danh sách, giao diện app | cảnh mặt người cận |
 | `flip` | Lật 3D | Trượt | vui, lật mặt, trước/sau | trước/sau, lật thẻ, đáp án câu hỏi, mặt sau sản phẩm | dùng liên tục; nội dung trầm |
 | `page` | Lật trang | Trượt | kể chuyện, sách, hướng dẫn | chương mới, bước tiếp theo trong hướng dẫn, khoá học | montage nhanh |

@@ -42,8 +42,8 @@
   const NEW = Object.fromEntries(Object.entries(BZ).map(([k, v]) => [k, bezier(...v)]));
   NEW.elastic = k => (k <= 0 ? 0 : k >= 1 ? 1 : Math.pow(2, -10 * k) * Math.sin((k * 10 - 0.75) * (2 * Math.PI) / 3) + 1);
   const EASE = { ...OLD, ...NEW };
-  const EASE_VI = [['linear', 'Đều'], ['inOut', 'Mượt'], ['in', 'Nhanh dần'], ['out', 'Chậm dần'], ['back', 'Nảy quá'], ['bounce', 'Nảy bóng'], ['hold', 'Giữ (nhảy)'],
-    ['easeIn', 'Ease vào'], ['easeOut', 'Ease ra'], ['easeInOut', 'Ease cả hai'], ['overshoot', 'Nảy (bezier)'], ['elastic', 'Đàn hồi']];
+  const EASE_VI = [['linear', 'Đều'], ['inOut', 'Mượt'], ['in', 'Nhanh dần'], ['out', 'Chậm dần'], ['back', 'Nảy quá'], ['bounce', 'Nảy bóng'], ['hold', 'Giữ rồi nhảy'],
+    ['easeIn', 'Nhanh dần mượt'], ['easeOut', 'Chậm dần mượt'], ['easeInOut', 'Mượt hai đầu'], ['overshoot', 'Nảy quá mềm'], ['elastic', 'Đàn hồi']];
   const easeOf = k => (Array.isArray(k?.bz) && k.bz.length === 4 && k.bz.every(Number.isFinite) ? bezier(...k.bz) : EASE[k?.ease] || EASE.linear);
 
   // ---- bảng thuộc tính keyframe được (Studio vẽ nút thoi, Claude đọc tên) ----

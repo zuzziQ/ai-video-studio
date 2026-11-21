@@ -19,13 +19,13 @@ const SEQ = /^[\p{L}\p{N} _./-]+\/%05d\.jpg$/u;
 /** spec từ route / dòng lệnh → spec đã kiểm lại từ đầu (hash tính lại từ tham số; đường dẫn phải nằm trong dự án) hoặc ném lỗi */
 export function checkSpec(dir, raw) {
   const s = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  if (!s || typeof s.seq !== 'string' || !SEQ.test(s.seq) || s.seq.includes('..')) throw new Error('Chuỗi khung lạ (cần …/%05d.jpg trong dự án)');
+  if (!s || typeof s.seq !== 'string' || !SEQ.test(s.seq) || s.seq.includes('..')) throw new Error('Khung hình của clip không nằm đúng chỗ trong dự án');
   const fps = +s.fps, n0 = Math.floor(+s.n0), n1 = Math.floor(+s.n1);
-  if (!(fps > 0 && fps <= 240) || !(n0 >= 1) || !(n1 >= n0) || n1 - n0 > 30 * 60 * 120) throw new Error('Khoảng khung lạ');
+  if (!(fps > 0 && fps <= 240) || !(n0 >= 1) || !(n1 >= n0) || n1 - n0 > 30 * 60 * 120) throw new Error('Đoạn khung hình của clip không hợp lệ');
   // dựng lại clip tối thiểu rồi để lõi tính hash: không tin hash của bên gọi
   const sp = B.spec({ src: { seq: s.seq, fps, count: n1 }, in: (n0 - 1) / fps, out: (n1 - 1) / fps, bake: s.ops }, fps);
-  if (!sp || sp.n0 !== n0 || sp.n1 !== n1) throw new Error('Không có thao tác nào để nướng');
-  if (s.hash && s.hash !== sp.hash) throw new Error('Tham số đã đổi (hash lệch), xếp lại việc');
+  if (!sp || sp.n0 !== n0 || sp.n1 !== n1) throw new Error('Chưa bật hiệu chỉnh nào để xử lý');
+  if (s.hash && s.hash !== sp.hash) throw new Error('Thiết lập đã đổi trong lúc chờ, bấm Xử lý lại');
   const frames = path.resolve(dir, path.dirname(sp.seq));
   if (!inside(dir, frames) || !fs.existsSync(frames)) throw new Error('Không thấy thư mục khung của clip trong dự án');
   if (sp.ops.lut) { const f = path.resolve(dir, sp.ops.lut.file); if (!inside(path.join(dir, B.DIR, 'luts'), f) || !fs.existsSync(f)) throw new Error('Không thấy file LUT đã nhập'); }
@@ -69,7 +69,7 @@ async function bakeInto(dir, final, want, args, p0, p1, msg) {
   const rel = path.relative(dir, tmp).split(path.sep).join('/');
   const tick = setInterval(() => console.log(`@@ ${(p0 + (p1 - p0) * Math.min(1, count(tmp) / want)).toFixed(3)} ${msg} ${count(tmp)}/${want} khung`), 1000);
   try { await ff(args(rel), dir); } catch (e) { rmSync(tmp, { recursive: true, force: true }); throw e; } finally { clearInterval(tick); }
-  if (count(tmp) < want) { rmSync(tmp, { recursive: true, force: true }); throw new Error(`ffmpeg chỉ ra ${count(tmp)}/${want} khung`); }
+  if (count(tmp) < want) { rmSync(tmp, { recursive: true, force: true }); throw new Error(`ffmpeg mới xuất được ${count(tmp)}/${want} khung`); }
   rmSync(final, { recursive: true, force: true });
   fs.renameSync(tmp, final);
 }
@@ -86,9 +86,9 @@ async function main(args) {
   if (!readResult(dir, sp.hash)) {
     const first = path.join(dir, path.dirname(sp.seq), String(sp.n0).padStart(5, '0') + '.jpg');
     const dims = sp.ops.stab && fs.existsSync(first) ? jpegSize(first) : {};
-    console.log(`@@ 0.02 Nướng ${B.label(sp.ops)} (${want} khung)`);
-    await bakeInto(dir, final, want, rel => B.ffArgs(sp, `${rel}/%05d.${sp.ext}`, dims), 0.02, 0.85, 'Đang nướng');
-  } else console.log('@@ 0.85 Đã có chuỗi nướng (dùng lại)');
+    console.log(`@@ 0.02 Xử lý ${B.label(sp.ops)} (${want} khung)`);
+    await bakeInto(dir, final, want, rel => B.ffArgs(sp, `${rel}/%05d.${sp.ext}`, dims), 0.02, 0.85, 'Đang xử lý');
+  } else console.log('@@ 0.85 Đã xử lý trước đó, dùng lại');
   // M213: nguồn có chuỗi 540p đã trích đủ → nướng luôn bản 540p từ chuỗi vừa nướng (cùng số khung)
   const px = PP.proxySeq(sp.seq), pxOk = px && fs.existsSync(path.join(dir, path.dirname(px), PP.OK));
   if (pxOk && !fs.existsSync(path.join(outDir(dir, sp.hash, true), B.OK))) {

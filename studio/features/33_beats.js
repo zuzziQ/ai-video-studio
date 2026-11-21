@@ -74,7 +74,7 @@
       : `${b ? `<div class="help"><b>${b.bpm} BPM</b> · ${b.t.length} phách, ${b.strong.length} phách mạnh</div>` : '<div class="help">Tìm phách trong bài để vạch nhịp hiện trên track nhạc và các mép hít vào nhịp.</div>'}
         <div class="bmrow"><button data-bmact="run" ${busy ? 'disabled' : ''}><i class="ti ti-wave-sine"></i>${busy ? S.esc(busy) : b ? 'Phân tích lại' : 'Phân tích nhịp'}</button>${b ? '<button data-bmact="clear" title="Bỏ nhịp của khối này"><i class="ti ti-trash"></i></button>' : ''}</div>
         <div class="bmrow" role="group" aria-label="Mức vạch nhịp"><span class="lbl">Vạch</span>${lv}</div>
-        <div class="help">Nam châm bật thì kéo clip / element hít vào vạch. Chọn clip rồi bấm <i class="ti ti-slice"></i> cạnh nút tách để cắt theo nhịp.</div>
+        <div class="help">Nam châm bật thì kéo clip, chữ, hình hít vào vạch. Chọn clip rồi bấm <i class="ti ti-slice"></i> cạnh nút tách để cắt theo nhịp.</div>
         ${b ? `<span class="lbl">Hiệu ứng theo nhịp</span><div class="bmrow"><select data-bmfx aria-label="Loại hiệu ứng">${fxOpts()}</select>
           <select data-bmevery aria-label="Mỗi mấy phách mạnh">${[1, 2, 4].map(n => `<option value="${n}" ${n === fxEvery ? 'selected' : ''}>${n === 1 ? 'Mỗi phách mạnh' : `Mỗi ${n} phách mạnh`}</option>`).join('')}</select>
           <button data-bmact="fx" title="Đặt khối Hiệu ứng ngắn tại các phách mạnh trong khối nhạc này (bấm lại thì thay)"><i class="ti ti-sparkles"></i>Đặt</button></div>` : ''}`;
