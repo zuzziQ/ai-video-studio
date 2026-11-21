@@ -9,9 +9,10 @@
 // ngoài khoảng đó, hay ảnh nướng lỗi, đọc chuỗi gốc (không trắng khung).
 (function (root) {
   'use strict';
-  const DIR = '.studio/bake', OK = '.ok', V = 2; // V 2: sửa trộn LUT bị đảo + strength của HSL → hash mới, chuỗi nướng cũ được nướng lại
+  const DIR = '.studio/bake', OK = '.ok', V = 3; // V 2: sửa trộn LUT bị đảo + strength của HSL; V 3: phông nền nhạt màu (keyInfo) → hash mới, chuỗi nướng cũ được nướng lại
   const num = (v, a, b, d = 0) => { const x = +v; return Number.isFinite(x) ? Math.min(b, Math.max(a, x)) : d; };
   const r2 = v => Math.round(v * 100) / 100;
+  const r3 = v => Math.round(v * 1000) / 1000;
   const HEX = /^#[0-9a-f]{6}$/i;
   const BANDS = ['all', 'r', 'y', 'g', 'c', 'b', 'm'];
   const BAND_VI = { all: 'Mọi màu', r: 'Đỏ', y: 'Vàng', g: 'Xanh lục', c: 'Xanh lơ', b: 'Xanh lam', m: 'Tím' };
@@ -105,6 +106,21 @@
   }
 
   // ---------- ffmpeg ----------
+  // Màu khoá theo độ đậm màu: r = khoảng cách UV tới xám, cùng thang với similarity của chromakey (UV kiểu CCIR, chia 255·√2).
+  // chromakey chỉ so màu sắc, không so độ sáng: mọi điểm gần xám (da, áo trắng, tóc đen) cách màu khoá đúng r. Với nền nhạt
+  // (#9bb1ca: r 0,05) similarity cũ ở độ mạnh 40 là 0,17 > r nên xoá cả người (alpha trung bình 0,04/255, đo M212). Vì vậy:
+  //  - chroma (r ≥ 0,1, xanh lá / xanh dương thật): giữ ánh xạ cũ 0,02–0,40.
+  //  - pale (0,02 ≤ r < 0,1): similarity = r·(0,1 + 0,75·độ mạnh) — luôn < r, 40 → 0,4r (0,02 với #9bb1ca: nền alpha 19, mặt 248,
+  //    tóc 254, váy 247). Bỏ despill: khử màu hắt của nền nhạt làm xỉn da.
+  //  - gray (r < 0,02, xám / trắng): UV không phân biệt được, dùng colorkey so RGB (có độ sáng), 40 → 0,10.
+  // colorkey không dùng cho nền nhạt có màu: da #ac98a2 chỉ cách #9bb1ca 0,11 theo RGB nên mặt bị khoét trước khi nền sạch.
+  function keyInfo(color) {
+    if (!HEX.test(color || '')) return { r: 0, mode: 'chroma', pale: false };
+    const R = parseInt(color.slice(1, 3), 16), G = parseInt(color.slice(3, 5), 16), B = parseInt(color.slice(5, 7), 16);
+    const u = (-0.1687 * R - 0.3313 * G + 0.5 * B) * 224 / 255, v = (0.5 * R - 0.4187 * G - 0.0813 * B) * 224 / 255;
+    const r = Math.hypot(u, v) / (255 * Math.SQRT2), mode = r < 0.02 ? 'gray' : r < 0.1 ? 'pale' : 'chroma';
+    return { r: r3(r), mode, pale: mode !== 'chroma' };
+  }
   // -vf của một bộ thao tác. w, h = cỡ khung gốc (ổn định hình phóng nhẹ để giấu mép); lut = đường dẫn tương đối (cwd = thư mục dự án)
   function vf(o, { w = 0, h = 0 } = {}) {
     const f = [];
@@ -114,9 +130,11 @@
       if (w && h) f.push(`crop=${Math.round(w / z / 2) * 2}:${Math.round(h / z / 2) * 2}`, `scale=${w}:${h}`);
     }
     if (o.chroma) {
-      const k = o.chroma, sim = r2(0.02 + (k.strength / 100) * 0.38), bl = r2((k.edge / 100) * 0.25);
-      f.push(`chromakey=color=0x${k.color.slice(1)}:similarity=${sim}:blend=${bl}`);
-      if (k.spill) {
+      const k = o.chroma, ki = keyInfo(k.color), s = k.strength / 100, e = k.edge / 100;
+      if (ki.mode === 'gray') f.push(`colorkey=color=0x${k.color.slice(1)}:similarity=${r3(0.02 + s * 0.2)}:blend=${r3(e * 0.1)}`);
+      else if (ki.mode === 'pale') f.push(`chromakey=color=0x${k.color.slice(1)}:similarity=${r3(ki.r * (0.1 + s * 0.75))}:blend=${r3(ki.r * e * 0.75)}`);
+      else f.push(`chromakey=color=0x${k.color.slice(1)}:similarity=${r2(0.02 + s * 0.38)}:blend=${r2(e * 0.25)}`);
+      if (k.spill && ki.mode === 'chroma') {
         const R = parseInt(k.color.slice(1, 3), 16), B = parseInt(k.color.slice(5, 7), 16), G = parseInt(k.color.slice(3, 5), 16);
         f.push('format=rgba', `despill=type=${B > G && B > R ? 'blue' : 'green'}:mix=${r2(k.spill / 100)}:expand=0`);
       }
@@ -159,7 +177,7 @@
     return rows === n * n * n;
   }
 
-  const api = { DIR, OK, V, BANDS, BAND_VI, CURVES, CURVES_VI, LUT_FILE, ops, range, hashOf, spec, active, state, approxCss, vf, ffArgs, label, cubeOk };
+  const api = { DIR, OK, V, BANDS, BAND_VI, CURVES, CURVES_VI, LUT_FILE, ops, range, hashOf, spec, active, state, approxCss, keyInfo, vf, ffArgs, label, cubeOk };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.BakeCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

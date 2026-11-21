@@ -52,11 +52,14 @@
   function tab(c) {
     const o = c.obj, b = o.bake || {}, still = typeof o.src === 'string';
     if (still) return sect('', '<div class="help">Tab này xử lý từng khung hình của clip video, nên chỉ dùng cho clip video. Ảnh tĩnh dùng tab Màu.</div>');
-    const k = b.chroma, band = b.hsl?.band || 'all';
+    const k = b.chroma, band = b.hsl?.band || 'all', ki = BK.keyInfo(k?.color); // nền nhạt: cảnh báo, bỏ Khử màu hắt (vf không dùng)
     const chroma = `<div class="bkrow"><button data-bkact="chroma" class="${k ? 'on' : ''}"><i class="ti ti-${k ? 'toggle-right' : 'toggle-left'}"></i> ${k ? 'Đang tách nền' : 'Bật tách nền'}</button>
         <input type="color" data-bk="chroma.color" value="${esc(k?.color || GREEN)}" title="Màu nền cần xoá"><button data-bkact="pick" title="Hút màu nền trên khung"><i class="ti ti-color-picker"></i> Hút màu</button></div>
       <div class="bkframe" data-bkpick hidden style="--bk-ar:${(S.TL?.width || 9) / (S.TL?.height || 16)}"><img alt="Khung gốc để hút màu" data-bkimg></div><!-- design-token-ok: tỉ lệ khung -->
-      ${k ? slider(b, 'chroma.strength', 0, 100, 'Dải màu xoá') + slider(b, 'chroma.edge', 0, 100, 'Viền mềm') + slider(b, 'chroma.spill', 0, 100, 'Khử màu hắt') : ''}
+      ${k ? slider(b, 'chroma.strength', 0, 100, 'Dải màu xoá') + slider(b, 'chroma.edge', 0, 100, 'Viền mềm') + (ki.pale ? '' : slider(b, 'chroma.spill', 0, 100, 'Khử màu hắt')) : ''}
+      ${k && ki.pale ? `<div class="help ui-text-warn"><i class="ti ti-alert-triangle"></i> ${ki.mode === 'gray'
+        ? 'Phông nền xám hoặc trắng: chỗ trắng, xám trên người có thể bị xoá theo.'
+        : 'Phông nền nhạt màu, khoá có thể không sạch. Nền còn sót thì tăng Dải màu xoá.'} ${S.tip('Phông xanh lá cho kết quả sạch nhất.')}</div>` : ''}
       <div class="help">Phần nền xoá đi lộ lớp bên dưới. ${S.tip('Bấm Hút màu rồi chọn điểm nền trên khung xem trước (hoặc trên ảnh khung hiện ra).')}</div>`;
     const lut = `<div class="bkrow"><button data-bkact="lut"><i class="ti ti-file-upload"></i> ${b.lut ? 'Đổi file .cube' : 'Nhập file .cube'}</button>${b.lut ? `<span class="muted">${esc(b.lut.name || 'LUT')}</span><button data-bkact="lutoff" title="Bỏ LUT"><i class="ti ti-x"></i></button>` : ''}
       <input type="file" accept=".cube" data-bklut hidden></div>${b.lut ? slider(b, 'lut.mix', 0, 100, 'Độ mạnh', '%') : ''}`;
