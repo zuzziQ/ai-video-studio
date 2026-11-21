@@ -63,4 +63,15 @@ Preview khi phát: track phụ phát theo âm lượng + mute/solo; **chưa** c�
 | `GET /api/audio/probe?file=` | `{dur}` |
 | `POST /api/audio/mix` | job chạy `mix_audio.py` → `job.out = work/mix.wav` |
 
+## Nhịp (S28 M210)
+Thuộc tính khối nhạc → tab **Nhịp** → Phân tích nhịp: job nền `beats` (`scripts/queue.mjs` → `scripts/beats_job.mjs` → `scripts/beats.py`), cache `.studio/beats/<khoá>.json` theo cỡ + giờ sửa file.
+Studio gắn kết quả vào khối nhạc một bước hoàn tác: `audio.music[i].beats = {bpm, t:[giây nguồn], strong:[phách mạnh], dur}` (giờ nguồn của file, nên kéo / cắt khối thì vạch đi theo; file ngắn hơn khối thì nhịp lặp như `-stream_loop`). Khác `timeline.beats` của gói `beatslide` (giờ video).
+Vạch vẽ trong khối nhạc, mức 1/1 (phách mạnh) · 1/2 · mỗi phách (nhớ theo trình duyệt); nam châm bật thì mép clip, element, chỗ nối hít vào vạch đang hiện. Nút **Cắt theo nhịp** (cạnh nút tách) chia clip đang chọn tại các vạch, một bước hoàn tác.
+Claude: Hỏi Claude nhận `{bpm, strong}` trong ngữ cảnh (`scripts/ask_route.mjs` `checkBeats`); AI dựng (`scripts/ai_edit.mjs`) khi giữ nền nhạc người dùng có nhịp thì đưa phách mạnh vào prompt và kéo mép cảnh vào phách mạnh trong ±0,2 s. Chưa có hiệu ứng theo nhịp (đợi `M206`). Giới hạn: mức 1/1 · 1/2 lấy phách mạnh của `beats.py` (đoán 4/4); trước phách mạnh đầu tiên và khi không có phách mạnh thì đếm 4 phách một ô, nhạc 3/4 / 6/8 sẽ vạch ô nhịp lệch.
+
+| Đường dẫn | Việc |
+|---|---|
+| `GET /api/beats?file=\|mood=` | `{beats, job}`: nhịp đã phân tích + việc `beats` mới nhất của file |
+| `POST /api/beats` | `{file\|mood}` → `{ok, beats}` hoặc `{ok, item}` (xếp job; chỉ file trong dự án hoặc nhạc thư viện) |
+
 `mix_audio.py <timeline.json> --stems` ghi thêm `.studio/stem_voice.wav` + `.studio/stem_music.wav` (bus nhạc sau khi hạ) để kiểm tra.

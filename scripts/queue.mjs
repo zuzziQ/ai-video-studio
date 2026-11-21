@@ -96,6 +96,8 @@ export const KINDS = {
   script_takes: { name: 'A-roll theo kịch bản', script: 'script_takes.mjs' },
   // S27 M191: kịch bản → 3 phương án mẫu dựng sẵn trước khi quay (scripts/script_draft.mjs): input = thư mục nháp ~/.ai-video-studio/drafts/<id>
   script_draft: { name: 'Kịch bản → mẫu dựng sẵn', script: 'script_draft.mjs' },
+  // S28 M210: nhịp của một file nhạc (scripts/beats_job.mjs → beats.py): input = thư mục dự án, opts.file | opts.mood; chỉ ghi .studio/beats/, Studio gắn vào khối nhạc
+  beats: { name: 'Phân tích nhịp nhạc', script: 'beats_job.mjs' },
 };
 // own keys only: KINDS['constructor'] / KINDS['toString'] are inherited functions, not job kinds
 export const isKind = kind => typeof kind === 'string' && Object.hasOwn(KINDS, kind);
@@ -163,6 +165,7 @@ export function argsFor(it) {
   else if (k === 'topic') { A.push(it.input, '--out', o.out || khoTopicDir(o.brand, `${String(it.input).slice(0, 50)} ${it.id}`)); /* fresh folder per item: topic_video nests into an existing one */ for (const f of ['dur', 'voice', 'orient']) if (o[f] != null) A.push('--' + f, String(o[f])); }
   else if (k === 'variants') { A.push(it.input, '--n', String(o.n || 3)); if (o.kind) A.push('--kind', o.kind); }
   else if (k === 'script_takes') { A.push(it.input); if (['small', 'medium', 'large-v3-turbo', 'large-v3'].includes(o.model)) A.push('--model', o.model); }
+  else if (k === 'beats') { A.push(it.input); if (typeof o.file === 'string' && o.file) A.push('--file', o.file); else if (typeof o.mood === 'string' && o.mood) A.push('--mood', o.mood); }
   else if (k === 'script_draft') A.push(it.input); // mọi tham số (kịch bản, thương hiệu, khổ, tốc độ đọc) nằm trong draft.json của thư mục nháp
   else if (k === 'publish') { A.push(o.action || 'youtube-upload', it.input); if (o.meta) A.push('--meta', o.meta); if (o.schedule) A.push('--schedule', o.schedule); }
   if (Array.isArray(o.args)) A.push(...o.args.map(String));
