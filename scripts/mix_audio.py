@@ -45,27 +45,20 @@ def find(d, stem):
 
 # Main track made of clips (TL.clips, references/clips.md): build the voice by trimming each clip's audio
 # (in/out, speed via atempo, volume, mute; stills and silent clips become silence) and concatenating.
+# S29 M207: speed curve / reverse / freeze (hold) via speed_curve.clip_graph (same maths as engine/speed.js).
 def clips_voice(clips):
+    import speed_curve
     parts, ins, fc = [], [], []
     for c in clips:
         if c.get("hidden"):
             continue
-        sp = c.get("speed", 1) or 1
-        d = max(1 / 30, (c.get("out", 3) - c.get("in", 0)) / sp)
+        d = speed_curve.dur(c)
         k = len(parts)
         src = c.get("audio")
-        if src and not c.get("mute") and os.path.exists(P(src)):
+        live = src and not c.get("mute") and c.get("hold") is None and os.path.exists(P(src))
+        if live:
             ins += ["-i", P(src)]
-            tempo, chain = sp, []
-            while tempo > 2.0:
-                chain.append("atempo=2.0"); tempo /= 2.0
-            while tempo < 0.5:
-                chain.append("atempo=0.5"); tempo /= 0.5
-            chain.append(f"atempo={tempo:.4f}")
-            fc.append(f"[{len(ins) // 2 - 1}:a]atrim=start={c.get('in', 0)}:end={c.get('out', 3)},asetpts=PTS-STARTPTS,"
-                      f"aresample=48000,aformat=channel_layouts=stereo,{','.join(chain)},volume={c.get('volume', 1)},apad,atrim=duration={d:.3f}[p{k}]")
-        else:
-            fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={d:.3f}[p{k}]")
+        fc += speed_curve.clip_graph(c, f"{len(ins) // 2 - 1}:a" if live else None, f"p{k}", d)
         parts.append(f"[p{k}]")
     out = P(".studio/voice_clips.wav")
     os.makedirs(os.path.dirname(out), exist_ok=True)

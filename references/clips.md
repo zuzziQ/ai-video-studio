@@ -19,6 +19,9 @@ Có `TL.clips` (mảng không rỗng) thì engine dựng video nền từ các c
 | `audio` | file có tiếng của clip (mp4/wav), tính theo giây của nguồn. Bỏ trống thì clip im lặng |
 | `in`, `out` | đoạn lấy từ nguồn, tính bằng giây nguồn. Ảnh tĩnh: `out - in` = thời lượng |
 | `speed` | tốc độ (0.25–4). Thời lượng trên timeline = (out − in) / speed. Tiếng đổi theo bằng atempo |
+| `speedCurve` | S29 M207: đường cong tốc độ, tên preset (`montage`, `hero`, `bullet`, `jump_cut`, `flash_in`, `flash_out`) hoặc `[{x, y}]`: `x` 0–1 trên đoạn nguồn theo chiều phát, `y` hệ số 0,1–10× (nội suy theo log). Có thì bỏ qua `speed`. Thời lượng = tích phân 1 / tốc độ |
+| `reverse` | phát ngược: giây nguồn = `out` − tiến độ. Engine đọc chuỗi khung theo thứ tự ngược (không tạo file đảo, `C40`); tiếng `areverse` khi xuất, xem trước tắt tiếng |
+| `hold` | clip đứng hình (Freeze) dài `hold` giây, giữ khung tại `in` (= `out`), im lặng. Studio chèn bằng nút Freeze (3 s tại playhead, tách clip nếu cần) |
 | `volume`, `mute` | âm lượng (0–2), tắt tiếng |
 | `filter` | `preset` (bảng *Bộ lọc* bên dưới) + `brightness`, `contrast`, `saturate` (1 = giữ nguyên), `hue` (độ), `temp` (−1…1), `blur` (px) |
 | `flip` | lật ngang |
@@ -95,9 +98,10 @@ Hình vẫn vẽ ở `engine/vertical.js` `textLine`; registry giữ nhãn, nhó
 - `arollFilter(t)` đã gồm màu của clip.
 - `arollImg(t)` vẽ cả chuyển cảnh.
 - Hàm cho gói: `clipAt(t)` → `{c, i, lt, src}`, `srcFrame(clip, srcT)`, `mainTrack(t)`.
+- Thời lượng và giây nguồn của clip luôn lấy từ `SpeedMap` (`engine/speed.js`: `dur`, `srcAt`, `ltAt`, `speedAt`), dùng chung cho engine, Studio (`studio/clips.js`, ripple `fClip` giữ phụ đề / cảnh theo giây nguồn khi đổi tốc độ, đường cong hay chiều phát) và `scripts/speed_curve.py` (cùng thuật toán, test so số ở `scripts/tests/test_speed_curve.py`). Đừng tự tính `(out − in) / speed` ở chỗ mới.
 
 ## Âm thanh
-`mix_audio.py` thấy có `clips` thì dựng giọng từ các clip: cắt in/out, `atempo` theo tốc độ, áp âm lượng hoặc tắt tiếng, chèn im lặng cho ảnh tĩnh, nối lại, lưu ra `.studio/voice_clips.wav`. Sau đó trộn nhạc và SFX như cũ.
+`mix_audio.py` thấy có `clips` thì dựng giọng từ các clip: cắt in/out, `atempo` theo tốc độ, áp âm lượng hoặc tắt tiếng, chèn im lặng cho ảnh tĩnh, nối lại, lưu ra `.studio/voice_clips.wav`. Đường cong: chia đoạn nguồn thành 16 đoạn, mỗi đoạn một `atempo`, đoạn nhanh hơn 4× im lặng; ngược: `areverse`; đứng hình: im lặng (`scripts/speed_curve.py`). Sau đó trộn nhạc và SFX như cũ.
 
 ## Chuyển dự án cũ sang clip
 `{ src: {seq: TL.aroll.frames, fps: TL.fps, count: <số frame>}, audio: TL.audio.voice, in: 0, out: count / fps }`.

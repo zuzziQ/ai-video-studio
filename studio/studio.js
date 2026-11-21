@@ -408,10 +408,10 @@ function clipTabs(c) {
       sect('Cắt nguồn (giây)', `<div class="row"><div><span class="lbl">Vào</span><input type="number" step=".05" data-cf="in" value="${r2(o.in || 0)}"></div><div><span class="lbl">Ra</span><input type="number" step=".05" data-cf="out" value="${r2(o.out ?? 3)}"></div></div>
         <div class="help">Đổi điểm vào/ra sẽ tự dồn phụ đề, graphic, SFX phía sau (ripple).</div>`, 'ti-cut') +
       `<div class="acts"><button data-cact="split"><i class="ti ti-scissors"></i> Tách tại playhead</button><button data-cact="dup"><i class="ti ti-copy"></i> Nhân bản</button><button data-cact="del" class="danger"><i class="ti ti-trash"></i> Xoá (dồn)</button></div>`],
-    ['speed', 'Tốc độ', sect('Tốc độ phát', `<div class="seg4">${[.5, 1, 1.5, 2].map(v => `<button class="${(o.speed || 1) === v ? 'on' : ''}" data-cspeed="${v}">${v}×</button>`).join('')}</div>
+    ['speed', 'Tốc độ', (h => (Studio.speedTab ? Studio.speedTab(o, k, h) : h))(sect('Tốc độ phát', `<div class="seg4">${[.5, 1, 1.5, 2].map(v => `<button class="${(o.speed || 1) === v ? 'on' : ''}" data-cspeed="${v}">${v}×</button>`).join('')}</div>
         ${rng('speed', o.speed || 1, .25, 4, .05, 'Tốc độ', '×')}
         <div class="stat"><span>Thời lượng</span><b>${r2(k.t1 - k.t0)}s</b><span class="muted">gốc ${r2((o.out ?? 3) - (o.in || 0))}s</span></div>
-        <div class="help">Phụ đề, graphic giãn/co theo clip; phía sau tự dồn. ${tip('Tiếng đổi tốc độ theo clip nhưng giữ cao độ.')}</div>`, 'ti-brand-speedtest')],
+        <div class="help">Phụ đề, graphic giãn/co theo clip; phía sau tự dồn. ${tip('Tiếng đổi tốc độ theo clip nhưng giữ cao độ.')}</div>`, 'ti-brand-speedtest'))],
     ['audio', 'Âm thanh', sect('Âm lượng clip', still || !o.audio ? '<div class="help">Clip này không có tiếng.</div>'
       : `${rng('volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, 'Âm lượng', '%')}<div class="acts"><button data-cact="mute" class="${o.mute ? 'on' : ''}"><i class="ti ${o.mute ? 'ti-volume-off' : 'ti-volume'}"></i> ${o.mute ? 'Đang tắt tiếng' : 'Tắt tiếng'}</button></div>`, 'ti-volume')],
     ['color', 'Màu', sect('Bộ lọc', `<div class="flmini">${FILTERS.map(([v, l]) => `<button class="${(f.preset || '') === v ? 'on' : ''}" data-cpreset="${v}"><span data-dbg="${esc(thumb)}" data-dfx="${esc(v ? LUT_CSS[v] : 'none')}"></span><small>${l}</small></button>`).join('')}</div>`, 'ti-color-filter') +
@@ -715,6 +715,7 @@ function clipField(f, v, el) {
   pushUndo('clip' + i + f);
   const lab = el?.parentNode?.querySelector(`[data-v="${f}"]`);
   if (f === 'speed') { setClipSpeed(i, +v); if (lab) lab.textContent = r2(+v) + '×'; changed(); return; }
+  if ((f === 'in' || f === 'out') && !SpeedMap.plain(o)) { setClipRange(i, f, +v); changed(true); return; } // S29 M207: đường cong / ngược
   if (f === 'in' || f === 'out') {
     const sp = o.speed || 1, cur = f === 'in' ? (o.in || 0) : (o.out ?? 3);
     trimClip(i, f === 'in' ? 'l' : 'r', (+v - cur) / sp); changed(true); return;
@@ -1210,10 +1211,10 @@ const RULER_H = 28, VIDEO_H = 64, WAVE_H = 40;
 const lanes = list => { const ends = []; for (const c of list) { let l = ends.findIndex(e => e <= c.t0 + .001); if (l < 0) { l = ends.length; ends.push(0); } ends[l] = c.t1; c.lane = l; } return Math.max(1, ends.length); };
 function rulerStep() { for (const s of [.25, .5, 1, 2, 5, 10, 15, 30, 60, 120]) if (s * PPS >= 64) return s; return 300; }
 function clipStrip(k, w) {
-  const tw = Math.max(18, Math.round((VIDEO_H - 2) * DW / DH)), n = Math.min(400, Math.ceil(w / tw)), sp = k.c.speed || 1, f = clipFilterCss(k.c);
+  const tw = Math.max(18, Math.round((VIDEO_H - 2) * DW / DH)), n = Math.min(400, Math.ceil(w / tw)), f = clipFilterCss(k.c);
   let h = '';
   const fx = esc(f);
-  for (let j = 0; j < n; j++) h += `<i data-dw="${tw}" data-dbg="${esc(clipFrameUrl(k.c, (k.c.in || 0) + ((j + .5) * tw / PPS) * sp))}" data-dfx="${fx}"></i>`;
+  for (let j = 0; j < n; j++) h += `<i data-dw="${tw}" data-dbg="${esc(clipFrameUrl(k.c, srcAt(k, k.t0 + (j + .5) * tw / PPS)))}" data-dfx="${fx}"></i>`;
   return h;
 }
 function renderTimeline() {
@@ -1241,7 +1242,7 @@ function renderTimeline() {
         const w = Math.max(6, (k.t1 - k.t0) * PPS - 1), c = k.c, on = sel?.obj === c;
         return `<div class="clip ${on ? 'sel' : ''}" data-ci="${k.i}" data-dl="${k.t0 * PPS}" data-dw="${w}">
           <div class="strip">${clipStrip(k, w)}</div>
-          <div class="ctop"><span class="cn">${k.i + 1}</span>${c.speed && c.speed !== 1 ? `<span class="cb"><i class="ti ti-brand-speedtest"></i>${c.speed}×</span>` : ''}${c.mute ? '<span class="cb"><i class="ti ti-volume-off"></i></span>' : ''}${c.filter ? '<span class="cb"><i class="ti ti-color-filter"></i></span>' : ''}${c.flip ? '<span class="cb"><i class="ti ti-flip-vertical"></i></span>' : ''}<span class="cd">${r2(k.t1 - k.t0)}s</span></div>
+          <div class="ctop"><span class="cn">${k.i + 1}</span>${SpeedMap.label(c) ? `<span class="cb"><i class="ti ${c.hold != null ? 'ti-snowflake' : c.reverse ? 'ti-arrow-back-up' : 'ti-brand-speedtest'}"></i>${esc(SpeedMap.label(c))}</span>` : ''}${c.mute ? '<span class="cb"><i class="ti ti-volume-off"></i></span>' : ''}${c.filter ? '<span class="cb"><i class="ti ti-color-filter"></i></span>' : ''}${c.flip ? '<span class="cb"><i class="ti ti-flip-vertical"></i></span>' : ''}<span class="cd">${r2(k.t1 - k.t0)}s</span></div>
           <span class="h l"></span><span class="h r"></span></div>`;
       }).join('') + L.slice(1).map(k => `<button class="tb ${k.c.transition ? 'on' : ''}" data-tbi="${k.i}" data-dl="${k.t0 * PPS}" title="${k.c.transition ? 'Chuyển cảnh: ' + (TRANS_TYPES.find(x => x[0] === k.c.transition.type)?.[1] || k.c.transition.type) : 'Thêm chuyển cảnh'}"><i class="ti ${k.c.transition ? 'ti-transition-right' : 'ti-plus'}"></i></button>`).join('') + '</div>';
       lh += label(key, name, ic, VIDEO_H + 8);
@@ -1438,10 +1439,11 @@ const audFor = src => { const p = previewSrc(src); if (!clipAud.has(p)) clipAud.
 function syncClipAudio(force) {
   let want = null;
   const k = playing && TL.clips?.length ? clipAtT(T) : null;
-  if (k && k.c.audio && !k.c.mute && T < k.t1 - .02) {
+  const rate = k ? SpeedMap.speedAt(k.c, T - k.t0) : 0; // S29 M207: đứng hình / ngược / nhanh hơn 4× = im lặng (như bản xuất)
+  if (k && k.c.audio && !k.c.mute && !k.c.reverse && rate > 0 && rate <= 4 && T < k.t1 - .02) {
     want = audFor(k.c.audio);
     const st = srcAt(k, T);
-    want.playbackRate = k.c.speed || 1; want.volume = clamp(k.c.volume ?? 1, 0, 1);
+    want.playbackRate = clamp(rate, .25, 4); want.volume = clamp(k.c.volume ?? 1, 0, 1);
     if (want.paused || force || curClip !== k.i || Math.abs(want.currentTime - st) > .25) { want.currentTime = st; want.play().catch(() => {}); }
   }
   curClip = k ? k.i : -1;

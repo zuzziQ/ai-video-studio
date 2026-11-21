@@ -122,11 +122,16 @@
     check: ['qc_fix_all', 'ab_hooks'],
     ship: ['publish_write', 'cover', 'post_time'],
   };
+  // S29 M207: tốc độ của clip đang chọn (preset đường cong, đều, Freeze, đảo ngược) — áp bằng Studio.speed.apply (59_speed.js)
+  const SM = root.SpeedMap || (typeof require === 'function' ? require('../../engine/speed.js') : null);
+  const SPEED_MODES = ['montage', 'hero', 'bullet', 'jump_cut', 'flash_in', 'flash_out', 'normal', 'freeze', 'reverse', 'forward'];
+  A.clip_speed = { what: 'Đổi tốc độ clip đang chọn: preset đường cong (montage, hero = nhanh–chậm–nhanh khoe khoảnh khắc, bullet = chậm sâu ở giữa, jump_cut, flash_in, flash_out), normal = tốc độ đều speed×, freeze = đứng hình dur giây tại playhead (nhấn câu đinh), reverse = phát ngược, forward = bỏ phát ngược.',
+    params: { mode: { t: 'enum', values: SPEED_MODES }, speed: { t: 'num', min: 0.25, max: 4 }, dur: { t: 'num', min: 0.5, max: 10 } } };
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
-        : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'open_panel'] : ['open_panel'])
+        : scope.kind === 'clip' ? (scope.idx > 0 ? ['clip_transition', 'clip_speed', 'open_panel'] : ['clip_speed', 'open_panel'])
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
@@ -193,7 +198,7 @@
     if (!act) { if (id && id !== 'answer') warnings.push(`việc "${clip(id, 24)}" không có trong phạm vi này`); id = 'answer'; act = list.find(a => a.id === 'answer'); }
     const params = act ? cleanParams(act.params, pickKey(o, ['params', 'args', 'parameters', 'arguments']), warnings) : {};
     // thiếu tham số bắt buộc → về trả lời bằng chữ, không đoán
-    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], clip_transition: ['type'], open_panel: ['panel'] }[id] || [];
+    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], clip_transition: ['type'], clip_speed: ['mode'], open_panel: ['panel'] }[id] || [];
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
@@ -210,7 +215,7 @@
   // Chuyển cảnh: mọi chỗ nối (clip i > 0); range [a, b] → chỉ chỗ nối nằm trong đoạn. Trả số chỗ nối đã đổi.
   function clipStarts(tl) {
     let t = 0; const out = [];
-    for (const c of tl.clips || []) { out.push(t); t += Math.max(1 / 30, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1)); }
+    for (const c of tl.clips || []) { out.push(t); t += SM ? SM.dur(c, 30) : Math.max(1 / 30, ((c.out ?? 3) - (c.in || 0)) / (c.speed || 1)); }
     return out;
   }
   function transitionsApply(tl, p, range) {
@@ -264,7 +269,7 @@
     let i = clips.length - 1;
     while (i > 0 && st[i] > t) i--;
     const c = clips[i] || {}, a = +c.in || 0, b = Number.isFinite(+c.out) ? +c.out : Infinity;
-    const at = r2(Math.max(a, Math.min(b, a + Math.max(0, (+t || 0) - st[i]) * (+c.speed || 1))));
+    const at = r2(Math.max(a, Math.min(b, SM ? SM.srcAt(c, (+t || 0) - st[i]) : a + Math.max(0, (+t || 0) - st[i]) * (+c.speed || 1))));
     const out = { at };
     const src = c.src && typeof c.src === 'object' ? c.src : null;
     if (src && typeof src.seq === 'string' && /%0\d+d/.test(src.seq)) {
