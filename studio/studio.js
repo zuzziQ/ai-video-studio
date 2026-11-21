@@ -424,6 +424,7 @@ function clipTabs(c) {
         ${TRANS_TYPES.map(([kk, l, ic]) => `<button class="tr ${o.transition?.type === kk ? 'on' : ''}" data-ctr="${kk}"><span class="demo t-${kk}"><i class="a"></i><i class="b"></i><i class="ti ${ic} ic"></i></span><small>${l}</small></button>`).join('')}</div>
         ${o.transition ? rng('tdur', o.transition.dur ?? .4, .1, 3, .05, 'Thời lượng', 's') : ''}`, 'ti-transition-right')],
     ...(Studio.animTab ? [['anim', 'Hoạt ảnh', Studio.animTab(c)]] : []), // S28 M204: 81_clipanim.js
+    ...(Studio.bakeTab ? [['bake', 'Hiệu chỉnh', Studio.bakeTab(c)]] : []), // S29 M212: 86_bake.js (phông xanh, LUT .cube, HSL, curves, ổn định — nướng bằng ffmpeg)
   ];
 }
 function inspTabs(c) {

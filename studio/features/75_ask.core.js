@@ -206,11 +206,35 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     const d = SM ? SM.dur(c, tl.fps || 30) : 3, a = Math.min(Math.max(0, +p.start || 0), Math.max(0, d - 0.1)), b = p.end != null && +p.end > a ? Math.min(+p.end, d) : d;
     return K.ramp(c, p.prop, p.from, p.to, a, b, p.ease);
   }
+  // S29 M212: hiệu chỉnh nướng sẵn của clip đang chọn (engine/bake.js; tab Hiệu chỉnh 86_bake.js). Claude chỉ đặt tham số lên bản
+  //   timeline: xem gần đúng bằng CSS, job nướng ffmpeg chỉ chạy khi người dùng Nhận. LUT phải do người dùng nhập file, Claude chỉ đổi mix.
+  const BK = root.BakeCore || (typeof require === 'function' ? require('../../engine/bake.js') : null);
+  const BAKE_OPS = ['chroma', 'hsl', 'curves', 'stab', 'lut', 'none'];
+  A.clip_bake = { what: 'Hiệu chỉnh nướng sẵn cho clip đang chọn, mỗi lần một op: chroma = tách phông xanh / lục (color #rrggbb màu nền, strength 0–100 độ rộng màu bị xoá, edge 0–100 viền mềm, spill 0–100 khử ánh màu lem lên người); hsl = đổi một dải màu (band all|r|y|g|c|b|m, hue −180–180, sat −100–100, light −100–100); curves = đường cong (preset ' + (BK ? BK.CURVES.join('|') : '') + ', shadows / highlights −50–50); stab = ổn định hình rung (strength 0–100, 0 = tắt); lut = độ mạnh LUT .cube người dùng đã nhập (strength 0–100); none = bỏ mọi hiệu chỉnh nướng. Tác dụng thấy sau khi người dùng Nhận và máy nướng xong (vài giây).',
+    params: { op: { t: 'enum', values: BAKE_OPS }, color: { t: 'str', max: 7 }, strength: { t: 'num', min: 0, max: 100 }, edge: { t: 'num', min: 0, max: 100 }, spill: { t: 'num', min: 0, max: 100 },
+      band: { t: 'enum', values: BK ? BK.BANDS : ['all'] }, hue: { t: 'num', min: -180, max: 180 }, sat: { t: 'num', min: -100, max: 100 }, light: { t: 'num', min: -100, max: 100 },
+      preset: { t: 'enum', values: BK ? BK.CURVES : ['none'] }, shadows: { t: 'num', min: -50, max: 50 }, highlights: { t: 'num', min: -50, max: 50 } } };
+  // đặt một op lên clip idx của bản timeline tl (bỏ seq / hash cũ: Studio nướng lại khi Nhận). Trả false khi không áp được.
+  function bakeApply(tl, idx, p) {
+    const c = tl.clips?.[idx];
+    if (!c || !BK || typeof c.src !== 'object' || !p || !BAKE_OPS.includes(p.op)) return false;
+    if (p.op === 'none') { if (!c.bake) return false; delete c.bake; return true; }
+    const b = { ...(c.bake || {}) }; delete b.seq; delete b.hash; delete b.p540;
+    if (p.op === 'chroma') { const col = /^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color.toLowerCase() : b.chroma?.color || '#00b140'; b.chroma = { ...(b.chroma || {}), color: col, ...['strength', 'edge', 'spill'].reduce((o, k) => (p[k] != null ? { ...o, [k]: p[k] } : o), {}) }; } // design-token-ok: màu phông xanh mặc định trong video
+    if (p.op === 'hsl') b.hsl = { ...(b.hsl || {}), ...['band', 'hue', 'sat', 'light'].reduce((o, k) => (p[k] != null ? { ...o, [k]: p[k] } : o), {}) };
+    if (p.op === 'curves') b.curves = { ...(b.curves || {}), ...['preset', 'shadows', 'highlights'].reduce((o, k) => (p[k] != null ? { ...o, [k]: p[k] } : o), {}) };
+    if (p.op === 'stab') { if (p.strength) b.stab = { strength: p.strength }; else delete b.stab; }
+    if (p.op === 'lut') { if (!b.lut?.file) return false; b.lut = { ...b.lut, mix: p.strength ?? 100 }; }
+    const o = BK.ops(b);
+    if (!o) { delete c.bake; return true; }
+    c.bake = { ...b };
+    return true;
+  }
   function actionsOf(scope) {
     if (!scope) return [];
     const ids = scope.kind === 'region' ? (scope.step === 'build' ? ['ai_build'] : []) : scope.kind === 'video' || scope.kind === 'range' ? ['ai_build', 'autofill', 'transitions', 'fx_add', 'fx_beats', 'elem_create']
       : scope.kind === 'elem' ? ['elem_edit', ...(scope.ek === 'line' || scope.ek === 'scene' ? ['elem_anim'] : []), 'elem_variants', ...(scope.knobs ? ['elem_knobs'] : [])]
-        : scope.kind === 'clip' ? [...(scope.idx > 0 ? ['clip_transition'] : []), 'clip_speed', 'clip_anim', 'clip_kf', 'color_pick', 'open_panel']
+        : scope.kind === 'clip' ? [...(scope.idx > 0 ? ['clip_transition'] : []), 'clip_speed', 'clip_anim', 'clip_kf', 'color_pick', 'clip_bake', 'open_panel']
           : [...(STEP_ACTS[scope.step] || []), ...(PANELS[scope.step] ? ['open_panel'] : [])];
     return [...ids, 'answer'].map(id => {
       const a = A[id], params = { ...a.params };
@@ -277,7 +301,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     if (!act) { if (id && id !== 'answer') warnings.push(`việc "${clip(id, 24)}" không có trong phạm vi này`); id = 'answer'; act = list.find(a => a.id === 'answer'); }
     const params = act ? cleanParams(act.params, pickKey(o, ['params', 'args', 'parameters', 'arguments']), warnings) : {};
     // thiếu tham số bắt buộc → về trả lời bằng chữ, không đoán
-    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], fx_add: ['type'], fx_beats: ['type'], clip_transition: ['type'], clip_speed: ['mode'], clip_anim: ['slot', 'type'], open_panel: ['panel'] }[id] || [];
+    const need = { elem_edit: ['ask'], elem_create: ['ask'], transitions: ['type'], fx_add: ['type'], fx_beats: ['type'], clip_transition: ['type'], clip_speed: ['mode'], clip_anim: ['slot', 'type'], clip_bake: ['op'], open_panel: ['panel'] }[id] || [];
     if (need.some(k => params[k] == null)) { warnings.push(`thiếu ${need.filter(k => params[k] == null).join(', ')}`); return { action: 'answer', params: {}, reply: reply || 'Chưa rõ muốn làm gì, thử nói cụ thể hơn.', warnings }; }
     if (id === 'answer' && !reply) return { action: 'answer', params: {}, reply: 'Chưa có việc nào khớp câu hỏi trong phạm vi này.', warnings };
     if (id === 'autofill' && !params.mode) params.mode = 'all';
@@ -429,6 +453,8 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     if (nt) out.push(`${nt} chỗ nối chuyển cảnh`);
     const nf = cb.filter((c, i) => key(c.filter) !== key(ca[i]?.filter)).length; // S29 M208
     if (nf) out.push(`màu ${nf} clip`);
+    const nb = cb.filter((c, i) => key(c.bake) !== key(ca[i]?.bake)).length; // S29 M212
+    if (nb) out.push(`hiệu chỉnh ${nb} clip`);
     const ne = delta(a?.TL?.efx, b?.TL?.efx).add.length + delta(a?.TL?.fx, b?.TL?.fx).add.length; // S28 M206
     if (ne) out.push(`+${ne} hiệu ứng`);
     return out.slice(0, 6);
@@ -449,7 +475,7 @@ Combo: ${FX.aiGuide('clip_combo', ' | ')}.`,
     return a.reduce((acc, x) => logPush(acc, x, Infinity), []).slice(-max);
   }
 
-  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, colorApply, clipKfApply, KF_PROPS, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply, fxBeatsApply,
+  const api = { STEPS, ELEM_KINDS, TRANS, TRANS_VI, PANELS, PLATS, PLAT_VI, VA_KINDS, STEP_ACTS, LOG_MAX, stamp, transParams, scopeOf, actionsOf, quickOf, checkPick, transitionsApply, clipTransitionApply, clipAnimApply, colorApply, bakeApply, clipKfApply, KF_PROPS, changedSpan, clipStarts, EFX, EFX_VI, fxAddApply, fxBeatsApply,
     logEntry, logPush, logParse, changeSummary, regionOf, frameAt, ANIM_GUIDE, elemAnimApply }; // S24 M170: bỏ formOf / colParts (một dạng: tab Claude cột phải)
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AskCore = api;

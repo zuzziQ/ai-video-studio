@@ -98,6 +98,8 @@ export const KINDS = {
   script_draft: { name: 'Kịch bản → mẫu dựng sẵn', script: 'script_draft.mjs' },
   // S28 M210: nhịp của một file nhạc (scripts/beats_job.mjs → beats.py): input = thư mục dự án, opts.file | opts.mood; chỉ ghi .studio/beats/, Studio gắn vào khối nhạc
   beats: { name: 'Phân tích nhịp nhạc', script: 'beats_job.mjs' },
+  // S29 M212: nướng chuỗi khung của một clip bằng ffmpeg (scripts/bake_job.mjs, lõi engine/bake.js): input = thư mục dự án, opts.spec; chỉ ghi .studio/bake/
+  bake: { name: 'Nướng hiệu chỉnh clip', script: 'bake_job.mjs' },
 };
 // own keys only: KINDS['constructor'] / KINDS['toString'] are inherited functions, not job kinds
 export const isKind = kind => typeof kind === 'string' && Object.hasOwn(KINDS, kind);
@@ -166,6 +168,7 @@ export function argsFor(it) {
   else if (k === 'variants') { A.push(it.input, '--n', String(o.n || 3)); if (o.kind) A.push('--kind', o.kind); }
   else if (k === 'script_takes') { A.push(it.input); if (['small', 'medium', 'large-v3-turbo', 'large-v3'].includes(o.model)) A.push('--model', o.model); }
   else if (k === 'beats') { A.push(it.input); if (typeof o.file === 'string' && o.file) A.push('--file', o.file); else if (typeof o.mood === 'string' && o.mood) A.push('--mood', o.mood); }
+  else if (k === 'bake') { A.push(it.input); if (o.spec && typeof o.spec === 'object') A.push('--spec', JSON.stringify(o.spec)); } // bake_job.mjs tự kiểm lại spec
   else if (k === 'script_draft') A.push(it.input); // mọi tham số (kịch bản, thương hiệu, khổ, tốc độ đọc) nằm trong draft.json của thư mục nháp
   else if (k === 'publish') { A.push(o.action || 'youtube-upload', it.input); if (o.meta) A.push('--meta', o.meta); if (o.schedule) A.push('--schedule', o.schedule); }
   if (Array.isArray(o.args)) A.push(...o.args.map(String));
